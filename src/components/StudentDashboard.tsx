@@ -13,29 +13,29 @@ import { SERVER_URL } from '../../apiConfig';
 // --- COMPONENT IMPORTS (No changes needed here) ---
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AcademicCalendar from './AcademicCalendar';
-import StudentResultsScreen from '../screens/results/StudentResultsScreen';
-import TransportScreen from '../screens/transport/TransportScreen';
-import StudentExamsScreen from '../screens/exams/StudentExamsScreen';
+// import StudentResultsScreen from '../screens/results/StudentResultsScreen';
+// import TransportScreen from '../screens/transport/TransportScreen';
+// import StudentExamsScreen from '../screens/exams/StudentExamsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import StudentExamScreen from '../screens/exams_Schedule/StudentExamScreen';
+// import StudentExamScreen from '../screens/exams_Schedule/StudentExamScreen';
 import TimetableScreen from '../screens/TimetableScreen'; 
 import AttendanceScreen from '../screens/AttendanceScreen';
-import StudentHealthScreen from '../screens/health/StudentHealthScreen';
-import StudentSportsScreen from '../screens/sports/StudentSportsScreen';
-import StudentEventsScreen from '../screens/events/StudentEventsScreen';
-import UserHelpDeskScreen from '../screens/helpdesk/UserHelpDeskScreen';
-import StudentPTMScreen from '../screens/ptm/StudentPTMScreen';
-import StudentLabsScreen from '../screens/labs/StudentLabsScreen';
+// import StudentHealthScreen from '../screens/health/StudentHealthScreen';
+// import StudentSportsScreen from '../screens/sports/StudentSportsScreen';
+// import StudentEventsScreen from '../screens/events/StudentEventsScreen';
+// import UserHelpDeskScreen from '../screens/helpdesk/UserHelpDeskScreen';
+// import StudentPTMScreen from '../screens/ptm/StudentPTMScreen';
+// import StudentLabsScreen from '../screens/labs/StudentLabsScreen';
 import StudentHomeworkScreen from '../screens/homework/StudentHomeworkScreen';
-import StudentMaterialsScreen from '../screens/study-materials/StudentMaterialsScreen';
-import StudentSyllabusScreen from '../screens/syllabus/StudentSyllabusScreen';
+// import StudentMaterialsScreen from '../screens/study-materials/StudentMaterialsScreen';
+// import StudentSyllabusScreen from '../screens/syllabus/StudentSyllabusScreen';
 import AboutUs from './AboutUs';
-import ChatAIScreen from '../screens/chatai/ChatAIScreen';
-import FoodScreen from '../screens/food/FoodScreen';
-import GroupChatScreen from '../screens/chat/GroupChatScreen';
+// import ChatAIScreen from '../screens/chatai/ChatAIScreen';
+// import FoodScreen from '../screens/food/FoodScreen';
+// import GroupChatScreen from '../screens/chat/GroupChatScreen';
 import GalleryScreen from '../screens/gallery/GalleryScreen';
-import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
-import StudentResourcesScreen from '../screens/syllabus_Textbook/StudentResourcesScreen';
+// import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
+// import StudentResourcesScreen from '../screens/syllabus_Textbook/StudentResourcesScreen';
 
 interface ProfileData {
   full_name: string;
@@ -105,29 +105,29 @@ const StudentDashboard = ({ navigation }) => {
 
   // --- Quick Access Items (No changes needed here) ---
   const allQuickAccessItems = [
-    { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
+    // { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
     { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-    { id: 'qa4', title: 'Syllabus Tracker', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'StudentSyllabusScreen' },
-    { id: 'qa40', title: 'Syllabus & Textbook', imageSource: 'https://cdn-icons-png.flaticon.com/128/3185/3185838.png', navigateToTab: 'StudentResourcesScreen' },
-    { id: 'qa7', title: 'Exam Schedule', imageSource: 'https://cdn-icons-png.flaticon.com/128/4029/4029113.png', navigateToTab: 'StudentExamScreen' },
-    { id: 'qa5', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/207/207190.png',  navigateToTab: 'StudentExamsScreen' },
-    { id: 'qa6', title: 'Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913576.png', navigateToTab: 'StudentResultsScreen' },
-    { id: 'qa15', title: 'Study materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'StudentMaterialsScreen' },
+    // { id: 'qa4', title: 'Syllabus Tracker', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'StudentSyllabusScreen' },
+    // { id: 'qa40', title: 'Syllabus & Textbook', imageSource: 'https://cdn-icons-png.flaticon.com/128/3185/3185838.png', navigateToTab: 'StudentResourcesScreen' },
+    // { id: 'qa7', title: 'Exam Schedule', imageSource: 'https://cdn-icons-png.flaticon.com/128/4029/4029113.png', navigateToTab: 'StudentExamScreen' },
+    // { id: 'qa5', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/207/207190.png',  navigateToTab: 'StudentExamsScreen' },
+    // { id: 'qa6', title: 'Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913576.png', navigateToTab: 'StudentResultsScreen' },
+    // { id: 'qa15', title: 'Study materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'StudentMaterialsScreen' },
     { id: 'qa14', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'StudentHomeworkScreen' },
-    { id: 'qa27', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'OnlineClassScreen' },
-    { id: 'qa8', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/9562/9562280.png', navigateToTab: 'StudentLabsScreen' },
-    { id: 'qa9', title: 'Sports', imageSource: 'https://cdn-icons-png.flaticon.com/128/3429/3429456.png', navigateToTab: 'StudentSportsScreen' },
-    { id: 'qa10', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/3004/3004458.png', navigateToTab: 'StudentHealthScreen' },
-    { id: 'qa13', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'StudentEventsScreen' },
-    { id: 'qa11', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/17588/17588666.png', navigateToTab: 'StudentPTMScreen' },
-    { id: 'qa1', title: "Transport", imageSource: "https://cdn-icons-png.flaticon.com/128/2945/2945694.png", navigateToTab: 'TransportScreen' },
-    { id: 'qa12', title: 'Help Desk', imageSource: 'https://cdn-icons-png.flaticon.com/128/4961/4961736.png', navigateToTab: 'UserHelpDeskScreen' },
+    // { id: 'qa27', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'OnlineClassScreen' },
+    // { id: 'qa8', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/9562/9562280.png', navigateToTab: 'StudentLabsScreen' },
+    // { id: 'qa9', title: 'Sports', imageSource: 'https://cdn-icons-png.flaticon.com/128/3429/3429456.png', navigateToTab: 'StudentSportsScreen' },
+    // { id: 'qa10', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/3004/3004458.png', navigateToTab: 'StudentHealthScreen' },
+    // { id: 'qa13', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'StudentEventsScreen' },
+    // { id: 'qa11', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/17588/17588666.png', navigateToTab: 'StudentPTMScreen' },
+    // { id: 'qa1', title: "Transport", imageSource: "https://cdn-icons-png.flaticon.com/128/2945/2945694.png", navigateToTab: 'TransportScreen' },
+    // { id: 'qa12', title: 'Help Desk', imageSource: 'https://cdn-icons-png.flaticon.com/128/4961/4961736.png', navigateToTab: 'UserHelpDeskScreen' },
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa19', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     // { id: 'qa20', title: 'Chat AI', imageSource: 'https://cdn-icons-png.flaticon.com/128/6028/6028616.png', navigateToTab: 'ChatAI' },
-    { id: 'qa25', title: 'Food', imageSource: 'https://cdn-icons-png.flaticon.com/128/2276/2276931.png', navigateToTab: 'FoodScreen' },
-    { id: 'qa26', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/745/745205.png', navigateToTab: 'GroupChatScreen' },
+    // { id: 'qa25', title: 'Food', imageSource: 'https://cdn-icons-png.flaticon.com/128/2276/2276931.png', navigateToTab: 'FoodScreen' },
+    // { id: 'qa26', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/745/745205.png', navigateToTab: 'GroupChatScreen' },
   ];
   
   const [filteredItems, setFilteredItems] = useState(allQuickAccessItems);
@@ -184,28 +184,28 @@ const StudentDashboard = ({ navigation }) => {
       case 'allNotifications': return ( <><ContentScreenHeader title="Notifications" /><NotificationsScreen onUnreadCountChange={setUnreadNotificationsCount} /></> );
       case 'calendar': return <AcademicCalendar />;
       case 'profile': return <ProfileScreen onBackPress={() => setActiveTab('home')} />;
-      case 'StudentHealthScreen': return ( <><ContentScreenHeader title="Health Information" /><StudentHealthScreen /></> );
-      case 'UserHelpDeskScreen': return ( <><ContentScreenHeader title="Help Desk" /><UserHelpDeskScreen /></> );
-      case 'StudentSportsScreen': return ( <><ContentScreenHeader title="Sports" /><StudentSportsScreen /></> );
-      case 'StudentEventsScreen': return ( <><ContentScreenHeader title="Events" /><StudentEventsScreen /></> );
-      case 'StudentPTMScreen': return ( <><ContentScreenHeader title="Parents-Teachers Meetings" /><StudentPTMScreen /></> );
-      case 'StudentLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" /><StudentLabsScreen /></> );
+      // case 'StudentHealthScreen': return ( <><ContentScreenHeader title="Health Information" /><StudentHealthScreen /></> );
+      // case 'UserHelpDeskScreen': return ( <><ContentScreenHeader title="Help Desk" /><UserHelpDeskScreen /></> );
+      // case 'StudentSportsScreen': return ( <><ContentScreenHeader title="Sports" /><StudentSportsScreen /></> );
+      // case 'StudentEventsScreen': return ( <><ContentScreenHeader title="Events" /><StudentEventsScreen /></> );
+      // case 'StudentPTMScreen': return ( <><ContentScreenHeader title="Parents-Teachers Meetings" /><StudentPTMScreen /></> );
+      // case 'StudentLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" /><StudentLabsScreen /></> );
       case 'StudentHomeworkScreen': return ( <><ContentScreenHeader title="Homework" /><StudentHomeworkScreen /></> );
-      case 'StudentExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" /><StudentExamScreen /></> );
-      case 'StudentMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" /><StudentMaterialsScreen /></> );
-      case 'StudentExamsScreen': return ( <><ContentScreenHeader title="Exams" /><StudentExamsScreen /></> );
-      case 'StudentSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracker" /><StudentSyllabusScreen /></> );
-      case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" /><TransportScreen /></> );
-      case 'StudentResultsScreen': return ( <><ContentScreenHeader title="My Reports" /><StudentResultsScreen navigation={navigation} /></> );
+      // case 'StudentExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" /><StudentExamScreen /></> );
+      // case 'StudentMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" /><StudentMaterialsScreen /></> );
+      // case 'StudentExamsScreen': return ( <><ContentScreenHeader title="Exams" /><StudentExamsScreen /></> );
+      // case 'StudentSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracker" /><StudentSyllabusScreen /></> );
+      // case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" /><TransportScreen /></> );
+      // case 'StudentResultsScreen': return ( <><ContentScreenHeader title="My Reports" /><StudentResultsScreen navigation={navigation} /></> );
       case 'Timetable': return ( <><ContentScreenHeader title="Time Table" /><TimetableScreen /></> );
       case 'Attendance': return ( <><ContentScreenHeader title="Attendance" /><AttendanceScreen /></> );
       case 'AboutUs': return ( <><ContentScreenHeader title="About Us" /><AboutUs /></> );
-      case 'ChatAI': return ( <><ContentScreenHeader title="AI Assistant" /><ChatAIScreen /></> );
-      case 'FoodScreen': return ( <><ContentScreenHeader title="Food" /><FoodScreen /></> );
-      case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" /><GroupChatScreen /></> );
+      // case 'ChatAI': return ( <><ContentScreenHeader title="AI Assistant" /><ChatAIScreen /></> );
+      // case 'FoodScreen': return ( <><ContentScreenHeader title="Food" /><FoodScreen /></> );
+      // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" /><GroupChatScreen /></> );
       case 'Gallery': return ( <><ContentScreenHeader title="Gallery" /><GalleryScreen /></> );
-      case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" /><OnlineClassScreen /></> );
-      case 'StudentResourcesScreen': return ( <><ContentScreenHeader title="Syllabus & Textbook" /><StudentResourcesScreen /></> );
+      // case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" /><OnlineClassScreen /></> );
+      // case 'StudentResourcesScreen': return ( <><ContentScreenHeader title="Syllabus & Textbook" /><StudentResourcesScreen /></> );
 
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={() => setActiveTab('home')}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
     }

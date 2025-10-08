@@ -17,32 +17,32 @@ import AdminLM from './AdminLM';
 import ProfileScreen from '../screens/ProfileScreen';
 import TimetableScreen from '../screens/TimetableScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
-import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen';
-import AdminSportsScreen from '../screens/sports/AdminSportsScreen';
-import AdminEventsScreen from '../screens/events/AdminEventsScreen';
-import AdminHelpDeskScreen from '../screens/helpdesk/AdminHelpDeskScreen';
-import TeacherAdminPTMScreen from '../screens/ptm/TeacherAdminPTMScreen';
-import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
-import TeacherAdminHomeworkScreen from '../screens/homework/TeacherAdminHomeworkScreen';
-import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
-import TeacherAdminExamsScreen from '../screens/exams/TeacherAdminExamsScreen';
-import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
-import TeacherAdminResultsScreen from '../screens/results/TeacherAdminResultsScreen';
-import AdminSyllabusScreen from '../screens/syllabus/AdminSyllabusScreen';
-import TransportScreen from '../screens/transport/TransportScreen';
+// import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen';
+// import AdminSportsScreen from '../screens/sports/AdminSportsScreen';
+// import AdminEventsScreen from '../screens/events/AdminEventsScreen';
+// import AdminHelpDeskScreen from '../screens/helpdesk/AdminHelpDeskScreen';
+// import TeacherAdminPTMScreen from '../screens/ptm/TeacherAdminPTMScreen';
+// import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
+// import TeacherAdminHomeworkScreen from '../screens/homework/TeacherAdminHomeworkScreen';
+// import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
+// import TeacherAdminExamsScreen from '../screens/exams/TeacherAdminExamsScreen';
+// import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
+// import TeacherAdminResultsScreen from '../screens/results/TeacherAdminResultsScreen';
+// import AdminSyllabusScreen from '../screens/syllabus/AdminSyllabusScreen';
+// import TransportScreen from '../screens/transport/TransportScreen';
 import AboutUs from './AboutUs';
 import GalleryScreen from '../screens/gallery/GalleryScreen';
-import ChatAIScreen from '../screens/chatai/ChatAIScreen';
-import AdminSuggestionsScreen from '../screens/suggestions/AdminSuggestionsScreen';
-import AdminSponsorScreen from '../screens/sponsorship/AdminSponsorScreen';
-import AdminPaymentScreen from '../screens/payments/AdminPaymentScreen';
-import KitchenScreen from '../screens/kitchen/KitchenScreen';
-import FoodScreen from '../screens/food/FoodScreen';
-import GroupChatScreen from '../screens/chat/GroupChatScreen';
-import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
-import AlumniScreen from '../screens/Alumni/AlumniScreen';
-import PreAdmissionsScreen from '../screens/Pre-Admissions/PreAdmissionsScreen';
-import TeacherAdminResourcesScreen from '../screens/syllabus_Textbook/TeacherAdminResourcesScreen';
+// import ChatAIScreen from '../screens/chatai/ChatAIScreen';
+// import AdminSuggestionsScreen from '../screens/suggestions/AdminSuggestionsScreen';
+// import AdminSponsorScreen from '../screens/sponsorship/AdminSponsorScreen';
+// import AdminPaymentScreen from '../screens/payments/AdminPaymentScreen';
+// import KitchenScreen from '../screens/kitchen/KitchenScreen';
+// import FoodScreen from '../screens/food/FoodScreen';
+// import GroupChatScreen from '../screens/chat/GroupChatScreen';
+// import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
+// import AlumniScreen from '../screens/Alumni/AlumniScreen';
+// import PreAdmissionsScreen from '../screens/Pre-Admissions/PreAdmissionsScreen';
+// import TeacherAdminResourcesScreen from '../screens/syllabus_Textbook/TeacherAdminResourcesScreen';
 
 interface ProfileData {
   full_name: string;
@@ -111,37 +111,37 @@ const AdminDashboard = ({ navigation }) => {
     : { uri: 'default_avatar' };
 
   const allQuickAccessItems = [
-    { id: 'qa1', title: 'Pre-Admissions', imageSource: 'https://cdn-icons-png.flaticon.com/128/16495/16495874.png', navigateToTab: 'PreAdmissionsScreen' },
-    { id: 'qa2', title: 'Alumni', imageSource: 'https://cdn-icons-png.flaticon.com/128/2641/2641333.png', navigateToTab: 'AlumniScreen' },
-    { id: 'qa-ads-manage', title: 'Ads Management', imageSource: 'https://cdn-icons-png.flaticon.com/128/19006/19006038.png', navigateTo: 'AdminAdDashboardScreen' },
-    { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
+    // { id: 'qa1', title: 'Pre-Admissions', imageSource: 'https://cdn-icons-png.flaticon.com/128/16495/16495874.png', navigateToTab: 'PreAdmissionsScreen' },
+    // { id: 'qa2', title: 'Alumni', imageSource: 'https://cdn-icons-png.flaticon.com/128/2641/2641333.png', navigateToTab: 'AlumniScreen' },
+    // { id: 'qa-ads-manage', title: 'Ads Management', imageSource: 'https://cdn-icons-png.flaticon.com/128/19006/19006038.png', navigateTo: 'AdminAdDashboardScreen' },
+    // { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
     { id: 'qa0', title: 'LM', imageSource: 'https://cdn-icons-png.flaticon.com/128/15096/15096966.png', navigateToTab: 'AdminLM' },
     { id: 'qa5', title: 'Time Table', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-    { id: 'qa4', title: 'Syllabus Tracker', imageSource: 'https://cdn-icons-png.flaticon.com/128/4728/4728712.png', navigateToTab: 'AdminSyllabusScreen' },
-    { id: 'qa40', title: 'Syllabus & Textbook', imageSource: 'https://cdn-icons-png.flaticon.com/128/3185/3185838.png', navigateToTab: 'TeacherAdminResourcesScreen' },
-    { id: 'qa7', title: 'Exam Schedule', imageSource: 'https://cdn-icons-png.flaticon.com/128/4029/4029113.png', navigateToTab: 'TeacherAdminExamScreen' },
-    { id: 'qa15', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/207/207190.png', navigateToTab: 'TeacherAdminExamsScreen' },
-    { id: 'qa6', title: 'Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913576.png', navigateToTab: 'TeacherAdminResultsScreen' },
-    { id: 'qa16', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
+    // { id: 'qa4', title: 'Syllabus Tracker', imageSource: 'https://cdn-icons-png.flaticon.com/128/4728/4728712.png', navigateToTab: 'AdminSyllabusScreen' },
+    // { id: 'qa40', title: 'Syllabus & Textbook', imageSource: 'https://cdn-icons-png.flaticon.com/128/3185/3185838.png', navigateToTab: 'TeacherAdminResourcesScreen' },
+    // { id: 'qa7', title: 'Exam Schedule', imageSource: 'https://cdn-icons-png.flaticon.com/128/4029/4029113.png', navigateToTab: 'TeacherAdminExamScreen' },
+    // { id: 'qa15', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/207/207190.png', navigateToTab: 'TeacherAdminExamsScreen' },
+    // { id: 'qa6', title: 'Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913576.png', navigateToTab: 'TeacherAdminResultsScreen' },
+    // { id: 'qa16', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
     { id: 'qa13', title: 'Homework', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
-    { id: 'qa27', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'OnlineClassScreen' },
-    { id: 'qa8', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/9562/9562280.png', navigateToTab: 'TeacherAdminLabsScreen' },
-    { id: 'qa9', title: 'Sports', imageSource: 'https://cdn-icons-png.flaticon.com/128/3429/3429456.png', navigateToTab: 'AdminSportsScreen' },
-    { id: 'qa12', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/3004/3004458.png', navigateToTab: 'TeacherHealthAdminScreen' },
-    { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
-    { id: 'qa10', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/17588/17588666.png', navigateToTab: 'TeacherAdminPTMScreen' },
-    { id: 'qa17', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/2945/2945694.png', navigateToTab: 'TransportScreen' },    
-    { id: 'qa14', title: 'Help Desk', imageSource: 'https://cdn-icons-png.flaticon.com/128/4961/4961736.png', navigateToTab: 'AdminHelpDeskScreen' },
+    // { id: 'qa27', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'OnlineClassScreen' },
+    // { id: 'qa8', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/9562/9562280.png', navigateToTab: 'TeacherAdminLabsScreen' },
+    // { id: 'qa9', title: 'Sports', imageSource: 'https://cdn-icons-png.flaticon.com/128/3429/3429456.png', navigateToTab: 'AdminSportsScreen' },
+    // { id: 'qa12', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/3004/3004458.png', navigateToTab: 'TeacherHealthAdminScreen' },
+    // { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
+    // { id: 'qa10', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/17588/17588666.png', navigateToTab: 'TeacherAdminPTMScreen' },
+    // { id: 'qa17', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/2945/2945694.png', navigateToTab: 'TransportScreen' },    
+    // { id: 'qa14', title: 'Help Desk', imageSource: 'https://cdn-icons-png.flaticon.com/128/4961/4961736.png', navigateToTab: 'AdminHelpDeskScreen' },
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa19', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     // { id: 'qa20', title: 'Chat AI', imageSource: 'https://cdn-icons-png.flaticon.com/128/6028/6028616.png', navigateToTab: 'ChatAI' },
     // { id: 'qa21', title: 'Suggestions', imageSource: 'https://cdn-icons-png.flaticon.com/128/9722/9722906.png', navigateToTab: 'AdminSuggestionsScreen' },
     // { id: 'qa22', title: 'Sponsorship', imageSource: 'https://cdn-icons-png.flaticon.com/128/18835/18835518.png', navigateToTab: 'AdminSponsorScreen' },
-    { id: 'qa23', title: 'Payments', imageSource: 'https://cdn-icons-png.flaticon.com/128/1198/1198291.png', navigateToTab: 'AdminPaymentScreen' },
-    { id: 'qa24', title: 'Kitchen', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
-    { id: 'qa25', title: 'Food', imageSource: 'https://cdn-icons-png.flaticon.com/128/2276/2276931.png', navigateToTab: 'FoodScreen' },
-    { id: 'qa26', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/745/745205.png', navigateToTab: 'GroupChatScreen' },
+    // { id: 'qa23', title: 'Payments', imageSource: 'https://cdn-icons-png.flaticon.com/128/1198/1198291.png', navigateToTab: 'AdminPaymentScreen' },
+    // { id: 'qa24', title: 'Kitchen', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
+    // { id: 'qa25', title: 'Food', imageSource: 'https://cdn-icons-png.flaticon.com/128/2276/2276931.png', navigateToTab: 'FoodScreen' },
+    // { id: 'qa26', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/745/745205.png', navigateToTab: 'GroupChatScreen' },
   ];
 
   const [filteredItems, setFilteredItems] = useState(allQuickAccessItems);
@@ -217,32 +217,32 @@ const AdminDashboard = ({ navigation }) => {
       case 'AdminLM': return ( <><ContentScreenHeader title="Login Management" onBack={handleBack} /><AdminLM /></> );
       case 'Timetable': return ( <><ContentScreenHeader title="Time Table Management" onBack={handleBack} /><TimetableScreen /></> );
       case 'Attendance': return ( <><ContentScreenHeader title="Attendance" onBack={handleBack} /><AttendanceScreen /></> );
-      case 'TeacherHealthAdminScreen': return ( <> <ContentScreenHeader title="Health Information" onBack={handleBack} /> <TeacherHealthAdminScreen /> </> );
-      case 'AdminSportsScreen': return ( <> <ContentScreenHeader title="Sports" onBack={handleBack} /> <AdminSportsScreen /> </> );
-      case 'AdminEventsScreen': return ( <> <ContentScreenHeader title="Events" onBack={handleBack} /> <AdminEventsScreen /> </> );
-      case 'AdminHelpDeskScreen': return ( <> <ContentScreenHeader title="Help Desk" onBack={handleBack} /> <AdminHelpDeskScreen /> </> );
-      case 'TeacherAdminPTMScreen': return ( <> <ContentScreenHeader title="Meetings" onBack={handleBack} /> <TeacherAdminPTMScreen navigation={navigation}/> </> );
-      case 'TeacherAdminLabsScreen': return ( <> <ContentScreenHeader title="Digital Labs" onBack={handleBack} /> <TeacherAdminLabsScreen /> </> );
+      // case 'TeacherHealthAdminScreen': return ( <> <ContentScreenHeader title="Health Information" onBack={handleBack} /> <TeacherHealthAdminScreen /> </> );
+      // case 'AdminSportsScreen': return ( <> <ContentScreenHeader title="Sports" onBack={handleBack} /> <AdminSportsScreen /> </> );
+      // case 'AdminEventsScreen': return ( <> <ContentScreenHeader title="Events" onBack={handleBack} /> <AdminEventsScreen /> </> );
+      // case 'AdminHelpDeskScreen': return ( <> <ContentScreenHeader title="Help Desk" onBack={handleBack} /> <AdminHelpDeskScreen /> </> );
+      // case 'TeacherAdminPTMScreen': return ( <> <ContentScreenHeader title="Meetings" onBack={handleBack} /> <TeacherAdminPTMScreen navigation={navigation}/> </> );
+      // case 'TeacherAdminLabsScreen': return ( <> <ContentScreenHeader title="Digital Labs" onBack={handleBack} /> <TeacherAdminLabsScreen /> </> );
       case 'TeacherAdminHomeworkScreen': return ( <> <ContentScreenHeader title="Homework" onBack={handleBack} /> <TeacherAdminHomeworkScreen /> </> );
-      case 'TeacherAdminExamScreen': return ( <> <ContentScreenHeader title="Exam Schedule" onBack={handleBack} /> <TeacherAdminExamScreen /> </> );
-      case 'TeacherAdminExamsScreen': return ( <> <ContentScreenHeader title="Exams" onBack={handleBack} /> <TeacherAdminExamsScreen /> </> );
-      case 'TeacherAdminMaterialsScreen': return ( <> <ContentScreenHeader title="Study Materials" onBack={handleBack} /> <TeacherAdminMaterialsScreen /> </> );
-      case 'AdminSyllabusScreen': return ( <> <ContentScreenHeader title="Syllabus Tracker" onBack={handleBack} /> <AdminSyllabusScreen /> </> );
-      case 'TransportScreen': return ( <> <ContentScreenHeader title="Transport" onBack={handleBack} /> <TransportScreen /> </> );
-      case 'TeacherAdminResultsScreen': return ( <> <ContentScreenHeader title="Reports" onBack={handleBack} /> <TeacherAdminResultsScreen navigation={navigation} /> </> );
+      // case 'TeacherAdminExamScreen': return ( <> <ContentScreenHeader title="Exam Schedule" onBack={handleBack} /> <TeacherAdminExamScreen /> </> );
+      // case 'TeacherAdminExamsScreen': return ( <> <ContentScreenHeader title="Exams" onBack={handleBack} /> <TeacherAdminExamsScreen /> </> );
+      // case 'TeacherAdminMaterialsScreen': return ( <> <ContentScreenHeader title="Study Materials" onBack={handleBack} /> <TeacherAdminMaterialsScreen /> </> );
+      // case 'AdminSyllabusScreen': return ( <> <ContentScreenHeader title="Syllabus Tracker" onBack={handleBack} /> <AdminSyllabusScreen /> </> );
+      // case 'TransportScreen': return ( <> <ContentScreenHeader title="Transport" onBack={handleBack} /> <TransportScreen /> </> );
+      // case 'TeacherAdminResultsScreen': return ( <> <ContentScreenHeader title="Reports" onBack={handleBack} /> <TeacherAdminResultsScreen navigation={navigation} /> </> );
       case 'Gallery': return ( <><ContentScreenHeader title="Gallery" onBack={handleBack} /><GalleryScreen /></> );
       case 'AboutUs': return ( <><ContentScreenHeader title="About Us" onBack={handleBack} /><AboutUs /></> );
-      case 'ChatAI': return ( <><ContentScreenHeader title="AI Assistant" onBack={handleBack} /><ChatAIScreen /></> );
-      case 'AdminSuggestionsScreen': return ( <><ContentScreenHeader title="Suggestions" onBack={handleBack} /><AdminSuggestionsScreen /></> );
-      case 'AdminSponsorScreen': return ( <><ContentScreenHeader title="Sponsorship" onBack={handleBack} /><AdminSponsorScreen /></> );
-      case 'AdminPaymentScreen': return ( <><ContentScreenHeader title="Payments" onBack={handleBack} /><AdminPaymentScreen /></> );
-      case 'KitchenScreen': return ( <><ContentScreenHeader title="Kitchen" onBack={handleBack} /><KitchenScreen /></> );
-      case 'FoodScreen': return ( <><ContentScreenHeader title="Food" onBack={handleBack} /><FoodScreen /></> );
-      case 'AlumniScreen': return ( <><ContentScreenHeader title="Alumni" onBack={handleBack} /><AlumniScreen /></> );
-      case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
-      case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
-      case 'PreAdmissionsScreen': return ( <><ContentScreenHeader title="Pre-Admissions" onBack={handleBack} /><PreAdmissionsScreen /></> );
-      case 'TeacherAdminResourcesScreen': return ( <><ContentScreenHeader title="Syllabus & Textbook" /><TeacherAdminResourcesScreen /></> );
+      // case 'ChatAI': return ( <><ContentScreenHeader title="AI Assistant" onBack={handleBack} /><ChatAIScreen /></> );
+      // case 'AdminSuggestionsScreen': return ( <><ContentScreenHeader title="Suggestions" onBack={handleBack} /><AdminSuggestionsScreen /></> );
+      // case 'AdminSponsorScreen': return ( <><ContentScreenHeader title="Sponsorship" onBack={handleBack} /><AdminSponsorScreen /></> );
+      // case 'AdminPaymentScreen': return ( <><ContentScreenHeader title="Payments" onBack={handleBack} /><AdminPaymentScreen /></> );
+      // case 'KitchenScreen': return ( <><ContentScreenHeader title="Kitchen" onBack={handleBack} /><KitchenScreen /></> );
+      // case 'FoodScreen': return ( <><ContentScreenHeader title="Food" onBack={handleBack} /><FoodScreen /></> );
+      // case 'AlumniScreen': return ( <><ContentScreenHeader title="Alumni" onBack={handleBack} /><AlumniScreen /></> );
+      // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
+      // case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
+      // case 'PreAdmissionsScreen': return ( <><ContentScreenHeader title="Pre-Admissions" onBack={handleBack} /><PreAdmissionsScreen /></> );
+      // case 'TeacherAdminResourcesScreen': return ( <><ContentScreenHeader title="Syllabus & Textbook" /><TeacherAdminResourcesScreen /></> );
       
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
     }
