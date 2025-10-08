@@ -312,7 +312,7 @@ const AppNavigator = () => {
       
       {/* This is the "small key". It will now float on top of all screens. */}
       {/* We add a check to only show it if a user is logged in. */}
-      {user && <AdDisplay />}
+      {/* {user && <AdDisplay />} */}
     </View>
   );
 };
