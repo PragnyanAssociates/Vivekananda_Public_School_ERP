@@ -740,9 +740,88 @@ app.get('/api/attendance/admin-summary', async (req, res) => {
     }
 });
 
-app.get('/api/attendance/sheet', async (req, res) => { const { class_group, date } = req.query; try { if (!class_group || !date) { return res.status(400).json({ message: 'Class group and date are required.' }); } const periodNum = 1; /* MODIFIED: Always fetch for period 1 */ const query = `SELECT u.id, u.full_name, ar.status FROM users u LEFT JOIN attendance_records ar ON u.id = ar.student_id AND ar.attendance_date = ? AND ar.period_number = ? WHERE u.role = 'student' AND u.class_group = ? ORDER BY u.full_name;`; const [students] = await db.query(query, [date, periodNum, class_group]); res.status(200).json(students); } catch (error) { console.error("GET /api/attendance/sheet Error:", error); res.status(500).json({ message: 'Error fetching attendance sheet.' }); }});
+app.get('/api/attendance/sheet', async (req, res) => { 
+    const { class_group, date } = req.query; 
+    try { 
+        if (!class_group || !date) { 
+            return res.status(400).json({ message: 'Class group and date are required.' }); 
+        } 
+        const periodNum = 1; // Always fetch for period 1 for daily attendance
+        const query = `SELECT u.id, u.full_name, ar.status FROM users u LEFT JOIN attendance_records ar ON u.id = ar.student_id AND ar.attendance_date = ? AND ar.period_number = ? WHERE u.role = 'student' AND u.class_group = ? ORDER BY u.full_name;`; 
+        const [students] = await db.query(query, [date, periodNum, class_group]); 
+        res.status(200).json(students); 
+    } catch (error) { 
+        console.error("GET /api/attendance/sheet Error:", error); 
+        res.status(500).json({ message: 'Error fetching attendance sheet.' }); 
+    }
+});
 
-app.post('/api/attendance', async (req, res) => { const { class_group, subject_name, date, teacher_id, attendanceData } = req.body; const connection = await db.getConnection(); try { if (!class_group || !subject_name || !date || !teacher_id || !Array.isArray(attendanceData)) { return res.status(400).json({ message: 'All fields are required, and attendanceData must be an array.' }); } const periodNum = 1; // --- MODIFIED: Enforce daily attendance via Period 1 --- if (attendanceData.some(record => !record.student_id || !['Present', 'Absent'].includes(record.status))) { return res.status(400).json({ message: 'Each attendance record must have a valid student_id and status (Present or Absent).' }); } const dayOfWeek = new Date(date).toLocaleString('en-US', { weekday: 'long' }); const [timetableSlot] = await connection.query( 'SELECT teacher_id FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?', [class_group, dayOfWeek, periodNum] ); if (!timetableSlot.length || timetableSlot[0].teacher_id !== parseInt(teacher_id)) { return res.status(403).json({ message: 'You are not assigned to the first period for this class today.' }); } await connection.beginTransaction(); const studentIds = attendanceData.map(r => r.student_id); if (studentIds.length > 0) { await connection.execute('DELETE FROM attendance_records WHERE student_id IN (?) AND attendance_date = ?', [studentIds, date]); } const query = `INSERT INTO attendance_records (student_id, teacher_id, class_group, subject_name, attendance_date, period_number, status) VALUES (?, ?, ?, ?, ?, ?, ?);`; for (const record of attendanceData) { await connection.execute(query, [ record.student_id, teacher_id, class_group, subject_name, date, periodNum, record.status ]); } await connection.commit(); res.status(201).json({ message: 'Attendance saved successfully!' }); } catch (error) { await connection.rollback(); console.error("POST /api/attendance Error:", error); res.status(500).json({ message: 'Error saving attendance.' }); } finally { connection.release(); }});
+// ★★★★★ START: CORRECTED AND STABILIZED POST ATTENDANCE ROUTE ★★★★★
+app.post('/api/attendance', async (req, res) => {
+    const { class_group, subject_name, date, teacher_id, attendanceData } = req.body;
+    const connection = await db.getConnection();
+    try {
+        // --- Validation Step 1: Check for required fields ---
+        if (!class_group || !subject_name || !date || !teacher_id || !Array.isArray(attendanceData)) {
+            return res.status(400).json({ message: 'All fields are required, and attendanceData must be an array.' });
+        }
+        
+        // --- Hardcode period number for daily attendance logic ---
+        const periodNum = 1;
+
+        // --- Validation Step 2: Check the contents of the array ---
+        if (attendanceData.length > 0 && attendanceData.some(record => !record.student_id || !['Present', 'Absent'].includes(record.status))) {
+            return res.status(400).json({ message: 'Each attendance record must have a valid student_id and status (Present or Absent).' });
+        }
+        
+        // --- Validation Step 3: Check if the teacher is assigned to this period ---
+        const dayOfWeek = new Date(date).toLocaleString('en-US', { weekday: 'long' });
+        const [timetableSlot] = await connection.query(
+            'SELECT teacher_id FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?',
+            [class_group, dayOfWeek, periodNum]
+        );
+        if (!timetableSlot.length || timetableSlot[0].teacher_id !== parseInt(teacher_id, 10)) {
+            return res.status(403).json({ message: 'You are not assigned to the first period for this class today.' });
+        }
+
+        // --- Database Transaction: Perform the update atomically ---
+        await connection.beginTransaction();
+
+        const studentIds = attendanceData.map(r => r.student_id);
+
+        if (studentIds.length > 0) {
+             // 1. Delete any pre-existing records for these students on this day to prevent conflicts.
+            await connection.execute(
+                'DELETE FROM attendance_records WHERE student_id IN (?) AND attendance_date = ?', 
+                [studentIds, date]
+            );
+
+            // 2. Insert the new, updated records.
+            const query = `INSERT INTO attendance_records (student_id, teacher_id, class_group, subject_name, attendance_date, period_number, status) VALUES ?;`;
+            const valuesToInsert = attendanceData.map(record => [
+                record.student_id,
+                teacher_id,
+                class_group,
+                subject_name,
+                date,
+                periodNum,
+                record.status
+            ]);
+            await connection.query(query, [valuesToInsert]);
+        }
+        
+        await connection.commit();
+        res.status(201).json({ message: 'Attendance saved successfully!' });
+
+    } catch (error) {
+        await connection.rollback(); // Rollback transaction on error
+        console.error("POST /api/attendance Error:", error);
+        res.status(500).json({ message: 'Error saving attendance.' });
+    } finally {
+        connection.release(); // Always release the connection
+    }
+});
+// ★★★★★ END: CORRECTED AND STABILIZED POST ATTENDANCE ROUTE ★★★★★
 
 // --- MODIFIED: Rewritten Student History Endpoint Logic ---
 const getStudentHistory = async (studentId, viewMode) => {
