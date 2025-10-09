@@ -8,6 +8,7 @@ const cors = require('cors');
 const multer = require('multer');
 const jwt = require('jsonwebtoken'); // 👈 ADD THIS LINE
 const path = require('path');
+const sharp = require('sharp'); 
 // ... after const path = require('path');
 const crypto = require('crypto');
 const { sendPasswordResetCode } = require('./mailer');
@@ -42,25 +43,59 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 // ==========================================================
 app.get('/api/image/:filename', (req, res) => {
     const { filename } = req.params;
-    // Security: Basic check to prevent directory traversal attacks
+
+    // --- Get optional resizing parameters from the URL query string ---
+    const width = req.query.w ? parseInt(req.query.w, 10) : null;
+    const height = req.query.h ? parseInt(req.query.h, 10) : null;
+    const quality = req.query.q ? parseInt(req.query.q, 10) : 80; // Default to 80% quality
+
+    // Security check
     if (filename.includes('..')) {
         return res.status(400).send('Invalid filename');
     }
 
     const filePath = path.join(__dirname, 'uploads', filename);
 
-    // Check if the file actually exists before trying to send it
+    // Check if the original file exists
     fs.access(filePath, fs.constants.F_OK, (err) => {
         if (err) {
             console.error(`Image not found: ${filePath}`);
             return res.status(404).json({ error: 'File not found' });
         }
 
-        // Send the file to the client
-        res.sendFile(filePath, (err) => {
-            if (err) {
-                console.error(`Error sending file: ${filePath}`, err);
-                res.status(500).send("Error sending file");
+        // --- LOGIC: If width or height is requested, resize the image ---
+        if (width || height) {
+            res.type('image/jpeg'); // Set the response content type
+
+            const transformer = sharp(filePath);
+
+            // Resize the image. 'fit: inside' maintains aspect ratio.
+            // 'withoutEnlargement' prevents making small images blurry.
+            transformer.resize({
+                width: width,
+                height: height,
+                fit: 'inside',
+                withoutEnlargement: true
+            });
+
+            // Convert to JPEG format with specified quality
+            transformer.jpeg({ quality });
+            
+            // Handle any errors during processing
+            transformer.on('error', (sharpErr) => {
+                console.error('Sharp processing error:', sharpErr);
+                res.status(500).send('Error processing image');
+            });
+            
+            // Stream the processed image directly to the client
+            return transformer.pipe(res);
+        }
+
+        // --- FALLBACK: If no resizing is needed, send the original file ---
+        res.sendFile(filePath, (fileErr) => {
+            if (fileErr) {
+                console.error(`Error sending original file: ${filePath}`, fileErr);
+                // Avoid sending headers twice if an error occurs
             }
         });
     });
@@ -4112,18 +4147,16 @@ app.get('/api/transport/routes', async (req, res) => {
 
 
 // ==========================================================
-// --- GALLERY API ROUTES ---
+// --- GALLERY API ROUTES (FULLY OPTIMIZED) ---
 // ==========================================================
 
 // DELETE: Delete an entire album by its title
 app.delete('/api/gallery/album', async (req, res) => {
-    const { title, role } = req.body; // Get title and role from the request body
+    const { title, role } = req.body;
 
-    // Security check: Only admins can delete albums
     if (role !== 'admin') {
         return res.status(403).json({ message: "Forbidden: Requires Admin Role." });
     }
-
     if (!title) {
         return res.status(400).json({ message: "Album title is required." });
     }
@@ -4132,24 +4165,22 @@ app.delete('/api/gallery/album', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Step 1: Find all file paths associated with the album title before deleting records
         const [items] = await connection.query('SELECT file_path FROM gallery_items WHERE title = ?', [title]);
-        
         if (items.length === 0) {
             await connection.rollback();
             return res.status(404).json({ message: "Album not found." });
         }
 
-        // Step 2: Delete all database records for that album
         await connection.query('DELETE FROM gallery_items WHERE title = ?', [title]);
 
-        // Step 3: Asynchronously delete each associated file from the server's storage
+        // Asynchronously delete each file from storage
         items.forEach(item => {
             if (item.file_path) {
-                fs.unlink(item.file_path, (err) => {
+                // Construct the full path from the project root
+                const fullPath = path.join(__dirname, item.file_path);
+                fs.unlink(fullPath, (err) => {
                     if (err) {
-                        // Log the error but don't stop the process, as the DB record is already gone
-                        console.error(`Failed to delete file from disk: ${item.file_path}`, err);
+                        console.error(`Failed to delete file from disk: ${fullPath}`, err);
                     }
                 });
             }
@@ -4193,7 +4224,6 @@ app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) 
         if (file) fs.unlinkSync(file.path);
         return res.status(403).json({ message: "Forbidden: Requires Admin Role." });
     }
-
     if (!file || !title || !event_date || !adminId) {
         if (file) fs.unlinkSync(file.path);
         return res.status(400).json({ message: "Missing required fields: adminId, title, event_date, and a media file." });
@@ -4204,7 +4234,7 @@ app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) 
         await connection.beginTransaction();
 
         const file_type = file.mimetype.startsWith('image') ? 'photo' : 'video';
-        const file_path = `/uploads/${file.filename}`; 
+        const file_path = `/uploads/${file.filename}`;
         const query = 'INSERT INTO gallery_items (title, event_date, file_path, file_type, uploaded_by) VALUES (?, ?, ?, ?, ?)';
         const [result] = await connection.query(query, [title, event_date, file_path, file_type, adminId]);
         const newGalleryItemId = result.insertId;
@@ -4217,21 +4247,16 @@ app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) 
             const recipientIds = usersToNotify.map(u => u.id);
             const notificationTitle = `New Gallery Album: ${title}`;
             const notificationMessage = `New photos/videos for "${title}" have been added to the gallery. Check them out!`;
-            await createBulkNotifications(
-                connection,
-                recipientIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/gallery'
-            );
+            if (typeof createBulkNotifications === 'function') {
+                await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/gallery');
+            }
         }
         // --- End Notification Logic ---
 
         await connection.commit();
-        
-        res.status(201).json({ 
-            message: "Media uploaded and users notified successfully!", 
+
+        res.status(201).json({
+            message: "Media uploaded and users notified successfully!",
             insertId: newGalleryItemId,
             filePath: file_path
         });
@@ -4246,6 +4271,7 @@ app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) 
     }
 });
 
+
 // PUT: Update a gallery item's info (Checks for role='admin' in body)
 app.put('/api/gallery/:id', async (req, res) => {
     const { id } = req.params;
@@ -4254,7 +4280,6 @@ app.put('/api/gallery/:id', async (req, res) => {
     if (role !== 'admin') {
         return res.status(403).json({ message: "Forbidden: Requires Admin Role." });
     }
-
     if (!title || !event_date) {
         return res.status(400).json({ message: "Title and Event Date are required." });
     }
@@ -4262,7 +4287,6 @@ app.put('/api/gallery/:id', async (req, res) => {
     try {
         const query = 'UPDATE gallery_items SET title = ?, event_date = ? WHERE id = ?';
         const [result] = await db.query(query, [title, event_date, id]);
-
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: "Item not found." });
         }
@@ -4294,12 +4318,15 @@ app.delete('/api/gallery/:id', async (req, res) => {
         const filePath = rows[0].file_path;
 
         await connection.query('DELETE FROM gallery_items WHERE id = ?', [id]);
-        
-        fs.unlink(filePath, (err) => {
-            if (err) {
-                console.error(`Failed to delete file from disk: ${filePath}`, err);
-            }
-        });
+
+        if (filePath) {
+            const fullPath = path.join(__dirname, filePath);
+            fs.unlink(fullPath, (err) => {
+                if (err) {
+                    console.error(`Failed to delete file from disk: ${fullPath}`, err);
+                }
+            });
+        }
         
         await connection.commit();
         res.status(200).json({ message: "Item deleted successfully." });
