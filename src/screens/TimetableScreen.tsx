@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   Dimensions, TouchableOpacity, Modal, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import * as Animatable from 'react-native-animatable'; // ✨ NEW: Import animatable
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -79,6 +80,26 @@ const tableHeaders = [
   { name: 'FRI', color: '#E8EAF6', textColor: '#1A237E', width: dayColumnWidth },
   { name: 'SAT', color: '#E0F7FA', textColor: '#006064', width: dayColumnWidth },
 ];
+
+// ✨ NEW: Color palette and helper for dynamic subject colors
+const subjectColorPalette = [
+    '#E3F2FD', '#FCE4EC', '#F3E5F5', '#E8EAF6', '#E0F2F1',
+    '#FFF9C4', '#FBE9E7', '#EFEBE9', '#E0F7FA', '#F1F8E9',
+];
+
+const subjectColorMap = new Map<string, string>();
+let colorIndex = 0;
+
+const getSubjectColor = (subject?: string): string => {
+    if (!subject) return '#FFFFFF'; // Default for empty slots
+    if (subjectColorMap.has(subject)) {
+        return subjectColorMap.get(subject)!;
+    }
+    const color = subjectColorPalette[colorIndex % subjectColorPalette.length];
+    subjectColorMap.set(subject, color);
+    colorIndex++;
+    return color;
+};
 
 // --- Main Component ---
 const TimetableScreen = () => {
@@ -176,19 +197,17 @@ const TimetableScreen = () => {
       return;
     }
     
-    // --- MODIFIED: Enforce 1st Period Only Rule ---
     if (periodNumber !== 1) {
       Alert.alert('Attendance Rule', 'Attendance is only taken for the first period to mark the full day.');
       return;
     }
-    // --- END MODIFICATION ---
     
     if (!user?.id) return;
 
     navigation.navigate('Attendance', {
       class_group: selectedClass,
       subject_name: subject,
-      period_number: periodNumber, // This will always be 1 now
+      period_number: periodNumber,
       date: today.toISOString().split('T')[0],
     });
   };
@@ -219,38 +238,42 @@ const TimetableScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.pageContainer}>
-        <View style={styles.pageHeaderContainer}>
-          <Image
-            source={{ uri: 'https://cdn-icons-png.flaticon.com/128/2693/2693507.png' }}
-            style={styles.pageHeaderIcon}
-            defaultSource={require('../assets/fallback-icon.png')}
-          />
-          <View style={styles.pageHeaderTextContainer}>
-            <Text style={styles.pageMainTitle}>Class Schedule - {selectedClass}</Text>
-            <Text style={styles.pageSubTitle}>Logged in as: {user.full_name}</Text>
-          </View>
-        </View>
+        <Animatable.View animation="fadeInDown" duration={600}>
+            <View style={styles.pageHeaderContainer}>
+            <Image
+                source={{ uri: 'https://cdn-icons-png.flaticon.com/128/2693/2693507.png' }}
+                style={styles.pageHeaderIcon}
+                defaultSource={require('../assets/fallback-icon.png')}
+            />
+            <View style={styles.pageHeaderTextContainer}>
+                <Text style={styles.pageMainTitle}>Class Schedule - {selectedClass}</Text>
+                <Text style={styles.pageSubTitle}>Logged in as: {user.full_name}</Text>
+            </View>
+            </View>
+        </Animatable.View>
 
         {(user.role === 'admin' || user.role === 'teacher') && (
-          <View style={styles.adminPickerWrapper}>
-            <Picker
-              selectedValue={selectedClass}
-              onValueChange={(itemValue: string) => setSelectedClass(itemValue)}
-              style={styles.picker}
-              itemStyle={styles.pickerItem}
-              dropdownIconColor="#333"
-            >
-              {classPickerData.map(option => (
-                <Picker.Item key={option.key} label={option.label} value={option.key} />
-              ))}
-            </Picker>
-          </View>
+          <Animatable.View animation="fadeIn" duration={500} delay={200}>
+            <View style={styles.adminPickerWrapper}>
+                <Picker
+                selectedValue={selectedClass}
+                onValueChange={(itemValue: string) => setSelectedClass(itemValue)}
+                style={styles.picker}
+                itemStyle={styles.pickerItem}
+                dropdownIconColor="#333"
+                >
+                {classPickerData.map(option => (
+                    <Picker.Item key={option.key} label={option.label} value={option.key} />
+                ))}
+                </Picker>
+            </View>
+          </Animatable.View>
         )}
 
         {isTimetableLoading ? (
             <ActivityIndicator size="large" color="#5E35B1" style={{ marginTop: 50 }} />
         ) : (
-            <View style={styles.tableOuterContainer}>
+            <Animatable.View animation="fadeInUp" duration={700} delay={300} style={styles.tableOuterContainer}>
               <View style={styles.tableHeaderRow}>
                 {tableHeaders.map(h => (
                   <View key={h.name} style={[styles.tableHeaderCell, { backgroundColor: h.color, width: h.width }]}>
@@ -259,44 +282,48 @@ const TimetableScreen = () => {
                 ))}
               </View>
               {scheduleData.map((row, rowIndex) => (
-                <View key={rowIndex} style={styles.tableRow}>
-                  <View style={[styles.tableCell, styles.timeCell, { width: tableHeaders[0].width }]}>
-                    <Text style={styles.timeText}>{row.time}</Text>
-                  </View>
-                  {row.periods.map((period, periodIndex) => {
-                    const day = DAYS[periodIndex];
-                    const periodNumber = PERIOD_DEFINITIONS[rowIndex].period;
-                    const isMyPeriod = user.id && String(period.teacher_id) === String(user.id);
-                    return (
-                      <TouchableOpacity
-                        key={periodIndex}
-                        style={[
-                          styles.tableCell,
-                          period.isBreak ? styles.breakCell : styles.periodCell,
-                          isMyPeriod && styles.myPeriodCell,
-                          { width: tableHeaders[periodIndex + 1].width },
-                        ]}
-                        disabled={user.role !== 'admin' && !isMyPeriod}
-                        onPress={() =>
-                          user.role === 'admin'
-                            ? handleSlotPress(day, periodNumber)
-                            : isMyPeriod && handleTeacherSlotPress(period.subject!, periodNumber, day)
-                        }
-                      >
-                        <Text style={period.isBreak ? styles.breakTextSubject : styles.subjectText} numberOfLines={2}>
-                          {period.subject || '-'}
-                        </Text>
-                        {!period.isBreak && period.teacher && (
-                          <Text style={styles.teacherText} numberOfLines={1}>
-                            {period.teacher}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <Animatable.View key={rowIndex} animation="fadeIn" duration={500} delay={rowIndex * 100}>
+                    <View style={styles.tableRow}>
+                    <View style={[styles.tableCell, styles.timeCell, { width: tableHeaders[0].width }]}>
+                        <Text style={styles.timeText}>{row.time}</Text>
+                    </View>
+                    {row.periods.map((period, periodIndex) => {
+                        const day = DAYS[periodIndex];
+                        const periodNumber = PERIOD_DEFINITIONS[rowIndex].period;
+                        const isMyPeriod = user.id && String(period.teacher_id) === String(user.id);
+                        const periodBgColor = getSubjectColor(period.subject);
+
+                        return (
+                        <TouchableOpacity
+                            key={periodIndex}
+                            style={[
+                            styles.tableCell,
+                            period.isBreak ? styles.breakCell : { backgroundColor: periodBgColor }, // ✨ DYNAMIC COLOR
+                            isMyPeriod && styles.myPeriodCell,
+                            { width: tableHeaders[periodIndex + 1].width },
+                            ]}
+                            disabled={user.role !== 'admin' && !isMyPeriod}
+                            onPress={() =>
+                            user.role === 'admin'
+                                ? handleSlotPress(day, periodNumber)
+                                : isMyPeriod && handleTeacherSlotPress(period.subject!, periodNumber, day)
+                            }
+                        >
+                            <Text style={period.isBreak ? styles.breakTextSubject : styles.subjectText} numberOfLines={2}>
+                            {period.subject || 'Free'}
+                            </Text>
+                            {!period.isBreak && period.teacher && (
+                            <Text style={styles.teacherText} numberOfLines={1}>
+                                {period.teacher}
+                            </Text>
+                            )}
+                        </TouchableOpacity>
+                        );
+                    })}
+                    </View>
+                </Animatable.View>
               ))}
-            </View>
+            </Animatable.View>
         )}
       </ScrollView>
       {selectedSlot && (
@@ -315,7 +342,7 @@ const TimetableScreen = () => {
   );
 };
 
-// --- Edit Slot Modal Component (No changes needed here) ---
+// --- Edit Slot Modal Component (With Animation) ---
 const EditSlotModal = ({
   isVisible,
   onClose,
@@ -351,7 +378,7 @@ const EditSlotModal = ({
   return (
     <Modal visible={isVisible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <Animatable.View animation="zoomIn" duration={400} style={styles.modalContent}>
           <Text style={styles.modalTitle}>Edit Slot</Text>
           <Text style={styles.modalSubtitle}>
             {slotInfo.day} - Period {slotInfo.period}
@@ -410,16 +437,16 @@ const EditSlotModal = ({
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>Cancel</Text>
           </TouchableOpacity>
-        </View>
+        </Animatable.View>
       </View>
     </Modal>
   );
 };
 
-// --- Styles (No changes needed here) ---
+// --- Styles (Updated with new colors) ---
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F4F6F8' },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F6F8' },
+  safeArea: { flex: 1, backgroundColor: '#F7F9FC' }, // ✨ UPDATED BG
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FC' }, // ✨ UPDATED BG
   pageContainer: { paddingBottom: 30 },
   pageHeaderContainer: {
     flexDirection: 'row',
@@ -441,20 +468,21 @@ const styles = StyleSheet.create({
   pageMainTitle: { fontSize: 18, fontWeight: 'bold', color: '#2C3E50' },
   pageSubTitle: { fontSize: 14, color: '#566573', paddingTop: 2 },
   adminPickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#BDBDBD',
-    borderRadius: 8,
-    padding: 10,
     marginHorizontal: 10,
     marginBottom: 15,
     backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
   modalPickerStyle: {
     borderWidth: 1,
     borderColor: '#ccc',
-    borderRadius: 5,
+    borderRadius: 8,
     marginBottom: 10,
-    padding: 10,
+    backgroundColor: '#F9F9F9',
   },
   picker: {
     height: 50,
@@ -500,8 +528,12 @@ const styles = StyleSheet.create({
   },
   timeCell: { alignItems: 'center', backgroundColor: '#F8F9FA' },
   timeText: { fontSize: 11, color: '#495057', fontWeight: '500', textAlign: 'center' },
-  periodCell: { backgroundColor: '#FFFFFF' },
-  myPeriodCell: { backgroundColor: '#D1E7DD', borderWidth: 1, borderColor: '#A3BFA8' },
+  // ✨ `periodCell` removed, as color is now dynamic
+  myPeriodCell: {
+    backgroundColor: '#A0E7E5', // ✨ NEW vibrant color
+    borderWidth: 1.5,
+    borderColor: '#006A71', // ✨ NEW border color
+  },
   subjectText: {
     fontSize: 12,
     fontWeight: '600',
@@ -510,35 +542,41 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   teacherText: { fontSize: 10, color: '#78909C', textAlign: 'center' },
-  breakCell: { alignItems: 'center', backgroundColor: '#ECEFF1' },
+  breakCell: {
+    alignItems: 'center',
+    backgroundColor: '#EAECEE', // ✨ NEW break color
+  },
   breakTextSubject: { fontSize: 12, fontWeight: '500', color: '#546E7A', textAlign: 'center' },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)', // ✨ Darker overlay
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     width: '90%',
     backgroundColor: 'white',
-    borderRadius: 10,
+    borderRadius: 15, // ✨ Rounded corners
     padding: 20,
     elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
   },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#333' },
   modalSubtitle: { fontSize: 16, color: '#555', textAlign: 'center', marginBottom: 20 },
-  inputLabel: { fontSize: 16, marginTop: 15, marginBottom: 5, color: '#333' },
+  inputLabel: { fontSize: 16, marginTop: 15, marginBottom: 5, color: '#333', fontWeight: '500' },
   modalButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 25,
   },
-  modalButton: { flex: 1, padding: 12, borderRadius: 5, alignItems: 'center' },
+  modalButton: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', elevation: 2 },
   saveButton: { backgroundColor: '#27AE60', marginLeft: 10 },
   clearButton: { backgroundColor: '#E74C3C', marginRight: 10 },
   modalButtonText: { color: 'white', fontWeight: 'bold' },
   closeButton: { marginTop: 15, padding: 10 },
-  closeButtonText: { textAlign: 'center', color: '#3498DB', fontSize: 16 },
+  closeButtonText: { textAlign: 'center', color: '#3498DB', fontSize: 16, fontWeight: '600' },
 });
 
 export default TimetableScreen;

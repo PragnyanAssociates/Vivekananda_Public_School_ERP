@@ -1,18 +1,21 @@
-// 📂 File: src/screens/homework/StudentHomeworkScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Linking, LayoutAnimation, UIManager, Platform } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import * as Animatable from 'react-native-animatable'; // ✨ NEW: Import animatable
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
+// ✨ NEW: Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const StudentHomeworkScreen = () => {
     const { user } = useAuth();
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    // This state will now handle loading for both submitting and deleting
     const [isSubmitting, setIsSubmitting] = useState(null);
 
     const fetchAssignments = useCallback(async () => {
@@ -49,60 +52,37 @@ const StudentHomeworkScreen = () => {
             setIsSubmitting(assignmentId);
             const formData = new FormData();
             formData.append('student_id', user.id.toString());
-            formData.append('submission', {
-                uri: fileToUpload.uri,
-                type: fileToUpload.type,
-                name: fileToUpload.name,
-            });
+            formData.append('submission', { uri: fileToUpload.uri, type: fileToUpload.type, name: fileToUpload.name });
 
-            await apiClient.post(`/homework/submit/${assignmentId}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            // ✨ NEW: Animate the layout change before fetching new data
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            await apiClient.post(`/homework/submit/${assignmentId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             
             Alert.alert("Success", "Homework submitted!");
             fetchAssignments();
 
         } catch (err: any) {
-            if (isCancel(err)) {
-                console.log('User cancelled submission.');
-            } else {
-                console.error("Submission Error:", err);
-                Alert.alert("Error", err.response?.data?.message || "Could not submit file.");
-            }
-        } finally {
-            setIsSubmitting(null);
-        }
+            if (isCancel(err)) { console.log('User cancelled submission.'); } 
+            else { console.error("Submission Error:", err); Alert.alert("Error", err.response?.data?.message || "Could not submit file."); }
+        } finally { setIsSubmitting(null); }
     };
     
-    // ★ 1. ADD a function to handle deleting a submission
     const handleDeleteSubmission = async (submissionId, assignmentId) => {
         if (!user) return;
-        Alert.alert(
-            "Delete Submission",
-            "Are you sure you want to delete your submission? This action cannot be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        setIsSubmitting(assignmentId); // Reuse loading state for visual feedback
-                        try {
-                            // The body for a DELETE request in axios is passed in a 'data' object
-                            await apiClient.delete(`/homework/submission/${submissionId}`, {
-                                data: { student_id: user.id }
-                            });
-                            Alert.alert("Success", "Your submission has been deleted.");
-                            fetchAssignments(); // Refresh the list to show the "Submit" button again
-                        } catch (err: any) {
-                            Alert.alert("Error", err.response?.data?.message || "Could not delete submission.");
-                        } finally {
-                            setIsSubmitting(null);
-                        }
-                    },
-                },
-            ]
-        );
+        Alert.alert( "Delete Submission", "Are you sure you want to delete your submission? This action cannot be undone.", [ { text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive",
+            onPress: async () => {
+                setIsSubmitting(assignmentId); 
+                try {
+                    // ✨ NEW: Animate the layout change before fetching new data
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    await apiClient.delete(`/homework/submission/${submissionId}`, { data: { student_id: user.id } });
+                    Alert.alert("Success", "Your submission has been deleted.");
+                    fetchAssignments(); 
+                } catch (err: any) {
+                    Alert.alert("Error", err.response?.data?.message || "Could not delete submission.");
+                } finally { setIsSubmitting(null); }
+            },
+        }, ]);
     };
 
     if (isLoading && assignments.length === 0) {
@@ -114,10 +94,11 @@ const StudentHomeworkScreen = () => {
             <FlatList
                 data={assignments}
                 keyExtractor={(item) => item.id.toString()}
-                // ★ 2. PASS the new delete handler to the AssignmentCard
-                renderItem={({ item }) => (
+                // ✨ MODIFIED: Pass index to the AssignmentCard for staggered animation
+                renderItem={({ item, index }) => (
                     <AssignmentCard 
                         item={item} 
+                        index={index}
                         onSubmit={handleSubmission} 
                         onDelete={handleDeleteSubmission}
                         isSubmitting={isSubmitting === item.id} 
@@ -134,7 +115,8 @@ const StudentHomeworkScreen = () => {
 };
 
 const Header = () => (
-    <View style={styles.header}>
+    // ✨ MODIFIED: Add entrance animation to header
+    <Animatable.View animation="fadeInDown" duration={600} style={styles.header}>
         <View style={styles.iconCircle}>
             <MaterialIcons name="edit" size={24} color="#fff" />
         </View>
@@ -142,11 +124,11 @@ const Header = () => (
             <Text style={styles.headerTitle}>Assignments & Homework</Text>
             <Text style={styles.headerSubtitle}>Track upcoming and submitted assignments.</Text>
         </View>
-    </View>
+    </Animatable.View>
 );
 
-// ★ 3. UPDATE AssignmentCard to accept 'onDelete' and render the correct button
-const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
+// ✨ MODIFIED: Accept 'index' prop for animation delay
+const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting, index }) => {
     const getStatusInfo = () => {
         const statusText = item.submission_id ? (item.status || 'Submitted') : 'Pending';
         switch (statusText) {
@@ -160,7 +142,8 @@ const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
     const handleViewAttachment = () => { if(item.attachment_path) Linking.openURL(`${SERVER_URL}${item.attachment_path}`); };
 
     return (
-        <View style={[styles.card, { borderLeftColor: status.color }]}>
+        // ✨ MODIFIED: Wrap card in animatable view for staggered entrance
+        <Animatable.View style={[styles.card, { borderLeftColor: status.color }]} animation="fadeInUp" duration={600} delay={index * 120}>
             <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <View style={[styles.statusBadge, { backgroundColor: status.color }]}>
@@ -177,10 +160,11 @@ const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
             </View>
             
             {status.text === 'Graded' && item.grade && (
-                <View style={styles.gradedSection}>
+                // ✨ MODIFIED: Animate the graded section when it appears
+                <Animatable.View animation="fadeIn" duration={400} style={styles.gradedSection}>
                     <DetailRow icon="school" label="Grade" value={item.grade} />
                     {item.remarks && <Text style={styles.remarksText}>Remarks: {item.remarks}</Text>}
-                </View>
+                </Animatable.View>
             )}
             
             <View style={styles.buttonRow}>
@@ -190,10 +174,7 @@ const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
                         <Text style={styles.detailsButtonText}>View Attachment</Text>
                     </TouchableOpacity>
                 )}
-
-                {/* ★ 4. MODIFY BUTTON LOGIC to show submit, delete, or nothing */}
                 {item.submission_id && status.text !== 'Graded' ? (
-                    // If submitted but NOT graded, show the delete button
                     <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(item.submission_id, item.id)} disabled={isSubmitting}>
                         {isSubmitting ? 
                             <ActivityIndicator size="small" color="#fff" /> : 
@@ -201,7 +182,6 @@ const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
                         }
                     </TouchableOpacity>
                 ) : !item.submission_id && (
-                    // If not submitted, show the submit button
                     <TouchableOpacity style={styles.submitButton} onPress={() => onSubmit(item.id)} disabled={isSubmitting}>
                         {isSubmitting ? 
                             <ActivityIndicator size="small" color="#fff" /> : 
@@ -209,9 +189,8 @@ const AssignmentCard = ({ item, onSubmit, onDelete, isSubmitting }) => {
                         }
                     </TouchableOpacity>
                 )}
-                {/* If the assignment is graded, no action button will appear, which is correct. */}
             </View>
-        </View>
+        </Animatable.View>
     );
 };
 
@@ -247,7 +226,6 @@ const styles = StyleSheet.create({
     detailsButton: { flexDirection: 'row', alignItems: 'center', padding: 8, marginRight: 'auto' },
     detailsButtonText: { color: '#42a5f5', marginLeft: 5, fontWeight: 'bold' },
     submitButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#66bb6a', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, elevation: 2 },
-    // ★ 5. ADD the new style for the delete button
     deleteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef5350', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, elevation: 2 },
     submitButtonText: { color: '#fff', marginLeft: 8, fontWeight: 'bold' },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' },

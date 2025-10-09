@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { SERVER_URL } from '../../apiConfig';
 import apiClient from '../api/client';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import * as Animatable from 'react-native-animatable'; // ✨ NEW: Import animation library
 
 export interface ProfileData {
   id: number;
@@ -32,12 +33,14 @@ interface ProfileScreenProps {
   onProfileUpdate?: (newProfileData: ProfileData) => void;
 }
 
-const PRIMARY_COLOR = '#008080';
-const SECONDARY_COLOR = '#e0f2f7';
-const TERTIARY_COLOR = '#f8f8ff';
-const TEXT_COLOR_DARK = '#333333';
-const TEXT_COLOR_MEDIUM = '#555555';
-const BORDER_COLOR = '#b2ebf2';
+// ✨ --- NEW: Modern, vibrant color palette ---
+const PRIMARY_ACCENT = '#008080'; // A friendly, modern blue
+const PAGE_BACKGROUND = '#f7fcfbff';
+const CARD_BACKGROUND = '#FFFFFF';
+const TEXT_PRIMARY = '#2C3E50';
+const TEXT_SECONDARY = '#8A94A6';
+const BORDER_COLOR = '#EAECEF';
+const WHITE_COLOR = '#FFFFFF';
 
 const ProfileScreen = ({ onBackPress, staticProfileData, onStaticSave, onProfileUpdate }: ProfileScreenProps) => {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -122,18 +125,23 @@ const ProfileScreen = ({ onBackPress, staticProfileData, onStaticSave, onProfile
   };
 
   if (isAuthLoading || isProfileLoading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_ACCENT} /></View>;
   }
 
   if (!profileData) {
     return <View style={styles.centered}><Text>Profile not available.</Text></View>;
   }
-
-  return isEditing
-    ? <EditProfileView userProfile={profileData} onSave={handleSave} onCancel={() => setIsEditing(false)} isSaving={isSaving} />
-    : <DisplayProfileView userProfile={profileData} onEditPress={() => setIsEditing(true)} onBackPress={onBackPress} />;
+  
+  // ✨ NEW: Animate the transition between Display and Edit views
+  return (
+    <Animatable.View key={String(isEditing)} animation="fadeIn" duration={400} style={{flex: 1}}>
+      {isEditing
+        ? <EditProfileView userProfile={profileData} onSave={handleSave} onCancel={() => setIsEditing(false)} isSaving={isSaving} />
+        : <DisplayProfileView userProfile={profileData} onEditPress={() => setIsEditing(true)} onBackPress={onBackPress} />
+      }
+    </Animatable.View>
+  );
 };
-
 
 const DisplayProfileView = ({ userProfile, onEditPress, onBackPress }: { userProfile: ProfileData, onEditPress: () => void, onBackPress?: () => void }) => {
   let profileImageSource;
@@ -143,8 +151,6 @@ const DisplayProfileView = ({ userProfile, onEditPress, onBackPress }: { userPro
     const fullUri = (imageUri.startsWith('http') || imageUri.startsWith('file')) ? imageUri : `${SERVER_URL}${imageUri}`;
     profileImageSource = { uri: fullUri };
   } else {
-    // ★★★ 1. CORRECTED PATH ★★★
-    // Use the native drawable resource syntax
     profileImageSource = { uri: 'default_avatar' };
   }
 
@@ -152,44 +158,46 @@ const DisplayProfileView = ({ userProfile, onEditPress, onBackPress }: { userPro
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        {onBackPress ? (
-          <TouchableOpacity onPress={onBackPress} style={styles.headerButton}>
-            <MaterialIcons name="arrow-back" size={24} color={PRIMARY_COLOR} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.headerButton} />
-        )}
-        <Text style={styles.headerTitle}>My Profile</Text>
-        <TouchableOpacity onPress={onEditPress} style={styles.headerButton}>
-          <MaterialIcons name="edit" size={24} color={PRIMARY_COLOR} />
-        </TouchableOpacity>
-      </View>
+      <Animatable.View animation="fadeInDown" duration={500}>
+        <View style={styles.header}>
+            {onBackPress ? (
+            <TouchableOpacity onPress={onBackPress} style={styles.headerButton}>
+                <MaterialIcons name="arrow-back" size={24} color={PRIMARY_ACCENT} />
+            </TouchableOpacity>
+            ) : (
+            <View style={styles.headerButton} />
+            )}
+            <Text style={styles.headerTitle}>My Profile</Text>
+            <TouchableOpacity onPress={onEditPress} style={styles.headerButton}>
+            <MaterialIcons name="edit" size={24} color={PRIMARY_ACCENT} />
+            </TouchableOpacity>
+        </View>
+      </Animatable.View>
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.profileHeader}>
+        <Animatable.View animation="zoomIn" duration={500} delay={100} style={styles.profileHeader}>
           <Image source={profileImageSource} style={styles.profileImage} />
           <Text style={styles.profileName}>{userProfile.full_name}</Text>
           <Text style={styles.profileRole}>{userProfile.role.charAt(0).toUpperCase() + userProfile.role.slice(1)}</Text>
-        </View>
-        <View style={styles.detailsCard}>
+        </Animatable.View>
+        <Animatable.View animation="fadeInUp" duration={500} delay={200} style={styles.detailsCard}>
           <Text style={styles.cardTitle}>Personal Information</Text>
-          <DetailRow label="User ID:" value={userProfile.username} />
-          {showAcademicDetails && <DetailRow label="Date of Birth:" value={userProfile.dob} />}
-          {showAcademicDetails && <DetailRow label="Gender:" value={userProfile.gender} />}
-        </View>
-        <View style={styles.detailsCard}>
+          <DetailRow label="User ID:" value={userProfile.username} icon="badge" />
+          {showAcademicDetails && <DetailRow label="Date of Birth:" value={userProfile.dob} icon="cake" />}
+          {showAcademicDetails && <DetailRow label="Gender:" value={userProfile.gender} icon="wc" />}
+        </Animatable.View>
+        <Animatable.View animation="fadeInUp" duration={500} delay={300} style={styles.detailsCard}>
           <Text style={styles.cardTitle}>Contact Information</Text>
-          <DetailRow label="Email:" value={userProfile.email} />
-          <DetailRow label="Phone:" value={userProfile.phone} />
-          <DetailRow label="Address:" value={userProfile.address} />
-        </View>
+          <DetailRow label="Email:" value={userProfile.email} icon="email" />
+          <DetailRow label="Phone:" value={userProfile.phone} icon="phone" />
+          <DetailRow label="Address:" value={userProfile.address} icon="home" />
+        </Animatable.View>
         {showAcademicDetails && (
-          <View style={styles.detailsCard}>
+          <Animatable.View animation="fadeInUp" duration={500} delay={400} style={styles.detailsCard}>
             <Text style={styles.cardTitle}>Academic Details</Text>
-            <DetailRow label="Class:" value={userProfile.class_group} />
-            <DetailRow label="Roll No.:" value={userProfile.roll_no} />
-            <DetailRow label="Admission Date:" value={userProfile.admission_date} />
-          </View>
+            <DetailRow label="Class:" value={userProfile.class_group} icon="class" />
+            <DetailRow label="Roll No.:" value={userProfile.roll_no} icon="assignment-ind" />
+            <DetailRow label="Admission Date:" value={userProfile.admission_date} icon="event" />
+          </Animatable.View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -230,8 +238,6 @@ const EditProfileView = ({ userProfile, onSave, onCancel, isSaving }: { userProf
     ? { uri: newImage.uri }
     : (editedData.profile_image_url
       ? (editedData.profile_image_url.startsWith('http') || editedData.profile_image_url.startsWith('file') ? { uri: editedData.profile_image_url } : { uri: `${SERVER_URL}${editedData.profile_image_url}` })
-      // ★★★ 2. CORRECTED PATH ★★★
-      // Use the native drawable resource syntax here as well
       : { uri: 'default_avatar' });
 
   const showAcademicFields = userProfile.role !== 'donor';
@@ -240,17 +246,18 @@ const EditProfileView = ({ userProfile, onSave, onCancel, isSaving }: { userProf
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel} style={styles.headerButton} disabled={isSaving}>
-          <Text style={styles.headerButtonText}>Cancel</Text>
+          <Text style={styles.headerButtonTextCancel}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <TouchableOpacity onPress={() => onSave(editedData, newImage)} style={styles.headerButton} disabled={isSaving}>
-          <Text style={styles.headerButtonText}>Save</Text>
+          <Text style={styles.headerButtonTextSave}>Save</Text>
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.profileHeader}>
           <Image source={imageSource} style={styles.profileImage} />
           <TouchableOpacity onPress={handleChoosePhoto} style={styles.changeImageButton}>
+            <MaterialIcons name="photo-camera" size={16} color={PRIMARY_ACCENT} style={{ marginRight: 8 }} />
             <Text style={styles.changeImageButtonText}>Change Photo</Text>
           </TouchableOpacity>
         </View>
@@ -267,14 +274,15 @@ const EditProfileView = ({ userProfile, onSave, onCancel, isSaving }: { userProf
             <EditField label="Admission Date" value={editedData.admission_date} onChange={text => handleChange('admission_date', text)} placeholder="YYYY-MM-DD" />
           </>
         )}
-        {isSaving && <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 20 }} />}
+        {isSaving && <ActivityIndicator size="large" color={PRIMARY_ACCENT} style={{ marginTop: 20 }} />}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const DetailRow = ({ label, value }: { label: string; value?: string | null }) => (
+const DetailRow = ({ label, value, icon }: { label: string; value?: string | null; icon: string }) => (
   <View style={styles.detailRow}>
+    <MaterialIcons name={icon} size={20} color={PRIMARY_ACCENT} style={styles.detailIcon} />
     <Text style={styles.detailLabel}>{label}</Text>
     <Text style={styles.detailValue}>{value || 'N/A'}</Text>
   </View>
@@ -283,38 +291,48 @@ const DetailRow = ({ label, value }: { label: string; value?: string | null }) =
 const EditField = ({ label, value, onChange, ...props }: any) => (
   <View style={styles.inputGroup}>
     <Text style={styles.inputLabel}>{label}</Text>
-    <TextInput style={styles.textInput} value={value || ''} onChangeText={onChange} {...props} />
+    <TextInput
+      style={props.multiline ? [styles.textInput, styles.multilineInput] : styles.textInput}
+      value={value || ''}
+      onChangeText={onChange}
+      placeholderTextColor="#C7C7CD"
+      {...props}
+    />
   </View>
 );
 
+// ✨ --- NEW: Revamped styles for a modern, dynamic UI ---
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: TERTIARY_COLOR },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  safeArea: { flex: 1, backgroundColor: PAGE_BACKGROUND },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: PAGE_BACKGROUND },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: SECONDARY_COLOR, padding: 15,
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20, marginBottom: 10,
+    backgroundColor: CARD_BACKGROUND, paddingVertical: 15, paddingHorizontal: 10,
+    borderBottomWidth: 1, borderBottomColor: BORDER_COLOR,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 3
   },
-  headerButton: { padding: 5, minWidth: 60, alignItems: 'center' },
-  headerButtonText: { color: PRIMARY_COLOR, fontSize: 16, fontWeight: '600' },
-  headerTitle: { color: PRIMARY_COLOR, fontSize: 20, fontWeight: 'bold' },
-  container: { padding: 15, paddingBottom: 40 },
-  profileHeader: { alignItems: 'center', marginBottom: 25 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: PRIMARY_COLOR, marginBottom: 10 },
-  profileName: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK },
-  profileRole: { fontSize: 16, color: TEXT_COLOR_MEDIUM, marginTop: 5 },
-  detailsCard: { backgroundColor: 'white', borderRadius: 10, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_COLOR, marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingBottom: 10 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  detailLabel: { fontSize: 15, fontWeight: '600', color: TEXT_COLOR_MEDIUM, flex: 1 },
-  detailValue: { fontSize: 15, color: TEXT_COLOR_DARK, flex: 2, textAlign: 'right' },
-  changeImageButton: { backgroundColor: SECONDARY_COLOR, paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20 },
-  changeImageButtonText: { color: PRIMARY_COLOR, fontWeight: 'bold' },
+  headerButton: { padding: 8, minWidth: 60, alignItems: 'center' },
+  headerButtonTextSave: { color: PRIMARY_ACCENT, fontSize: 16, fontWeight: '600' },
+  headerButtonTextCancel: { color: TEXT_SECONDARY, fontSize: 16, fontWeight: '500' },
+  headerTitle: { color: TEXT_PRIMARY, fontSize: 20, fontWeight: 'bold' },
+  container: { paddingHorizontal: 15, paddingBottom: 40 },
+  profileHeader: { alignItems: 'center', marginVertical: 20 },
+  profileImage: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, borderColor: CARD_BACKGROUND, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 5 },
+  profileName: { fontSize: 26, fontWeight: 'bold', color: TEXT_PRIMARY, textAlign: 'center' },
+  profileRole: { fontSize: 16, color: TEXT_SECONDARY, marginTop: 5, textTransform: 'capitalize' },
+  detailsCard: { backgroundColor: CARD_BACKGROUND, borderRadius: 12, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_ACCENT, marginBottom: 15, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, paddingBottom: 10 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  detailIcon: { marginRight: 15, width: 20 },
+  detailLabel: { fontSize: 15, fontWeight: '500', color: TEXT_SECONDARY, flex: 2 },
+  detailValue: { fontSize: 15, color: TEXT_PRIMARY, flex: 3, textAlign: 'right' },
+  changeImageButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(74, 105, 226, 0.1)', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20 },
+  changeImageButtonText: { color: PRIMARY_ACCENT, fontWeight: 'bold' },
   inputGroup: { marginBottom: 15 },
-  inputLabel: { fontSize: 15, fontWeight: '600', color: TEXT_COLOR_MEDIUM, marginBottom: 5 },
-  textInput: { backgroundColor: 'white', borderRadius: 8, padding: 12, fontSize: 16, color: TEXT_COLOR_DARK, borderWidth: 1, borderColor: '#e5e7eb' },
+  inputLabel: { fontSize: 15, fontWeight: '500', color: TEXT_SECONDARY, marginBottom: 8 },
+  textInput: { backgroundColor: CARD_BACKGROUND, borderRadius: 10, padding: 12, fontSize: 16, color: TEXT_PRIMARY, borderWidth: 1, borderColor: BORDER_COLOR },
+  multilineInput: { height: 100, textAlignVertical: 'top' },
 });
 
 export default ProfileScreen;

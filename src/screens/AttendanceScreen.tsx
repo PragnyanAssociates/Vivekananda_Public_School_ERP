@@ -8,15 +8,23 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Platform, // --- NEW ---
+  Platform,
+  TextInput, // ✨ NEW: Import TextInput for the search bar
+  UIManager,   // ✨ NEW: For LayoutAnimation
+  LayoutAnimation, // ✨ NEW: For smooth list filtering
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { useNavigation } from '@react-navigation/native';
-// --- NEW ---
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Animatable from 'react-native-animatable'; // ✨ NEW: Import Animatable
+
+// ✨ NEW: Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // --- Constants (Shared across views) ---
 const PRIMARY_COLOR = '#008080';
@@ -35,27 +43,27 @@ const PERIOD_DEFINITIONS = [
   { period: 1, time: '09:00-09:45' },
 ];
 
-const SummaryCard = ({ label, value, color }) => (
-    <View style={styles.summaryBox}>
+const SummaryCard = ({ label, value, color, delay }) => ( // ✨ MODIFIED: Added delay prop
+    <Animatable.View animation="zoomIn" duration={500} delay={delay} style={styles.summaryBox}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
         <Text style={styles.summaryLabel}>{label}</Text>
-    </View>
+    </Animatable.View>
 );
 
 const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-const HistoryDayCard = ({ item }) => {
+const HistoryDayCard = ({ item, index }) => { // ✨ MODIFIED: Added index prop
     const isPresent = item.status === 'Present';
     const dayStatus = isPresent ? 'Present' : 'Absent';
     const statusColor = isPresent ? GREEN : RED;
 
     return (
-        <View style={styles.historyDayCard}>
+        <Animatable.View animation="fadeInUp" duration={400} delay={index * 100} style={styles.historyDayCard}>
             <View style={styles.historyDayHeader}>
                 <Text style={styles.historyDate}>{new Date(item.attendance_date).toDateString()}</Text>
                 <Text style={[styles.historyStatus, { color: statusColor }]}>{dayStatus}</Text>
             </View>
-        </View>
+        </Animatable.View>
     );
 };
 
@@ -82,7 +90,6 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
     const [viewMode, setViewMode] = useState('monthly');
     const [data, setData] = useState({ summary: {}, history: [] });
     const [isLoading, setIsLoading] = useState(true);
-    // --- NEW: State for Date Picker ---
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -95,7 +102,6 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                     ? `/attendance/student-history-admin/${studentId}?viewMode=${viewMode}`
                     : `/attendance/my-history/${studentId}?viewMode=${viewMode}`;
                 
-                // --- MODIFIED: Append date to URL if in daily view ---
                 if (viewMode === 'daily') {
                     url += `&date=${selectedDate.toISOString().split('T')[0]}`;
                 }
@@ -109,15 +115,14 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
             }
         };
         fetchHistory();
-    }, [studentId, viewMode, selectedDate]); // --- MODIFIED: Refetch on date change
+    }, [studentId, viewMode, selectedDate]);
 
-    // --- NEW: Handler for the date picker ---
     const onDateChange = (event: any, date?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios'); // On iOS, the picker is a modal
+        setShowDatePicker(Platform.OS === 'ios'); 
         if (date) {
             setSelectedDate(date);
             if (viewMode !== 'daily') {
-                setViewMode('daily'); // Switch to daily view when a date is picked
+                setViewMode('daily'); 
             }
         }
     };
@@ -129,22 +134,23 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
     
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                {onBack && (
-                    <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                        <Icon name="arrow-left" size={24} color={TEXT_COLOR_DARK} />
-                    </TouchableOpacity>
-                )}
-                <View style={{flex: 1, alignItems: 'center', paddingRight: onBack ? 30 : 0 }}>
-                    <Text style={styles.headerTitle}>{headerTitle}</Text>
-                    {/* --- NEW: Show selected date in daily view --- */}
-                    {viewMode === 'daily' && (
-                        <Text style={styles.headerSubtitleSmall}>
-                            Showing for: {selectedDate.toDateString()}
-                        </Text>
+            <Animatable.View animation="fadeInDown" duration={500}>
+                <View style={styles.header}>
+                    {onBack && (
+                        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                            <Icon name="arrow-left" size={24} color={TEXT_COLOR_DARK} />
+                        </TouchableOpacity>
                     )}
+                    <View style={{flex: 1, alignItems: 'center', paddingRight: onBack ? 30 : 0 }}>
+                        <Text style={styles.headerTitle}>{headerTitle}</Text>
+                        {viewMode === 'daily' && (
+                            <Text style={styles.headerSubtitleSmall}>
+                                Showing for: {selectedDate.toDateString()}
+                            </Text>
+                        )}
+                    </View>
                 </View>
-            </View>
+            </Animatable.View>
 
             <View style={styles.toggleContainer}>
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'daily' && styles.toggleButtonActive]} onPress={() => setViewMode('daily')}>
@@ -156,13 +162,11 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'overall' && styles.toggleButtonActive]} onPress={() => setViewMode('overall')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'overall' && styles.toggleButtonTextActive]}>Overall</Text>
                 </TouchableOpacity>
-                 {/* --- NEW: Calendar Icon Button --- */}
                 <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
                     <Icon name="calendar" size={22} color={PRIMARY_COLOR} />
                 </TouchableOpacity>
             </View>
 
-            {/* --- NEW: Date Picker Modal --- */}
             {showDatePicker && (
                 <DateTimePicker
                     value={selectedDate}
@@ -175,14 +179,14 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} /> : (
                 <>
                     <View style={styles.summaryContainer}>
-                        <SummaryCard label="Overall" value={`${percentage}%`} color={BLUE} />
-                        <SummaryCard label="Days Present" value={data.summary.present_days || 0} color={GREEN} />
-                        <SummaryCard label="Days Absent" value={data.summary.absent_days || 0} color={RED} />
+                        <SummaryCard label="Overall" value={`${percentage}%`} color={BLUE} delay={100} />
+                        <SummaryCard label="Days Present" value={data.summary.present_days || 0} color={GREEN} delay={200} />
+                        <SummaryCard label="Days Absent" value={data.summary.absent_days || 0} color={RED} delay={300} />
                     </View>
                     <FlatList
                         data={data.history}
                         keyExtractor={(item) => item.attendance_date}
-                        renderItem={({ item }) => <HistoryDayCard item={item} />}
+                        renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} />}
                         ListHeaderComponent={<Text style={styles.historyTitle}>Detailed History ({capitalize(viewMode)})</Text>}
                         ListEmptyComponent={<Text style={styles.noDataText}>No records found for this period.</Text>}
                         contentContainerStyle={{ paddingBottom: 20 }}
@@ -212,12 +216,24 @@ const AdminStudentDetailView = ({ student, onBack }) => {
     );
 };
 
+// ✨ --- HEAVILY MODIFIED: This is the main component with the new search bar ---
 const GenericSummaryView = ({
     picker1, picker2, listData,
     summaryData, isLoading, viewMode, setViewMode, onDateChange, selectedDate, onSelectStudent
 }) => {
     const summary = summaryData?.overallSummary ?? {};
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [searchQuery, setSearchQuery] = useState(''); // ✨ NEW: State for search query
+
+    // ✨ NEW: Memoized filtering for performance
+    const filteredListData = useMemo(() => {
+        if (!searchQuery) {
+            return listData;
+        }
+        return listData.filter(student =>
+            student.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [listData, searchQuery]);
 
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(Platform.OS === 'ios');
@@ -225,22 +241,28 @@ const GenericSummaryView = ({
             onDateChange(date); 
         }
     };
+    
+    // ✨ NEW: Search handler with smooth animation
+    const handleSearch = (text: string) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSearchQuery(text);
+    };
 
     const renderSummaryCards = () => {
         if (viewMode === 'daily') {
             return (
                 <View style={styles.summaryContainer}>
-                    <SummaryCard label="Class Attendance %" value={`${Number(summary.overall_percentage ?? 0).toFixed(1)}%`} color={BLUE} />
-                    <SummaryCard label="Students Present" value={summary.students_present ?? 0} color={GREEN} />
-                    <SummaryCard label="Students Absent" value={summary.students_absent ?? 0} color={RED} />
+                    <SummaryCard label="Class Attendance %" value={`${Number(summary.overall_percentage ?? 0).toFixed(1)}%`} color={BLUE} delay={100} />
+                    <SummaryCard label="Students Present" value={summary.students_present ?? 0} color={GREEN} delay={200} />
+                    <SummaryCard label="Students Absent" value={summary.students_absent ?? 0} color={RED} delay={300} />
                 </View>
             );
         } else {
             return (
                 <View style={styles.summaryContainer}>
-                    <SummaryCard label="Class Attendance %" value={`${Number(summary.overall_percentage ?? 0).toFixed(1)}%`} color={BLUE} />
-                    <SummaryCard label="Avg. Daily Attendance" value={`${Number(summary.avg_daily_attendance ?? 0).toFixed(1)}%`} color={ORANGE} />
-                    <SummaryCard label="Students Below 75%" value={summary.students_below_threshold ?? 0} color={RED} />
+                    <SummaryCard label="Class Attendance %" value={`${Number(summary.overall_percentage ?? 0).toFixed(1)}%`} color={BLUE} delay={100} />
+                    <SummaryCard label="Avg. Daily Attendance" value={`${Number(summary.avg_daily_attendance ?? 0).toFixed(1)}%`} color={ORANGE} delay={200} />
+                    <SummaryCard label="Students Below 75%" value={summary.students_below_threshold ?? 0} color={RED} delay={300} />
                 </View>
             );
         }
@@ -256,10 +278,12 @@ const GenericSummaryView = ({
                     onChange={handleDateChange}
                 />
             )}
-            <View style={styles.pickerContainer}>
-                <View style={styles.pickerWrapper}>{picker1}</View>
-                <View style={styles.pickerWrapper}>{picker2}</View>
-            </View>
+            <Animatable.View animation="fadeInDown" duration={500}>
+                <View style={styles.pickerContainer}>
+                    <View style={styles.pickerWrapper}>{picker1}</View>
+                    <View style={styles.pickerWrapper}>{picker2}</View>
+                </View>
+            </Animatable.View>
             
             {viewMode === 'daily' && (
                 <Text style={styles.dateHeader}>
@@ -284,29 +308,49 @@ const GenericSummaryView = ({
 
             {isLoading ? <ActivityIndicator size="large" color={PRIMARY_COLOR} style={styles.loaderContainer} /> : (
                 <FlatList
-                    data={listData}
+                    data={filteredListData} // ✨ MODIFIED: Use filtered data
                     keyExtractor={(item) => item.student_id.toString()}
-                    ListHeaderComponent={renderSummaryCards}
-                    renderItem={({ item }) => {
+                    ListHeaderComponent={
+                        <>
+                            {renderSummaryCards()}
+                             {/* ✨ NEW: Search Bar UI */}
+                            <Animatable.View animation="fadeIn" duration={600} delay={400} style={styles.searchBarContainer}>
+                                <Icon name="magnify" size={22} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
+                                <TextInput
+                                    style={styles.searchBar}
+                                    placeholder="Search student by name..."
+                                    value={searchQuery}
+                                    onChangeText={handleSearch}
+                                    placeholderTextColor={TEXT_COLOR_MEDIUM}
+                                />
+                            </Animatable.View>
+                        </>
+                    }
+                    renderItem={({ item, index }) => { // ✨ MODIFIED: Pass index for animation
                         const studentPercentage = item.total_days > 0 ? (item.present_days / item.total_days) * 100 : 0;
                         const percentageColor = studentPercentage >= 75 ? GREEN : studentPercentage >= 50 ? YELLOW : RED;
                         return (
-                            <TouchableOpacity onPress={() => onSelectStudent && onSelectStudent(item)}>
-                                <View style={styles.summaryStudentRow}>
-                                    <View style={{flex: 1}}>
-                                        <Text style={styles.studentName}>{item.full_name}</Text>
-                                        <Text style={styles.studentDetailText}>Days Present: {item.present_days} / {item.total_days}</Text>
+                            <Animatable.View animation="fadeInUp" duration={400} delay={index * 75}>
+                                <TouchableOpacity onPress={() => onSelectStudent && onSelectStudent(item)}>
+                                    <View style={styles.summaryStudentRow}>
+                                        <View style={{flex: 1}}>
+                                            <Text style={styles.studentName}>{item.full_name}</Text>
+                                            <Text style={styles.studentDetailText}>Days Present: {item.present_days} / {item.total_days}</Text>
+                                        </View>
+                                        <Text style={[styles.percentageText, { color: percentageColor }]}>{studentPercentage.toFixed(0)}%</Text>
                                     </View>
-                                    <Text style={[styles.percentageText, { color: percentageColor }]}>{studentPercentage.toFixed(0)}%</Text>
-                                </View>
-                            </TouchableOpacity>
+                                </TouchableOpacity>
+                            </Animatable.View>
                         );
                     }}
                     ListEmptyComponent={
                         <View style={styles.loaderContainer}>
-                            <Text style={styles.noDataText}>No attendance data for this selection.</Text>
+                            <Text style={styles.noDataText}>
+                                {searchQuery ? 'No students match your search.' : 'No attendance data for this selection.'}
+                            </Text>
                         </View>
                     }
+                    contentContainerStyle={{ paddingBottom: 20 }}
                 />
             )}
         </SafeAreaView>
@@ -314,6 +358,7 @@ const GenericSummaryView = ({
 };
 
 const TeacherSummaryView = ({ teacher }) => {
+    // ... (This component's logic remains unchanged, it just benefits from the updated GenericSummaryView)
     const [assignments, setAssignments] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
@@ -416,6 +461,7 @@ const TeacherSummaryView = ({ teacher }) => {
 };
 
 const AdminAttendanceView = () => {
+  // ... (This component's logic remains unchanged, it just benefits from the updated GenericSummaryView)
   const [selectedClass, setSelectedClass] = useState(CLASS_GROUPS[9]);
   const [subjects, setSubjects] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -551,21 +597,8 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
     if (attendanceData.length === 0) return;
     setIsSaving(true);
     try {
-      await apiClient.post('/attendance', { 
-        class_group, 
-        subject_name, 
-        period_number: 1,
-        date, 
-        teacher_id: teacher.id, 
-        attendanceData 
-      });
-      Alert.alert(
-        'Success', 
-        'Attendance saved successfully!',
-        [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]
-      );
+      await apiClient.post('/attendance', { class_group, subject_name, period_number: 1, date, teacher_id: teacher.id, attendanceData });
+      Alert.alert( 'Success', 'Attendance saved successfully!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch (error: any) { 
       console.error("Failed to save attendance:", JSON.stringify(error.response?.data || error.message, null, 2));
       const errorMessage = error.response?.data?.message || 'Failed to save attendance. Please contact support.';
@@ -578,22 +611,24 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.centeredHeader}>
-        <Text style={styles.headerTitle}>Daily Attendance</Text>
-        <Text style={styles.headerSubtitle}>{`${class_group} - ${subject_name}`}</Text>
-        <Text style={styles.headerSubtitleSmall}>{`For ${date} (Based on 1st Period - ${periodTime})`}</Text>
-      </View>
+      <Animatable.View animation="fadeInDown" duration={500}>
+        <View style={styles.centeredHeader}>
+            <Text style={styles.headerTitle}>Daily Attendance</Text>
+            <Text style={styles.headerSubtitle}>{`${class_group} - ${subject_name}`}</Text>
+            <Text style={styles.headerSubtitleSmall}>{`For ${date} (Based on 1st Period - ${periodTime})`}</Text>
+        </View>
+      </Animatable.View>
       <FlatList
         data={students}
-        renderItem={({ item }) => (
-            <View style={styles.liveStudentRow}>
+        renderItem={({ item, index }) => ( // ✨ MODIFIED: Added index prop for animation
+            <Animatable.View animation="fadeInUp" duration={400} delay={index * 75} style={styles.liveStudentRow}>
                 <Icon name="account-circle-outline" size={32} color={TEXT_COLOR_DARK} />
                 <Text style={styles.studentName}>{item.full_name}</Text>
                 <View style={styles.buttonGroup}>
                     <TouchableOpacity style={[styles.statusButton, item.status === 'Present' && styles.presentButton]} onPress={() => handleMarkAttendance(item.id, 'Present')}><Text style={[styles.statusButtonText, item.status === 'Present' && { color: WHITE }]}>P</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.statusButton, item.status === 'Absent' && styles.absentButton]} onPress={() => handleMarkAttendance(item.id, 'Absent')}><Text style={[styles.statusButtonText, item.status === 'Absent' && { color: WHITE }]}>A</Text></TouchableOpacity>
                 </View>
-            </View>
+            </Animatable.View>
         )}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={{ padding: 10 }}
@@ -611,14 +646,7 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   noDataText: { textAlign: 'center', marginTop: 20, color: TEXT_COLOR_MEDIUM, fontSize: 16 },
   header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
-  centeredHeader: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    backgroundColor: WHITE,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER_COLOR,
-    alignItems: 'center',
-  },
+  centeredHeader: { paddingVertical: 15, paddingHorizontal: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center' },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: TEXT_COLOR_DARK, textAlign: 'center' },
   headerSubtitle: { fontSize: 16, color: TEXT_COLOR_MEDIUM, marginTop: 4, textAlign: 'center' },
   headerSubtitleSmall: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2, textAlign: 'center' },
@@ -629,6 +657,11 @@ const styles = StyleSheet.create({
   summaryBox: { alignItems: 'center', flex: 1, paddingVertical: 10, paddingHorizontal: 5 },
   summaryValue: { fontSize: 26, fontWeight: 'bold' },
   summaryLabel: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 5, fontWeight: '500', textAlign: 'center' },
+  // ✨ --- NEW STYLES FOR SEARCH BAR ---
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, marginHorizontal: 15, marginTop: 15, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR, paddingHorizontal: 10 },
+  searchBar: { flex: 1, height: 45, fontSize: 16, color: TEXT_COLOR_DARK },
+  searchIcon: { marginRight: 8 },
+  // ✨ --- END OF NEW STYLES ---
   summaryStudentRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, padding: 15, marginHorizontal: 15, marginVertical: 6, borderRadius: 8, elevation: 1, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
   studentName: { flex: 1, fontSize: 16, color: TEXT_COLOR_DARK, fontWeight: '600' },
   studentDetailText: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 2 },

@@ -37,6 +37,36 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
+// ==========================================================
+// --- ✨ NEW: IMAGE PROXY ROUTE TO BYPASS AD BLOCKERS ---
+// ==========================================================
+app.get('/api/image/:filename', (req, res) => {
+    const { filename } = req.params;
+    // Security: Basic check to prevent directory traversal attacks
+    if (filename.includes('..')) {
+        return res.status(400).send('Invalid filename');
+    }
+
+    const filePath = path.join(__dirname, 'uploads', filename);
+
+    // Check if the file actually exists before trying to send it
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+            console.error(`Image not found: ${filePath}`);
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        // Send the file to the client
+        res.sendFile(filePath, (err) => {
+            if (err) {
+                console.error(`Error sending file: ${filePath}`, err);
+                res.status(500).send("Error sending file");
+            }
+        });
+    });
+});
+// ==========================================================
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => { cb(null, 'uploads/'); },
     filename: (req, file, cb) => {

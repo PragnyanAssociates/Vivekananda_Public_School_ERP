@@ -1,15 +1,21 @@
-// 📂 File: src/screens/homework/TeacherAdminHomeworkScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, Linking } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation, UIManager, Platform } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
+import * as Animatable from 'react-native-animatable'; // ✨ NEW: Import animatable
 import { useAuth } from '../../context/AuthContext';
-// ★★★ 1. IMPORT apiClient AND SERVER_URL, REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { useIsFocused } from '@react-navigation/native';
+
+// ✨ NEW: Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// ✨ NEW: Create a custom animated view for list items
+const AnimatableTouchableOpacity = Animatable.createAnimatableComponent(TouchableOpacity);
 
 const TeacherAdminHomeworkScreen = () => {
     const [view, setView] = useState('assignments');
@@ -18,6 +24,7 @@ const TeacherAdminHomeworkScreen = () => {
     const viewSubmissions = (assignment) => { setSelectedAssignment(assignment); setView('submissions'); };
     const backToAssignments = () => { setSelectedAssignment(null); setView('assignments'); };
 
+    // The transition between views is a hard cut, but the content inside each view will be animated.
     if (view === 'assignments') return <AssignmentList onSelectAssignment={viewSubmissions} />;
     if (view === 'submissions' && selectedAssignment) return <SubmissionList assignment={selectedAssignment} onBack={backToAssignments} />;
     return null;
@@ -42,7 +49,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
         if (!user) return; 
         setIsLoading(true); 
         try { 
-            // ★★★ 2. USE apiClient FOR ALL FETCH CALLS ★★★
             const response = await apiClient.get(`/homework/teacher/${user.id}`);
             setAssignments(response.data);
         } catch (e: any) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch assignment history."); } 
@@ -77,7 +83,12 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setIsModalVisible(true); 
     };
 
-    const handleDelete = (assignment) => { Alert.alert("Confirm Delete", `Are you sure you want to delete "${assignment.title}"?`, [ { text: "Cancel", style: 'cancel' }, { text: "Delete", style: 'destructive', onPress: async () => { try { await apiClient.delete(`/homework/${assignment.id}`); Alert.alert("Success", "Assignment deleted."); fetchTeacherAssignments(); } catch(e: any) { Alert.alert("Error", e.response?.data?.message || 'Failed to delete assignment.'); } }}, ]); };
+    const handleDelete = (assignment) => { Alert.alert("Confirm Delete", `Are you sure you want to delete "${assignment.title}"?`, [ { text: "Cancel", style: 'cancel' }, { text: "Delete", style: 'destructive', onPress: async () => { try { 
+        // ✨ NEW: Animate the list before the state changes
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
+        await apiClient.delete(`/homework/${assignment.id}`); 
+        Alert.alert("Success", "Assignment deleted."); 
+        fetchTeacherAssignments(); } catch(e: any) { Alert.alert("Error", e.response?.data?.message || 'Failed to delete assignment.'); } }}, ]); };
     
     const handleSave = async () => { 
         if (!user || !selectedClass || !selectedSubject || !newAssignment.title || !newAssignment.due_date) { return Alert.alert("Validation Error", "Title, Class, Subject, and Due Date are required."); } 
@@ -106,7 +117,26 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     const selectAttachment = async () => { try { const result = await pick({ type: [types.allFiles], allowMultiSelection: false, }); setAttachment(result[0]); } catch (err) { if (isCancel(err)) { console.log('User cancelled the document picker.'); } else { Alert.alert('Error', 'An unknown error occurred while picking the file.'); console.error(err); } } };
     
-    return ( <View style={styles.container}> <FlatList data={assignments} keyExtractor={(item) => item.id.toString()} renderItem={({ item }) => ( <View style={styles.card}> <View style={styles.cardHeaderRow}> <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text> <View style={styles.actionIconContainer}> <TouchableOpacity onPress={() => openEditModal(item)}><MaterialIcons name="edit" size={24} color="#007bff" /></TouchableOpacity> <TouchableOpacity onPress={() => handleDelete(item)} style={{marginLeft: 15}}><MaterialIcons name="delete" size={24} color="#dc3545" /></TouchableOpacity> </View> </View> <Text style={styles.cardSubtitle}>For: {item.class_group} - {item.subject}</Text> <Text style={styles.cardDetail}>Due: {new Date(item.due_date).toLocaleDateString()}</Text> <View style={item.submission_count > 0 ? styles.badge : styles.badgeMuted}><Text style={styles.badgeText}>{item.submission_count} Submission(s)</Text></View> <TouchableOpacity style={styles.viewSubmissionsBtn} onPress={() => onSelectAssignment(item)}><Text style={styles.viewSubmissionsBtnText}>View Submissions & Grade</Text></TouchableOpacity> </View> )} ListHeaderComponent={ <View style={styles.header}><Text style={styles.headerTitle}>My Created Assignments</Text></View> } ListFooterComponent={ <TouchableOpacity style={styles.addButton} onPress={openCreateModal}><MaterialIcons name="add" size={24} color="#fff" /><Text style={styles.addButtonText}>Create New Homework</Text></TouchableOpacity> } ListEmptyComponent={<View style={{paddingTop: 50}}><Text style={styles.emptyText}>You have not created any assignments yet.</Text></View>} onRefresh={fetchTeacherAssignments} refreshing={isLoading} /> <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide"> <ScrollView style={styles.modalView} contentContainerStyle={{paddingBottom: 50}}> <Text style={styles.modalTitle}>{editingAssignment ? 'Edit Assignment' : 'Create New Assignment'}</Text> <Text style={styles.label}>Class *</Text> <View style={styles.pickerContainer}><Picker selectedValue={selectedClass} onValueChange={(itemValue) => handleClassChange(itemValue)}><Picker.Item label="-- Select a class --" value="" />{studentClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}</Picker></View> <Text style={styles.label}>Subject *</Text> <View style={styles.pickerContainer}><Picker selectedValue={selectedSubject} onValueChange={(itemValue) => setSelectedSubject(itemValue)} enabled={subjects.length > 0}><Picker.Item label={subjects.length > 0 ? "-- Select a subject --" : "Select a class first"} value="" />{subjects.map(s => <Picker.Item key={s} label={s} value={s} />)}</Picker></View> <Text style={styles.label}>Title *</Text> <TextInput style={styles.input} placeholder="e.g., Chapter 5 Exercise" value={newAssignment.title} onChangeText={text => setNewAssignment({...newAssignment, title: text})} /> <Text style={styles.label}>Description (Optional)</Text> <TextInput style={[styles.input, {height: 100, textAlignVertical: 'top'}]} placeholder="Instructions for students" multiline value={newAssignment.description} onChangeText={text => setNewAssignment({...newAssignment, description: text})} /> <Text style={styles.label}>Due Date *</Text> <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={newAssignment.due_date} onChangeText={text => setNewAssignment({...newAssignment, due_date: text})} /> <TouchableOpacity style={styles.uploadButton} onPress={selectAttachment}><MaterialIcons name="attach-file" size={20} color="#fff" /><Text style={styles.uploadButtonText}>Attach File</Text></TouchableOpacity> {attachment && <Text style={styles.attachmentText}>Selected: {attachment.name}</Text>} <View style={styles.modalActions}><TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}><Text style={{color: '#fff', fontWeight: 'bold'}}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[styles.modalBtn, styles.createBtn]} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={{color: '#fff', fontWeight: 'bold'}}>{editingAssignment ? 'Save Changes' : 'Create'}</Text>}</TouchableOpacity></View> </ScrollView> </Modal> </View> );
+    // ✨ MODIFIED: renderItem to include animation
+    const renderAssignmentItem = ({ item, index }) => (
+        <Animatable.View animation="fadeInUp" duration={600} delay={index * 100}>
+            <View style={styles.card}>
+                <View style={styles.cardHeaderRow}>
+                    <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+                    <View style={styles.actionIconContainer}>
+                        <TouchableOpacity onPress={() => openEditModal(item)}><MaterialIcons name="edit" size={24} color="#007bff" /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDelete(item)} style={{marginLeft: 15}}><MaterialIcons name="delete" size={24} color="#dc3545" /></TouchableOpacity>
+                    </View>
+                </View>
+                <Text style={styles.cardSubtitle}>For: {item.class_group} - {item.subject}</Text>
+                <Text style={styles.cardDetail}>Due: {new Date(item.due_date).toLocaleDateString()}</Text>
+                <View style={item.submission_count > 0 ? styles.badge : styles.badgeMuted}><Text style={styles.badgeText}>{item.submission_count} Submission(s)</Text></View>
+                <TouchableOpacity style={styles.viewSubmissionsBtn} onPress={() => onSelectAssignment(item)}><Text style={styles.viewSubmissionsBtnText}>View Submissions & Grade</Text></TouchableOpacity>
+            </View>
+        </Animatable.View>
+    );
+
+    return ( <View style={styles.container}> <FlatList data={assignments} keyExtractor={(item) => item.id.toString()} renderItem={renderAssignmentItem} ListHeaderComponent={ <Animatable.View animation="fadeInDown" duration={500}><View style={styles.header}><Text style={styles.headerTitle}>My Created Assignments</Text></View></Animatable.View> } ListFooterComponent={ <AnimatableTouchableOpacity animation="pulse" easing="ease-out" iterationCount="infinite" style={styles.addButton} onPress={openCreateModal}><MaterialIcons name="add" size={24} color="#fff" /><Text style={styles.addButtonText}>Create New Homework</Text></AnimatableTouchableOpacity> } ListEmptyComponent={<View style={{paddingTop: 50}}><Text style={styles.emptyText}>You have not created any assignments yet.</Text></View>} onRefresh={fetchTeacherAssignments} refreshing={isLoading} /> <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide"> <ScrollView style={styles.modalView} contentContainerStyle={{paddingBottom: 50}}> <Text style={styles.modalTitle}>{editingAssignment ? 'Edit Assignment' : 'Create New Assignment'}</Text> <Text style={styles.label}>Class *</Text> <View style={styles.pickerContainer}><Picker selectedValue={selectedClass} onValueChange={(itemValue) => handleClassChange(itemValue)}><Picker.Item label="-- Select a class --" value="" />{studentClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}</Picker></View> <Text style={styles.label}>Subject *</Text> <View style={styles.pickerContainer}><Picker selectedValue={selectedSubject} onValueChange={(itemValue) => setSelectedSubject(itemValue)} enabled={subjects.length > 0}><Picker.Item label={subjects.length > 0 ? "-- Select a subject --" : "Select a class first"} value="" />{subjects.map(s => <Picker.Item key={s} label={s} value={s} />)}</Picker></View> <Text style={styles.label}>Title *</Text> <TextInput style={styles.input} placeholder="e.g., Chapter 5 Exercise" value={newAssignment.title} onChangeText={text => setNewAssignment({...newAssignment, title: text})} /> <Text style={styles.label}>Description (Optional)</Text> <TextInput style={[styles.input, {height: 100, textAlignVertical: 'top'}]} placeholder="Instructions for students" multiline value={newAssignment.description} onChangeText={text => setNewAssignment({...newAssignment, description: text})} /> <Text style={styles.label}>Due Date *</Text> <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={newAssignment.due_date} onChangeText={text => setNewAssignment({...newAssignment, due_date: text})} /> <TouchableOpacity style={styles.uploadButton} onPress={selectAttachment}><MaterialIcons name="attach-file" size={20} color="#fff" /><Text style={styles.uploadButtonText}>Attach File</Text></TouchableOpacity> {attachment && <Text style={styles.attachmentText}>Selected: {attachment.name}</Text>} <View style={styles.modalActions}><TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}><Text style={{color: '#fff', fontWeight: 'bold'}}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[styles.modalBtn, styles.createBtn]} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={{color: '#fff', fontWeight: 'bold'}}>{editingAssignment ? 'Save Changes' : 'Create'}</Text>}</TouchableOpacity></View> </ScrollView> </Modal> </View> );
 };
 
 const SubmissionList = ({ assignment, onBack }) => {
@@ -127,10 +157,7 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     useEffect(() => { fetchStudentRoster(); }, [fetchStudentRoster]);
     
-    const openGradeModal = (rosterItem) => {
-        setSelectedSubmission(rosterItem);
-        setGradeData({ grade: rosterItem.grade || '', remarks: rosterItem.remarks || '' });
-    };
+    const openGradeModal = (rosterItem) => { setSelectedSubmission(rosterItem); setGradeData({ grade: rosterItem.grade || '', remarks: rosterItem.remarks || '' }); };
 
     const handleGrade = async () => {
         if (!selectedSubmission || !selectedSubmission.submission_id) return;
@@ -144,52 +171,55 @@ const SubmissionList = ({ assignment, onBack }) => {
         finally { setIsGrading(false); }
     };
     
+    // ✨ MODIFIED: renderItem to include animation
+    const renderSubmissionItem = ({ item, index }) => (
+        <Animatable.View animation="fadeInUp" duration={600} delay={index * 100}>
+            <View style={styles.submissionCard}>
+                <Text style={styles.cardTitle}>{item.student_name}</Text>
+                {item.submission_id ? ( <>
+                    <Text>Submitted: {new Date(item.submitted_at).toLocaleString()}</Text>
+                    <Text>Status: {item.status} {item.grade && `(Grade: ${item.grade})`}</Text>
+                    <View style={styles.submissionActions}>
+                        <TouchableOpacity style={styles.actionLink} onPress={() => Linking.openURL(`${SERVER_URL}${item.submission_path}`)}>
+                            <MaterialIcons name="cloud-download" size={20} color="#2196f3"/>
+                            <Text style={[styles.actionLinkText, {color: '#2196f3'}]}>View Submission</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionLink} onPress={() => openGradeModal(item)}>
+                            <MaterialIcons name="grade" size={20} color="#4caf50"/>
+                            <Text style={[styles.actionLinkText, {color: '#4caf50'}]}>{item.grade ? 'Update Grade' : 'Grade'}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </> ) : (
+                <View style={styles.notSubmittedContainer}>
+                    <MaterialIcons name="cancel" size={20} color="#a5a5a5"/>
+                    <Text style={styles.notSubmittedText}>Not Submitted</Text>
+                </View> )}
+            </View>
+        </Animatable.View>
+    );
+
     if (isLoading) { return <View style={styles.centered}><ActivityIndicator size="large" /></View>; }
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                <MaterialIcons name="arrow-back" size={24} color="#333" />
-                <Text style={styles.backButtonText}>Back to Assignments</Text>
-            </TouchableOpacity>
-            <Text style={styles.submissionHeaderTitle}>Submissions for: "{assignment.title}"</Text>
+            <Animatable.View animation="fadeInDown" duration={500}>
+                <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                    <MaterialIcons name="arrow-back" size={24} color="#333" />
+                    <Text style={styles.backButtonText}>Back to Assignments</Text>
+                </TouchableOpacity>
+                <Text style={styles.submissionHeaderTitle}>Submissions for: "{assignment.title}"</Text>
+            </Animatable.View>
             <FlatList
                 data={studentRoster}
                 keyExtractor={(item, index) => item?.student_id?.toString() || index.toString()}
-                renderItem={({ item }) => (
-                    <View style={styles.submissionCard}>
-                        <Text style={styles.cardTitle}>{item.student_name}</Text>
-                        
-                        {item.submission_id ? (
-                            <>
-                                <Text>Submitted: {new Date(item.submitted_at).toLocaleString()}</Text>
-                                <Text>Status: {item.status} {item.grade && `(Grade: ${item.grade})`}</Text>
-                                <View style={styles.submissionActions}>
-                                    <TouchableOpacity style={styles.actionLink} onPress={() => Linking.openURL(`${SERVER_URL}${item.submission_path}`)}>
-                                        <MaterialIcons name="cloud-download" size={20} color="#2196f3"/>
-                                        <Text style={[styles.actionLinkText, {color: '#2196f3'}]}>View Submission</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.actionLink} onPress={() => openGradeModal(item)}>
-                                        <MaterialIcons name="grade" size={20} color="#4caf50"/>
-                                        <Text style={[styles.actionLinkText, {color: '#4caf50'}]}>{item.grade ? 'Update Grade' : 'Grade'}</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </>
-                        ) : (
-                           <View style={styles.notSubmittedContainer}>
-                             <MaterialIcons name="cancel" size={20} color="#a5a5a5"/>
-                             <Text style={styles.notSubmittedText}>Not Submitted</Text>
-                           </View>
-                        )}
-                    </View>
-                )}
+                renderItem={renderSubmissionItem}
                 ListEmptyComponent={<Text style={styles.emptyText}>There are no students in this class group.</Text>}
                 onRefresh={fetchStudentRoster}
                 refreshing={isLoading}
             />
             <Modal visible={!!selectedSubmission} onRequestClose={() => setSelectedSubmission(null)} transparent={true} animationType="fade">
                 <View style={styles.gradeModalBackdrop}>
-                    <View style={styles.gradeModalView}>
+                    <Animatable.View animation="zoomIn" duration={300} style={styles.gradeModalView}>
                         <Text style={styles.modalTitle}>Grade Submission for {selectedSubmission?.student_name}</Text>
                         <Text style={styles.label}>Grade</Text>
                         <TextInput style={styles.input} placeholder="e.g., A+, 95/100" defaultValue={gradeData.grade} onChangeText={text => setGradeData({...gradeData, grade: text})} />
@@ -201,7 +231,7 @@ const SubmissionList = ({ assignment, onBack }) => {
                                 {isGrading ? <ActivityIndicator color="#fff"/> : <Text style={{color: '#fff', fontWeight: 'bold'}}>Submit Grade</Text>}
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    </Animatable.View>
                 </View>
             </Modal>
         </View>
@@ -209,6 +239,6 @@ const SubmissionList = ({ assignment, onBack }) => {
 };
 
 // Styles remain the same
-const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: '#f4f6f8' }, centered: { flex: 1, justifyContent: 'center', alignItems: 'center' }, header: { paddingBottom: 10, paddingTop: 10 }, headerTitle: { fontSize: 24, fontWeight: 'bold', paddingHorizontal: 15, color: '#333' }, card: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: {width: 0, height: 1} }, cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }, actionIconContainer: { flexDirection: 'row' }, cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#37474f', flex: 1 }, cardSubtitle: { fontSize: 14, color: '#546e7a', marginTop: 2 }, cardDetail: { fontSize: 14, color: '#777', marginTop: 5 }, viewSubmissionsBtn: { marginTop: 12, backgroundColor: '#007bff', paddingVertical: 10, borderRadius: 5, alignItems: 'center' }, viewSubmissionsBtnText: { color: '#fff', fontWeight: 'bold' }, addButton: { flexDirection: 'row', backgroundColor: '#28a745', padding: 15, margin: 15, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 3 }, addButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }, modalView: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' }, modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' }, label: { fontSize: 16, fontWeight: '500', color: '#444', marginBottom: 5, marginLeft: 5 }, input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 15, fontSize: 16 }, pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, backgroundColor: '#fff' }, uploadButton: { flexDirection: 'row', backgroundColor: '#007bff', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }, uploadButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 }, attachmentText: { textAlign: 'center', marginVertical: 10, fontStyle: 'italic', color: '#555' }, modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 }, modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }, cancelBtn: { backgroundColor: '#6c757d', marginRight: 10 }, createBtn: { backgroundColor: '#28a745', marginLeft: 10 }, backButton: { flexDirection: 'row', alignItems: 'center', padding: 15 }, backButtonText: { marginLeft: 5, fontSize: 18, color: '#333', fontWeight: '500' }, emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' }, submissionHeaderTitle: { fontSize: 20, fontWeight: 'bold', paddingHorizontal: 15, marginBottom: 10 }, submissionCard: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 15, elevation: 2 }, submissionActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 10 }, actionLink: { flexDirection: 'row', alignItems: 'center' }, actionLinkText: { marginLeft: 5, fontWeight: 'bold' }, gradeModalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }, gradeModalView: { backgroundColor: 'white', padding: 25, borderRadius: 10, width: '90%', elevation: 10 }, badge: { backgroundColor: '#ffb300', borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignSelf: 'flex-start', marginTop: 10 }, badgeMuted: { backgroundColor: '#e0e0e0', borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignSelf: 'flex-start', marginTop: 10 }, badgeText: { color: '#333', fontSize: 12, fontWeight: 'bold' }, notSubmittedContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, }, notSubmittedText: { marginLeft: 8, fontSize: 14, color: '#a5a5a5', fontStyle: 'italic' }});
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: '#f4f6f8' }, centered: { flex: 1, justifyContent: 'center', alignItems: 'center' }, header: { paddingBottom: 10, paddingTop: 10 }, headerTitle: { fontSize: 24, fontWeight: 'bold', paddingHorizontal: 15, color: '#333' }, card: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: {width: 0, height: 1} }, cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }, actionIconContainer: { flexDirection: 'row' }, cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#37474f', flex: 1 }, cardSubtitle: { fontSize: 14, color: '#546e7a', marginTop: 2 }, cardDetail: { fontSize: 14, color: '#777', marginTop: 5 }, viewSubmissionsBtn: { marginTop: 12, backgroundColor: '#007bff', paddingVertical: 10, borderRadius: 5, alignItems: 'center' }, viewSubmissionsBtnText: { color: '#fff', fontWeight: 'bold' }, addButton: { flexDirection: 'row', backgroundColor: '#28a745', padding: 15, margin: 15, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 3 }, addButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }, modalView: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' }, modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' }, label: { fontSize: 16, fontWeight: '500', color: '#444', marginBottom: 5, marginLeft: 5 }, input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 15, fontSize: 16 }, pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, backgroundColor: '#fff' }, uploadButton: { flexDirection: 'row', backgroundColor: '#007bff', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }, uploadButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 }, attachmentText: { textAlign: 'center', marginVertical: 10, fontStyle: 'italic', color: '#555' }, modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 }, modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' }, cancelBtn: { backgroundColor: '#6c757d', marginRight: 10 }, createBtn: { backgroundColor: '#28a745', marginLeft: 10 }, backButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingTop: 15, paddingBottom: 5 }, backButtonText: { marginLeft: 5, fontSize: 18, color: '#333', fontWeight: '500' }, emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' }, submissionHeaderTitle: { fontSize: 20, fontWeight: 'bold', paddingHorizontal: 15, marginBottom: 10 }, submissionCard: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 15, elevation: 2 }, submissionActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 10 }, actionLink: { flexDirection: 'row', alignItems: 'center' }, actionLinkText: { marginLeft: 5, fontWeight: 'bold' }, gradeModalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }, gradeModalView: { backgroundColor: 'white', padding: 25, borderRadius: 10, width: '90%', elevation: 10 }, badge: { backgroundColor: '#ffb300', borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignSelf: 'flex-start', marginTop: 10 }, badgeMuted: { backgroundColor: '#e0e0e0', borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignSelf: 'flex-start', marginTop: 10 }, badgeText: { color: '#333', fontSize: 12, fontWeight: 'bold' }, notSubmittedContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, }, notSubmittedText: { marginLeft: 8, fontSize: 14, color: '#a5a5a5', fontStyle: 'italic' }});
 
 export default TeacherAdminHomeworkScreen;
