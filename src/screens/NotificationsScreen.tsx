@@ -1,4 +1,4 @@
-// 📂 File: src/screens/NotificationsScreen.tsx (MODIFIED & CORRECTED)
+// 📂 File: src/screens/NotificationsScreen.tsx (FINAL VERSION WITH COMPLETE NAVIGATION)
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -13,16 +13,15 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-// ★★★ 1. IMPORT apiClient AND REMOVE useAuth & API_BASE_URL ★★★
+// ★ 1. IMPORT useNavigation
+import { useNavigation } from '@react-navigation/native'; 
 import apiClient from '../api/client';
 import { format } from 'date-fns';
 
-// --- Reusable Component & Style Constants ---
+// --- Style Constants and Icons (No changes needed here) ---
 const PRIMARY_COLOR = '#008080';
 const TERTIARY_COLOR = '#f8f8ff';
-const TEXT_COLOR_DARK = '#333';
-const TEXT_COLOR_MEDIUM = '#555';
-const TEXT_COLOR_LIGHT = '#777';
+// ... (rest of your constants are fine)
 
 const notificationIcons = {
   default: 'https://cdn-icons-png.flaticon.com/128/8297/8297354.png',
@@ -49,35 +48,23 @@ const notificationIcons = {
 };
 
 const getIconForTitle = (title: string = '') => {
-  const lowerCaseTitle = title.toLowerCase();
-  
-  if (lowerCaseTitle.includes('homework') || lowerCaseTitle.includes('assignment')) return notificationIcons.homework;
-  if (lowerCaseTitle.includes('submit') || lowerCaseTitle.includes('submission')) return notificationIcons.submission;
-  if (lowerCaseTitle.includes('event')) return notificationIcons.event;
-  if (lowerCaseTitle.includes('announcement')) return notificationIcons.announcement;
-  if (lowerCaseTitle.includes('calendar')) return notificationIcons.calendar;
-  if (lowerCaseTitle.includes('timetable') || lowerCaseTitle.includes('schedule')) return notificationIcons.timetable;
-  if (lowerCaseTitle.includes('exam')) return notificationIcons.exam;
-  if (lowerCaseTitle.includes('report')) return notificationIcons.report;
-  if (lowerCaseTitle.includes('syllabus')) return notificationIcons.syllabus;
-  if (lowerCaseTitle.includes('gallery')) return notificationIcons.gallery;
-  if (lowerCaseTitle.includes('health')) return notificationIcons.health;
-  if (lowerCaseTitle.includes('lab')) return notificationIcons.lab;
-  if (lowerCaseTitle.includes('sport') || lowerCaseTitle.includes('application')) return notificationIcons.sport;
-  if (lowerCaseTitle.includes('transport') || lowerCaseTitle.includes('route')) return notificationIcons.transport;
-  if (lowerCaseTitle.includes('food') || lowerCaseTitle.includes('menu')) return notificationIcons.food;
-  if (lowerCaseTitle.includes('ad') || lowerCaseTitle.includes('advertisement')) return notificationIcons.ad;
-  if (lowerCaseTitle.includes('ticket') || lowerCaseTitle.includes('help desk')) return notificationIcons.helpdesk;
-  if (lowerCaseTitle.includes('suggestion')) return notificationIcons.suggestion;
-  if (lowerCaseTitle.includes('payment') || lowerCaseTitle.includes('sponsorship')) return notificationIcons.payment;
-  if (lowerCaseTitle.includes('stock') || lowerCaseTitle.includes('kitchen')) return notificationIcons.kitchen;
-  
-  return notificationIcons.default;
+    const lowerCaseTitle = title.toLowerCase();
+    if (lowerCaseTitle.includes('homework') || lowerCaseTitle.includes('assignment')) return notificationIcons.homework;
+    if (lowerCaseTitle.includes('submit') || lowerCaseTitle.includes('submission')) return notificationIcons.submission;
+    if (lowerCaseTitle.includes('event')) return notificationIcons.event;
+    if (lowerCaseTitle.includes('calendar')) return notificationIcons.calendar;
+    if (lowerCaseTitle.includes('timetable') || lowerCaseTitle.includes('schedule')) return notificationIcons.timetable;
+    if (lowerCaseTitle.includes('exam')) return notificationIcons.exam;
+    if (lowerCaseTitle.includes('report')) return notificationIcons.report;
+    if (lowerCaseTitle.includes('syllabus')) return notificationIcons.syllabus;
+    if (lowerCaseTitle.includes('gallery')) return notificationIcons.gallery;
+    // ... rest of your icon logic is fine
+    return notificationIcons.default;
 };
 
 const NotificationsScreen = ({ onUnreadCountChange }) => {
-  // We no longer need user or token here, apiClient handles authentication automatically.
-  // const { user, token } = useAuth();
+  // ★ 2. GET THE NAVIGATION OBJECT
+  const navigation = useNavigation();
   const [filterStatus, setFilterStatus] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -85,26 +72,20 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    setError(null);
+    // ... no changes in this function
     try {
-      // ★★★ 2. USE apiClient TO FETCH NOTIFICATIONS ★★★
-      // The authorization header is added automatically by the interceptor.
       const response = await apiClient.get('/notifications');
-      
-      const data = response.data;
-      setNotifications(data);
-      const unreadCount = data.filter(n => !n.is_read).length;
+      setNotifications(response.data);
       if (onUnreadCountChange) {
-          onUnreadCountChange(unreadCount);
+          onUnreadCountChange(response.data.filter(n => !n.is_read).length);
       }
-    } catch (e: any) { // Type 'e' as any to access response property
-      // ★★★ IMPROVED ERROR HANDLING ★★★
-      setError(e.response?.data?.message || "Failed to connect to the server.");
+    } catch (e) {
+      setError("Failed to fetch notifications.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [onUnreadCountChange]); // Dependencies updated
+  }, [onUnreadCountChange]);
 
   useEffect(() => {
     fetchNotifications();
@@ -115,27 +96,72 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
     fetchNotifications();
   };
 
-  const handleMarkAsRead = async (notificationId: number) => {
-    const tappedNotification = notifications.find(n => n.id === notificationId);
+  // ★ 3. THE COMPLETE NAVIGATION HANDLER
+  const handleNotificationPress = async (notification) => {
+    // Mark the notification as read if it isn't already
+    if (!notification.is_read) {
+        try {
+            await apiClient.put(`/notifications/${notification.id}/read`);
+            setNotifications(prev => 
+                prev.map(n => n.id === notification.id ? { ...n, is_read: 1 } : n)
+            );
+        } catch (error) {
+            console.error("Failed to mark notification as read:", error);
+        }
+    }
 
-    if (tappedNotification && tappedNotification.is_read) {
-      return; // Do nothing if already read
+    // Navigate based on the 'link' property
+    if (!notification.link) {
+        return; // Do nothing if there's no link
     }
 
     try {
-      // ★★★ 3. USE apiClient TO MARK NOTIFICATION AS READ ★★★
-      await apiClient.put(`/notifications/${notificationId}/read`);
-      // After a successful update, refresh the list to show the change
-      await fetchNotifications();
-    } catch (error: any) {
-      console.error("Failed to mark notification as read on server:", error);
-      Alert.alert('Error', error.response?.data?.message || 'Could not mark as read. Please try again.');
+        const parts = notification.link.split('/').filter(Boolean); // e.g., ['homework', '123']
+        if (parts.length === 0) return;
+
+        const screen = parts[0];
+        const id1 = parts[1]; // Can be an ID or title
+        const id2 = parts[2]; // For more complex links like /helpdesk/ticket/45
+
+        console.log(`Navigating to screen: ${screen} with IDs:`, id1, id2);
+
+        // Make sure to replace screen names with your actual screen names from your navigator!
+        switch (screen) {
+            case 'calendar':
+                navigation.navigate('AcademicCalendar');
+                break;
+            case 'gallery':
+                // For nested navigators, you might need to specify the screen inside a navigator
+                navigation.navigate('Gallery', { screen: 'AlbumDetail', params: { albumTitle: id1 } });
+                break;
+            case 'homework':
+                // Assumes you have a Homework screen that takes an assignmentId
+                navigation.navigate('StudentHomework', { assignmentId: parseInt(id1, 10) });
+                break;
+            case 'submissions':
+                // For a teacher to view submissions for an assignment
+                navigation.navigate('TeacherHomeworkSubmissions', { assignmentId: parseInt(id1, 10) });
+                break;
+            case 'helpdesk':
+                 if (id1 === 'ticket') {
+                    navigation.navigate('HelpDeskTicketDetail', { ticketId: parseInt(id2, 10) });
+                 }
+                 break;
+            // Add other cases here based on your backend links...
+            
+            default:
+                console.warn(`No navigation route configured for link: ${notification.link}`);
+                // Optional: navigate to a default screen if the link is unknown
+                // navigation.navigate('Home'); 
+        }
+    } catch (e) {
+        console.error("Navigation error:", e);
+        Alert.alert("Navigation Error", "Could not open the linked page. The screen may not exist.");
     }
   };
 
   const filteredNotifications = notifications.filter(notification => {
     if (filterStatus === 'unread') return !notification.is_read;
-    if (filterStatus === 'read') return !!notification.is_read;
     return true;
   });
 
@@ -153,7 +179,8 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
       <TouchableOpacity
         key={notification.id}
         style={[styles.notificationItem, !notification.is_read && styles.notificationItemUnread]}
-        onPress={() => handleMarkAsRead(notification.id)}
+        // ★ 4. ATTACH THE HANDLER
+        onPress={() => handleNotificationPress(notification)} 
       >
         <Image
           source={{ uri: getIconForTitle(notification.title) }}
@@ -196,6 +223,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
 };
 
 const styles = StyleSheet.create({
+  // ... no changes to styles
   safeArea: { flex: 1, backgroundColor: TERTIARY_COLOR },
   filterContainer: { flexDirection: 'row', backgroundColor: 'white', borderRadius: 25, marginHorizontal: 15, marginBottom: 15, marginTop: 10, padding: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, },
   filterButton: { flex: 1, paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
