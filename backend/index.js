@@ -2048,191 +2048,191 @@ app.delete('/api/ptm/:id', verifyToken, async (req, res) => {
 });
 
 
-// ==========================================================
-// --- DIGITAL LABS API ROUTES (NEW) ---
-// ==========================================================
-// This section handles creating, fetching, and managing digital lab resources.
-// It uses the 'upload' multer instance you already configured.
+// // ==========================================================
+// // --- DIGITAL LABS API ROUTES (NEW) ---
+// // ==========================================================
+// // This section handles creating, fetching, and managing digital lab resources.
+// // It uses the 'upload' multer instance you already configured.
 
-// GET all digital labs (Publicly accessible for students to view)
-// ★ 1. MODIFIED: GET labs for a specific STUDENT's class
-app.get('/api/labs/student/:classGroup', async (req, res) => {
-    const { classGroup } = req.params;
-    try {
-        // This query fetches labs assigned to the specific class OR labs assigned to ALL classes (where class_group is NULL)
-        const query = `
-            SELECT * FROM digital_labs 
-            WHERE class_group = ? OR class_group IS NULL OR class_group = ''
-            ORDER BY created_at DESC
-        `;
-        const [labs] = await db.query(query, [classGroup]);
-        res.status(200).json(labs);
-    } catch (error) {
-        console.error("GET /api/labs/student/:classGroup Error:", error);
-        res.status(500).json({ message: 'Error fetching digital labs.' });
-    }
-});
+// // GET all digital labs (Publicly accessible for students to view)
+// // ★ 1. MODIFIED: GET labs for a specific STUDENT's class
+// app.get('/api/labs/student/:classGroup', async (req, res) => {
+//     const { classGroup } = req.params;
+//     try {
+//         // This query fetches labs assigned to the specific class OR labs assigned to ALL classes (where class_group is NULL)
+//         const query = `
+//             SELECT * FROM digital_labs 
+//             WHERE class_group = ? OR class_group IS NULL OR class_group = ''
+//             ORDER BY created_at DESC
+//         `;
+//         const [labs] = await db.query(query, [classGroup]);
+//         res.status(200).json(labs);
+//     } catch (error) {
+//         console.error("GET /api/labs/student/:classGroup Error:", error);
+//         res.status(500).json({ message: 'Error fetching digital labs.' });
+//     }
+// });
 
-// ★ 2. MODIFIED: GET all labs created by a specific TEACHER (for the manage screen)
-app.get('/api/labs/teacher/:teacherId', async (req, res) => {
-    const { teacherId } = req.params;
-    try {
-        const query = `SELECT * FROM digital_labs WHERE created_by = ? ORDER BY created_at DESC`;
-        const [labs] = await db.query(query, [teacherId]);
-        res.status(200).json(labs);
-    } catch (error) {
-        console.error("GET /api/labs/teacher/:teacherId Error:", error);
-        res.status(500).json({ message: 'Error fetching labs.' });
-    }
-});
+// // ★ 2. MODIFIED: GET all labs created by a specific TEACHER (for the manage screen)
+// app.get('/api/labs/teacher/:teacherId', async (req, res) => {
+//     const { teacherId } = req.params;
+//     try {
+//         const query = `SELECT * FROM digital_labs WHERE created_by = ? ORDER BY created_at DESC`;
+//         const [labs] = await db.query(query, [teacherId]);
+//         res.status(200).json(labs);
+//     } catch (error) {
+//         console.error("GET /api/labs/teacher/:teacherId Error:", error);
+//         res.status(500).json({ message: 'Error fetching labs.' });
+//     }
+// });
 
-// 📂 File: server.js (REPLACE THIS ROUTE)
+// // 📂 File: server.js (REPLACE THIS ROUTE)
 
-// ★ 3. MODIFIED: POST a new digital lab (with class_group)
-app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
-    // Add class_group to the destructured body
-    const { title, subject, lab_type, class_group, description, access_url, created_by } = req.body;
+// // ★ 3. MODIFIED: POST a new digital lab (with class_group)
+// app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
+//     // Add class_group to the destructured body
+//     const { title, subject, lab_type, class_group, description, access_url, created_by } = req.body;
 
-    const coverImageFile = req.files['coverImage'] ? req.files['coverImage'][0] : null;
-    const labFile = req.files['labFile'] ? req.files['labFile'][0] : null;
+//     const coverImageFile = req.files['coverImage'] ? req.files['coverImage'][0] : null;
+//     const labFile = req.files['labFile'] ? req.files['labFile'][0] : null;
 
-    const cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : null;
-    const file_path = labFile ? `/uploads/${labFile.filename}` : null;
+//     const cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : null;
+//     const file_path = labFile ? `/uploads/${labFile.filename}` : null;
     
-    if (!access_url && !file_path) {
-        return res.status(400).json({ message: 'You must provide either an Access URL or upload a Lab File.' });
-    }
+//     if (!access_url && !file_path) {
+//         return res.status(400).json({ message: 'You must provide either an Access URL or upload a Lab File.' });
+//     }
 
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
+//     const connection = await db.getConnection();
+//     try {
+//         await connection.beginTransaction();
 
-        // Update INSERT query to include class_group
-        const query = `
-            INSERT INTO digital_labs (title, subject, lab_type, class_group, description, access_url, file_path, cover_image_url, created_by) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        await connection.query(query, [title, subject, lab_type, class_group || null, description, access_url || null, file_path, cover_image_url, created_by || null]);
+//         // Update INSERT query to include class_group
+//         const query = `
+//             INSERT INTO digital_labs (title, subject, lab_type, class_group, description, access_url, file_path, cover_image_url, created_by) 
+//             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+//         `;
+//         await connection.query(query, [title, subject, lab_type, class_group || null, description, access_url || null, file_path, cover_image_url, created_by || null]);
         
-        // --- MODIFIED NOTIFICATION LOGIC ---
-        let usersToNotifyQuery;
-        // If a class is specified, notify only that class. Otherwise, notify all students and teachers.
-        if (class_group) {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
-        } else {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        }
-        const [usersToNotify] = await usersToNotifyQuery;
+//         // --- MODIFIED NOTIFICATION LOGIC ---
+//         let usersToNotifyQuery;
+//         // If a class is specified, notify only that class. Otherwise, notify all students and teachers.
+//         if (class_group) {
+//              usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
+//         } else {
+//              usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
+//         }
+//         const [usersToNotify] = await usersToNotifyQuery;
         
-        if (usersToNotify.length > 0) {
-            const [[creator]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = creator.full_name || "School Administration";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = `New Digital Lab: ${subject}`;
-            const notificationMessage = `A new lab titled "${title}" has been added.`;
+//         if (usersToNotify.length > 0) {
+//             const [[creator]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
+//             const senderName = creator.full_name || "School Administration";
+//             const recipientIds = usersToNotify.map(u => u.id);
+//             const notificationTitle = `New Digital Lab: ${subject}`;
+//             const notificationMessage = `A new lab titled "${title}" has been added.`;
 
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
-        }
+//             await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
+//         }
         
-        await connection.commit();
-        res.status(201).json({ message: 'Digital lab created and users notified successfully!' });
-    } catch (error) {
-        await connection.rollback();
-        console.error("POST /api/labs Error:", error);
-        res.status(500).json({ message: 'Error creating digital lab.' });
-    } finally {
-        connection.release();
-    }
-});
+//         await connection.commit();
+//         res.status(201).json({ message: 'Digital lab created and users notified successfully!' });
+//     } catch (error) {
+//         await connection.rollback();
+//         console.error("POST /api/labs Error:", error);
+//         res.status(500).json({ message: 'Error creating digital lab.' });
+//     } finally {
+//         connection.release();
+//     }
+// });
 
-// ... inside the DIGITAL LABS API ROUTES section ...
+// // ... inside the DIGITAL LABS API ROUTES section ...
 
 
-// 📂 File: server.js (REPLACE THIS ROUTE)
+// // 📂 File: server.js (REPLACE THIS ROUTE)
 
-// ★ 4. MODIFIED: UPDATE an existing lab (with class_group)
-app.put('/api/labs/:id', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
-    const { id } = req.params;
-    // Add class_group
-    const { title, subject, lab_type, class_group, description, access_url, created_by } = req.body;
+// // ★ 4. MODIFIED: UPDATE an existing lab (with class_group)
+// app.put('/api/labs/:id', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
+//     const { id } = req.params;
+//     // Add class_group
+//     const { title, subject, lab_type, class_group, description, access_url, created_by } = req.body;
     
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
+//     const connection = await db.getConnection();
+//     try {
+//         await connection.beginTransaction();
 
-        const [existingLabRows] = await connection.query('SELECT cover_image_url, file_path FROM digital_labs WHERE id = ?', [id]);
-        if (existingLabRows.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Lab not found.' });
-        }
-        const existingLab = existingLabRows[0];
+//         const [existingLabRows] = await connection.query('SELECT cover_image_url, file_path FROM digital_labs WHERE id = ?', [id]);
+//         if (existingLabRows.length === 0) {
+//             await connection.rollback();
+//             return res.status(404).json({ message: 'Lab not found.' });
+//         }
+//         const existingLab = existingLabRows[0];
 
-        const coverImageFile = req.files['coverImage'] ? req.files['coverImage'][0] : null;
-        const labFile = req.files['labFile'] ? req.files['labFile'][0] : null;
+//         const coverImageFile = req.files['coverImage'] ? req.files['coverImage'][0] : null;
+//         const labFile = req.files['labFile'] ? req.files['labFile'][0] : null;
 
-        let cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : existingLab.cover_image_url;
-        let file_path = labFile ? `/uploads/${labFile.filename}` : existingLab.file_path;
+//         let cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : existingLab.cover_image_url;
+//         let file_path = labFile ? `/uploads/${labFile.filename}` : existingLab.file_path;
 
-        // Update UPDATE query to include class_group
-        const query = `
-            UPDATE digital_labs SET 
-            title = ?, subject = ?, lab_type = ?, class_group = ?, description = ?, access_url = ?, file_path = ?, cover_image_url = ?
-            WHERE id = ?
-        `;
-        await connection.query(query, [title, subject, lab_type, class_group || null, description, access_url || null, file_path, cover_image_url, id]);
+//         // Update UPDATE query to include class_group
+//         const query = `
+//             UPDATE digital_labs SET 
+//             title = ?, subject = ?, lab_type = ?, class_group = ?, description = ?, access_url = ?, file_path = ?, cover_image_url = ?
+//             WHERE id = ?
+//         `;
+//         await connection.query(query, [title, subject, lab_type, class_group || null, description, access_url || null, file_path, cover_image_url, id]);
         
-        // --- NOTE: Notification on update can be complex (e.g., if class changes). 
-        // For simplicity, we can notify the new class or all users again.
-        // Let's notify the assigned class (or all if no class is assigned).
+//         // --- NOTE: Notification on update can be complex (e.g., if class changes). 
+//         // For simplicity, we can notify the new class or all users again.
+//         // Let's notify the assigned class (or all if no class is assigned).
         
-        let usersToNotifyQuery;
-        if (class_group) {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
-        } else {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        }
-        const [usersToNotify] = await usersToNotifyQuery;
+//         let usersToNotifyQuery;
+//         if (class_group) {
+//              usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
+//         } else {
+//              usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
+//         }
+//         const [usersToNotify] = await usersToNotifyQuery;
 
-        if (usersToNotify.length > 0) {
-            const [[editor]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = editor.full_name || "School Administration";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = `Digital Lab Updated: ${subject}`;
-            const notificationMessage = `The lab "${title}" has been updated.`;
+//         if (usersToNotify.length > 0) {
+//             const [[editor]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
+//             const senderName = editor.full_name || "School Administration";
+//             const recipientIds = usersToNotify.map(u => u.id);
+//             const notificationTitle = `Digital Lab Updated: ${subject}`;
+//             const notificationMessage = `The lab "${title}" has been updated.`;
 
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
-        }
+//             await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
+//         }
 
-        await connection.commit();
-        res.status(200).json({ message: 'Digital lab updated successfully!' });
-    } catch (error) {
-        await connection.rollback();
-        console.error("PUT /api/labs/:id Error:", error);
-        res.status(500).json({ message: 'Error updating digital lab.' });
-    } finally {
-        connection.release();
-    }
-});
-
-
-// ... your existing DELETE route for /api/labs/:id
+//         await connection.commit();
+//         res.status(200).json({ message: 'Digital lab updated successfully!' });
+//     } catch (error) {
+//         await connection.rollback();
+//         console.error("PUT /api/labs/:id Error:", error);
+//         res.status(500).json({ message: 'Error updating digital lab.' });
+//     } finally {
+//         connection.release();
+//     }
+// });
 
 
-// DELETE a digital lab (Admin/Teacher only)
-app.delete('/api/labs/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        // You might want to add logic here to delete the associated image file from the /uploads folder
-        const [result] = await db.query('DELETE FROM digital_labs WHERE id = ?', [id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Digital lab not found.' });
-        }
-        res.status(200).json({ message: 'Digital lab deleted successfully.' });
-    } catch (error) {
-        console.error("DELETE /api/labs/:id Error:", error);
-        res.status(500).json({ message: 'Error deleting digital lab.' });
-    }
-});
+// // ... your existing DELETE route for /api/labs/:id
+
+
+// // DELETE a digital lab (Admin/Teacher only)
+// app.delete('/api/labs/:id', async (req, res) => {
+//     const { id } = req.params;
+//     try {
+//         // You might want to add logic here to delete the associated image file from the /uploads folder
+//         const [result] = await db.query('DELETE FROM digital_labs WHERE id = ?', [id]);
+//         if (result.affectedRows === 0) {
+//             return res.status(404).json({ message: 'Digital lab not found.' });
+//         }
+//         res.status(200).json({ message: 'Digital lab deleted successfully.' });
+//     } catch (error) {
+//         console.error("DELETE /api/labs/:id Error:", error);
+//         res.status(500).json({ message: 'Error deleting digital lab.' });
+//     }
+// });
 
 
 // ==========================================================
