@@ -4196,11 +4196,13 @@ app.get('/api/transport/routes', async (req, res) => {
 
 // 📂 File: server.js (CORRECTED & VERIFIED GALLERY MODULE)
 
+// 📂 File: server.js (FINAL & VERIFIED GALLERY MODULE)
+
 // ==========================================================
 // --- GALLERY API ROUTES ---
 // ==========================================================
 
-// GET all album summaries (No changes needed, this is correct and optimized)
+// GET all album summaries (No changes needed, this is correct)
 app.get('/api/gallery', async (req, res) => {
     const query = `
         SELECT 
@@ -4208,15 +4210,12 @@ app.get('/api/gallery', async (req, res) => {
             MAX(g.event_date) as event_date, 
             COUNT(g.id) as item_count,
             (
-                SELECT file_path 
-                FROM gallery_items 
+                SELECT file_path FROM gallery_items 
                 WHERE title = g.title AND file_type = 'photo' 
-                ORDER BY event_date DESC, created_at DESC 
-                LIMIT 1
+                ORDER BY event_date DESC, created_at DESC LIMIT 1
             ) as cover_image_path
         FROM gallery_items g
-        GROUP BY g.title
-        ORDER BY MAX(g.event_date) DESC;
+        GROUP BY g.title ORDER BY MAX(g.event_date) DESC;
     `;
     try {
         const [albums] = await db.query(query);
@@ -4233,16 +4232,11 @@ app.get('/api/gallery/album/:title', async (req, res) => {
     if (!title) {
         return res.status(400).json({ message: 'Album title is required.' });
     }
-
     try {
-        // Decode the title from the URL to handle spaces and special characters
         const decodedTitle = decodeURIComponent(title);
         const query = `
             SELECT id, title, event_date, file_path, file_type 
-            FROM gallery_items 
-            WHERE title = ? 
-            ORDER BY created_at DESC
-        `;
+            FROM gallery_items WHERE title = ? ORDER BY created_at DESC`;
         const [items] = await db.query(query, [decodedTitle]);
         res.status(200).json(items);
     } catch (error) {
@@ -4251,57 +4245,56 @@ app.get('/api/gallery/album/:title', async (req, res) => {
     }
 });
 
-// POST: Upload a new gallery item (with notifications enabled)
+// POST: Upload a new gallery item (with SMARTER notifications)
 app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) => {
     const { title, event_date, role, adminId } = req.body;
     const file = req.file;
 
-    if (role !== 'admin') {
+    if (role !== 'admin' || !file || !title || !event_date || !adminId) {
         if (file) fs.unlinkSync(file.path);
-        return res.status(403).json({ message: "Forbidden: Requires Admin Role." });
-    }
-    if (!file || !title || !event_date || !adminId) {
-        if (file) fs.unlinkSync(file.path);
-        return res.status(400).json({ message: "Missing required fields: adminId, title, event_date, and a media file." });
+        return res.status(400).json({ message: "Missing required fields or invalid role." });
     }
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
+        // ★★★ FIX: Check if the album already exists BEFORE inserting the new item ★★★
+        const [existingItems] = await connection.query("SELECT id FROM gallery_items WHERE title = ? LIMIT 1", [title]);
+        const isNewAlbum = existingItems.length === 0;
+
+        // Insert the new gallery item
         const file_type = file.mimetype.startsWith('image') ? 'photo' : 'video';
         const file_path = `/uploads/${file.filename}`;
         const insertQuery = 'INSERT INTO gallery_items (title, event_date, file_path, file_type, uploaded_by) VALUES (?, ?, ?, ?, ?)';
         await connection.query(insertQuery, [title, event_date, file_path, file_type, adminId]);
         
-        // --- Corrected & Enabled Notification Logic ---
-        const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher', 'donor') AND id != ?", [adminId]);
-        
-        if (usersToNotify.length > 0) {
-            const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [adminId]);
-            const senderName = admin.full_name || "School Administration";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = `New Gallery Album: ${title}`;
-            const notificationMessage = `New photos/videos for "${title}" have been added. Check them out!`;
-            
-            // Create a direct link to the specific album for better navigation.
-            const notificationLink = `/gallery/${encodeURIComponent(title)}`;
-            
-            await createBulkNotifications(
-                connection, 
-                recipientIds, 
-                senderName, 
-                notificationTitle, 
-                notificationMessage, 
-                notificationLink
-            );
+        // ★★★ FIX: Only send notifications if it's a brand new album ★★★
+        if (isNewAlbum) {
+            const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher', 'donor') AND id != ?", [adminId]);
+            if (usersToNotify.length > 0) {
+                const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [adminId]);
+                const senderName = admin.full_name || "School Administration";
+                const recipientIds = usersToNotify.map(u => u.id);
+                const notificationTitle = `New Gallery Album: ${title}`;
+                const notificationMessage = `New photos/videos for "${title}" have been added. Check them out!`;
+                
+                // The link format is correct for the frontend navigation fix
+                const notificationLink = `/gallery/${title}`;
+                
+                await createBulkNotifications(
+                    connection, recipientIds, senderName, 
+                    notificationTitle, notificationMessage, notificationLink
+                );
+            }
         }
         
         await connection.commit();
-        res.status(201).json({
-            message: "Media uploaded and users notified successfully!",
-            filePath: file_path
-        });
+        const message = isNewAlbum 
+            ? "New album created and users notified successfully!" 
+            : "Media added to existing album successfully!";
+        res.status(201).json({ message, filePath: file_path });
+
     } catch (error) {
         await connection.rollback();
         if (file) fs.unlinkSync(file.path);
@@ -4315,11 +4308,8 @@ app.post('/api/gallery/upload', galleryUpload.single('media'), async (req, res) 
 // DELETE an entire album by its title (No changes needed, this is correct)
 app.delete('/api/gallery/album', async (req, res) => {
     const { title, role } = req.body;
-    if (role !== 'admin') {
-        return res.status(403).json({ message: "Forbidden: Requires Admin Role." });
-    }
-    if (!title) {
-        return res.status(400).json({ message: "Album title is required." });
+    if (role !== 'admin' || !title) {
+        return res.status(400).json({ message: "Admin role and title are required." });
     }
     const connection = await db.getConnection();
     try {
@@ -4331,12 +4321,9 @@ app.delete('/api/gallery/album', async (req, res) => {
         }
         await connection.query('DELETE FROM gallery_items WHERE title = ?', [title]);
         
-        // Deletes all associated files from the server's storage
         items.forEach(item => {
             if (item.file_path) {
-                // Your multer saves to '/data/uploads', and file_path is '/uploads/...'
-                // So the absolute path is '/data' + file_path
-                const fullPath = path.join('/data', item.file_path.substring(1)); // substring(1) to remove leading '/'
+                const fullPath = path.join('/data', item.file_path.substring(1));
                 fs.unlink(fullPath, (err) => {
                     if (err) console.error(`Failed to delete file from disk: ${fullPath}`, err);
                 });
@@ -4354,7 +4341,7 @@ app.delete('/api/gallery/album', async (req, res) => {
     }
 });
 
-// DELETE a single gallery item (SYNTAX CORRECTED)
+// DELETE a single gallery item (No changes needed, this is correct)
 app.delete('/api/gallery/:id', async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
@@ -4373,7 +4360,7 @@ app.delete('/api/gallery/:id', async (req, res) => {
         await connection.query('DELETE FROM gallery_items WHERE id = ?', [id]);
         
         if (filePath) {
-            const fullPath = path.join('/data', filePath.substring(1)); // substring(1) to remove leading '/'
+            const fullPath = path.join('/data', filePath.substring(1));
             fs.unlink(fullPath, (err) => {
                 if (err) console.error(`Failed to delete file from disk: ${fullPath}`, err);
             });
@@ -4381,7 +4368,7 @@ app.delete('/api/gallery/:id', async (req, res) => {
         
         await connection.commit();
         res.status(200).json({ message: "Item deleted successfully." });
-    } catch (error) { // ★★★ FIX: Added opening curly brace '{' here ★★★
+    } catch (error) {
         await connection.rollback();
         console.error(`DELETE /api/gallery/${id} Error:`, error);
         res.status(500).json({ message: "Error deleting item." });

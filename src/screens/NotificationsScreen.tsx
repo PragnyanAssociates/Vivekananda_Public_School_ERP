@@ -132,15 +132,15 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
                 break;
             case 'gallery':
                 // For nested navigators, you might need to specify the screen inside a navigator
-                navigation.navigate('Gallery', { screen: 'AlbumDetail', params: { albumTitle: id1 } });
+                navigation.navigate('GalleryScreen', { screen: 'AlbumDetailScreen', params: { albumTitle: id1 } });
                 break;
             case 'homework':
                 // Assumes you have a Homework screen that takes an assignmentId
-                navigation.navigate('StudentHomework', { assignmentId: parseInt(id1, 10) });
+                navigation.navigate('StudentHomeworkScreen', { assignmentId: parseInt(id1, 10) });
                 break;
             case 'submissions':
                 // For a teacher to view submissions for an assignment
-                navigation.navigate('TeacherHomeworkSubmissions', { assignmentId: parseInt(id1, 10) });
+                navigation.navigate('submissions', { assignmentId: parseInt(id1, 10) });
                 break;
             case 'helpdesk':
                  if (id1 === 'ticket') {
