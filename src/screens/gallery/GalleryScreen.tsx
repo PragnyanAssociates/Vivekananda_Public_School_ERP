@@ -11,13 +11,12 @@ import RNPickerSelect from 'react-native-picker-select';
 import Icon from 'react-native-vector-icons/Ionicons';
 import * as Animatable from 'react-native-animatable';
 import LinearGradient from 'react-native-linear-gradient';
-import FastImage from 'react-native-fast-image'; // --- CHANGE 1: Import FastImage
+import FastImage from 'react-native-fast-image'; // Using FastImage for performance
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
-// --- Type Definitions ---
-// --- CHANGE 2: Update Album type to match new API response ---
+// --- Type Definitions (Updated for new API) ---
 type AlbumType = { title: string; event_date: string; item_count: number; cover_image_path: string | null; };
 type RootStackParamList = { AlbumDetail: { title: string }; }; // Pass only the title now
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -30,19 +29,27 @@ const NUM_COLUMNS = 2;
 const MARGIN = 12;
 const albumSize = (width - MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
-// --- CHANGE 3: Update AlbumCover to use FastImage and new data structure ---
+// --- AlbumCover Component (Corrected and Optimized) ---
 const AlbumCover: FC<{ album: AlbumType; onPress: () => void; onDelete: () => void; isAdmin: boolean; index: number; }> = ({ album, onPress, onDelete, isAdmin, index }) => {
-    const imageSource = album.cover_image_path
-        ? { uri: `${SERVER_URL}${album.cover_image_path}`, priority: FastImage.priority.normal }
-        : require('../../../assets/default_avatar.png'); // Fallback image if no photo in album
+    // This logic restores your original way of handling video-only albums
+    const isVideoOnlyAlbum = !album.cover_image_path;
 
     return (
         <Animatable.View animation="zoomIn" duration={500} delay={index * 100} useNativeDriver={true}>
             <TouchableOpacity style={styles.albumContainer} onPress={onPress}>
-                <FastImage source={imageSource} style={styles.albumImage} resizeMode={FastImage.resizeMode.cover}>
-                    {/* Show a video icon if there's no cover image (implies video-only album) */}
-                    {!album.cover_image_path && <Icon name="film-outline" size={40} color="rgba(255,255,255,0.6)" />}
-                </FastImage>
+                {isVideoOnlyAlbum ? (
+                    // If it's a video-only album, show the film icon, just like your original code
+                    <View style={styles.albumImage}>
+                        <Icon name="film-outline" size={40} color="rgba(255,255,255,0.6)" />
+                    </View>
+                ) : (
+                    // Otherwise, use FastImage to load the cover photo for maximum speed
+                    <FastImage
+                        source={{ uri: `${SERVER_URL}${album.cover_image_path}`, priority: FastImage.priority.normal }}
+                        style={styles.albumImage}
+                        resizeMode={FastImage.resizeMode.cover}
+                    />
+                )}
                 <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradientOverlay} />
                 <View style={styles.albumInfo}>
                     <Text style={styles.albumTitle} numberOfLines={2}>{album.title}</Text>
@@ -55,13 +62,14 @@ const AlbumCover: FC<{ album: AlbumType; onPress: () => void; onDelete: () => vo
     );
 };
 
+
 // --- Main GalleryScreen Component ---
 const GalleryScreen: FC = () => {
     const { user } = useAuth();
     const navigation = useNavigation<GalleryScreenNavigationProp>();
     const isAdmin = user?.role === 'admin';
 
-    const [allAlbums, setAllAlbums] = useState<AlbumType[]>([]); // Use new AlbumType
+    const [allAlbums, setAllAlbums] = useState<AlbumType[]>([]);
     const [filteredAlbums, setFilteredAlbums] = useState<AlbumType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [isFilterModalVisible, setFilterModalVisible] = useState(false);
@@ -75,7 +83,6 @@ const GalleryScreen: FC = () => {
     const [tempSelectedMonth, setTempSelectedMonth] = useState<number | null>(null);
     const [availableYears, setAvailableYears] = useState<{label: string; value: number}[]>([]);
 
-    // --- CHANGE 4: Update filter logic to work with `event_date` directly ---
     useEffect(() => {
         let albumsToFilter = [...allAlbums];
         if (activeDateFilterType && selectedYear) {
@@ -91,7 +98,6 @@ const GalleryScreen: FC = () => {
         setFilteredAlbums(albumsToFilter);
     }, [allAlbums, activeDateFilterType, selectedYear, selectedMonth]);
     
-    // --- CHANGE 5: Update available years logic ---
     useEffect(() => {
         if (allAlbums.length > 0) {
             const years = [...new Set(allAlbums.map(album => new Date(album.event_date).getFullYear()))];
@@ -99,12 +105,12 @@ const GalleryScreen: FC = () => {
         }
     }, [allAlbums]);
 
-    // --- CHANGE 6: Remove groupDataByTitle. The API does this now. ---
+    // The groupDataByTitle function is no longer needed because the new API does this work for us.
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch the new, optimized album summary data
+            // Fetch the new, optimized album summary data from the server
             const response = await apiClient.get<AlbumType[]>('/gallery');
             setAllAlbums(response.data);
         } catch (error: any) {
@@ -120,10 +126,10 @@ const GalleryScreen: FC = () => {
     const handleClearFilter = () => { setTempActiveDateFilterType(null); setTempSelectedYear(null); setTempSelectedMonth(null); };
     const handleOpenFilterModal = () => { setTempActiveDateFilterType(activeDateFilterType); setTempSelectedYear(selectedYear); setTempSelectedMonth(selectedMonth); setFilterModalVisible(true); };
 
-    // --- CHANGE 7: Update navigation to pass only the title ---
+    // Navigate to detail screen, passing only the title
     const handleAlbumPress = (album: AlbumType) => navigation.navigate('AlbumDetail', { title: album.title });
 
-    // Rest of the component (Upload Logic, Delete Logic, Modals) remains largely the same
+    // --- Upload Logic (unchanged from your original) ---
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [isUploadModalVisible, setUploadModalVisible] = useState<boolean>(false);
     const [title, setTitle] = useState<string>('');
@@ -151,7 +157,7 @@ const GalleryScreen: FC = () => {
             
             {isAdmin && <Animatable.View animation="zoomIn" duration={400} delay={300} style={styles.fabContainer}><TouchableOpacity style={styles.fab} onPress={handleOpenUploadModal}><Icon name="add" size={30} color="white" /></TouchableOpacity></Animatable.View>}
             
-            {/* Filter Modal (Unchanged) */}
+            {/* Filter Modal (unchanged) */}
             <Modal visible={isFilterModalVisible} transparent={true} animationType="slide" onRequestClose={() => setFilterModalVisible(false)}>
                 <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setFilterModalVisible(false)}>
                     <Animatable.View animation="fadeInUpBig" duration={400} style={styles.filterModalView} onStartShouldSetResponder={() => true}>
@@ -171,13 +177,13 @@ const GalleryScreen: FC = () => {
                 </TouchableOpacity>
             </Modal>
             
-            {/* Upload Modal (Unchanged) */}
+            {/* Upload Modal (unchanged) */}
             <Modal visible={isUploadModalVisible} transparent={true} animationType="fade" onRequestClose={() => setUploadModalVisible(false)}><View style={styles.modalBackdrop}><Animatable.View animation="zoomInUp" duration={500} style={styles.uploadModalView}><Text style={styles.modalTitle}>Create New Album</Text><TextInput style={styles.input} placeholder="Album Title" value={title} onChangeText={setTitle} /><TouchableOpacity style={styles.datePickerButton}><Icon name="calendar-outline" size={20} color="#555" style={{marginRight: 10}} /><Text style={styles.datePickerText}>Event Date: {eventDate.toLocaleDateString()}</Text></TouchableOpacity><TouchableOpacity style={styles.selectButton} onPress={() => launchImageLibrary({mediaType: 'mixed'}, r => r.assets && setAsset(r.assets[0]))}><Icon name={asset ? "checkmark-circle" : "attach"} size={20} color={asset ? '#4CAF50' : ACCENT_COLOR} /><Text style={styles.selectButtonText}>{asset ? "Media Selected" : "Select Photo/Video"}</Text></TouchableOpacity>{asset?.fileName && <Text style={styles.fileName}>{asset.fileName}</Text>}<View style={styles.modalActions}><Button title="Cancel" onPress={() => setUploadModalVisible(false)} color="#888" /><View style={{width: 20}} /><Button title={isSubmitting ? "Uploading..." : 'Upload'} onPress={handleUpload} disabled={isSubmitting} color={ACCENT_COLOR} /></View></Animatable.View></View></Modal>
         </SafeAreaView>
     );
 };
 
-// Styles remain the same, just a few tweaks for FastImage placeholder
+// Styles are the same as your original file
 const pickerSelectStyles = StyleSheet.create({ inputIOS: { fontSize: 16, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, color: 'black', backgroundColor: '#f0f2f5', }, inputAndroid: { fontSize: 16, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, color: 'black', backgroundColor: '#f0f2f5', } });
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F0F2F5' },

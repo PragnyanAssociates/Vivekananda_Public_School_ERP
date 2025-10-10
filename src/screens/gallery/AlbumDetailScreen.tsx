@@ -10,48 +10,53 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import RNFetchBlob from 'rn-fetch-blob';
 import * as Animatable from 'react-native-animatable';
-import FastImage from 'react-native-fast-image'; // --- CHANGE 1: Import FastImage
+import FastImage from 'react-native-fast-image'; // Import FastImage for performance
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 
-// --- Type Definitions ---
+// --- Type Definitions (Updated for new API structure) ---
 type GalleryItemType = { id: number; title: string; event_date: string; file_path: string; file_type: 'photo' | 'video'; };
-type RootStackParamList = { AlbumDetail: { title: string }; }; // Now only receives title
+type RootStackParamList = { AlbumDetail: { title: string }; }; // Now only receives the title
 type AlbumDetailScreenRouteProp = RouteProp<RootStackParamList, 'AlbumDetail'>;
 type FilterType = 'all' | 'photo' | 'video';
 
+// --- Style Constants ---
 const { width } = Dimensions.get('window');
 const ITEM_MARGIN = 6;
 const NUM_COLUMNS = 3;
 const imageSize = (width - (ITEM_MARGIN * (NUM_COLUMNS + 1))) / NUM_COLUMNS;
 const ACCENT_COLOR = '#5A33C8';
 
+// --- Animatable Components ---
 const AnimatableVideo = Animatable.createAnimatableComponent(Video);
-const AnimatableFastImage = Animatable.createAnimatableComponent(FastImage); // For modal animation
+const AnimatableFastImage = Animatable.createAnimatableComponent(FastImage);
 
+// --- Download Helper (Unchanged from your original) ---
 const handleDownloadItem = async (item: GalleryItemType) => { if (!item) return; const url = `${SERVER_URL}${item.file_path}`; const fileName = item.file_path.split('/').pop() || `gallery-item-${Date.now()}`; if (Platform.OS === 'android') { try { const permission = Platform.Version >= 33 ? (item.file_type === 'video' ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO : PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES) : PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE; const granted = await PermissionsAndroid.request(permission); if (granted !== PermissionsAndroid.RESULTS.GRANTED) { Alert.alert('Permission Denied'); return; } } catch (err) { console.warn(err); return; } } const { dirs } = RNFetchBlob.fs; const path = Platform.OS === 'ios' ? `${dirs.DocumentDir}/${fileName}` : `${dirs.PictureDir}/${fileName}`; RNFetchBlob.config({ path, fileCache: true, addAndroidDownloads: { useDownloadManager: true, notification: true, path, description: 'Downloading media.' } }).fetch('GET', url).then(() => Alert.alert('Success', 'Download complete.')).catch(() => Alert.alert('Download Failed')); };
 
+// --- Main AlbumDetailScreen Component ---
 const AlbumDetailScreen: FC = () => {
     const route = useRoute<AlbumDetailScreenRouteProp>();
     const navigation = useNavigation();
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
-    const albumTitle = route.params.title; // Get title from route
+    const albumTitle = route.params.title; // Get album title from navigation parameters
 
-    // --- CHANGE 2: Add loading state and fetch data inside this component ---
-    const [loading, setLoading] = useState(true);
-    const [albumItems, setAlbumItems] = useState<GalleryItemType[]>([]);
+    // --- State Management (Updated) ---
+    const [loading, setLoading] = useState(true); // Add loading state
+    const [albumItems, setAlbumItems] = useState<GalleryItemType[]>([]); // Start with an empty array
     const [activeFilter, setActiveFilter] = useState<FilterType>('all');
     const [filteredItems, setFilteredItems] = useState<GalleryItemType[]>([]);
     
-    // Other state (unchanged)
+    // Modal and submission state (unchanged)
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [isImageModalVisible, setImageModalVisible] = useState(false);
     const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
     const [isVideoModalVisible, setVideoModalVisible] = useState(false);
     const [selectedVideoUri, setSelectedVideoUri] = useState<string | null>(null);
 
+    // --- Data Fetching ---
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -65,18 +70,22 @@ const AlbumDetailScreen: FC = () => {
         }
     }, [albumTitle]);
 
-    useFocusEffect(fetchData); // Refetch when screen is focused
+    // Fetch data when the screen comes into focus
+    useFocusEffect(fetchData);
+
+    // Set screen title and filter items when data changes
     useEffect(() => { navigation.setOptions({ title: albumTitle }); }, [navigation, albumTitle]);
     useEffect(() => { if (activeFilter === 'all') setFilteredItems(albumItems); else setFilteredItems(albumItems.filter(item => item.file_type === activeFilter)); }, [albumItems, activeFilter]);
 
+    // --- Handlers (Logic remains the same, just adapted for local state) ---
     const handleItemPress = (item: GalleryItemType) => { if (item.file_type === 'photo') { setSelectedImageUri(`${SERVER_URL}${item.file_path}`); setImageModalVisible(true); } else { setSelectedVideoUri(`${SERVER_URL}${item.file_path}`); setVideoModalVisible(true); } };
-    const confirmDeleteItem = (itemToDelete: GalleryItemType) => Alert.alert("Delete Item", "Are you sure you want to delete this item?", [{ text: "Cancel" }, { text: "Delete", style: "destructive", onPress: () => deleteItem(itemToDelete.id) }]);
+    const confirmDeleteItem = (itemToDelete: GalleryItemType) => Alert.alert("Delete Item", "Are you sure?", [{ text: "Cancel" }, { text: "Delete", style: "destructive", onPress: () => deleteItem(itemToDelete.id) }]);
     const deleteItem = async (itemId: number) => { if (!user) return; try { await apiClient.delete(`/gallery/${itemId}`, { data: { role: user.role } }); setAlbumItems(prev => prev.filter(item => item.id !== itemId)); } catch (e) { Alert.alert("Error", "Could not delete item."); } };
     const handleAddItem = () => launchImageLibrary({ mediaType: 'mixed', selectionLimit: 10 }, async (res) => { if (res.didCancel || !res.assets) return; setIsSubmitting(true); const newItems = await Promise.all(res.assets.map(uploadItem)); setAlbumItems(prev => [...newItems.filter(Boolean).reverse() as GalleryItemType[], ...prev]); setIsSubmitting(false); });
-    const uploadItem = async (asset: Asset): Promise<GalleryItemType | null> => { const originalEventDate = albumItems[0]?.event_date; if (!user || !originalEventDate) { Alert.alert("Error", "Cannot add to an empty or invalid album."); return null; } const fd = new FormData(); fd.append('title', albumTitle); fd.append('event_date', originalEventDate.split('T')[0]); fd.append('role', user.role); fd.append('adminId', String(user.id)); fd.append('media', { uri: asset.uri, type: asset.type, name: asset.fileName || `m-${Date.now()}` }); try { const { data } = await apiClient.post('/gallery/upload', fd); return { id: data.insertId, title: albumTitle, event_date: originalEventDate, file_path: data.filePath, file_type: asset.type?.startsWith('image') ? 'photo' : 'video', uploader_name: user.full_name }; } catch (e) { return null; } };
+    const uploadItem = async (asset: Asset): Promise<GalleryItemType | null> => { const originalEventDate = albumItems[0]?.event_date; if (!user || !originalEventDate) { Alert.alert("Error", "Cannot add to an empty album. Please upload from the main gallery screen first."); return null; } const fd = new FormData(); fd.append('title', albumTitle); fd.append('event_date', originalEventDate.split('T')[0]); fd.append('role', user.role); fd.append('adminId', String(user.id)); fd.append('media', { uri: asset.uri, type: asset.type, name: asset.fileName || `m-${Date.now()}` }); try { const { data } = await apiClient.post('/gallery/upload', fd); return { id: data.insertId, title: albumTitle, event_date: originalEventDate, file_path: data.filePath, file_type: asset.type?.startsWith('image') ? 'photo' : 'video' }; } catch (e) { Alert.alert("Upload Failed", "Could not upload the selected item."); return null; } };
     const closeModals = () => { setImageModalVisible(false); setVideoModalVisible(false); };
     
-    // --- CHANGE 3: Use FastImage in the grid item for instant loading ---
+    // --- Grid Item Renderer (Using FastImage) ---
     const renderGridItem = ({ item, index }: { item: GalleryItemType; index: number }) => (
         <Animatable.View animation="zoomIn" duration={500} delay={index * 50} useNativeDriver={true}>
             <TouchableOpacity style={styles.gridItemContainer} onPress={() => handleItemPress(item)}>
@@ -94,10 +103,12 @@ const AlbumDetailScreen: FC = () => {
         </Animatable.View>
     );
 
+    // Show a loading spinner while fetching data
     if (loading) {
         return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={ACCENT_COLOR} /></View>;
     }
 
+    // --- Main JSX ---
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
@@ -115,6 +126,7 @@ const AlbumDetailScreen: FC = () => {
         </SafeAreaView>
     );
 };
+// Styles are the same as your original, with a new loadingContainer style
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },

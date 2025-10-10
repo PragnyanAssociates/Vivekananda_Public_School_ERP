@@ -37,7 +37,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static('/data/uploads'));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // ==========================================================
@@ -52,7 +52,7 @@ app.get('/api/image/:filename', (req, res) => {
     if (filename.includes('..')) {
         return res.status(400).send('Invalid filename');
     }
-    const filePath = path.join(__dirname, 'uploads', filename);
+    const filePath = path.join('/data/uploads', filename);
 
     fs.access(filePath, fs.constants.F_OK, (err) => {
         if (err) {
@@ -89,7 +89,7 @@ app.get('/api/image/:filename', (req, res) => {
 // --- MULTER & DB SETUP (Your existing code, unchanged) ---
 // ==========================================================
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, 'uploads/'); },
+    destination: (req, file, cb) => { cb(null, '/data/uploads'); }, // <-- FIXED
     filename: (req, file, cb) => {
         cb(null, `profile-${Date.now()}${path.extname(file.originalname)}`);
     }
@@ -97,7 +97,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const galleryStorage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, 'uploads/'); },
+    destination: (req, file, cb) => { cb(null, '/data/uploads'); }, // <-- FIXED
     filename: (req, file, cb) => {
         cb(null, `gallery-media-${Date.now()}${path.extname(file.originalname)}`);
     }
@@ -184,7 +184,7 @@ const createBulkNotifications = async (dbOrConnection, recipientIds, senderName,
 const adsStorage = multer.diskStorage({
     destination: (req, file, cb) => {
         // We'll use your existing 'uploads' directory
-        cb(null, 'uploads/');
+        cb(null, '/data/uploads')
     },
     filename: (req, file, cb) => {
         // Create a unique filename for ad images and payment proofs
