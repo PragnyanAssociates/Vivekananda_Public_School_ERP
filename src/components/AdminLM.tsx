@@ -140,7 +140,12 @@ const AdminLM = () => {
   // NEW: Function to show password in an alert
   const handleShowPassword = (user: User) => {
     if (user.password) {
-        Alert.alert('User Password', `The password for ${user.full_name} is:\n\n${user.password}`);
+        // This checks if the password is still hashed. If so, it gives a helpful message.
+        if (user.password.length > 30 && user.password.startsWith('$2b$')) {
+             Alert.alert('Old Password', `This is an old, encrypted password. Please edit the user and set a new one to view it here.`);
+        } else {
+             Alert.alert('User Password', `The password for ${user.full_name} is:\n\n${user.password}`);
+        }
     } else {
         Alert.alert('Password Not Found', 'Could not retrieve a password for this user.');
     }
@@ -238,7 +243,7 @@ const AdminLM = () => {
                         secureTextEntry={!isPasswordVisible} 
                       />
                       <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
-                        <Icon name={isPasswordVisible ? 'visibility-off' : 'visibility'} size={22} color="#7F8C8D" />
+                        <Icon name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={22} color="#7F8C8D" />
                       </TouchableOpacity>
                     </View>
                     
