@@ -207,11 +207,15 @@ const adsUpload = multer({ storage: adsStorage });
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
+        // DANGER: Password is now selected from the DB to be compared in plain text.
         const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         const user = rows[0];
-        if (!user || !(await bcrypt.compare(password, user.password))) {
+
+        // DANGER: Replaced bcrypt.compare with a direct string comparison.
+        if (!user || password !== user.password) {
             return res.status(401).json({ message: 'Error: Invalid username or password.' });
         }
+
         if (user.subjects_taught && typeof user.subjects_taught === 'string') {
             try { user.subjects_taught = JSON.parse(user.subjects_taught); } 
             catch (e) { user.subjects_taught = []; }
@@ -234,10 +238,11 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
     try {
+        // MODIFIED: Added u.password to the SELECT statement to send it to the admin panel.
         const query = `
             SELECT 
-                u.id, u.username, u.full_name, u.role, u.class_group, u.subjects_taught, 
-                p.email, p.phone, p.address,
+                u.id, u.username, u.password, u.full_name, u.role, u.class_group, u.subjects_taught, 
+                p.email, p.phone, p.address, p.roll_no,
                 p.admission_no, p.parent_name, p.aadhar_no, p.pen_no
             FROM users u LEFT JOIN user_profiles p ON u.id = p.user_id`;
         const [rows] = await db.query(query);
@@ -254,26 +259,29 @@ app.get('/api/users', async (req, res) => {
 app.post('/api/users', async (req, res) => {
     const { 
         username, password, full_name, email, role, class_group, subjects_taught, 
-        admission_no, parent_name, aadhar_no, pen_no 
+        roll_no, admission_no, parent_name, aadhar_no, pen_no 
     } = req.body;
     const subjectsJson = (role === 'teacher' && Array.isArray(subjects_taught)) ? JSON.stringify(subjects_taught) : null;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // DANGER: Removed bcrypt hashing. Storing plain text password.
         const [userResult] = await connection.query(
             'INSERT INTO users (username, password, full_name, role, class_group, subjects_taught) VALUES (?, ?, ?, ?, ?, ?)',
-            [username, hashedPassword, full_name, role, class_group, subjectsJson]
+            [username, password, full_name, role, class_group, subjectsJson]
         );
+
         const newUserId = userResult.insertId;
         await connection.query(
-            'INSERT INTO user_profiles (user_id, email, admission_no, parent_name, aadhar_no, pen_no) VALUES (?, ?, ?, ?, ?, ?)', 
-            [newUserId, email || null, admission_no || null, parent_name || null, aadhar_no || null, pen_no || null]
+            'INSERT INTO user_profiles (user_id, email, roll_no, admission_no, parent_name, aadhar_no, pen_no) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+            [newUserId, email || null, roll_no || null, admission_no || null, parent_name || null, aadhar_no || null, pen_no || null]
         );
         await connection.commit();
         res.status(201).json({ message: 'User and profile created successfully!' });
     } catch (error) {
         await connection.rollback();
+        console.error("User Creation Error:", error);
         if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Error: This username already exists.' });
         res.status(500).json({ message: 'Error: Could not create user.' });
     } finally { connection.release(); }
@@ -284,14 +292,13 @@ app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { 
         username, password, full_name, role, class_group, subjects_taught,
-        admission_no, parent_name, aadhar_no, pen_no // Get profile fields for editing
+        roll_no, admission_no, parent_name, aadhar_no, pen_no
     } = req.body;
     
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // --- Step 1: Update the `users` table ---
         let userQueryFields = [];
         let userQueryParams = [];
 
@@ -299,39 +306,33 @@ app.put('/api/users/:id', async (req, res) => {
         if (full_name !== undefined) { userQueryFields.push('full_name = ?'); userQueryParams.push(full_name); }
         if (role !== undefined) { userQueryFields.push('role = ?'); userQueryParams.push(role); }
         if (class_group !== undefined) { userQueryFields.push('class_group = ?'); userQueryParams.push(class_group); }
+        
+        // DANGER: Storing plain text password if provided.
+        if (password) {
+            userQueryFields.push('password = ?');
+            userQueryParams.push(password);
+        }
+
         if (role === 'teacher' && subjects_taught !== undefined) {
             const subjectsJson = Array.isArray(subjects_taught) ? JSON.stringify(subjects_taught) : null;
             userQueryFields.push('subjects_taught = ?');
             userQueryParams.push(subjectsJson);
         }
-        if (password) {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            userQueryFields.push('password = ?');
-            userQueryParams.push(hashedPassword);
-        }
 
         if (userQueryFields.length > 0) {
             userQueryParams.push(id);
             const userSql = `UPDATE users SET ${userQueryFields.join(', ')} WHERE id = ?`;
-            const [userResult] = await connection.query(userSql, userQueryParams);
-            if (userResult.affectedRows === 0) {
-                await connection.rollback();
-                return res.status(404).json({ message: 'User not found.' });
-            }
+            await connection.query(userSql, userQueryParams);
         }
 
-        // --- Step 2: Update the `user_profiles` table for students ---
         if (role === 'student') {
              const profileSql = `
-                INSERT INTO user_profiles (user_id, admission_no, parent_name, aadhar_no, pen_no) 
-                VALUES (?, ?, ?, ?, ?) 
-                ON DUPLICATE KEY UPDATE 
-                    admission_no = VALUES(admission_no),
-                    parent_name = VALUES(parent_name),
-                    aadhar_no = VALUES(aadhar_no),
-                    pen_no = VALUES(pen_no)
-            `;
-            await connection.query(profileSql, [id, admission_no, parent_name, aadhar_no, pen_no]);
+                INSERT INTO user_profiles (user_id, roll_no, admission_no, parent_name, aadhar_no, pen_no) 
+                VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE 
+                    roll_no = VALUES(roll_no), admission_no = VALUES(admission_no),
+                    parent_name = VALUES(parent_name), aadhar_no = VALUES(aadhar_no),
+                    pen_no = VALUES(pen_no)`;
+            await connection.query(profileSql, [id, roll_no, admission_no, parent_name, aadhar_no, pen_no]);
         }
         
         await connection.commit();
@@ -397,8 +398,8 @@ app.patch('/api/users/:id/reset-password', async (req, res) => {
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ message: 'New password cannot be empty.' });
     try {
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        const [result] = await db.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, id]);
+        // DANGER: Saving plain text password, not a hash.
+        const [result] = await db.query('UPDATE users SET password = ? WHERE id = ?', [newPassword, id]);
         if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found.' });
         res.status(200).json({ message: 'Password has been reset successfully!' });
     } catch (error) { res.status(500).json({ message: 'Could not reset password.' }); }
@@ -412,8 +413,6 @@ app.delete('/api/users/:id', async (req, res) => {
         res.status(200).json({ message: 'User deleted successfully.' });
     } catch (error) { res.status(500).json({ message: 'Error: Could not delete user.' }); }
 });
-
-// --- SELF-SERVICE PASSWORD RESET API ROUTES (OTP/CODE METHOD) ---
 
 app.post('/api/forgot-password', async (req, res) => {
     const { email } = req.body;
@@ -431,7 +430,7 @@ app.post('/api/forgot-password', async (req, res) => {
             return res.status(200).json({ message: 'If a Donor account with that email exists, a reset code has been sent.' });
         }
         const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const tokenExpiry = new Date(Date.now() + 600000); // 10 minutes
+        const tokenExpiry = new Date(Date.now() + 600000);
         await db.query('UPDATE users SET reset_password_token = ?, reset_password_expires = ? WHERE id = ?', [resetCode, tokenExpiry, user_id]);
         await sendPasswordResetCode(email, resetCode);
         res.status(200).json({ message: 'A 6-digit reset code has been sent to your email.' });
@@ -455,18 +454,14 @@ app.post('/api/reset-password', async (req, res) => {
         if (!user) {
             return res.status(400).json({ message: 'Reset code is invalid or has expired.' });
         }
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await db.query('UPDATE users SET password = ?, reset_password_token = NULL, reset_password_expires = NULL WHERE id = ?', [hashedPassword, user.id]);
+        // DANGER: Storing plain text password.
+        await db.query('UPDATE users SET password = ?, reset_password_token = NULL, reset_password_expires = NULL WHERE id = ?', [newPassword, user.id]);
         res.status(200).json({ message: 'Password has been successfully reset. You can now log in.' });
     } catch (error) {
         console.error("Reset Password Error:", error);
         res.status(500).json({ message: 'An error occurred while resetting the password.' });
     }
 });
-
-// ==========================================================
-// --- SELF-SERVICE PASSWORD CHANGE API ROUTE ---
-// ==========================================================
 
 app.post('/api/auth/change-password', async (req, res) => {
     const authHeader = req.headers['authorization'];
@@ -495,13 +490,13 @@ app.post('/api/auth/change-password', async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        const isMatch = await bcrypt.compare(currentPassword, user.password);
-        if (!isMatch) {
+        // DANGER: Plain text password comparison.
+        if (currentPassword !== user.password) {
             return res.status(401).json({ message: 'Incorrect current password.' });
         }
 
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        await db.query('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        // DANGER: Storing new password in plain text.
+        await db.query('UPDATE users SET password = ? WHERE id = ?', [newPassword, userId]);
 
         res.status(200).json({ message: 'Password changed successfully.' });
 
@@ -510,7 +505,6 @@ app.post('/api/auth/change-password', async (req, res) => {
         res.status(500).json({ message: 'An internal server error occurred.' });
     }
 });
-
 
 
 

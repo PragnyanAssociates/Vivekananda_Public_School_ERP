@@ -18,10 +18,12 @@ const USER_ROLES = ['admin', 'teacher', 'student'];
 interface User {
   id: number;
   username: string;
+  password?: string; // MODIFIED: Password is now part of the User object
   full_name: string;
   role: 'student' | 'teacher' | 'admin';
   class_group: string;
   subjects_taught?: string[];
+  roll_no?: string;
   admission_no?: string;
   parent_name?: string;
   aadhar_no?: string;
@@ -35,6 +37,7 @@ const AdminLM = () => {
   const [formData, setFormData] = useState<any>({});
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NEW: State for eye icon
 
   const fetchUsers = async () => {
     try {
@@ -68,15 +71,18 @@ const AdminLM = () => {
     setEditingUser(null);
     setFormData({ 
       username: '', password: '', full_name: '', role: 'student', 
-      class_group: 'LKG', subjects_taught: [], admission_no: '', 
-      parent_name: '', aadhar_no: '', pen_no: ''
+      class_group: 'LKG', subjects_taught: [], roll_no: '',
+      admission_no: '', parent_name: '', aadhar_no: '', pen_no: ''
     });
+    setIsPasswordVisible(false);
     setIsModalVisible(true);
   };
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    setFormData({ ...user, password: '', subjects_taught: user.subjects_taught || [] });
+    // MODIFIED: The full user object, including password, is now set
+    setFormData({ ...user, subjects_taught: user.subjects_taught || [] });
+    setIsPasswordVisible(false);
     setIsModalVisible(true);
   };
 
@@ -85,15 +91,12 @@ const AdminLM = () => {
       Alert.alert('Error', 'Username and Full Name are required.');
       return;
     }
-    if (!editingUser && !formData.password) {
-        Alert.alert('Error', 'Password is required for new users.');
+    if (!formData.password) {
+        Alert.alert('Error', 'Password cannot be empty.');
         return;
     }
 
     const payload = { ...formData };
-    if (editingUser && !payload.password) {
-        delete payload.password;
-    }
     if (payload.role === 'student' || payload.role === 'admin') {
         delete payload.subjects_taught;
     }
@@ -134,24 +137,13 @@ const AdminLM = () => {
     ]);
   };
 
-  const handleResetPassword = (user: User) => {
-    Alert.prompt(
-      'Reset Password', `Enter a new temporary password for "${user.full_name}":`,
-      [ { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: async (newPassword) => {
-            if (!newPassword || newPassword.trim() === '') {
-              Alert.alert('Error', 'Password cannot be empty.');
-              return;
-            }
-            try {
-              const response = await apiClient.patch(`/users/${user.id}/reset-password`, { newPassword });
-              Alert.alert('Success', response.data.message);
-            } catch (error: any) {
-              Alert.alert('Reset Failed', error.response?.data?.message || 'An unknown error occurred.');
-            }
-        }},
-      ], 'plain-text'
-    );
+  // NEW: Function to show password in an alert
+  const handleShowPassword = (user: User) => {
+    if (user.password) {
+        Alert.alert('User Password', `The password for ${user.full_name} is:\n\n${user.password}`);
+    } else {
+        Alert.alert('Password Not Found', 'Could not retrieve a password for this user.');
+    }
   };
 
   const handleToggleAccordion = (className: string) => {
@@ -162,29 +154,19 @@ const AdminLM = () => {
   const renderUserItem = (item: User) => (
     <View style={styles.userRow}>
       <Icon 
-        name={
-            item.role === 'admin' ? 'admin-panel-settings' :
-            item.role === 'teacher' ? 'school' : 'person'
-        } 
-        size={24} 
-        color="#008080" 
-        style={styles.userIcon} 
+        name={ item.role === 'admin' ? 'admin-panel-settings' : item.role === 'teacher' ? 'school' : 'person' } 
+        size={24} color="#008080" style={styles.userIcon} 
       />
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.full_name}</Text>
-        <Text style={styles.userUsername}>Username: {item.username}</Text>
-        {item.admission_no && (
-          <Text style={styles.userSubjects}>
-            Admission No: {item.admission_no}
-          </Text>
-        )}
+        <Text style={styles.userUsername}>Username: {item.username} {item.roll_no ? `| Roll: ${item.roll_no}` : ''}</Text>
+        {item.admission_no && (<Text style={styles.userSubjects}>Admission No: {item.admission_no}</Text>)}
         {item.role === 'teacher' && item.subjects_taught && item.subjects_taught.length > 0 && (
-          <Text style={styles.userSubjects}>
-            Subjects: {item.subjects_taught.join(', ')}
-          </Text>
+          <Text style={styles.userSubjects}>Subjects: {item.subjects_taught.join(', ')}</Text>
         )}
       </View>
-      <TouchableOpacity onPress={() => handleResetPassword(item)} style={styles.actionButton}>
+      {/* MODIFIED: Key button now shows the password */}
+      <TouchableOpacity onPress={() => handleShowPassword(item)} style={styles.actionButton}>
         <Icon name="vpn-key" size={22} color="#F39C12" />
       </TouchableOpacity>
       <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
@@ -225,11 +207,7 @@ const AdminLM = () => {
             {expandedClass === className && (
               <View style={styles.userListContainer}>
                 {groupedUsers[className]?.length > 0 ? (
-                  groupedUsers[className].map((user) => (
-                    <Animatable.View key={user.id} animation="fadeIn">
-                        {renderUserItem(user)}
-                    </Animatable.View>
-                  ))
+                  groupedUsers[className].map((user) => ( <Animatable.View key={user.id} animation="fadeIn">{renderUserItem(user)}</Animatable.View> ))
                 ) : (
                   <Text style={styles.emptySectionText}>No users in this section.</Text>
                 )}
@@ -249,21 +227,30 @@ const AdminLM = () => {
                     <Text style={styles.inputLabel}>Username</Text>
                     <TextInput style={styles.input} placeholder="e.g., john.doe, STU101" value={formData.username} onChangeText={(val) => setFormData({ ...formData, username: val })} autoCapitalize="none" />
                     
-                    <Text style={styles.inputLabel}>{isEditing ? 'New Password (Optional)' : 'Password'}</Text>
-                    <TextInput style={styles.input} placeholder={isEditing ? "Leave blank to keep current" : "Enter temporary password"} value={formData.password} onChangeText={(val) => setFormData({ ...formData, password: val })} secureTextEntry />
+                    {/* MODIFIED: Password field with visibility toggle */}
+                    <Text style={styles.inputLabel}>Password</Text>
+                    <View style={styles.passwordContainer}>
+                      <TextInput 
+                        style={styles.passwordInput} 
+                        placeholder="Enter user password" 
+                        value={formData.password} 
+                        onChangeText={(val) => setFormData({ ...formData, password: val })} 
+                        secureTextEntry={!isPasswordVisible} 
+                      />
+                      <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+                        <Icon name={isPasswordVisible ? 'visibility-off' : 'visibility'} size={22} color="#7F8C8D" />
+                      </TouchableOpacity>
+                    </View>
                     
                     <Text style={styles.inputLabel}>Full Name</Text>
                     <TextInput style={styles.input} placeholder="Enter user's full name" value={formData.full_name} onChangeText={(val) => setFormData({ ...formData, full_name: val })} />
                     
                     <Text style={styles.inputLabel}>Role</Text>
                     <View style={styles.pickerWrapper}>
-                        <Picker 
-                            selectedValue={formData.role} 
-                            onValueChange={(val) => {
+                        <Picker selectedValue={formData.role} onValueChange={(val) => {
                                 const newClassGroup = val === 'teacher' ? 'Teachers' : (val === 'admin' ? 'Admins' : formData.class_group || 'LKG');
                                 setFormData({ ...formData, role: val, class_group: newClassGroup });
-                            }} 
-                            style={styles.modalPicker}>
+                            }} style={styles.modalPicker}>
                             {USER_ROLES.map((role) => (<Picker.Item key={role} label={role.charAt(0).toUpperCase() + role.slice(1)} value={role} />))}
                         </Picker>
                     </View>
@@ -282,6 +269,9 @@ const AdminLM = () => {
                               </Picker>
                           </View>
                           
+                          <Text style={styles.inputLabel}>Roll No.</Text>
+                          <TextInput style={styles.input} placeholder="Enter class roll number" value={formData.roll_no} onChangeText={(val) => setFormData({ ...formData, roll_no: val })} keyboardType="numeric" />
+
                           <Text style={styles.inputLabel}>Admission No.</Text>
                           <TextInput style={styles.input} placeholder="Enter admission number" value={formData.admission_no} onChangeText={(val) => setFormData({ ...formData, admission_no: val })} />
 
@@ -312,56 +302,32 @@ const AdminLM = () => {
   );
 };
 
+// MODIFIED: Added styles for the password input with eye icon
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F9FC' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FC' },
   header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 15, 
-    backgroundColor: '#FFFFFF', 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#E0E0E0',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, 
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
+    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2,
   },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#008080' },
   addButton: { 
-    flexDirection: 'row', 
-    backgroundColor: '#27AE60', 
-    paddingVertical: 10, 
-    paddingHorizontal: 14, 
-    borderRadius: 20, 
-    alignItems: 'center', 
-    elevation: 2,
+    flexDirection: 'row', backgroundColor: '#27AE60', paddingVertical: 10, paddingHorizontal: 14, 
+    borderRadius: 20, alignItems: 'center', elevation: 2,
   },
   addButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginLeft: 5 },
   container: { padding: 10 },
   accordionSection: { 
-    backgroundColor: '#FFFFFF', 
-    borderRadius: 12, 
-    marginBottom: 12, 
-    overflow: 'hidden', 
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    backgroundColor: '#FFFFFF', borderRadius: 12, marginBottom: 12, overflow: 'hidden', 
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3,
   },
   accordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 15 },
   accordionTitle: { fontSize: 18, fontWeight: '600', color: '#2C3E50' },
   userListContainer: { borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   userRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingVertical: 14, 
-    paddingHorizontal: 15, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#ECEFF1', 
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 15, 
+    borderBottomWidth: 1, borderBottomColor: '#ECEFF1', 
   },
   userIcon: { marginRight: 15 },
   userInfo: { flex: 1 },
@@ -372,48 +338,33 @@ const styles = StyleSheet.create({
   emptySectionText: { textAlign: 'center', padding: 20, color: '#95A5A6', fontStyle: 'italic' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: {
-    width: '90%',
-    maxHeight: '85%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    overflow: 'hidden',
+    width: '90%', maxHeight: '85%', backgroundColor: '#FFFFFF', borderRadius: 20,
+    elevation: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, overflow: 'hidden',
   },
-  modalContent: {
-    padding: 25,
-  },
+  modalContent: { padding: 25 },
   modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#2C3E50', textAlign: 'center' },
   modalTitleSeparator: {
-    height: 3,
-    width: 40,
-    backgroundColor: '#008080',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 25,
+    height: 3, width: 40, backgroundColor: '#008080', borderRadius: 2,
+    alignSelf: 'center', marginTop: 8, marginBottom: 25,
   },
   inputLabel: { fontSize: 16, color: '#34495E', marginBottom: 8, fontWeight: '500' },
   input: { 
-    backgroundColor: '#F7F9FC', 
-    borderRadius: 10, 
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16, 
-    color: '#2C3E50', 
-    borderWidth: 1, 
-    borderColor: '#E0E0E0',
-    marginBottom: 20,
+    backgroundColor: '#F7F9FC', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12,
+    fontSize: 16, color: '#2C3E50', borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 20,
+  },
+  passwordContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7F9FC',
+    borderRadius: 10, borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 20,
+  },
+  passwordInput: {
+    flex: 1, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#2C3E50',
+  },
+  eyeIcon: {
+    padding: 10,
   },
   pickerWrapper: {
-    backgroundColor: '#F7F9FC',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    justifyContent: 'center',
-    marginBottom: 20,
+    backgroundColor: '#F7F9FC', borderRadius: 10, borderWidth: 1,
+    borderColor: '#E0E0E0', justifyContent: 'center', marginBottom: 20,
   },
   modalPicker: { height: 50, width: '100%', color: '#2C3E50' },
   modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },

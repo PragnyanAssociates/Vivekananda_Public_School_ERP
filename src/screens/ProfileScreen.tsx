@@ -33,7 +33,7 @@ export interface ProfileData {
 }
 
 interface ProfileScreenProps {
-  onBackPress?: () => void; // This prop is kept in case you want to trigger back navigation from the parent component
+  onBackPress?: () => void;
   staticProfileData?: ProfileData;
   onStaticSave?: (updatedData: ProfileData, newImage: Asset | null) => Promise<void>;
   onProfileUpdate?: (newProfileData: ProfileData) => void;
@@ -218,8 +218,6 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving }: { use
     </SafeAreaView>
   );
 });
-
-// --- Main ProfileScreen Component ---
 
 const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: ProfileScreenProps) => {
   const { user, isLoading: isAuthLoading, updateUser } = useAuth();
