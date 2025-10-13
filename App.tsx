@@ -60,6 +60,8 @@ import TeacherAdminHomeworkScreen from './src/screens/homework/TeacherAdminHomew
 // import PreAdmissionsScreen from './src/screens/Pre-Admissions/PreAdmissionsScreen';
 // import TeacherAdminResourcesScreen from './src/screens/syllabus_Textbook/TeacherAdminResourcesScreen';
 
+import WrittenAnswerScreen from './src/screens/homework/WrittenAnswerScreen'; // Adjust the path to where you created the file
+
 // Teacher-Specific Screens
 // import TeacherHealthAdminScreen from './src/screens/health/TeacherHealthAdminScreen';
 // import TeacherAdminLabsScreen from './src/screens/labs/TeacherAdminLabsScreen';
@@ -80,7 +82,7 @@ import TeacherAdminHomeworkScreen from './src/screens/homework/TeacherAdminHomew
 // import StudentExamScreen from './src/screens/exams_Schedule/StudentExamScreen';
 // import StudentMaterialsScreen from './src/screens/study-materials/StudentMaterialsScreen';
 // import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
-// import ChatAIScreen from './src/screens/chatai/ChatAIScreen';
+import StudentHomeworkScreen from './src/screens/homework/StudentHomeworkScreen';
 // import OnlineClassScreen from './src/screens/Online_Class/OnlineClassScreen';
 // import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResourcesScreen';
 
@@ -226,6 +228,21 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
       <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
       <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} /> */}
+      // Inside your Stack.Navigator component
+
+<Stack.Screen 
+    name="HomeworkList" // Or whatever you call your main homework screen
+    component={StudentHomeworkScreen} 
+    options={{ title: 'Assignments & Homework' }}
+/>
+
+<Stack.Screen 
+    name="WrittenAnswerScreen" 
+    component={WrittenAnswerScreen}
+    options={({ route }) => ({ 
+        title: route.params?.assignment?.title || 'Answer Homework' 
+    })}
+/>
 
       {/* ADD THE GALLERY NAVIGATOR AS A SINGLE SCREEN IN THE MAIN STACK */}
       <Stack.Screen 

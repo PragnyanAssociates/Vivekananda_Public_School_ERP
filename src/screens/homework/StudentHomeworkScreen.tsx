@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Linking, LayoutAnimation, UIManager, Platform, TextInput } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Linking, LayoutAnimation, UIManager, Platform } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
+import { useNavigation, useIsFocused } from '@react-navigation/native'; // ★★★ MODIFIED: Import hooks
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -16,6 +17,8 @@ const StudentHomeworkScreen = () => {
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(null);
+    const navigation = useNavigation(); // ★★★ NEW: Get navigation object
+    const isFocused = useIsFocused(); // ★★★ NEW: Hook to check if screen is focused
 
     const fetchAssignments = useCallback(async () => {
         if (!user) return;
@@ -23,7 +26,6 @@ const StudentHomeworkScreen = () => {
         try {
             const response = await apiClient.get(`/homework/student/${user.id}/${user.class_group}`);
             const data = response.data;
-            
             data.sort((a, b) => {
                 if (a.status === 'Pending' && b.status !== 'Pending') return -1;
                 if (a.status !== 'Pending' && b.status === 'Pending') return 1;
@@ -34,9 +36,13 @@ const StudentHomeworkScreen = () => {
         finally { setIsLoading(false); }
     }, [user]);
 
-    useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+    // ★★★ MODIFIED: Use isFocused to auto-refresh the list when returning to it
+    useEffect(() => {
+        if (isFocused) {
+            fetchAssignments();
+        }
+    }, [fetchAssignments, isFocused]);
 
-    // ★★★ MODIFIED: Handle file submission
     const handleFileSubmission = async (assignmentId) => {
         if (!user) return;
         try {
@@ -58,30 +64,6 @@ const StudentHomeworkScreen = () => {
         } catch (err: any) {
             if (!isCancel(err)) { console.error("Submission Error:", err); Alert.alert("Error", err.response?.data?.message || "Could not submit file."); }
         } finally { setIsSubmitting(null); }
-    };
-    
-    // ★★★ NEW: Handle written answer submission
-    const handleWrittenSubmission = async (assignmentId, answer) => {
-        if (!user) return;
-        if (!answer || answer.trim() === '') {
-            return Alert.alert('Error', 'Please enter an answer before submitting.');
-        }
-
-        setIsSubmitting(assignmentId);
-        try {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            await apiClient.post('/api/homework/submit-written', {
-                assignment_id: assignmentId,
-                student_id: user.id,
-                written_answer: answer,
-            });
-            Alert.alert("Success", "Your answer has been submitted!");
-            fetchAssignments();
-        } catch (err: any) {
-             Alert.alert("Error", err.response?.data?.message || "Could not submit your answer.");
-        } finally {
-            setIsSubmitting(null);
-        }
     };
     
     const handleDeleteSubmission = async (submissionId, assignmentId) => {
@@ -115,9 +97,9 @@ const StudentHomeworkScreen = () => {
                         item={item} 
                         index={index}
                         onFileSubmit={handleFileSubmission}
-                        onWrittenSubmit={handleWrittenSubmission}
                         onDelete={handleDeleteSubmission}
-                        isSubmitting={isSubmitting === item.id} 
+                        isSubmitting={isSubmitting === item.id}
+                        navigation={navigation} // ★★★ NEW: Pass navigation to card
                     />
                 )}
                 ListHeaderComponent={<Header />}
@@ -137,10 +119,9 @@ const Header = () => (
     </Animatable.View>
 );
 
-// ★★★ HEAVILY MODIFIED: AssignmentCard now handles both types
-const AssignmentCard = ({ item, onFileSubmit, onWrittenSubmit, onDelete, isSubmitting, index }) => {
-    const [writtenAnswer, setWrittenAnswer] = useState('');
-
+// ★★★ HEAVILY MODIFIED: AssignmentCard now navigates for Written type
+const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, navigation }) => {
+    
     const getStatusInfo = () => {
         const statusText = item.submission_id ? (item.status || 'Submitted') : 'Pending';
         switch (statusText) {
@@ -161,7 +142,7 @@ const AssignmentCard = ({ item, onFileSubmit, onWrittenSubmit, onDelete, isSubmi
                     {item.written_answer && (
                          <View style={styles.submittedAnswerContainer}>
                             <Text style={styles.submittedAnswerLabel}>Your Answer:</Text>
-                            <Text style={styles.submittedAnswerText}>{item.written_answer}</Text>
+                            <Text style={styles.submittedAnswerText} numberOfLines={3}>{item.written_answer}</Text>
                         </View>
                     )}
                     <View style={styles.buttonRow}>
@@ -178,16 +159,10 @@ const AssignmentCard = ({ item, onFileSubmit, onWrittenSubmit, onDelete, isSubmi
         // --- RENDER IF HOMEWORK IS PENDING ---
         if (item.homework_type === 'Written') {
             return (
-                <View style={styles.writtenSubmissionArea}>
-                    <TextInput
-                        style={styles.writtenInput}
-                        placeholder="Type your answer here..."
-                        multiline
-                        value={writtenAnswer}
-                        onChangeText={setWrittenAnswer}
-                    />
-                    <TouchableOpacity style={styles.submitButton} onPress={() => onWrittenSubmit(item.id, writtenAnswer)} disabled={isSubmitting}>
-                        {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialIcons name="send" size={18} color="#fff" /><Text style={styles.submitButtonText}>Submit Answer</Text></>}
+                <View style={styles.buttonRow}>
+                    <TouchableOpacity style={styles.submitButton} onPress={() => navigation.navigate('WrittenAnswerScreen', { assignment: item })}>
+                        <MaterialIcons name="edit" size={18} color="#fff" />
+                        <Text style={styles.submitButtonText}>Start Answering</Text>
                     </TouchableOpacity>
                 </View>
             );
@@ -205,7 +180,7 @@ const AssignmentCard = ({ item, onFileSubmit, onWrittenSubmit, onDelete, isSubmi
     return (
         <Animatable.View style={[styles.card, { borderLeftColor: status.color }]} animation="fadeInUp" duration={600} delay={index * 120}>
             <View style={styles.cardHeader}><Text style={styles.cardTitle}>{item.title}</Text><View style={[styles.statusBadge, { backgroundColor: status.color }]}><MaterialIcons name={status.icon} size={14} color="#fff" /><Text style={styles.statusText}>{status.text}</Text></View></View>
-            <Text style={styles.description}>{item.description}</Text>
+            <Text style={styles.description} numberOfLines={3}>{item.description}</Text>
             
             <View style={styles.detailsGrid}>
                 <DetailRow icon="category" label="Type" value={item.homework_type || 'PDF'} />
@@ -262,8 +237,6 @@ const styles = StyleSheet.create({
     deleteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef5350', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, elevation: 2 },
     submitButtonText: { color: '#fff', marginLeft: 8, fontWeight: 'bold' },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' },
-    writtenSubmissionArea: { marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-    writtenInput: { backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, minHeight: 100, padding: 10, textAlignVertical: 'top', fontSize: 16, marginBottom: 10 },
     submittedAnswerContainer: { marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     submittedAnswerLabel: { fontSize: 14, fontWeight: 'bold', color: '#546e7a', marginBottom: 5 },
     submittedAnswerText: { fontSize: 15, color: '#37474f', backgroundColor: '#f1f8e9', padding: 12, borderRadius: 6, lineHeight: 22 },
