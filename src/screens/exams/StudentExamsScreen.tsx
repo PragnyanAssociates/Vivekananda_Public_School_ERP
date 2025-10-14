@@ -1,8 +1,5 @@
-// 📂 File: src/screens/exams/StudentExamsScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback }  from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Modal } from 'react-native';
-// ★★★ 1. IMPORT apiClient AND REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -54,20 +51,14 @@ const ExamList = ({ onStartExam, onViewResult }) => {
         if (!user?.id || !user.class_group) return;
         setIsLoading(true);
         try {
-            // ★★★ 2. USE apiClient ★★★
             const response = await apiClient.get(`/exams/student/${user.id}/${user.class_group}`);
             setExams(response.data);
-        } catch (e: any) {
-            Alert.alert('Error', e.response?.data?.message || 'Failed to fetch exams.');
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to fetch exams.'); } 
+        finally { setIsLoading(false); }
     }, [user?.id, user?.class_group]);
 
     useEffect(() => {
-        if (isFocused) {
-            fetchExams();
-        }
+        if (isFocused) { fetchExams(); }
     }, [isFocused, fetchExams]);
 
     const renderButton = (item) => {
@@ -123,7 +114,6 @@ const TakeExamView = ({ exam, onFinish }) => {
         const startAndFetch = async () => {
             if (!user?.id) return;
             try {
-                // ★★★ 3. USE apiClient FOR ALL CALLS ★★★
                 const startRes = await apiClient.post(`/exams/${exam.exam_id}/start`, { student_id: user.id });
                 const { attempt_id } = startRes.data;
                 setAttemptId(attempt_id);
@@ -224,6 +214,7 @@ const TakeExamView = ({ exam, onFinish }) => {
                 <View key={q.question_id} style={styles.questionBox}>
                     <Text style={styles.questionText}>{index + 1}. {q.question_text}</Text>
                     <Text style={styles.marksText}>{q.marks} Marks</Text>
+                    {/* ★★★ MODIFICATION: Render input based on question_type ★★★ */}
                     {q.question_type === 'multiple_choice' ? (
                         <View>
                             {q.options && Object.entries(q.options).map(([key, value]) => (
@@ -256,7 +247,6 @@ const ResultView = ({ attemptId, onBack }) => {
         const fetchResult = async () => {
             if (!user?.id) return;
             try {
-                // ★★★ 4. USE apiClient ★★★
                 const response = await apiClient.get(`/attempts/${attemptId}/result?student_id=${user.id}`);
                 const data = response.data;
                  if (data.details) {
@@ -289,6 +279,7 @@ const ResultView = ({ attemptId, onBack }) => {
                 <View key={item.question_id} style={styles.questionBox}>
                     <Text style={styles.questionText}>{index + 1}. {item.question_text}</Text>
                     <Text style={styles.yourAnswer}>Your Answer: {item.answer_text || 'Not Answered'}</Text>
+                    {/* ★★★ MODIFICATION: Show correct answer only for multiple choice ★★★ */}
                     {item.question_type === 'multiple_choice' && item.options && <Text style={styles.correctAnswer}>Correct Answer: {item.options[item.correct_answer]}</Text>}
                     <Text style={styles.marksAwarded}>Marks Awarded: {item.marks_awarded} / {item.marks}</Text>
                 </View>
@@ -317,7 +308,7 @@ const styles = StyleSheet.create({
     questionBox: { backgroundColor: '#fff', borderRadius: 8, padding: 15, marginHorizontal: 10, marginVertical: 8, elevation: 1 },
     questionText: { fontSize: 16, fontWeight: '500', marginBottom: 10 },
     marksText: { fontStyle: 'italic', color: '#888', alignSelf: 'flex-end', marginBottom: 10 },
-    textInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 5, padding: 10, minHeight: 80, textAlignVertical: 'top' },
+    textInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 5, padding: 10, minHeight: 100, textAlignVertical: 'top', fontSize: 16 },
     submitButton: { backgroundColor: '#28a745', padding: 15, margin: 15, borderRadius: 10, alignItems: 'center' },
     backButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
     backButtonText: { marginLeft: 5, fontSize: 18, color: '#333', fontWeight: '500' },

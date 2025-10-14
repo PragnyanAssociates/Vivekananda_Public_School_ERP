@@ -2938,12 +2938,10 @@ app.get('/api/exam-schedules/class/:classGroup', async (req, res) => {
 });
 
 // ==========================================================
-// --- ONLINE EXAMS API ROUTES (ALL MIDDLEWARE REMOVED) ---
+// --- ONLINE EXAMS API ROUTES  -----------------------
 // ==========================================================
 
 // --- TEACHER / ADMIN ROUTES ---
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
 
 // CREATE a new exam
 app.post('/api/exams', async (req, res) => {
@@ -2957,44 +2955,39 @@ app.post('/api/exams', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Step 1: Create the exam and its questions (no change here)
         const total_marks = questions.reduce((sum, q) => sum + (parseInt(q.marks, 10) || 0), 0);
         const [examResult] = await connection.query('INSERT INTO exams (title, description, class_group, time_limit_mins, created_by, total_marks, status) VALUES (?, ?, ?, ?, ?, ?, ?)', [title, description, class_group, time_limit_mins, teacher_id, total_marks, 'published']);
         const exam_id = examResult.insertId;
 
         if (questions.length > 0) {
             const questionQuery = 'INSERT INTO exam_questions (exam_id, question_text, question_type, options, correct_answer, marks) VALUES ?';
-            const questionValues = questions.map(q => [exam_id, q.question_text, q.question_type, q.question_type === 'multiple_choice' ? JSON.stringify(q.options) : null, q.correct_answer, q.marks]);
+            // ★★★★★ FIX APPLIED HERE ★★★★★
+            const questionValues = questions.map(q => [
+                exam_id, 
+                q.question_text, 
+                q.question_type, 
+                q.question_type === 'multiple_choice' ? JSON.stringify(q.options) : null, 
+                q.question_type === 'multiple_choice' ? q.correct_answer : null, // Set correct_answer to NULL if not MCQ
+                q.marks
+            ]);
             await connection.query(questionQuery, [questionValues]);
         }
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-        
-        // 1. Find all students in the affected class group
+        // --- Notification Logic ---
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
-        
         if (students.length > 0) {
-            // 2. Get the creator's name for the notification
             const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
             const senderName = teacher.full_name || "School Administration";
-            
-            // 3. Prepare notification details
             const studentIds = students.map(s => s.id);
-            const notificationTitle = `New Exam Published: ${title}`;
-            const notificationMessage = `An exam for your class (${class_group}) has been published. Please check the details.`;
-
-            // 4. Send notifications to all students in the class
             await createBulkNotifications(
                 connection,
                 studentIds,
                 senderName,
-                notificationTitle,
-                notificationMessage,
-                '/exams' // Generic link to the exams screen
+                `New Exam Published: ${title}`,
+                `An exam for your class (${class_group}) has been published. Please check the details.`,
+                '/exams'
             );
         }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
 
         await connection.commit();
         res.status(201).json({ message: 'Exam created successfully and students notified!', exam_id });
@@ -3035,55 +3028,49 @@ app.get('/api/exams/:examId', async (req, res) => {
     }
 });
 
-// 📂 File: server.js (REPLACE THIS ROUTE)
 
 // UPDATE an existing exam
 app.put('/api/exams/:examId', async (req, res) => {
     const { examId } = req.params;
-    const { title, description, class_group, time_limit_mins, questions, teacher_id } = req.body; // Assuming teacher_id is passed for sender info
+    const { title, description, class_group, time_limit_mins, questions, teacher_id } = req.body;
     
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // Step 1: Update exam and questions (no change here)
         const total_marks = questions.reduce((sum, q) => sum + (parseInt(q.marks, 10) || 0), 0);
         await connection.query('UPDATE exams SET title = ?, description = ?, class_group = ?, time_limit_mins = ?, total_marks = ? WHERE exam_id = ?', [title, description, class_group, time_limit_mins, total_marks, examId]);
         
         await connection.query('DELETE FROM exam_questions WHERE exam_id = ?', [examId]);
         if (questions.length > 0) {
             const questionQuery = 'INSERT INTO exam_questions (exam_id, question_text, question_type, options, correct_answer, marks) VALUES ?';
-            const questionValues = questions.map(q => [examId, q.question_text, q.question_type, q.question_type === 'multiple_choice' ? JSON.stringify(q.options) : null, q.correct_answer, q.marks]);
+             // ★★★★★ FIX APPLIED HERE ★★★★★
+            const questionValues = questions.map(q => [
+                examId, 
+                q.question_text, 
+                q.question_type, 
+                q.question_type === 'multiple_choice' ? JSON.stringify(q.options) : null, 
+                q.question_type === 'multiple_choice' ? q.correct_answer : null, // Set correct_answer to NULL if not MCQ
+                q.marks
+            ]);
             await connection.query(questionQuery, [questionValues]);
         }
-
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
-
-        // 1. Find all students in the affected class group
-        const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         
+        // --- Notification Logic ---
+        const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         if (students.length > 0) {
-            // 2. Get the creator/editor's name for the notification
             const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
             const senderName = teacher.full_name || "School Administration";
-
-            // 3. Prepare notification details
             const studentIds = students.map(s => s.id);
-            const notificationTitle = `Exam Updated: ${title}`;
-            const notificationMessage = `Details for the exam "${title}" have been updated. Please review the changes.`;
-
-            // 4. Send notifications to all students in the class
             await createBulkNotifications(
                 connection,
                 studentIds,
                 senderName,
-                notificationTitle,
-                notificationMessage,
+                `Exam Updated: ${title}`,
+                `Details for the exam "${title}" have been updated. Please review the changes.`,
                 '/exams'
             );
         }
-        
-        // ★★★★★ END: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
 
         await connection.commit();
         res.status(200).json({ message: 'Exam updated successfully and students notified!' });
@@ -3110,7 +3097,7 @@ app.delete('/api/exams/:examId', async (req, res) => {
     }
 });
 
-// --- SUBMISSION & GRADING ROUTES ---
+// --- SUBMISSION & GRADING ROUTES --- (No changes below this line, but included for completeness)
 
 // Get all submissions for a specific exam
 app.get('/api/exams/:examId/submissions', async (req, res) => {
@@ -3141,12 +3128,11 @@ app.get('/api/submissions/:attemptId', async (req, res) => {
 // Grade a student's submission
 app.post('/api/submissions/:attemptId/grade', async (req, res) => {
     const { attemptId } = req.params;
-    const { gradedAnswers, teacher_feedback, teacher_id } = req.body; // Added teacher_id for auth
+    const { gradedAnswers, teacher_feedback, teacher_id } = req.body;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
         const [[attempt]] = await connection.query('SELECT exam_id, student_id FROM student_exam_attempts WHERE attempt_id = ?', [attemptId]);
-        // Simple auth check: does the exam belong to the teacher grading it?
         const [[exam]] = await connection.query('SELECT created_by FROM exams WHERE exam_id = ?', [attempt.exam_id]);
         if (exam.created_by !== parseInt(teacher_id, 10)) {
             await connection.rollback();
@@ -3176,10 +3162,7 @@ app.post('/api/submissions/:attemptId/grade', async (req, res) => {
     }
 });
 
-
 // --- STUDENT ROUTES ---
-// We will also remove middleware from student routes for consistency,
-// but they will require a student_id to be passed.
 
 app.get('/api/exams/student/:studentId/:classGroup', async (req, res) => {
     try {

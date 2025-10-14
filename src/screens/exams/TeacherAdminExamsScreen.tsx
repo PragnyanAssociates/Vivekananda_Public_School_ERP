@@ -1,8 +1,5 @@
-// 📂 File: src/screens/exams/TeacherAdminExamsScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Modal } from 'react-native';
-// ★★★ 1. IMPORT apiClient AND REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -42,7 +39,6 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
         if (!user?.id) return;
         setIsLoading(true);
         try {
-            // ★★★ 2. USE apiClient ★★★
             const response = await apiClient.get(`/exams/teacher/${user.id}`);
             setExams(response.data);
         } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to fetch exams.'); }
@@ -50,9 +46,7 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
     }, [user?.id]);
 
     useEffect(() => {
-        if (isFocused) {
-            fetchExams();
-        }
+        if (isFocused) { fetchExams(); }
     }, [isFocused, fetchExams]);
 
     const handleDelete = (exam) => {
@@ -63,7 +57,6 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
                 onPress: async () => {
                     setIsLoading(true);
                     try {
-                        // ★★★ 3. USE apiClient ★★★
                         await apiClient.delete(`/exams/${exam.exam_id}`);
                         setExams(prevExams => prevExams.filter(e => e.exam_id !== exam.exam_id));
                         Alert.alert("Success", "Exam deleted.");
@@ -117,7 +110,6 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
     useEffect(() => {
         const bootstrapData = async () => {
             try {
-                // ★★★ 4. USE apiClient FOR ALL CALLS ★★★
                 const classesRes = await apiClient.get('/student-classes');
                 setStudentClasses(classesRes.data);
 
@@ -125,7 +117,7 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
                     const examRes = await apiClient.get(`/exams/${examToEdit.exam_id}`);
                     const data = examRes.data;
                     setExamDetails({ title: data.title, description: data.description || '', class_group: data.class_group, time_limit_mins: String(data.time_limit_mins || '0') });
-                    setQuestions(data.questions.map(q => ({ ...q, id: q.question_id })));
+                    setQuestions(data.questions.map(q => ({ ...q, id: q.question_id, options: (q.options && typeof q.options === 'string') ? JSON.parse(q.options) : (q.options || {A:'', B:'', C:'', D:''}) })));
                 }
             } catch (e: any) { 
                 Alert.alert("Error", e.response?.data?.message || "Failed to load data.");
@@ -155,13 +147,25 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
             }
             Alert.alert('Success', `Exam ${isEditMode ? 'updated' : 'created'}!`);
             onFinish();
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.message || "Failed to save."); } 
+        } catch (e: any) { Alert.alert('Error', e.response?.data?.message || "Failed to save exam."); } 
         finally { setIsSaving(false); }
     };
 
     if (isLoading) return <View style={styles.centered}><ActivityIndicator size="large" /><Text>Loading Exam Data...</Text></View>
-    return ( <ScrollView style={styles.containerDark}><TouchableOpacity onPress={onFinish} style={styles.backButton}><MaterialIcons name="arrow-back" size={24} color="#333" /><Text style={styles.backButtonText}>Back to Exam List</Text></TouchableOpacity><Text style={styles.headerTitle}>{isEditMode ? 'Edit Exam' : 'Create New Exam'}</Text><View style={styles.formSection}><Text style={styles.label}>Exam Title *</Text><TextInput style={styles.input} value={examDetails.title} onChangeText={t => setExamDetails({ ...examDetails, title: t })} /><Text style={styles.label}>Class *</Text><View style={styles.pickerContainer}><Picker selectedValue={examDetails.class_group} onValueChange={v => setExamDetails({ ...examDetails, class_group: v })}><Picker.Item label="-- Select a Class --" value="" />{studentClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}</Picker></View><Text style={styles.label}>Time Limit (minutes)</Text><TextInput style={styles.input} keyboardType="number-pad" value={examDetails.time_limit_mins} onChangeText={t => setExamDetails({ ...examDetails, time_limit_mins: t })} /></View><View style={styles.formSection}><Text style={styles.headerTitleSecondary}>Questions</Text>{questions.map((q, index) => (<View key={q.id} style={styles.questionEditor}><View style={styles.cardHeader}><Text style={styles.questionEditorTitle}>Question {index + 1}</Text><TouchableOpacity onPress={() => handleRemoveQuestion(q.id)}><MaterialIcons name="close" size={22} color="#dc3545" /></TouchableOpacity></View><TextInput style={styles.input} multiline value={q.question_text} onChangeText={t => handleQuestionChange(q.id, 'question_text', t)} />{Object.keys(q.options).map(key => (<TextInput key={key} style={styles.input} placeholder={`Option ${key}`} value={q.options[key]} onChangeText={t => handleOptionChange(q.id, key, t)} />))}<Text style={styles.label}>Correct Answer</Text><View style={styles.pickerContainer}><Picker selectedValue={q.correct_answer} onValueChange={v => handleQuestionChange(q.id, 'correct_answer', v)}><Picker.Item label="-- Select correct option --" value="" />{Object.keys(q.options).map(key => q.options[key] && <Picker.Item key={key} label={`Option ${key}`} value={key} />)}</Picker></View><Text style={styles.label}>Marks</Text><TextInput style={styles.input} keyboardType="number-pad" value={String(q.marks)} onChangeText={t => handleQuestionChange(q.id, 'marks', t)} /></View>))}<TouchableOpacity style={styles.addQuestionBtn} onPress={addQuestion}><Text style={styles.addQuestionBtnText}>+ Add Another Question</Text></TouchableOpacity></View><TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>{isEditMode ? 'Save Changes' : 'Save and Publish Exam'}</Text>}</TouchableOpacity></ScrollView> );
+    return ( <ScrollView style={styles.containerDark}><TouchableOpacity onPress={onFinish} style={styles.backButton}><MaterialIcons name="arrow-back" size={24} color="#333" /><Text style={styles.backButtonText}>Back to Exam List</Text></TouchableOpacity><Text style={styles.headerTitle}>{isEditMode ? 'Edit Exam' : 'Create New Exam'}</Text><View style={styles.formSection}><Text style={styles.label}>Exam Title *</Text><TextInput style={styles.input} value={examDetails.title} onChangeText={t => setExamDetails({ ...examDetails, title: t })} /><Text style={styles.label}>Class *</Text><View style={styles.pickerContainer}><Picker selectedValue={examDetails.class_group} onValueChange={v => setExamDetails({ ...examDetails, class_group: v })}><Picker.Item label="-- Select a Class --" value="" />{studentClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}</Picker></View><Text style={styles.label}>Time Limit (minutes)</Text><TextInput style={styles.input} keyboardType="number-pad" value={examDetails.time_limit_mins} onChangeText={t => setExamDetails({ ...examDetails, time_limit_mins: t })} /></View><View style={styles.formSection}><Text style={styles.headerTitleSecondary}>Questions</Text>{questions.map((q, index) => (<View key={q.id} style={styles.questionEditor}><View style={styles.cardHeader}><Text style={styles.questionEditorTitle}>Question {index + 1}</Text><TouchableOpacity onPress={() => handleRemoveQuestion(q.id)}><MaterialIcons name="close" size={22} color="#dc3545" /></TouchableOpacity></View><TextInput style={styles.input} multiline placeholder="Enter question text..." value={q.question_text} onChangeText={t => handleQuestionChange(q.id, 'question_text', t)} />
+    
+    <Text style={styles.label}>Question Type</Text>
+    <View style={styles.pickerContainer}><Picker selectedValue={q.question_type} onValueChange={v => handleQuestionChange(q.id, 'question_type', v)}><Picker.Item label="Multiple Choice" value="multiple_choice" /><Picker.Item label="Written Answer" value="written_answer" /></Picker></View>
+    
+    {q.question_type === 'multiple_choice' && (<>
+        {Object.keys(q.options).map(key => (<TextInput key={key} style={styles.input} placeholder={`Option ${key}`} value={q.options[key]} onChangeText={t => handleOptionChange(q.id, key, t)} />))}
+        <Text style={styles.label}>Correct Answer</Text>
+        <View style={styles.pickerContainer}><Picker selectedValue={q.correct_answer} onValueChange={v => handleQuestionChange(q.id, 'correct_answer', v)}><Picker.Item label="-- Select correct option --" value="" />{Object.keys(q.options).map(key => q.options[key] && <Picker.Item key={key} label={`Option ${key}`} value={key} />)}</Picker></View>
+    </>)}
+
+    <Text style={styles.label}>Marks</Text><TextInput style={styles.input} keyboardType="number-pad" value={String(q.marks)} onChangeText={t => handleQuestionChange(q.id, 'marks', t)} /></View>))}<TouchableOpacity style={styles.addQuestionBtn} onPress={addQuestion}><Text style={styles.addQuestionBtnText}>+ Add Another Question</Text></TouchableOpacity></View><TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>{isEditMode ? 'Save Changes' : 'Save and Publish Exam'}</Text>}</TouchableOpacity></ScrollView> );
 };
+
 
 // --- View 3: Submissions View ---
 const SubmissionsView = ({ exam, onBack }) => {
@@ -176,32 +180,20 @@ const SubmissionsView = ({ exam, onBack }) => {
     const fetchSubmissions = useCallback(async () => {
         setIsLoading(true);
         try {
-            // ★★★ 5. USE apiClient ★★★
             const response = await apiClient.get(`/exams/${exam.exam_id}/submissions`);
             setSubmissions(response.data);
         } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to fetch submissions.'); } 
         finally { setIsLoading(false); }
     }, [exam.exam_id]);
 
-    useEffect(() => {
-        fetchSubmissions();
-    }, [fetchSubmissions]);
+    useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
     const openGradingModal = async (submission) => {
         setIsLoading(true);
         setGradingSubmission(submission);
         try {
             const response = await apiClient.get(`/submissions/${submission.attempt_id}`);
-            let details = response.data;
-
-            // ★★★ MODIFICATION: Parse options if they are strings, just like in the student's result view ★★★
-            if (details) {
-                details = details.map(item => ({
-                    ...item,
-                    options: (item.options && typeof item.options === 'string') ? JSON.parse(item.options) : item.options,
-                }));
-            }
-
+            let details = response.data.map(item => ({...item, options: (item.options && typeof item.options === 'string') ? JSON.parse(item.options) : item.options,}));
             setSubmissionDetails(details);
             const initialGrades = details.reduce((acc, item) => ({ ...acc, [item.question_id]: item.marks_awarded || '' }), {});
             setGradedAnswers(initialGrades);
@@ -216,11 +208,7 @@ const SubmissionsView = ({ exam, onBack }) => {
         setIsSubmittingGrade(true);
         const answersPayload = Object.entries(gradedAnswers).map(([qid, marks]) => ({ question_id: qid, marks_awarded: marks || 0 }));
         try {
-            await apiClient.post(`/submissions/${gradingSubmission.attempt_id}/grade`, {
-                gradedAnswers: answersPayload, 
-                teacher_feedback: '', 
-                teacher_id: user.id
-            });
+            await apiClient.post(`/submissions/${gradingSubmission.attempt_id}/grade`, { gradedAnswers: answersPayload, teacher_feedback: '', teacher_id: user.id });
             Alert.alert('Success', 'Grades submitted successfully!');
             setGradingSubmission(null);
             fetchSubmissions();
@@ -252,14 +240,9 @@ const SubmissionsView = ({ exam, onBack }) => {
                 <ScrollView style={styles.modalView}>
                     <Text style={styles.modalTitle}>Grading: {gradingSubmission?.student_name}</Text>
                     {isLoading ? <ActivityIndicator size="large" /> : submissionDetails.map((item, index) => {
-                        // ★★★ MODIFICATION: Logic to determine and format the correct answer for display ★★★
                         let correctAnswerDisplay = 'N/A';
-                        if (item.correct_answer) {
-                            if (item.question_type === 'multiple_choice' && item.options && item.options[item.correct_answer]) {
-                                correctAnswerDisplay = `${item.correct_answer}. ${item.options[item.correct_answer]}`;
-                            } else {
-                                correctAnswerDisplay = item.correct_answer;
-                            }
+                        if (item.question_type === 'multiple_choice' && item.correct_answer && item.options && item.options[item.correct_answer]) {
+                            correctAnswerDisplay = `${item.correct_answer}. ${item.options[item.correct_answer]}`;
                         }
 
                         return (
@@ -267,8 +250,9 @@ const SubmissionsView = ({ exam, onBack }) => {
                                 <Text style={styles.questionText}>{index + 1}. {item.question_text}</Text>
                                 <Text style={styles.studentAnswer}>Student Answer: <Text style={{ fontWeight: 'normal' }}>{item.answer_text || 'Not answered'}</Text></Text>
                                 
-                                {/* ★★★ NEW ELEMENT: Display the correct answer ★★★ */}
-                                <Text style={styles.correctAnswerText}>Correct Answer: <Text style={{ fontWeight: 'normal' }}>{correctAnswerDisplay}</Text></Text>
+                                {item.question_type === 'multiple_choice' &&
+                                    <Text style={styles.correctAnswerText}>Correct Answer: <Text style={{ fontWeight: 'normal' }}>{correctAnswerDisplay}</Text></Text>
+                                }
                                 
                                 <Text style={styles.label}>Award Marks (out of {item.marks})</Text>
                                 <TextInput style={styles.input} keyboardType="number-pad" placeholder={`Max ${item.marks}`} value={String(gradedAnswers[item.question_id] ?? '')} onChangeText={text => handleGradeChange(item.question_id, text)} />
@@ -328,7 +312,6 @@ const styles = StyleSheet.create({
     gradingItem: { marginVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10 },
     questionText: { fontSize: 16, fontWeight: '500' },
     studentAnswer: { fontStyle: 'italic', color: '#333', marginVertical: 8, padding: 8, backgroundColor: '#f0f0f0', borderRadius: 5, fontWeight: 'bold' },
-    // ★★★ NEW STYLE ★★★
     correctAnswerText: { fontStyle: 'italic', color: '#28a745', marginVertical: 8, padding: 8, backgroundColor: '#e9f5e9', borderRadius: 5, fontWeight: 'bold' },
     modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30, marginBottom: 50 },
     modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
