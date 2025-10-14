@@ -1,3 +1,5 @@
+// 📂 File: StudentHomeworkScreen.js (NO CHANGES, VERIFIED)
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Linking, LayoutAnimation, UIManager, Platform } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -6,7 +8,7 @@ import { pick, types, isCancel } from '@react-native-documents/picker';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
-import { useNavigation, useIsFocused } from '@react-navigation/native'; // ★★★ MODIFIED: Import hooks
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -17,8 +19,8 @@ const StudentHomeworkScreen = () => {
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(null);
-    const navigation = useNavigation(); // ★★★ NEW: Get navigation object
-    const isFocused = useIsFocused(); // ★★★ NEW: Hook to check if screen is focused
+    const navigation = useNavigation();
+    const isFocused = useIsFocused();
 
     const fetchAssignments = useCallback(async () => {
         if (!user) return;
@@ -36,7 +38,6 @@ const StudentHomeworkScreen = () => {
         finally { setIsLoading(false); }
     }, [user]);
 
-    // ★★★ MODIFIED: Use isFocused to auto-refresh the list when returning to it
     useEffect(() => {
         if (isFocused) {
             fetchAssignments();
@@ -99,7 +100,7 @@ const StudentHomeworkScreen = () => {
                         onFileSubmit={handleFileSubmission}
                         onDelete={handleDeleteSubmission}
                         isSubmitting={isSubmitting === item.id}
-                        navigation={navigation} // ★★★ NEW: Pass navigation to card
+                        navigation={navigation}
                     />
                 )}
                 ListHeaderComponent={<Header />}
@@ -119,7 +120,6 @@ const Header = () => (
     </Animatable.View>
 );
 
-// ★★★ HEAVILY MODIFIED: AssignmentCard now navigates for Written type
 const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, navigation }) => {
     
     const getStatusInfo = () => {
@@ -135,7 +135,6 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
     const handleViewAttachment = () => { if(item.attachment_path) Linking.openURL(`${SERVER_URL}${item.attachment_path}`); };
 
     const renderSubmissionContent = () => {
-        // --- RENDER IF HOMEWORK IS SUBMITTED ---
         if (item.submission_id) {
             return (
                 <>
@@ -156,7 +155,6 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
             );
         }
         
-        // --- RENDER IF HOMEWORK IS PENDING ---
         if (item.homework_type === 'Written') {
             return (
                 <View style={styles.buttonRow}>
@@ -166,7 +164,7 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
                     </TouchableOpacity>
                 </View>
             );
-        } else { // Default to 'PDF' type
+        } else {
             return (
                 <View style={styles.buttonRow}>
                     <TouchableOpacity style={styles.submitButton} onPress={() => onFileSubmit(item.id)} disabled={isSubmitting}>

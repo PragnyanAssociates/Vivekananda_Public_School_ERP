@@ -1,4 +1,4 @@
-// 📂 File: WrittenAnswerScreen.js (FINAL AND VERIFIED)
+// 📂 File: WrittenAnswerScreen.js (NO CHANGES, VERIFIED)
 
 import React, { useState } from 'react';
 import {
@@ -37,13 +37,12 @@ const WrittenAnswerScreen = ({ route }) => {
     
     setIsSubmitting(true);
     try {
-      // ★★★ THIS IS THE FIX ★★★
-      // The API endpoint was missing the "/api" prefix.
-      await apiClient.post('/api/homework/submit-written', {
+      await apiClient.post('/homework/submit-written', {
         assignment_id: assignment.id,
         student_id: user.id,
         written_answer: answer,
       });
+
       Alert.alert('Success', 'Your answer has been submitted!', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);

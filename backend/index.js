@@ -2418,8 +2418,9 @@ app.post('/api/homework', upload.single('attachment'), async (req, res) => {
 });
 
 
-// Update an existing homework assignment
-app.post('/api/homework/:assignmentId', upload.single('attachment'), async (req, res) => {
+// ★★★ CRITICAL FIX IS HERE ★★★
+// Update an existing homework assignment - Route is now more specific to avoid conflicts
+app.post('/api/homework/update/:assignmentId', upload.single('attachment'), async (req, res) => {
     const { assignmentId } = req.params;
     const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type } = req.body;
     
@@ -2561,10 +2562,9 @@ app.post('/api/homework/submit/:assignmentId', upload.single('submission'), asyn
         const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
 
         if (assignment && student) {
-             // Notifying a single teacher, so we use createBulkNotifications with an array of one ID.
              await createBulkNotifications(
                 connection, 
-                [assignment.teacher_id], // The function expects an array of IDs
+                [assignment.teacher_id],
                 student.full_name, 
                 `Submission for: ${assignment.title}`,
                 `${student.full_name} (${student.class_group}) has submitted their homework.`, 
@@ -2583,7 +2583,6 @@ app.post('/api/homework/submit/:assignmentId', upload.single('submission'), asyn
     }
 });
 
-// ★★★ THIS IS THE CORRECTED ROUTE ★★★
 // Student submits a written answer
 app.post('/api/homework/submit-written', async (req, res) => {
     const { assignment_id, student_id, written_answer } = req.body;
@@ -2609,9 +2608,6 @@ app.post('/api/homework/submit-written', async (req, res) => {
         const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
 
         if (assignment && student) {
-            // ★★★ THIS IS THE FIX ★★★
-            // Changed `createNotification` to `createBulkNotifications` to match other routes
-            // and passed the teacher's ID in an array as required.
              await createBulkNotifications(
                 connection,
                 [assignment.teacher_id],
