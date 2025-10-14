@@ -2418,8 +2418,7 @@ app.post('/api/homework', upload.single('attachment'), async (req, res) => {
 });
 
 
-// ★★★ CRITICAL FIX IS HERE ★★★
-// Update an existing homework assignment - Route is now more specific to avoid conflicts
+// Update an existing homework assignment
 app.post('/api/homework/update/:assignmentId', upload.single('attachment'), async (req, res) => {
     const { assignmentId } = req.params;
     const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type } = req.body;
@@ -2455,14 +2454,18 @@ app.delete('/api/homework/:assignmentId', async (req, res) => {
     }
 });
 
-// Get all submissions for an assignment
+// ★★★ CRITICAL CHANGE IS HERE ★★★
+// Get all submissions for an assignment, now with Roll Number and sorted correctly.
 app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
+        // This query now JOINS user_profiles to get the roll_no
+        // and sorts by roll_no numerically.
         const query = `
             SELECT 
                 u.id as student_id,
                 u.full_name as student_name,
+                p.roll_no,
                 s.id as submission_id,
                 s.submission_path,
                 s.written_answer,
@@ -2473,13 +2476,15 @@ app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
             FROM 
                 users u
             LEFT JOIN 
+                user_profiles p ON u.id = p.user_id
+            LEFT JOIN 
                 homework_submissions s ON u.id = s.student_id AND s.assignment_id = ?
             WHERE 
                 u.role = 'student' AND u.class_group = (
                     SELECT class_group FROM homework_assignments WHERE id = ?
                 )
             ORDER BY 
-                u.full_name ASC`;
+                CAST(p.roll_no AS UNSIGNED) ASC, u.full_name ASC`;
         const [results] = await db.query(query, [assignmentId, assignmentId]);
         res.json(results);
     } catch (error) { 
