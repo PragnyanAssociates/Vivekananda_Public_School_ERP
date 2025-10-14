@@ -131,35 +131,55 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
 
     const addQuestion = () => setQuestions([...questions, { id: Date.now(), question_text: '', question_type: 'multiple_choice', options: { A: '', B: '', C: '', D: '' }, correct_answer: '', marks: '1' }]);
     
-    // Reverted to the original simple handler
-    const handleQuestionChange = (id, field, value) => setQuestions(questions.map(q => (q.id === id ? { ...q, [field]: value } : q)));
-    
+    // ★★★ FIX 1: CLEAN THE STATE WHEN QUESTION TYPE CHANGES ★★★
+    const handleQuestionChange = (id, field, value) => {
+        setQuestions(questions.map(q => {
+            if (q.id !== id) return q;
+
+            // Create a new object with the updated field
+            let newQ = { ...q, [field]: value };
+
+            // If the type was changed, clean the object structure
+            if (field === 'question_type') {
+                if (value === 'written_answer') {
+                    // Use destructuring to remove properties cleanly
+                    const { options, correct_answer, ...rest } = newQ;
+                    return rest; // Return the object without MCQ properties
+                } else if (value === 'multiple_choice') {
+                    // Add back the default MCQ properties
+                    newQ.options = { A: '', B: '', C: '', D: '' };
+                    newQ.correct_answer = '';
+                }
+            }
+            return newQ;
+        }));
+    };
+
     const handleOptionChange = (id, optionKey, value) => setQuestions(questions.map(q => (q.id === id ? { ...q, options: { ...q.options, [optionKey]: value } } : q)));
     const handleRemoveQuestion = (id) => setQuestions(questions.filter(q => q.id !== id));
     
-    // ★★★★★ DEFINITIVE FIX IS APPLIED HERE ★★★★★
     const handleSave = async () => {
         if (!user?.id) return Alert.alert("Session Error", "Could not identify user.");
         if (!examDetails.title || !examDetails.class_group || questions.length === 0) return Alert.alert('Validation Error', 'Title, Class Group, and at least one question are required.');
         
         setIsSaving(true);
         
-        // Sanitize the questions array to build a clean payload for the API
+        // ★★★ FIX 2: CREATE A PERFECTLY SANITIZED PAYLOAD ★★★
         const sanitizedQuestions = questions.map(q => {
-            // Base object with common properties
+            // Base object with properties common to all question types
             const questionPayload = {
                 question_text: q.question_text,
                 question_type: q.question_type,
-                marks: q.marks,
+                // IMPORTANT: Ensure marks is always an integer number
+                marks: parseInt(q.marks, 10) || 1, 
             };
 
-            // If it's a multiple choice question, add the specific properties
+            // Only add MCQ-specific properties if the type is correct
             if (q.question_type === 'multiple_choice') {
                 questionPayload.options = q.options;
                 questionPayload.correct_answer = q.correct_answer;
             }
-            // For 'written_answer', `options` and `correct_answer` are simply left out.
-
+            // For 'written_answer', options/correct_answer are correctly excluded.
             return questionPayload;
         });
 
@@ -173,7 +193,10 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
             }
             Alert.alert('Success', `Exam ${isEditMode ? 'updated' : 'created'}!`);
             onFinish();
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.message || "Failed to save exam."); } 
+        } catch (e: any) { 
+            console.error("API Error on Save:", e.response?.data || e.message);
+            Alert.alert('Error', e.response?.data?.message || "Failed to save exam."); 
+        } 
         finally { setIsSaving(false); }
     };
 
@@ -183,7 +206,8 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
     <Text style={styles.label}>Question Type</Text>
     <View style={styles.pickerContainer}><Picker selectedValue={q.question_type} onValueChange={v => handleQuestionChange(q.id, 'question_type', v)}><Picker.Item label="Multiple Choice" value="multiple_choice" /><Picker.Item label="Written Answer" value="written_answer" /></Picker></View>
     
-    {q.question_type === 'multiple_choice' && (<>
+    {/* ★★★ FIX 3: ADD SAFETY CHECKS TO JSX TO PREVENT CRASHES ★★★ */}
+    {q.question_type === 'multiple_choice' && q.options && (<>
         {Object.keys(q.options).map(key => (<TextInput key={key} style={styles.input} placeholder={`Option ${key}`} value={q.options[key]} onChangeText={t => handleOptionChange(q.id, key, t)} />))}
         <Text style={styles.label}>Correct Answer</Text>
         <View style={styles.pickerContainer}><Picker selectedValue={q.correct_answer} onValueChange={v => handleQuestionChange(q.id, 'correct_answer', v)}><Picker.Item label="-- Select correct option --" value="" />{Object.keys(q.options).map(key => q.options[key] && <Picker.Item key={key} label={`Option ${key}`} value={key} />)}</Picker></View>

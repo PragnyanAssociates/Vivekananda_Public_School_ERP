@@ -2937,7 +2937,7 @@ app.get('/api/exam-schedules/class/:classGroup', async (req, res) => {
     }
 });
 
-// ==========================================================
+/// ==========================================================
 // --- ONLINE EXAMS API ROUTES  -----------------------
 // ==========================================================
 
@@ -2962,7 +2962,6 @@ app.post('/api/exams', async (req, res) => {
         if (questions.length > 0) {
             const questionQuery = 'INSERT INTO exam_questions (exam_id, question_text, question_type, options, correct_answer, marks) VALUES ?';
             
-            // ★★★★★ FINAL ROBUST FIX APPLIED HERE ★★★★★
             const questionValues = questions.map(q => {
                 const isMcq = q.question_type === 'multiple_choice';
                 return [
@@ -2970,7 +2969,7 @@ app.post('/api/exams', async (req, res) => {
                     q.question_text, 
                     q.question_type, 
                     isMcq ? JSON.stringify(q.options) : null, 
-                    (isMcq && q.correct_answer) ? q.correct_answer : null, // Ensures NULL for non-MCQ or empty MCQ answer
+                    (isMcq && q.correct_answer) ? q.correct_answer : null,
                     q.marks
                 ];
             });
@@ -2980,8 +2979,12 @@ app.post('/api/exams', async (req, res) => {
         // --- Notification Logic ---
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         if (students.length > 0) {
-            const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
-            const senderName = teacher.full_name || "School Administration";
+            // ★★★★★ DEFINITIVE FIX APPLIED HERE ★★★★★
+            // This safely fetches the teacher's name and provides a default
+            // value if the teacher is not found, preventing a server crash.
+            const [teacherRows] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
+            const senderName = (teacherRows[0] && teacherRows[0].full_name) ? teacherRows[0].full_name : "School Administration";
+            
             const studentIds = students.map(s => s.id);
             await createBulkNotifications(
                 connection,
@@ -2998,7 +3001,7 @@ app.post('/api/exams', async (req, res) => {
 
     } catch (error) {
         await connection.rollback();
-        console.error("Error in POST /api/exams:", error); // Check your server console for detailed errors
+        console.error("Error in POST /api/exams:", error); // This will now log the real error if something else goes wrong.
         res.status(500).json({ message: 'Failed to create exam.' });
     } finally {
         connection.release();
@@ -3048,7 +3051,6 @@ app.put('/api/exams/:examId', async (req, res) => {
         if (questions.length > 0) {
             const questionQuery = 'INSERT INTO exam_questions (exam_id, question_text, question_type, options, correct_answer, marks) VALUES ?';
             
-            // ★★★★★ FINAL ROBUST FIX APPLIED HERE ★★★★★
             const questionValues = questions.map(q => {
                 const isMcq = q.question_type === 'multiple_choice';
                 return [
@@ -3056,7 +3058,7 @@ app.put('/api/exams/:examId', async (req, res) => {
                     q.question_text, 
                     q.question_type, 
                     isMcq ? JSON.stringify(q.options) : null, 
-                    (isMcq && q.correct_answer) ? q.correct_answer : null, // Ensures NULL for non-MCQ or empty MCQ answer
+                    (isMcq && q.correct_answer) ? q.correct_answer : null,
                     q.marks
                 ];
             });
@@ -3066,8 +3068,10 @@ app.put('/api/exams/:examId', async (req, res) => {
         // --- Notification Logic ---
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         if (students.length > 0) {
-            const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
-            const senderName = teacher.full_name || "School Administration";
+            // ★★★★★ DEFINITIVE FIX APPLIED HERE (for update) ★★★★★
+            const [teacherRows] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
+            const senderName = (teacherRows[0] && teacherRows[0].full_name) ? teacherRows[0].full_name : "School Administration";
+            
             const studentIds = students.map(s => s.id);
             await createBulkNotifications(
                 connection,
@@ -3084,7 +3088,7 @@ app.put('/api/exams/:examId', async (req, res) => {
 
     } catch (error) {
         await connection.rollback();
-        console.error("Error in PUT /api/exams/:examId:", error); // Check your server console for detailed errors
+        console.error("Error in PUT /api/exams/:examId:", error);
         res.status(500).json({ message: 'Failed to update exam.' });
     } finally {
         connection.release();
@@ -3105,8 +3109,7 @@ app.delete('/api/exams/:examId', async (req, res) => {
 });
 
 
-// --- SUBMISSION & GRADING ROUTES (No changes below) ---
-
+// --- SUBMISSION & GRADING ROUTES ---
 app.get('/api/exams/:examId/submissions', async (req, res) => {
     try {
         const { examId } = req.params;
@@ -3168,8 +3171,7 @@ app.post('/api/submissions/:attemptId/grade', async (req, res) => {
 });
 
 
-// --- STUDENT ROUTES (No changes below) ---
-
+// --- STUDENT ROUTES ---
 app.get('/api/exams/student/:studentId/:classGroup', async (req, res) => {
     try {
         const { studentId, classGroup } = req.params;
