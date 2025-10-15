@@ -5364,17 +5364,15 @@ app.get('/api/food-menu', async (req, res) => {
 });
 
 
-// ★★★ ROUTE ORDER CORRECTED ★★★
-// The specific route for '/time' must come BEFORE the general route for '/:id'.
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// PUT (update) the TIME for an entire meal column (Admin only)
-app.put('/api/food-menu/time', async (req, res) => {
-    const { meal_type, meal_time, editorId } = req.body;
+// POST (create) a NEW food menu item (Admin only)
+app.post('/api/food-menu', async (req, res) => {
+    const { day_of_week, meal_type, food_item, meal_time, editorId } = req.body;
 
     if (!editorId) {
         return res.status(401).json({ message: 'Unauthorized: User authentication is required.' });
+    }
+    if (!day_of_week || !meal_type) {
+        return res.status(400).json({ message: 'Day of week and meal type are required.' });
     }
 
     const connection = await db.getConnection();
@@ -5388,52 +5386,42 @@ app.put('/api/food-menu/time', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
         }
         
-        // Step 2: Update the meal time
-        const [result] = await connection.query('UPDATE food_menu SET meal_time = ? WHERE meal_type = ?', [meal_time, meal_type]);
+        // Step 2: Insert the new menu item
+        await connection.query(
+            'INSERT INTO food_menu (day_of_week, meal_type, food_item, meal_time) VALUES (?, ?, ?, ?)',
+            [day_of_week, meal_type, food_item, meal_time]
+        );
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-        
-        // 1. Find all students and teachers (excluding the editor admin)
+        // Step 3: Notification Logic
         const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [editorId]);
-        
         if (usersToNotify.length > 0) {
-            // 2. Prepare notification details
             const recipientIds = usersToNotify.map(u => u.id);
             const senderName = editor.full_name || "School Administration";
             const notificationTitle = `Food Menu Updated`;
-            const notificationMessage = `The timing for ${meal_type} has been updated to ${meal_time}. Please check the new schedule.`;
+            const notificationMessage = `The menu for ${day_of_week} ${meal_type} has been added.`;
 
-            // 3. Send notifications
-            await createBulkNotifications(
-                connection,
-                recipientIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/food-menu' // A generic link to the food menu screen
-            );
+            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/food-menu');
         }
 
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
         await connection.commit();
-        res.status(200).json({ message: `${meal_type} time updated for all days.`, affectedRows: result.affectedRows });
+        res.status(201).json({ message: 'Menu item created successfully.' });
 
     } catch (error) {
         await connection.rollback();
-        console.error("Error updating meal time:", error);
-        res.status(500).json({ message: 'Error updating meal time.' });
+        console.error("Error creating food menu item:", error);
+        res.status(500).json({ message: 'Error creating menu item.' });
     } finally {
         connection.release();
     }
 });
 
-// 📂 File: server.js (REPLACE THIS ROUTE)
 
-// PUT (update) a SINGLE food item's text (Admin only)
+// ★★★ REPLACE BOTH OLD PUT ROUTES WITH THIS SINGLE ONE ★★★
+// PUT (update) a SINGLE food item's text and/or time (Admin only)
 app.put('/api/food-menu/:id', async (req, res) => {
     const { id } = req.params;
-    const { food_item, editorId } = req.body;
+    // Now accepts both food_item and meal_time
+    const { food_item, meal_time, editorId } = req.body;
 
     if (!editorId) {
         return res.status(401).json({ message: 'Unauthorized: User authentication is required.' });
@@ -5450,41 +5438,29 @@ app.put('/api/food-menu/:id', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
         }
 
-        // Step 2: Update the food item
-        const [result] = await connection.query('UPDATE food_menu SET food_item = ? WHERE id = ?', [food_item, id]);
+        // Step 2: Update the food item and/or time
+        const [result] = await connection.query(
+            'UPDATE food_menu SET food_item = ?, meal_time = ? WHERE id = ?',
+            [food_item, meal_time, id]
+        );
+
         if (result.affectedRows === 0) {
             await connection.rollback();
             return res.status(404).json({ message: 'Menu item not found.' });
         }
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-
-        // 1. Find all students and teachers (excluding the editor admin)
+        // Step 3: Notification Logic
         const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [editorId]);
-        
         if (usersToNotify.length > 0) {
-            // 2. Get details about the meal that was changed
             const [[mealDetails]] = await connection.query("SELECT day_of_week, meal_type FROM food_menu WHERE id = ?", [id]);
-
-            // 3. Prepare notification details
             const recipientIds = usersToNotify.map(u => u.id);
             const senderName = editor.full_name || "School Administration";
             const notificationTitle = `Food Menu Updated`;
             const notificationMessage = `The menu for ${mealDetails.day_of_week} ${mealDetails.meal_type} has been updated.`;
-
-            // 4. Send notifications
-            await createBulkNotifications(
-                connection,
-                recipientIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/food-menu'
-            );
+            
+            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/food-menu');
         }
         
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
         await connection.commit();
         res.status(200).json({ message: 'Menu item updated successfully.' });
 
