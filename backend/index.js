@@ -5978,8 +5978,9 @@ app.post('/api/online-classes', verifyToken, videoUpload.single('videoFile'), as
         res.status(201).json({ message: `Class ${class_type === 'live' ? 'scheduled' : 'uploaded'} successfully!` });
 
     } catch (error) {
-        await connection.rollback();
+        // Log the full error for debugging
         console.error("POST /api/online-classes Error:", error);
+        await connection.rollback();
         res.status(500).json({ message: 'Failed to save the class.' });
     } finally {
         connection.release();

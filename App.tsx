@@ -80,7 +80,7 @@ import StudentExamScreen from './src/screens/exams_Schedule/StudentExamScreen';
 import StudentMaterialsScreen from './src/screens/study-materials/StudentMaterialsScreen';
 import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
 import StudentHomeworkScreen from './src/screens/homework/StudentHomeworkScreen';
-// import OnlineClassScreen from './src/screens/Online_Class/OnlineClassScreen';
+import OnlineClassScreen from './src/screens/Online_Class/OnlineClassScreen';
 import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResourcesScreen';
 
 // Donor-Specific Screens
@@ -229,15 +229,14 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
       <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} />
       <Stack.Screen name="KitchenScreen" component={KitchenScreen} />
+      <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
       {/* <Stack.Screen name="ChatAIScreen" component={ChatAIScreen} />
       <Stack.Screen name="DonorSuggestionsScreen" component={DonorSuggestionsScreen} />
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />
       <Stack.Screen name="DonorSponsorScreen" component={DonorSponsorScreen} />
       <Stack.Screen name="DonorPaymentScreen" component={DonorPaymentScreen} />
       <Stack.Screen name="AdminPaymentScreen" component={AdminPaymentScreen} />
-      
-      
-      <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />  */}
+      */}
       <Stack.Screen 
         name="Gallery" 
         component={GalleryNavigator} 

@@ -1,4 +1,4 @@
-// 📂 File: src/screens/Online_Class/OnlineClassScreen.tsx (MODIFIED & CORRECTED)
+// 📂 File: src/screens/Online_Class/OnlineClassScreen.tsx
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
-import DocumentPicker, { DocumentPickerResponse } from 'react-native-document-picker';
+import DocumentPicker, { DocumentPickerResponse } from '@react-native-documents/picker';
 import Video from 'react-native-video';
 
 // --- TYPE DEFINITIONS ---
@@ -164,7 +164,7 @@ const OnlineClassScreen: React.FC = () => {
                 topic: classItem.topic || '',
             });
             setDate(new Date(classItem.class_datetime));
-            setSelectedVideo(null); // Clear video selection when editing
+            setSelectedVideo(null);
         } else {
             setIsEditing(false); 
             setCurrentClass(null);
@@ -203,7 +203,6 @@ const OnlineClassScreen: React.FC = () => {
             data.append('topic', formData.topic);
             data.append('meet_link', formData.meet_link);
             try {
-                // Note: File update is not supported in this simplified edit flow.
                 await apiClient.put(`/online-classes/${currentClass?.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
                 Alert.alert("Success", "Class updated.");
             } catch (error: any) { Alert.alert("Save Error", error.response?.data?.message || 'Failed to update.'); }
@@ -215,7 +214,7 @@ const OnlineClassScreen: React.FC = () => {
             } else {
                 if (!selectedVideo || !formData.topic) { setIsSaving(false); return Alert.alert("Validation Error", "Topic and a video file are required."); }
                 data.append('topic', formData.topic);
-                data.append('videoFile', { uri: selectedVideo.uri, type: selectedVideo.type, name: selectedVideo.name });
+                data.append('videoFile', { uri: selectedVideo.uri, type: selectedVideo.type, name: selectedVideo.name, });
             }
             try {
                 await apiClient.post('/online-classes', data, { headers: { 'Content-Type': 'multipart/form-data' } });
