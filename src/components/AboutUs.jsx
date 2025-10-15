@@ -72,7 +72,7 @@ const AboutUs = () => {
     return (
         <ScrollView style={styles.scrollViewContainer} contentContainerStyle={styles.container}>
             <View style={styles.newHeader}>
-                <Image source={require("../assets/vspngo-logo.png")} style={styles.newHeaderLogo} resizeMode="contain"/>
+                <Image source={require("../assets/logo.png")} style={styles.newHeaderLogo} resizeMode="contain"/>
                 <Text style={styles.newHeaderSchoolName}>Vivekananda Public School</Text>
                 <Text style={styles.newHeaderSchoolSubName}>(English Medium school for underprivileged students)</Text>
                 <Text style={styles.newHeaderTagline}>Knowledge is Light</Text>
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     scrollViewContainer: { flex: 1, backgroundColor: '#f0f8ff' },
     container: { paddingBottom: 0 },
     newHeader: { backgroundColor: "#e0f2f7", paddingTop: 40, paddingBottom: 20, alignItems: "center", justifyContent: "center", borderBottomWidth: 1, borderBottomColor: "#b2ebf2" },
-    newHeaderLogo: { width: 130, height: 60, marginBottom: 10 },
+    newHeaderLogo: { width: 300, height: 160, marginBottom: -20, marginTop: -40, },
     newHeaderSchoolName: { fontSize: 22, fontWeight: "bold", color: "#008080", textAlign: 'center' },
     newHeaderSchoolSubName: { fontSize: 14, fontWeight: "300", color: "#008080", textAlign: 'center', marginTop: 2 },
     newHeaderTagline: { fontSize: 15, fontStyle: 'italic', color: '#558b8b', marginTop: 5, textAlign: 'center' },

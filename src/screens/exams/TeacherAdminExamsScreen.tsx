@@ -223,6 +223,8 @@ const SubmissionsView = ({ exam, onBack }) => {
     const [submissionDetails, setSubmissionDetails] = useState([]);
     const [gradedAnswers, setGradedAnswers] = useState({});
     const [isSubmittingGrade, setIsSubmittingGrade] = useState(false);
+    // ★★★★★ MODIFICATION: State for search query ★★★★★
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchSubmissions = useCallback(async () => {
         setIsLoading(true);
@@ -262,17 +264,40 @@ const SubmissionsView = ({ exam, onBack }) => {
         } catch (e: any) { Alert.alert('Error', e.response?.data?.message || "Failed to submit grade."); } 
         finally { setIsSubmittingGrade(false); }
     };
+
+    // ★★★★★ MODIFICATION: Filter logic for search ★★★★★
+    const filteredSubmissions = submissions.filter(submission => {
+        const query = searchQuery.toLowerCase();
+        const nameMatch = submission.student_name.toLowerCase().includes(query);
+        const rollNoMatch = submission.roll_no && submission.roll_no.toLowerCase().includes(query);
+        return nameMatch || rollNoMatch;
+    });
     
     return (
         <View style={styles.container}>
             <TouchableOpacity onPress={onBack} style={styles.backButton}><MaterialIcons name="arrow-back" size={24} color="#333" /><Text style={styles.backButtonText}>Back to Exam List</Text></TouchableOpacity>
             <Text style={styles.headerTitle}>Submissions for "{exam.title}"</Text>
+
+            {/* ★★★★★ MODIFICATION: Added Search Bar UI ★★★★★ */}
+            <View style={styles.searchContainer}>
+                <MaterialIcons name="search" size={22} color="#888" style={styles.searchIcon} />
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search by student name or roll no..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholderTextColor="#888"
+                />
+            </View>
+
             <FlatList
-                data={submissions}
+                data={filteredSubmissions} // Use filtered data
                 keyExtractor={(item) => item.attempt_id.toString()}
                 renderItem={({ item }) => (
                     <View style={styles.submissionCard}>
                         <Text style={styles.cardTitle}>{item.student_name}</Text>
+                        {/* ★★★★★ MODIFICATION: Display Roll No ★★★★★ */}
+                        <Text style={styles.cardDetail}>Roll No: {item.roll_no || 'N/A'}</Text>
                         <Text style={styles.cardDetail}>Status: {item.status}</Text>
                         {item.status === 'graded' && <Text style={styles.cardDetail}>Score: {item.final_score} / {exam.total_marks}</Text>}
                         <TouchableOpacity style={styles.gradeButton} onPress={() => openGradingModal(item)}><Text style={styles.gradeButtonText}>{item.status === 'graded' ? 'Update Grade' : 'Grade Now'}</Text></TouchableOpacity>
@@ -364,6 +389,29 @@ const styles = StyleSheet.create({
     modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
     modalBtnText: { color: '#fff', fontWeight: 'bold' },
     cancelBtn: { backgroundColor: '#6c757d', marginRight: 10 },
+    // ★★★★★ MODIFICATION: New styles for search bar ★★★★★
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 8,
+        marginHorizontal: 15,
+        marginVertical: 10,
+        paddingHorizontal: 10,
+        elevation: 2,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 3
+    },
+    searchIcon: {
+        marginRight: 10,
+    },
+    searchInput: {
+        flex: 1,
+        height: 45,
+        fontSize: 16,
+        color: '#333',
+    },
 });
 
 export default TeacherAdminExamsScreen;

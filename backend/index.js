@@ -2934,6 +2934,9 @@ app.get('/api/exam-schedules/class/:classGroup', async (req, res) => {
     }
 });
 
+
+
+
 // ==========================================================
 // --- ONLINE EXAMS API ROUTES  -----------------------
 // ==========================================================
@@ -3106,7 +3109,17 @@ app.delete('/api/exams/:examId', async (req, res) => {
 app.get('/api/exams/:examId/submissions', async (req, res) => {
     try {
         const { examId } = req.params;
-        const query = `SELECT sea.*, u.full_name as student_name FROM student_exam_attempts sea JOIN users u ON sea.student_id = u.id WHERE sea.exam_id = ? AND sea.status IN ('submitted', 'graded') ORDER BY u.full_name ASC`;
+        // ★★★★★ MODIFICATION: JOINED user_profiles to get roll_no ★★★★★
+        const query = `
+            SELECT 
+                sea.*, 
+                u.full_name as student_name, 
+                up.roll_no 
+            FROM student_exam_attempts sea 
+            JOIN users u ON sea.student_id = u.id 
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            WHERE sea.exam_id = ? AND sea.status IN ('submitted', 'graded') 
+            ORDER BY up.roll_no, u.full_name ASC`;
         const [submissions] = await db.query(query, [examId]);
         res.json(submissions);
     } catch (error) {
@@ -3255,6 +3268,8 @@ app.get('/api/attempts/:attemptId/result', async (req, res) => {
         res.status(500).json({ message: 'Error fetching result.' });
     }
 });
+
+
 
 
 // ==========================================================
