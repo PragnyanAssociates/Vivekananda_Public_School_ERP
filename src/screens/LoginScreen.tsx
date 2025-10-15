@@ -105,7 +105,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
           <ScrollView contentContainerStyle={styles.scrollContainer}>
             
             <Animated.View style={[styles.header, headerStyle]}>
-              <Image source={require("../assets/vspngo-logo.png")} style={styles.logo}/>
+              <Image source={require("../assets/logo.png")} style={styles.logo}/>
               <Text style={styles.welcomeText}>Welcome Back!</Text>
             </Animated.View>
 
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logo: {
-    width: 300,
+    width: 370,
     height: 250,
     resizeMode: "contain",
   },
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#005662',
-    marginTop: -10,
+    marginTop: -30,
   },
   formContainer: {
     width: '90%',

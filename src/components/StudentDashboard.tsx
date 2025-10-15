@@ -31,6 +31,18 @@ import TimetableScreen from '../screens/TimetableScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
 import AboutUs from './AboutUs';
 import StudentExamsScreen from '../screens/exams/StudentExamsScreen';
+import StudentPTMScreen from '../screens/ptm/StudentPTMScreen';
+import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
+import FoodScreen from '../screens/food/FoodScreen';
+import StudentHealthScreen from '../screens/health/StudentHealthScreen';
+import GroupChatScreen from '../screens/chat/GroupChatScreen';
+import StudentEventsScreen from '../screens/events/StudentEventsScreen';
+import StudentExamScreen from '../screens/exams_Schedule/StudentExamScreen';
+import StudentLabsScreen from '../screens/labs/StudentLabsScreen';
+import StudentResultsScreen from '../screens/results/StudentResultsScreen';
+import StudentMaterialsScreen from '../screens/study-materials/StudentMaterialsScreen';
+import StudentSyllabusScreen from '../screens/syllabus/StudentSyllabusScreen';
+import StudentResourcesScreen from '../screens/syllabus_Textbook/StudentResourcesScreen';
 
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -90,6 +102,21 @@ const StudentDashboard = ({ navigation }) => {
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa19', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     { id: 'qa4', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'StudentExamsScreen' },
+    { id: 'qa1', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'StudentPTMScreen' },
+    { id: 'qa7', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
+    { id: 'qa8', title: 'Food Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
+    { id: 'qa9', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'StudentHealthScreen' },
+    { id: 'qa10', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateToTab: 'GroupChatScreen' },
+    { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'StudentEventsScreen' },
+    { id: 'qa15', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'StudentExamScreen' },
+    { id: 'qa13', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'StudentLabsScreen' },
+    { id: 'qa14', title: 'Progress Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateToTab: 'StudentResultsScreen' },
+    { id: 'qa15', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'StudentMaterialsScreen' },
+    { id: 'qa20', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'StudentSyllabusScreen' },
+    { id: 'qa22', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'StudentResourcesScreen' },
+    { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
+    
+
   ];
 
   const [filteredItems, setFilteredItems] = useState(allQuickAccessItems);
@@ -154,6 +181,20 @@ const StudentDashboard = ({ navigation }) => {
       case 'Attendance': return ( <><ContentScreenHeader title="Attendance" onBack={handleBack} /><AttendanceScreen /></> );
       case 'AboutUs': return ( <><ContentScreenHeader title="About Us" onBack={handleBack} /><AboutUs /></> );
       case 'StudentExamsScreen': return ( <><ContentScreenHeader title="Exams" onBack={handleBack} /><StudentExamsScreen /></> );
+      case 'StudentPTMScreen': return ( <><ContentScreenHeader title="Parents-Teacher Meetings" onBack={handleBack} /><StudentPTMScreen /></> );
+      case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
+      case 'FoodScreen': return ( <><ContentScreenHeader title="Food Menu" onBack={handleBack} /><FoodScreen /></> );
+      case 'StudentHealthScreen': return ( <><ContentScreenHeader title="Health Info" onBack={handleBack} /><StudentHealthScreen /></> );
+      case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
+      case 'StudentEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><StudentEventsScreen /></> );
+      case 'StudentExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleBack} /><StudentExamScreen /></> );
+      case 'StudentLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleBack} /><StudentLabsScreen /></> );
+      case 'StudentResultsScreen': return ( <><ContentScreenHeader title="Progress Reports" onBack={handleBack} /><StudentResultsScreen /></> );
+      case 'StudentMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleBack} /><StudentMaterialsScreen /></> );
+      case 'StudentSyllabusNavigator': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleBack} /><StudentSyllabusScreen /></> );
+      case 'StudentResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><StudentResourcesScreen /></> );
+      
+
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
     }
   };

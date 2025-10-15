@@ -121,7 +121,7 @@ export default function HomeScreen() {
           style={styles.header}
         >
           <Image 
-            source={require("../assets/vspngo-logo.png")} 
+            source={require("../assets/logo.png")} 
             style={styles.logo} 
             resizeMode="contain" 
           />
@@ -169,14 +169,15 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 40,
   },
   logo: { 
-    width: width * 0.7, 
-    height: 130, // Adjusted height for better proportion
-    marginBottom: 10, 
+    width: 370, 
+    height: 270, // Adjusted height for better proportion
+    marginBottom: -20,
+    marginTop: -70, 
   },
   subtitle: {
     fontSize: 18,
-    color: '#005662',
-    paddingTop: 30, 
+    color: '#2f0062ff',
+    paddingTop: -30, 
   },
   contentWrapper: {
     flex: 1, 

@@ -10,9 +10,9 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 // --- Screen Imports (Your full list) ---
 
 // ✅ --- 1. IMPORT THE NEW ADS SCREENS AND THE DISPLAY COMPONENT --- ✅
-// import CreateAdScreen from './src/screens/ads/CreateAdScreen';
+import CreateAdScreen from './src/screens/ads/CreateAdScreen';
 import AdminAdDashboardScreen from './src/screens/ads/AdminAdDashboardScreen';
-// import AdDisplay from './src/screens/ads/AdDisplay';
+import AdDisplay from './src/screens/ads/AdDisplay';
 
 
 // Public (Pre-Login) Screens
@@ -40,52 +40,48 @@ import AttendanceScreen from './src/screens/AttendanceScreen';
 // import TransportScreen from './src/screens/transport/TransportScreen';
 import GalleryScreen from './src/screens/gallery/GalleryScreen';
 import AlbumDetailScreen from './src/screens/gallery/AlbumDetailScreen';
-// import GroupChatScreen from './src/screens/chat/GroupChatScreen';
+import GroupChatScreen from './src/screens/chat/GroupChatScreen';
 
-// Admin-Specific Screens
-// import AdminNotifications from './src/components/AdminNotifications';
 import AdminLM from './src/components/AdminLM';
-// import AdminHelpDeskScreen from './src/screens/helpdesk/AdminHelpDeskScreen';
-// import AdminEventsScreen from './src/screens/events/AdminEventsScreen';
-// import TeacherAdminPTMScreen from './src/screens/ptm/TeacherAdminPTMScreen';
+import AdminEventsScreen from './src/screens/events/AdminEventsScreen';
+import TeacherAdminPTMScreen from './src/screens/ptm/TeacherAdminPTMScreen';
 import TeacherAdminHomeworkScreen from './src/screens/homework/TeacherAdminHomeworkScreen';
-// import TeacherAdminExamScreen from './src/screens/exams_Schedule/TeacherAdminExamScreen';
-// import TeacherAdminResultsScreen from './src/screens/results/TeacherAdminResultsScreen';
-// import AdminSyllabusScreen from './src/screens/syllabus/AdminSyllabusScreen';
+import TeacherAdminExamScreen from './src/screens/exams_Schedule/TeacherAdminExamScreen';
+import TeacherAdminResultsScreen from './src/screens/results/TeacherAdminResultsScreen';
+import AdminSyllabusScreen from './src/screens/syllabus/AdminSyllabusScreen';
 // import AdminSuggestionsScreen from './src/screens/suggestions/AdminSuggestionsScreen';
 // import AdminPaymentScreen from './src/screens/payments/AdminPaymentScreen';
-// import KitchenScreen from './src/screens/kitchen/KitchenScreen';
-// import FoodScreen from './src/screens/food/FoodScreen';
-// import AlumniScreen from './src/screens/Alumni/AlumniScreen';
-// import PreAdmissionsScreen from './src/screens/Pre-Admissions/PreAdmissionsScreen';
-// import TeacherAdminResourcesScreen from './src/screens/syllabus_Textbook/TeacherAdminResourcesScreen';
+import KitchenScreen from './src/screens/kitchen/KitchenScreen';
+import FoodScreen from './src/screens/food/FoodScreen';
+import AlumniScreen from './src/screens/Alumni/AlumniScreen';
+import PreAdmissionsScreen from './src/screens/Pre-Admissions/PreAdmissionsScreen';
+import TeacherAdminResourcesScreen from './src/screens/syllabus_Textbook/TeacherAdminResourcesScreen';
 
 import WrittenAnswerScreen from './src/screens/homework/WrittenAnswerScreen'; // Adjust the path to where you created the file
 
 // Teacher-Specific Screens
-// import TeacherHealthAdminScreen from './src/screens/health/TeacherHealthAdminScreen';
-// import TeacherAdminLabsScreen from './src/screens/labs/TeacherAdminLabsScreen';
-// import TeacherAdminMaterialsScreen from './src/screens/study-materials/TeacherAdminMaterialsScreen';
-// import TeacherSyllabusScreen from './src/screens/syllabus/TeacherSyllabusScreen';
+import TeacherHealthAdminScreen from './src/screens/health/TeacherHealthAdminScreen';
+import TeacherAdminLabsScreen from './src/screens/labs/TeacherAdminLabsScreen';
+import StudentLabsScreen from './src/screens/labs/StudentLabsScreen';
+import TeacherAdminMaterialsScreen from './src/screens/study-materials/TeacherAdminMaterialsScreen';
+import TeacherSyllabusScreen from './src/screens/syllabus/TeacherSyllabusScreen';
 
 // Student-Specific Screens
-// import StudentNotifications from './src/components/StudentNotifications';
-// import StudentHealthScreen from './src/screens/health/StudentHealthScreen';
-
-// import StudentResultsScreen from './src/screens/results/StudentResultsScreen';
-// import StudentSyllabusScreen from './src/screens/syllabus/StudentSyllabusScreen';
+import StudentHealthScreen from './src/screens/health/StudentHealthScreen';
+import StudentResultsScreen from './src/screens/results/StudentResultsScreen';
+import StudentSyllabusScreen from './src/screens/syllabus/StudentSyllabusScreen';
 
 import StudentExamsScreen from './src/screens/exams/StudentExamsScreen';
 import TeacherAdminExamsScreen from './src/screens/exams/TeacherAdminExamsScreen';
 // import StudentSportsScreen from './src/screens/sports/StudentSportsScreen';
-// import StudentEventsScreen from './src/screens/events/StudentEventsScreen';
-// import StudentPTMScreen from './src/screens/ptm/StudentPTMScreen';
-// import StudentExamScreen from './src/screens/exams_Schedule/StudentExamScreen';
-// import StudentMaterialsScreen from './src/screens/study-materials/StudentMaterialsScreen';
-// import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
+import StudentEventsScreen from './src/screens/events/StudentEventsScreen';
+import StudentPTMScreen from './src/screens/ptm/StudentPTMScreen';
+import StudentExamScreen from './src/screens/exams_Schedule/StudentExamScreen';
+import StudentMaterialsScreen from './src/screens/study-materials/StudentMaterialsScreen';
+import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
 import StudentHomeworkScreen from './src/screens/homework/StudentHomeworkScreen';
 // import OnlineClassScreen from './src/screens/Online_Class/OnlineClassScreen';
-// import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResourcesScreen';
+import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResourcesScreen';
 
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
@@ -191,67 +187,57 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} />
       <Stack.Screen name="StudentDashboard" component={StudentDashboard} />
-      {/* <Stack.Screen name="DonorDashboard" component={DonorDashboard} /> */}
+      
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="AcademicCalendar" component={AcademicCalendar} />
+
       <Stack.Screen name="TimetableScreen" component={TimetableScreen} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} />
-      
-      {/* <Stack.Screen name="UserHelpDesk" component={UserHelpDeskScreen} /> */}
-      
       <Stack.Screen name="AdminLM" component={AdminLM} />
-      
-      {/* <Stack.Screen name="AdminHelpDeskScreen" component={AdminHelpDeskScreen} />
-      <Stack.Screen name="AdminEventsScreen" component={AdminEventsScreen} /> */}
+      <Stack.Screen name="FoodScreen" component={FoodScreen} />
+      <Stack.Screen name="AdminEventsScreen" component={AdminEventsScreen} />
       <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />
-      
-      
-      {/* <Stack.Screen name="TeacherSyllabusScreen" component={TeacherSyllabusScreen} />
-      <Stack.Screen name="StudentResourcesScreen" component={StudentResourcesScreen} />
-      <Stack.Screen name="TeacherHealthAdminScreen" component={TeacherHealthAdminScreen} />
-      
       <Stack.Screen name="StudentHealthScreen" component={StudentHealthScreen} />
-      
-      <Stack.Screen name="StudentSportsScreen" component={StudentSportsScreen} />
+      <Stack.Screen name="TeacherHealthAdminScreen" component={TeacherHealthAdminScreen} />
       <Stack.Screen name="StudentEventsScreen" component={StudentEventsScreen} />
-      <Stack.Screen name="TeacherAdminResourcesScreen" component={TeacherAdminResourcesScreen} />
-      
-      
-      
       <Stack.Screen name="StudentExamScreen" component={StudentExamScreen} />
+      <Stack.Screen name="TeacherAdminExamScreen" component={TeacherAdminExamScreen} />
       <Stack.Screen name="StudentMaterialsScreen" component={StudentMaterialsScreen} />
+      <Stack.Screen name="TeacherAdminMaterialsScreen" component={TeacherAdminMaterialsScreen} />
+      <Stack.Screen name="TeacherSyllabusScreen" component={TeacherSyllabusScreen} />
+      <Stack.Screen name="StudentSyllabusScreen" component={StudentSyllabusScreen} />
+      <Stack.Screen name="AdminSyllabusScreen" component={AdminSyllabusScreen} />
+      <Stack.Screen name="StudentResourcesScreen" component={StudentResourcesScreen} />
+      <Stack.Screen name="TeacherAdminResourcesScreen" component={TeacherAdminResourcesScreen} />
+      {/* <Stack.Screen name="StudentSportsScreen" component={StudentSportsScreen} /> */}
       
-      <Stack.Screen name="StudentSyllabusScreen" component={StudentSyllabusScreen} /> */}
       <Stack.Screen name="StudentExamsScreen" component={StudentExamsScreen} />
+      <Stack.Screen name="StudentPTMScreen" component={StudentPTMScreen} />
       
       <Stack.Screen name="TeacherAdminExamsScreen" component={TeacherAdminExamsScreen} />
-      {/* <Stack.Screen name="TeacherAdminPTMScreen" component={TeacherAdminPTMScreen} />
-      <Stack.Screen name="StudentPTMScreen" component={StudentPTMScreen} />
-      <Stack.Screen name="TeacherAdminLabsScreen" component={TeacherAdminLabsScreen} /> */}
+       <Stack.Screen name="TeacherAdminPTMScreen" component={TeacherAdminPTMScreen} />
+      
+      <Stack.Screen name="TeacherAdminLabsScreen" component={TeacherAdminLabsScreen} />
+      <Stack.Screen name="StudentLabsScreen" component={StudentLabsScreen} /> 
       <Stack.Screen name="TeacherAdminHomeworkScreen" component={TeacherAdminHomeworkScreen} />
-      {/* <Stack.Screen name="TeacherAdminExamScreen" component={TeacherAdminExamScreen} />
-      <Stack.Screen name="TeacherAdminMaterialsScreen" component={TeacherAdminMaterialsScreen} />
       <Stack.Screen name="TeacherAdminResultsScreen" component={TeacherAdminResultsScreen} />
-      <Stack.Screen name="ReportDetailScreen" component={ReportDetailScreen} /> 
       <Stack.Screen name="StudentResultsScreen" component={StudentResultsScreen} />
-      <Stack.Screen name="AdminSyllabusScreen" component={AdminSyllabusScreen} />
-      <Stack.Screen name="TransportScreen" component={TransportScreen} /> */}
+      <Stack.Screen name="ReportDetailScreen" component={ReportDetailScreen} /> 
+      {/* <Stack.Screen name="TransportScreen" component={TransportScreen} /> */}
       <Stack.Screen name="AboutUs" component={AboutUs} />
+      <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} />
+      <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
+      <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} />
+      <Stack.Screen name="KitchenScreen" component={KitchenScreen} />
       {/* <Stack.Screen name="ChatAIScreen" component={ChatAIScreen} />
       <Stack.Screen name="DonorSuggestionsScreen" component={DonorSuggestionsScreen} />
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />
       <Stack.Screen name="DonorSponsorScreen" component={DonorSponsorScreen} />
       <Stack.Screen name="DonorPaymentScreen" component={DonorPaymentScreen} />
       <Stack.Screen name="AdminPaymentScreen" component={AdminPaymentScreen} />
-      <Stack.Screen name="KitchenScreen" component={KitchenScreen} />
-      <Stack.Screen name="FoodScreen" component={FoodScreen} />
-      <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} />
-      <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
-      <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
-      <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} /> */}
       
-      {/* ★★★ MODIFIED: The problematic comment has been removed from here ★★★ */}
       
+      <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />  */}
       <Stack.Screen 
         name="Gallery" 
         component={GalleryNavigator} 
@@ -262,8 +248,7 @@ const AuthenticatedStack = () => {
         component={StudentHomeworkNavigator}
         options={{ headerShown: false }} 
       />
-      
-      {/* <Stack.Screen 
+      <Stack.Screen 
         name="CreateAdScreen" 
         component={CreateAdScreen} 
         options={{ 
@@ -273,7 +258,7 @@ const AuthenticatedStack = () => {
           headerTintColor: '#008080',
           headerTitleStyle: { fontWeight: 'bold' }
         }} 
-      /> */}
+      />
       <Stack.Screen 
         name="AdminAdDashboardScreen" 
         component={AdminAdDashboardScreen} 
@@ -329,9 +314,9 @@ const AppNavigator = () => {
         {user ? <AuthenticatedStack /> : <PublicStack />}
       </NavigationContainer>
       
-      {/* This is the "small key". It will now float on top of all screens. */}
-      {/* We add a check to only show it if a user is logged in. */}
-      {/* {user && <AdDisplay />} */}
+      This is the "small key". It will now float on top of all screens.
+      We add a check to only show it if a user is logged in.
+      {user && <AdDisplay />}
     </View>
   );
 };
