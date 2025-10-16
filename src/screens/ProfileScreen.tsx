@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, TextInput, Alert, ActivityIndicator, Platform, PermissionsAndroid
+  SafeAreaView, TextInput, Alert, ActivityIndicator, Platform, PermissionsAndroid,
+  Modal, Pressable
 } from 'react-native';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -50,7 +51,10 @@ const BORDER_COLOR = '#EAECEF';
 // --- Helper Functions ---
 const getProfileImageSource = (url?: string | null) => {
   if (!url || typeof url !== 'string') {
-    return require('../assets/default_avatar.png');
+    // This is a placeholder text, you can replace it with a default image require()
+     return require('../assets/default_avatar.png');
+    // Using a text-based placeholder for simplicity if you don't have a default image.
+    // return { uri: 'https://via.placeholder.com/150/e0e0e0/808080?text=No+Image' }; 
   }
   if (url.startsWith('http') || url.startsWith('file')) {
     return { uri: url, priority: FastImage.priority.normal };
@@ -85,12 +89,35 @@ const EditField = memo(({ label, value, onChange, ...props }: any) => (
 const DisplayProfileView = memo(({ userProfile, onEditPress }: { userProfile: ProfileData, onEditPress: () => void }) => {
   const profileImageSource = getProfileImageSource(userProfile.profile_image_url);
   const showAcademicDetails = userProfile.role !== 'donor';
+  const [isViewerVisible, setViewerVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Modal
+        visible={isViewerVisible}
+        transparent={true}
+        onRequestClose={() => setViewerVisible(false)}
+        animationType="fade"
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}>
+          <View style={styles.modalContent}>
+            <FastImage
+              source={profileImageSource}
+              style={styles.enlargedProfileImage}
+              resizeMode={FastImage.resizeMode.contain}
+            />
+            <TouchableOpacity style={styles.closeButton} onPress={() => setViewerVisible(false)}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.container}>
         <Animatable.View animation="zoomIn" duration={500} delay={100} style={styles.profileHeader}>
-          <FastImage source={profileImageSource} style={styles.profileImage} resizeMode={FastImage.resizeMode.cover} />
+          <TouchableOpacity onPress={() => setViewerVisible(true)}>
+            <FastImage source={profileImageSource} style={styles.profileImage} resizeMode={FastImage.resizeMode.cover} />
+          </TouchableOpacity>
           <Text style={styles.profileName}>{userProfile.full_name}</Text>
           <Text style={styles.profileRole}>{userProfile.role.charAt(0).toUpperCase() + userProfile.role.slice(1)}</Text>
           <TouchableOpacity onPress={onEditPress} style={styles.editProfileButton}>
@@ -161,10 +188,17 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving }: { use
     try {
       const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.7 });
       if (result.assets && result.assets.length > 0) {
-        setNewImage(result.assets[0]);
+        const imageAsset = result.assets[0];
+        setNewImage(imageAsset);
+        setEditedData(prev => ({ ...prev, profile_image_url: imageAsset.uri }));
       }
     } catch (error) { console.error('Image picker error:', error); }
   }, [requestGalleryPermission]);
+
+  const handleRemovePhoto = useCallback(() => {
+    setNewImage(null);
+    setEditedData(prev => ({ ...prev, profile_image_url: undefined }));
+  }, []);
 
   const handleChange = useCallback((field: keyof ProfileData, value: string) => {
     setEditedData(prev => ({ ...prev, [field]: value }));
@@ -174,7 +208,7 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving }: { use
     onSave(editedData, newImage);
   }
 
-  const imageSource = newImage?.uri ? { uri: newImage.uri } : getProfileImageSource(editedData.profile_image_url);
+  const imageSource = getProfileImageSource(editedData.profile_image_url);
   const showAcademicFields = userProfile.role !== 'donor';
 
   return (
@@ -182,10 +216,16 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving }: { use
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.profileHeader}>
           <FastImage source={imageSource} style={styles.profileImage} resizeMode={FastImage.resizeMode.cover} />
-          <TouchableOpacity onPress={handleChoosePhoto} style={styles.changeImageButton}>
-            <MaterialIcons name="photo-camera" size={16} color={PRIMARY_ACCENT} style={{ marginRight: 8 }} />
-            <Text style={styles.changeImageButtonText}>Change Photo</Text>
-          </TouchableOpacity>
+          <View style={styles.imageActionsContainer}>
+              <TouchableOpacity onPress={handleChoosePhoto} style={styles.changeImageButton}>
+                <MaterialIcons name="photo-camera" size={16} color={PRIMARY_ACCENT} style={{ marginRight: 8 }} />
+                <Text style={styles.changeImageButtonText}>Change</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleRemovePhoto} style={styles.removeImageButton}>
+                <MaterialIcons name="delete" size={16} color={'#D32F2F'} style={{ marginRight: 8 }} />
+                <Text style={styles.removeImageButtonText}>Remove</Text>
+              </TouchableOpacity>
+          </View>
         </View>
         <EditField label="Full Name" value={editedData.full_name} onChange={text => handleChange('full_name', text)} />
         <EditField label="Email" value={editedData.email} onChange={text => handleChange('email', text)} keyboardType="email-address" />
@@ -259,17 +299,24 @@ const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: Pro
     setIsSaving(true);
     try {
       if (onStaticSave) {
+        const wasImageRemoved = profileData?.profile_image_url && !editedData.profile_image_url;
+        if(wasImageRemoved) editedData.profile_image_url = undefined;
+
         await onStaticSave(editedData, newImage);
+
         const updatedProfile = { ...profileData, ...editedData } as ProfileData;
         if (newImage?.uri) {
           updatedProfile.profile_image_url = newImage.uri;
+        } else if (wasImageRemoved) {
+          updatedProfile.profile_image_url = undefined;
         }
         setProfileData(updatedProfile);
         setIsEditing(false);
+
       } else if (user) {
         const formData = new FormData();
         Object.entries(editedData).forEach(([key, value]) => {
-          if (value !== null && value !== undefined) {
+          if (key !== 'profile_image_url' && value !== null && value !== undefined) {
             formData.append(key, String(value));
           }
         });
@@ -280,6 +327,8 @@ const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: Pro
             type: newImage.type || 'image/jpeg',
             name: newImage.fileName || `profile-${Date.now()}.jpg`
           });
+        } else if (profileData?.profile_image_url && !editedData.profile_image_url) {
+          formData.append('profile_image_url', 'null');
         }
 
         const response = await apiClient.put(`/profiles/${user.id}`, formData, {
@@ -290,7 +339,7 @@ const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: Pro
         const finalUpdatedProfile = {
           ...profileData,
           ...editedData,
-          profile_image_url: refreshedDataFromServer.profile_image_url || profileData?.profile_image_url,
+          profile_image_url: refreshedDataFromServer.profile_image_url,
         } as ProfileData;
 
         setProfileData(finalUpdatedProfile);
@@ -353,53 +402,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     borderRadius: 25,
   },
-  editProfileButtonText: {
-    color: PRIMARY_ACCENT,
-    fontWeight: 'bold',
-    marginLeft: 8,
-    fontSize: 16,
-  },
+  editProfileButtonText: { color: PRIMARY_ACCENT, fontWeight: 'bold', marginLeft: 8, fontSize: 16, },
   detailsCard: { backgroundColor: CARD_BACKGROUND, borderRadius: 12, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_ACCENT, marginBottom: 15, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, paddingBottom: 10 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   detailIcon: { marginRight: 15, width: 20 },
   detailLabel: { fontSize: 15, fontWeight: '500', color: TEXT_SECONDARY, flex: 2 },
   detailValue: { fontSize: 15, color: TEXT_PRIMARY, flex: 3, textAlign: 'right' },
-  changeImageButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 128, 128, 0.1)', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20 },
+  imageActionsContainer: { flexDirection: 'row', marginTop: 10, justifyContent: 'center', alignItems: 'center', },
+  changeImageButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0, 128, 128, 0.1)', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginHorizontal: 5, },
   changeImageButtonText: { color: PRIMARY_ACCENT, fontWeight: 'bold' },
+  removeImageButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(211, 47, 47, 0.1)', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginHorizontal: 5, },
+  removeImageButtonText: { color: '#D32F2F', fontWeight: 'bold', },
   inputGroup: { marginBottom: 15 },
   inputLabel: { fontSize: 15, fontWeight: '500', color: TEXT_SECONDARY, marginBottom: 8 },
   textInput: { backgroundColor: '#F7F8FA', borderRadius: 10, padding: 12, fontSize: 16, color: TEXT_PRIMARY, borderWidth: 1, borderColor: BORDER_COLOR },
   multilineInput: { height: 100, textAlignVertical: 'top' },
-  editActionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 30,
-  },
-  editActionButton: {
-    flex: 1,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#EAECEF',
-    marginRight: 10,
-  },
-  saveButton: {
-    backgroundColor: PRIMARY_ACCENT,
-    marginLeft: 10,
-  },
-  cancelButtonText: {
-    color: TEXT_SECONDARY,
-    fontWeight: 'bold',
-    fontSize: 16
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16
-  },
+  editActionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, },
+  editActionButton: { flex: 1, paddingVertical: 15, borderRadius: 10, alignItems: 'center', },
+  cancelButton: { backgroundColor: '#EAECEF', marginRight: 10, },
+  saveButton: { backgroundColor: PRIMARY_ACCENT, marginLeft: 10, },
+  cancelButtonText: { color: TEXT_SECONDARY, fontWeight: 'bold', fontSize: 16 },
+  saveButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'center', alignItems: 'center', },
+  modalContent: { width: '90%', height: '70%', justifyContent: 'center', alignItems: 'center', },
+  enlargedProfileImage: { width: '100%', height: '100%', borderRadius: 20, },
+  closeButton: { position: 'absolute', bottom: -50, backgroundColor: '#fff', paddingVertical: 10, paddingHorizontal: 30, borderRadius: 25, },
+  closeButtonText: { color: TEXT_PRIMARY, fontSize: 16, fontWeight: 'bold', },
 });
 
 export default ProfileScreen;

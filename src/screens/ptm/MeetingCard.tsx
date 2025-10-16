@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+// ★★★ Import the icon component here ★★★
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 // This interface defines the structure of a single meeting object.
@@ -10,18 +11,19 @@ export interface Meeting {
   teacher_name: string;
   class_group: string;
   subject_focus: string;
-  status: 'Scheduled' | 'Completed' | string; // Allow string for flexibility
+  status: 'Scheduled' | 'Completed' | string;
   notes: string | null;
   meeting_link?: string | null;
 }
 
 // These are the props (parameters) that our MeetingCard component accepts.
+// ★★★ The onJoin prop is now required again ★★★
 interface MeetingCardProps {
   meeting: Meeting;
-  isAdmin: boolean;
+  isAdmin: boolean; 
   onEdit?: (meeting: Meeting) => void;
   onDelete?: (id: number) => void;
-  onJoin?: (link: string) => void; 
+  onJoin?: (link: string) => void; // This is crucial
 }
 
 // This helper function takes a date string and makes it look nice and readable.
@@ -41,8 +43,8 @@ const formatMeetingDate = (isoDate: string): string => {
 // This is the main MeetingCard component.
 export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: MeetingCardProps) => {
 
-  // Render Join Meeting button for any role if meeting is Scheduled, meeting_link exists, and onJoin prop is given
-  const canJoin = meeting.status === 'Scheduled' && meeting.meeting_link && typeof onJoin === 'function';
+  // This logic checks if the button should be displayed
+  const canJoin = meeting.status === 'Scheduled' && meeting.meeting_link && onJoin;
 
   return (
     <View style={styles.cardContainer}>
@@ -54,6 +56,7 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
               <Text style={styles.headerSubtitle}>Parent-Teacher Meeting</Text>
             </View>
         </View>
+
         {isAdmin && onEdit && onDelete && (
             <View style={styles.cardActions}>
               <TouchableOpacity onPress={() => onEdit(meeting)} style={[styles.actionBtn, styles.editBtn]}>
@@ -65,6 +68,7 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
             </View>
         )}
       </View>
+
       <View style={styles.cardBody}>
         <View style={styles.detailRow}>
             <Text style={styles.icon}>🧑‍🏫</Text>
@@ -86,24 +90,23 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
             </View>
         </View>
       </View>
-      <View>
-        {canJoin && (
-            <TouchableOpacity style={styles.joinButton} onPress={() => onJoin(meeting.meeting_link!)}>
-                <MaterialIcons name="videocam" size={18} color="white" />
-                <Text style={styles.joinButtonText}>Join Meeting</Text>
-            </TouchableOpacity>
-        )}
-        {meeting.notes ? (
-            <View style={styles.notesContainer}>
-              <Text style={styles.notesTitle}>Notes/Summary:</Text>
-              <View style={styles.notesBox}>
-                <Text style={styles.notesText}>{meeting.notes}</Text>
-              </View>
-            </View>
-        ) : (
-             canJoin ? <View style={{marginTop: -10}} /> : null
-        )}
-      </View>
+
+      {meeting.notes ? (
+        <View style={styles.notesContainer}>
+          <Text style={styles.notesTitle}>Notes/Summary:</Text>
+          <View style={styles.notesBox}>
+            <Text style={styles.notesText}>{meeting.notes}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      {/* ★★★ THE BUTTON IS NOW BACK INSIDE THE CARD, WHICH FIXES THE ALIGNMENT ★★★ */}
+      {canJoin && (
+        <TouchableOpacity style={styles.joinButton} onPress={() => onJoin(meeting.meeting_link!)}>
+            <MaterialIcons name="videocam" size={18} color="white" />
+            <Text style={styles.joinButtonText}>Join Meeting</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -114,37 +117,17 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 20,
         marginHorizontal: 15,
-        marginVertical: 10,
+        marginVertical: 10, // Using vertical margin again
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 3.84,
         elevation: 5,
     },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingBottom: 16,
-        marginBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e2e8f0',
-    },
-    headerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        paddingRight: 10,
-    },
-    cardActions: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    actionBtn: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 6,
-    },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10, },
+    cardActions: { flexDirection: 'row', gap: 8, },
+    actionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, },
     editBtn: { backgroundColor: '#ffc107' },
     editBtnText: { color: 'black', fontWeight: '500' },
     deleteBtn: { backgroundColor: '#f44336' },
@@ -165,6 +148,7 @@ const styles = StyleSheet.create({
     notesTitle: { fontSize: 14, color: '#718096', fontWeight: '500', marginBottom: 8 },
     notesBox: { backgroundColor: '#f7f9fc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 12 },
     notesText: { color: '#4a5568', fontSize: 15, lineHeight: 22 },
+    // ★★★ Styles for the Join Button are now back inside this component ★★★
     joinButton: {
       flexDirection: 'row',
       backgroundColor: '#5a67d8',
@@ -172,8 +156,7 @@ const styles = StyleSheet.create({
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
-      marginTop: 15,
-      marginBottom: 10,
+      marginTop: 20, // Add space between notes and button
     },
     joinButtonText: {
         color: 'white',

@@ -126,8 +126,15 @@ const TeacherAdminPTMScreen = () => {
         <FlatList
             data={meetings}
             keyExtractor={(item) => item.id.toString()}
-            // ★★★ THIS IS THE FIX. Added onJoin={handleJoinMeeting} ★★★
-            renderItem={({ item }) => <MeetingCard meeting={item} onEdit={handleOpenModal} onDelete={handleDelete} isAdmin={true} onJoin={handleJoinMeeting} />}
+            renderItem={({ item }) => (
+                <MeetingCard 
+                    meeting={item} 
+                    isAdmin={true} 
+                    onEdit={handleOpenModal}
+                    onDelete={handleDelete}
+                    onJoin={handleJoinMeeting}
+                />
+            )}
             ListHeaderComponent={
                 <>
                     <View style={styles.header}><Text style={styles.headerIcon}>👥</Text><View><Text style={styles.headerTitle}>Manage PTMs</Text><Text style={styles.headerSubtitle}>Schedule, update, and review all meetings.</Text></View></View>

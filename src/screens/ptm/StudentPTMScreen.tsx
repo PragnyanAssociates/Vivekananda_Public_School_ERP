@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, RefreshControl, Linking, Alert } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, RefreshControl, Linking, Alert } from 'react-native';
 import apiClient from '../../api/client';
 import { MeetingCard, Meeting } from './MeetingCard';
+// MaterialIcons is no longer needed here, it's in the card now.
 
 const StudentPTMScreen = () => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -50,7 +51,15 @@ const StudentPTMScreen = () => {
         <FlatList
             data={meetings}
             keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <MeetingCard meeting={item} isAdmin={false} onJoin={handleJoinMeeting} />}
+            // ★★★ The render logic is now simple again ★★★
+            // It passes the handleJoinMeeting function to the card as the 'onJoin' prop.
+            renderItem={({ item }) => (
+                <MeetingCard 
+                    meeting={item} 
+                    isAdmin={false} 
+                    onJoin={handleJoinMeeting}
+                />
+            )}
             ListHeaderComponent={
                 <View style={styles.header}>
                     <Text style={styles.headerIcon}>👥</Text>
@@ -72,11 +81,12 @@ const styles = StyleSheet.create({
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     errorText: { color: 'red', fontSize: 16, textAlign: 'center' },
     container: { flex: 1, backgroundColor: '#f0f4f7' },
-    header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: 'white', marginBottom: 10 },
+    header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: 'white' },
     headerIcon: { fontSize: 32, marginRight: 15, color: '#5a67d8' },
     headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#2d3748' },
     headerSubtitle: { fontSize: 14, color: '#718096' },
-    emptyText: { textAlign: 'center', fontSize: 16, color: '#718096' }
+    emptyText: { textAlign: 'center', fontSize: 16, color: '#718096' },
+    // ★★★ The button styles have been REMOVED from here, as they are now in MeetingCard.js ★★★
 });
 
 export default StudentPTMScreen;
