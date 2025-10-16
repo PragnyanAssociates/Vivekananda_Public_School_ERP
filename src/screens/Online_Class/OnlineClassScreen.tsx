@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
-  ActivityIndicator, Modal, TextInput, FlatList, Platform
+  // MODIFIED: Added PermissionsAndroid and Platform
+  ActivityIndicator, Modal, TextInput, FlatList, Platform, PermissionsAndroid
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -132,8 +133,8 @@ const OnlineClassScreen: React.FC = () => {
         
         live.sort((a, b) => new Date(a.class_datetime).getTime() - new Date(b.class_datetime).getTime());
         recorded.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
-
-        return { liveClasses, recordedClasses };
+        
+        return { liveClasses: live, recordedClasses: recorded };
     }, [filteredClasses]);
 
     const onPickerChange = (event: DateTimePickerEvent, selectedValue?: Date) => {
@@ -176,21 +177,85 @@ const OnlineClassScreen: React.FC = () => {
         setModalVisible(true);
     };
 
-    const handleSelectVideo = async () => {
+    // ==========================================================
+    // ★★★ MODIFIED & REWRITTEN: handleSelectVideo function ★★★
+    // ==========================================================
+    const requestStoragePermission = async () => {
+        if (Platform.OS !== 'android') return true;
         try {
-            const res = await DocumentPicker.pickSingle({ type: [DocumentPicker.types.video] });
+            // Use READ_MEDIA_VIDEO for Android 13+
+            const permission = Platform.Version >= 33 
+                ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO
+                : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+            
+            const granted = await PermissionsAndroid.request(permission, {
+                title: "Storage Permission Needed",
+                message: "This app needs access to your storage to select a video.",
+                buttonNeutral: "Ask Me Later",
+                buttonNegative: "Cancel",
+                buttonPositive: "OK"
+            });
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        } catch (err) {
+            console.warn(err);
+            return false;
+        }
+    };
+    
+    const handleSelectVideo = async () => {
+        const hasPermission = await requestStoragePermission();
+        if (!hasPermission) {
+            Alert.alert("Permission Denied", "You need to grant storage permission to select a video file.");
+            return;
+        }
+
+        try {
+            const res = await DocumentPicker.pickSingle({ 
+              type: [DocumentPicker.types.video],
+              copyTo: 'cachesDirectory' 
+            });
             setSelectedVideo(res);
         } catch (err) {
             if (!DocumentPicker.isCancel(err)) {
                 Alert.alert("Error", "Could not select video file.");
+                console.error("Document Picker Error: ", err);
             }
         }
     };
     
     const handleSave = async () => {
         if (!user) return Alert.alert("Error", "User not found.");
-        setIsSaving(true);
+
+        if (isEditing) {
+            if (!formData.title) {
+                return Alert.alert("Validation Error", "Title is a required field.");
+            }
+            setIsSaving(true);
+            const updatedData = {
+                title: formData.title,
+                meet_link: formData.meet_link,
+                description: formData.description,
+                topic: formData.topic,
+            };
+            try {
+                await apiClient.put(`/online-classes/${currentClass?.id}`, updatedData);
+                Alert.alert("Success", "Class updated successfully.");
+            } catch (error: any) {
+                Alert.alert("Save Error", error.response?.data?.message || 'Failed to update the class.');
+            } finally {
+                setIsSaving(false);
+                setModalVisible(false);
+                fetchInitialData();
+            }
+            return;
+        }
         
+        if (!formData.title || !formData.class_group || !formData.subject || !formData.teacher_id) {
+            setIsSaving(false);
+            return Alert.alert("Validation Error", "Please fill all required fields: Title, Class, Subject, and Teacher.");
+        }
+
+        setIsSaving(true);
         const data = new FormData();
         data.append('title', formData.title);
         data.append('class_group', formData.class_group);
@@ -198,33 +263,37 @@ const OnlineClassScreen: React.FC = () => {
         data.append('teacher_id', String(formData.teacher_id));
         data.append('class_datetime', date.toISOString());
         data.append('description', formData.description);
+        data.append('class_type', modalClassType);
 
-        if (isEditing) {
-            data.append('topic', formData.topic);
-            data.append('meet_link', formData.meet_link);
-            try {
-                await apiClient.put(`/online-classes/${currentClass?.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
-                Alert.alert("Success", "Class updated.");
-            } catch (error: any) { Alert.alert("Save Error", error.response?.data?.message || 'Failed to update.'); }
-        } else {
-            data.append('class_type', modalClassType);
-            if (modalClassType === 'live') {
-                if (!formData.meet_link) { setIsSaving(false); return Alert.alert("Validation Error", "Meeting Link is required."); }
-                data.append('meet_link', formData.meet_link);
-            } else {
-                if (!selectedVideo || !formData.topic) { setIsSaving(false); return Alert.alert("Validation Error", "Topic and a video file are required."); }
-                data.append('topic', formData.topic);
-                data.append('videoFile', { uri: selectedVideo.uri, type: selectedVideo.type, name: selectedVideo.name, });
+        if (modalClassType === 'live') {
+            if (!formData.meet_link) {
+                setIsSaving(false);
+                return Alert.alert("Validation Error", "A Meeting Link is required for live classes.");
             }
-            try {
-                await apiClient.post('/online-classes', data, { headers: { 'Content-Type': 'multipart/form-data' } });
-                Alert.alert("Success", `Class ${modalClassType === 'live' ? 'scheduled' : 'uploaded'}.`);
-            } catch (error: any) { Alert.alert("Save Error", error.response?.data?.message || 'Failed to save.'); }
+            data.append('meet_link', formData.meet_link);
+        } else {
+            if (!selectedVideo || !formData.topic) {
+                setIsSaving(false);
+                return Alert.alert("Validation Error", "A Topic and a Video File are required for recorded classes.");
+            }
+            data.append('topic', formData.topic);
+            data.append('videoFile', {
+                uri: selectedVideo.uri,
+                type: selectedVideo.type,
+                name: selectedVideo.name,
+            } as any);
         }
-        
-        setIsSaving(false);
-        setModalVisible(false);
-        fetchInitialData();
+
+        try {
+            await apiClient.post('/online-classes', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+            Alert.alert("Success", `Class ${modalClassType === 'live' ? 'scheduled' : 'uploaded'} successfully.`);
+        } catch (error: any) {
+            Alert.alert("Save Error", error.response?.data?.message || 'Failed to save the class.');
+        } finally {
+            setIsSaving(false);
+            setModalVisible(false);
+            fetchInitialData();
+        }
     };
 
     const handleDelete = (classId: number) => {
