@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 // This interface defines the structure of a single meeting object.
@@ -8,9 +8,9 @@ export interface Meeting {
   meeting_datetime: string;
   teacher_id: number;
   teacher_name: string;
-  class_group: string; // ✅ NEW: Added class_group
+  class_group: string;
   subject_focus: string;
-  status: 'Scheduled' | 'Completed';
+  status: 'Scheduled' | 'Completed' | string; // Allow string for flexibility
   notes: string | null;
   meeting_link?: string | null;
 }
@@ -41,7 +41,8 @@ const formatMeetingDate = (isoDate: string): string => {
 // This is the main MeetingCard component.
 export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: MeetingCardProps) => {
   
-  const canJoin = !isAdmin && meeting.status === 'Scheduled' && meeting.meeting_link;
+  // This logic is correct. It will work once the backend sends the `meeting_link`.
+  const canJoin = meeting.status === 'Scheduled' && meeting.meeting_link && onJoin;
 
   return (
     <View style={styles.cardContainer}>
@@ -54,7 +55,7 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
             </View>
         </View>
 
-        {isAdmin && (
+        {isAdmin && onEdit && onDelete && (
             <View style={styles.cardActions}>
               <TouchableOpacity onPress={() => onEdit(meeting)} style={[styles.actionBtn, styles.editBtn]}>
                 <Text style={styles.editBtnText}>Edit</Text>
@@ -71,7 +72,6 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
             <Text style={styles.icon}>🧑‍🏫</Text>
             <Text style={styles.detailText}>Teacher: {meeting.teacher_name}</Text>
         </View>
-        {/* ✅ NEW: Display the class group for the meeting */}
         <View style={styles.detailRow}>
             <Text style={styles.icon}>🏫</Text>
             <Text style={styles.detailText}>Class: {meeting.class_group}</Text>
@@ -89,18 +89,24 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
         </View>
       </View>
 
-      {canJoin && (
-          <TouchableOpacity style={styles.joinButton} onPress={() => onJoin(meeting.meeting_link)}>
-              <MaterialIcons name="videocam" size={18} color="white" />
-              <Text style={styles.joinButtonText}>Join Meeting</Text>
-          </TouchableOpacity>
-      )}
+      <View>
+        {canJoin && (
+            <TouchableOpacity style={styles.joinButton} onPress={() => onJoin(meeting.meeting_link!)}>
+                <MaterialIcons name="videocam" size={18} color="white" />
+                <Text style={styles.joinButtonText}>Join Meeting</Text>
+            </TouchableOpacity>
+        )}
 
-      <View style={styles.notesContainer}>
-        <Text style={styles.notesTitle}>Notes/Summary:</Text>
-        <View style={styles.notesBox}>
-          <Text style={styles.notesText}>{meeting.notes || 'No notes have been added yet.'}</Text>
-        </View>
+        {meeting.notes ? (
+            <View style={styles.notesContainer}>
+              <Text style={styles.notesTitle}>Notes/Summary:</Text>
+              <View style={styles.notesBox}>
+                <Text style={styles.notesText}>{meeting.notes}</Text>
+              </View>
+            </View>
+        ) : (
+             canJoin ? <View style={{marginTop: -10}} /> : null
+        )}
       </View>
     </View>
   );

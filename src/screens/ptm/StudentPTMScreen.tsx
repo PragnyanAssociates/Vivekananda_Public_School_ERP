@@ -1,8 +1,5 @@
-// 📂 File: src/screens/ptm/StudentPTMScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, RefreshControl, Linking, Alert } from 'react-native';
-// ★★★ 1. IMPORT apiClient AND REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 import { MeetingCard, Meeting } from './MeetingCard';
 
@@ -15,7 +12,6 @@ const StudentPTMScreen = () => {
   const fetchMeetings = useCallback(async () => {
     try {
       setError(null);
-      // ★★★ 2. USE apiClient ★★★
       const response = await apiClient.get('/ptm');
       setMeetings(response.data);
     } catch (err: any) {
@@ -72,7 +68,6 @@ const StudentPTMScreen = () => {
   );
 };
 
-// Styles remain the same
 const styles = StyleSheet.create({
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     errorText: { color: 'red', fontSize: 16, textAlign: 'center' },

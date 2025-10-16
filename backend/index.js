@@ -1981,15 +1981,22 @@ app.put('/api/admin/donor-query/status', async (req, res) => {
 // ==========================================================
 
 // GET meetings (role-aware filtering)
-// ★★★ This is the main fix for the student view ★★★
+// ★★★ THIS IS THE CORRECTED CODE WITH THE FIX ★★★
 app.get('/api/ptm', verifyToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
     try {
+        // Define the columns to select explicitly. This is the fix.
+        // It ensures 'meeting_link' is always included in the response.
+        const columnsToSelect = `
+            id, meeting_datetime, teacher_id, teacher_name, class_group, 
+            subject_focus, status, notes, meeting_link
+        `;
+
         // Admins and teachers see all meetings
         if (userRole === 'admin' || userRole === 'teacher') {
-            const query = `SELECT * FROM ptm_meetings ORDER BY meeting_datetime DESC`;
+            const query = `SELECT ${columnsToSelect} FROM ptm_meetings ORDER BY meeting_datetime DESC`;
             const [meetings] = await db.query(query);
             return res.status(200).json(meetings);
         }
@@ -2001,14 +2008,14 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
             
             if (!user || !user.class_group) {
                  // If a student has no class, they should still see school-wide meetings
-                 const query = `SELECT * FROM ptm_meetings WHERE class_group = 'All' ORDER BY meeting_datetime DESC`;
+                 const query = `SELECT ${columnsToSelect} FROM ptm_meetings WHERE class_group = 'All' ORDER BY meeting_datetime DESC`;
                  const [meetings] = await db.query(query);
                  return res.status(200).json(meetings);
             }
 
             const studentClassGroup = user.class_group;
             const query = `
-                SELECT * FROM ptm_meetings 
+                SELECT ${columnsToSelect} FROM ptm_meetings 
                 WHERE class_group = ? OR class_group = 'All' 
                 ORDER BY meeting_datetime DESC
             `;
@@ -2028,7 +2035,6 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
 // GET list of all teachers and admins for the form
 app.get('/api/ptm/teachers', verifyToken, async (req, res) => {
     try {
-        // ★★★★★ MODIFICATION: Changed query to include both 'teacher' and 'admin' roles ★★★★★
         const [users] = await db.query("SELECT id, full_name FROM users WHERE role IN ('teacher', 'admin') ORDER BY full_name ASC");
         res.status(200).json(users);
     } catch (error) {
@@ -2053,7 +2059,6 @@ app.get('/api/ptm/classes', verifyToken, async (req, res) => {
 
 
 // POST a new meeting
-// ★★★ This is the fix for notifications when selecting "All Classes" ★★★
 app.post('/api/ptm', verifyToken, async (req, res) => {
     const { meeting_datetime, teacher_id, class_group, subject_focus, notes, meeting_link } = req.body; 
     const created_by = req.user.id; // Get creator's ID securely from the token

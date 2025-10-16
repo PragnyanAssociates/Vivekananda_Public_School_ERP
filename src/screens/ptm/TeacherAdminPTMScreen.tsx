@@ -1,7 +1,5 @@
-// 📂 File: src/screens/ptm/TeacherAdminPTMScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ScrollView, Linking } from 'react-native';
 import { MeetingCard, Meeting } from './MeetingCard';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
@@ -35,7 +33,6 @@ const TeacherAdminPTMScreen = () => {
           ]);
           setMeetings(meetingsRes.data);
           setTeachers(teachersRes.data);
-          // ★★★★★ MODIFICATION: Added 'All' to the beginning of the classes array ★★★★★
           setClasses(['All', ...classesRes.data]);
       } catch (error: any) {
           Alert.alert("Error", error.response?.data?.message || "Failed to load data.");
@@ -114,6 +111,12 @@ const TeacherAdminPTMScreen = () => {
     );
   };
 
+  const handleJoinMeeting = (link: string) => {
+      if (link) {
+          Linking.openURL(link).catch(() => Alert.alert("Error", "Could not open the meeting link."));
+      }
+  };
+
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#008080" /></View>;
   }
@@ -123,7 +126,7 @@ const TeacherAdminPTMScreen = () => {
         <FlatList
             data={meetings}
             keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <MeetingCard meeting={item} onEdit={handleOpenModal} onDelete={handleDelete} isAdmin={true} />}
+            renderItem={({ item }) => <MeetingCard meeting={item} onEdit={handleOpenModal} onDelete={handleDelete} isAdmin={true} onJoin={handleJoinMeeting} />}
             ListHeaderComponent={
                 <>
                     <View style={styles.header}><Text style={styles.headerIcon}>👥</Text><View><Text style={styles.headerTitle}>Manage PTMs</Text><Text style={styles.headerSubtitle}>Schedule, update, and review all meetings.</Text></View></View>
