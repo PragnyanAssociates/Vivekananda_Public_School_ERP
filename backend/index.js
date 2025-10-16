@@ -1981,12 +1981,14 @@ app.put('/api/admin/donor-query/status', async (req, res) => {
 // ==========================================================
 
 // GET meetings (role-aware filtering)
+// ★★★ THIS IS THE CORRECTED CODE WITH THE FIX ★★★
 app.get('/api/ptm', verifyToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
     try {
-        // Ensure 'meeting_link' is always included in the response.
+        // Define the columns to select explicitly. This is the fix.
+        // It ensures 'meeting_link' is always included in the response.
         const columnsToSelect = `
             id, meeting_datetime, teacher_id, teacher_name, class_group, 
             subject_focus, status, notes, meeting_link
@@ -1999,15 +2001,18 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
             return res.status(200).json(meetings);
         }
 
-        // Students and parents see meetings for their class or 'All'
+        // Students (and parents, if applicable) only see meetings for their class or for 'All' classes
         if (userRole === 'student' || userRole === 'parent') {
-            // Get student's class_group
+            // First, get the student's class_group from the database using their ID from the token
             const [[user]] = await db.query('SELECT class_group FROM users WHERE id = ?', [userId]);
+            
             if (!user || !user.class_group) {
-                const query = `SELECT ${columnsToSelect} FROM ptm_meetings WHERE class_group = 'All' ORDER BY meeting_datetime DESC`;
-                const [meetings] = await db.query(query);
-                return res.status(200).json(meetings);
+                 // If a student has no class, they should still see school-wide meetings
+                 const query = `SELECT ${columnsToSelect} FROM ptm_meetings WHERE class_group = 'All' ORDER BY meeting_datetime DESC`;
+                 const [meetings] = await db.query(query);
+                 return res.status(200).json(meetings);
             }
+
             const studentClassGroup = user.class_group;
             const query = `
                 SELECT ${columnsToSelect} FROM ptm_meetings 
@@ -2020,6 +2025,7 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
         
         // Deny access for any other roles by default
         res.status(403).json({ message: "You do not have permission to view PTM schedules." });
+
     } catch (error) {
         console.error("GET /api/ptm Error:", error);
         res.status(500).json({ message: 'Error fetching PTM schedules.' });
@@ -2120,7 +2126,7 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// PUT (update) an existing meeting - update meeting_link if needed
+// PUT (update) an existing meeting
 app.put('/api/ptm/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { status, notes, meeting_link } = req.body;
