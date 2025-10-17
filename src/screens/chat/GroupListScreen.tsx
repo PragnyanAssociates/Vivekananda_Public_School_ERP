@@ -1,17 +1,19 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import React, { useCallback, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, Alert, Platform, TextInput, Image } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { getProfileImageSource } from '../../utils/imageHelpers'; // <-- IMPORT THE HELPER
 
 const THEME = { primary: '#007bff', background: '#f4f7fc', text: '#212529', muted: '#86909c', border: '#dee2e6', white: '#ffffff' };
 
 const GroupListScreen = () => {
     const { user } = useAuth();
     const navigation = useNavigation<any>();
-    const [groups, setGroups] = useState([]);
+    const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchGroups = async () => {
         try {
@@ -23,21 +25,25 @@ const GroupListScreen = () => {
             setLoading(false);
         }
     };
-    
-    useFocusEffect(
-        useCallback(() => {
-            if (user) {
-                setLoading(true);
-                fetchGroups();
-            }
-        }, [user])
+
+    useFocusEffect(useCallback(() => {
+        if (user) {
+            setLoading(true);
+            fetchGroups();
+        }
+    }, [user]));
+
+    const filteredGroups = useMemo(() =>
+        groups.filter(group => group.name.toLowerCase().includes(searchQuery.toLowerCase())),
+        [groups, searchQuery]
     );
 
     const renderGroupItem = ({ item }: { item: any }) => (
         <TouchableOpacity style={styles.groupItem} onPress={() => navigation.navigate('GroupChat', { group: item })}>
-            <View style={styles.avatar}>
-                <Icon name="account-group" size={28} color={THEME.primary} />
-            </View>
+            <Image
+                source={getProfileImageSource(item.group_dp_url)} // <-- USE THE HELPER
+                style={styles.avatar}
+            />
             <View style={styles.groupInfo}>
                 <Text style={styles.groupName}>{item.name}</Text>
                 <Text style={styles.groupDesc} numberOfLines={1}>{item.description || "Tap to open chat"}</Text>
@@ -54,12 +60,16 @@ const GroupListScreen = () => {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Groups</Text>
+                <View style={styles.searchContainer}>
+                    <Icon name="magnify" size={20} color={THEME.muted} />
+                    <TextInput style={styles.searchInput} placeholder="Search groups..." value={searchQuery} onChangeText={setSearchQuery} />
+                </View>
             </View>
             <FlatList
-                data={groups}
+                data={filteredGroups}
                 renderItem={renderGroupItem}
                 keyExtractor={(item) => item.id.toString()}
-                ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>You are not in any groups yet.</Text></View>}
+                ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No groups found.</Text></View>}
                 contentContainerStyle={{ flexGrow: 1 }}
             />
             {(user?.role === 'admin' || user?.role === 'teacher') && (
@@ -74,16 +84,18 @@ const GroupListScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: THEME.background },
     loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { paddingTop: Platform.OS === 'android' ? 15 : 0, paddingBottom: 15, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: THEME.border, alignItems: 'center', backgroundColor: THEME.white },
-    headerTitle: { fontSize: 22, fontWeight: 'bold', color: THEME.text },
+    header: { paddingTop: Platform.OS === 'android' ? 15 : 0, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: THEME.border, backgroundColor: THEME.white },
+    headerTitle: { fontSize: 28, fontWeight: 'bold', color: THEME.text, marginBottom: 10 },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 10, paddingHorizontal: 10, marginBottom: 10 },
+    searchInput: { flex: 1, height: 40, fontSize: 16, marginLeft: 8, color: THEME.text },
     groupItem: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: THEME.white, borderBottomWidth: 1, borderBottomColor: THEME.border },
-    avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#e9ecef', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#e9ecef', marginRight: 15 },
     groupInfo: { flex: 1 },
     groupName: { fontSize: 18, fontWeight: '600', color: THEME.text },
     groupDesc: { fontSize: 14, color: THEME.muted, marginTop: 2 },
-    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
     emptyText: { textAlign: 'center', fontSize: 16, color: THEME.muted },
-    fab: { position: 'absolute', right: 20, bottom: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
+    fab: { position: 'absolute', right: 20, bottom: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', elevation: 8 },
 });
 
 export default GroupListScreen;
