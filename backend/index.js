@@ -1079,10 +1079,9 @@ app.get('/api/attendance/student-history-admin/:studentId', async (req, res) => 
 
 
 
-// 📂 File: backend/server.js  (Paste this code before the app.listen() call)
-
+// 📂 File: server.js (or your main backend file)
 // ==========================================================
-// --- HEALTH API ROUTES (NEW) ---
+// --- HEALTH API ROUTES (REVISED) ---
 // ==========================================================
 
 // Endpoint for a student to get their own record
@@ -1095,7 +1094,6 @@ app.get('/api/health/my-record/:userId', async (req, res) => {
         WHERE u.id = ?`;
     try {
         const [results] = await db.query(query, [userId]);
-        // If no record exists, send back an object with the user's full name.
         if (results.length > 0) {
             res.json(results[0]);
         } else {
@@ -1103,7 +1101,7 @@ app.get('/api/health/my-record/:userId', async (req, res) => {
             const userName = userRows.length > 0 ? userRows[0].full_name : 'Student';
             res.json({ full_name: userName, user_id: userId });
         }
-    } catch (error) {
+    } catch (error) => {
         console.error("GET /api/health/my-record Error:", error);
         res.status(500).json({ message: "Error fetching health record." });
     }
@@ -1115,16 +1113,26 @@ app.get('/api/health/classes', async (req, res) => {
     try {
         const [results] = await db.query(query);
         res.json(results.map(r => r.class_group));
-    } catch (error) {
+    } catch (error) => {
         console.error("GET /api/health/classes Error:", error);
         res.status(500).json({ message: "Error fetching classes." });
     }
 });
 
-// Endpoint for Teachers/Admins to get students by class
+// ★★★ MODIFIED ENDPOINT ★★★
+// Fetches students for a class, now including their roll number.
 app.get('/api/health/students/:class_group', async (req, res) => {
     const { class_group } = req.params;
-    const query = "SELECT id, full_name, username FROM users WHERE role = 'student' AND class_group = ?";
+    const query = `
+        SELECT 
+            u.id, 
+            u.full_name, 
+            u.username, 
+            up.roll_no
+        FROM users u
+        LEFT JOIN user_profiles up ON u.id = up.user_id
+        WHERE u.role = 'student' AND u.class_group = ?
+        ORDER BY CAST(up.roll_no AS UNSIGNED), up.roll_no, u.full_name`; // Sorts numerically then alphabetically
     try {
         const [results] = await db.query(query, [class_group]);
         res.json(results);
@@ -1134,17 +1142,25 @@ app.get('/api/health/students/:class_group', async (req, res) => {
     }
 });
 
-// Endpoint for Teachers/Admins to get a specific student's health record
+// ★★★ MODIFIED ENDPOINT ★★★
+// Fetches a specific student's health record, now including their roll number for display.
 app.get('/api/health/record/:userId', async (req, res) => {
     const { userId } = req.params;
-    const query = `SELECT hr.*, u.full_name FROM users u LEFT JOIN health_records hr ON u.id = hr.user_id WHERE u.id = ?`;
+    const query = `
+        SELECT 
+            hr.*, 
+            u.full_name, 
+            up.roll_no 
+        FROM users u 
+        LEFT JOIN health_records hr ON u.id = hr.user_id 
+        LEFT JOIN user_profiles up ON u.id = up.user_id
+        WHERE u.id = ?`;
     try {
         const [results] = await db.query(query, [userId]);
         if (results.length === 0) return res.status(404).json({ message: "Student not found." });
         
         const record = results[0];
-        // If the student has no health record yet, some fields will be null. Ensure user_id and full_name are present.
-        if (!record.user_id) record.user_id = userId;
+        if (!record.user_id) record.user_id = parseInt(userId, 10);
 
         res.json(record);
     } catch (error) {
@@ -1153,9 +1169,8 @@ app.get('/api/health/record/:userId', async (req, res) => {
     }
 });
 
-// 📂 File: server.js (REPLACE THIS ROUTE)
 
-// Endpoint for Teachers/Admins to create or update a health record
+// Endpoint for Teachers/Admins to create or update a health record (with notifications)
 app.post('/api/health/record/:userId', async (req, res) => {
     const studentUserId = req.params.userId;
     const { editorId, blood_group, height_cm, weight_kg, last_checkup_date, allergies, medical_conditions, medications } = req.body;
@@ -1164,7 +1179,6 @@ app.post('/api/health/record/:userId', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Step 1: Insert or update the health record
         const query = `
             INSERT INTO health_records (user_id, blood_group, height_cm, weight_kg, last_checkup_date, allergies, medical_conditions, medications, last_updated_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1172,30 +1186,24 @@ app.post('/api/health/record/:userId', async (req, res) => {
             blood_group = VALUES(blood_group), height_cm = VALUES(height_cm), weight_kg = VALUES(weight_kg), last_checkup_date = VALUES(last_checkup_date),
             allergies = VALUES(allergies), medical_conditions = VALUES(medical_conditions), medications = VALUES(medications), last_updated_by = VALUES(last_updated_by);
         `;
-        const values = [studentUserId, blood_group, height_cm, weight_kg, last_checkup_date || null, allergies, medical_conditions, medications, editorId];
+        const values = [studentUserId, blood_group || null, height_cm || null, weight_kg || null, last_checkup_date || null, allergies, medical_conditions, medications, editorId];
         await connection.query(query, values);
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-        
-        // 1. Get the name of the teacher/admin who made the change
         const [[editor]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [editorId]);
         const senderName = editor.full_name || "School Health Department";
 
-        // 2. Prepare the notification details
         const notificationTitle = "Health Record Updated";
         const notificationMessage = `Your health information has been updated. Please review the details in the Health Info section.`;
         
-        // 3. Send a single notification to the affected student
+        // Assuming createNotification is a function you have defined elsewhere
         await createNotification(
             connection,
             studentUserId,
             senderName,
             notificationTitle,
             notificationMessage,
-            '/health-info' // A generic link to the health info screen
+            '/health-info'
         );
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
         
         await connection.commit();
         res.status(200).json({ message: "Health record saved and student notified successfully." });
@@ -1208,6 +1216,9 @@ app.post('/api/health/record/:userId', async (req, res) => {
         connection.release();
     }
 });
+
+
+
 
 // ==========================================================
 // --- SPORTS API ROUTES (NEW) ---

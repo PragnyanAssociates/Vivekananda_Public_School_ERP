@@ -1,64 +1,88 @@
-// 📂 File: src/screens/health/TeacherHealthAdminScreen.tsx (MODIFIED & CORRECTED)
+// 📂 File: src/screens/health/TeacherHealthAdminScreen.tsx (COMPLETELY REVISED)
 
-import { Picker } from '@react-native-picker/picker';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
-// ★★★ 1. IMPORT apiClient ★★★
 import apiClient from '../../api/client';
 
+// --- STYLING CONSTANTS ---
 const PRIMARY_COLOR = '#008080';
+const TEXT_COLOR_DARK = '#333';
+const TEXT_COLOR_MEDIUM = '#555';
+const BACKGROUND_COLOR = '#f0f4f7';
 
-// Main component - No changes needed
+// ==========================================================
+// --- MAIN COMPONENT: Manages which view is shown ---
+// ==========================================================
 const TeacherHealthAdminScreen = () => {
     const [view, setView] = useState('list');
     const [selectedStudent, setSelectedStudent] = useState(null);
-    const handleSelectStudent = (student) => { setSelectedStudent(student); setView('form'); };
-    const handleBackToList = () => { setSelectedStudent(null); setView('list'); };
 
-    if (view === 'list') return <StudentListView onSelectStudent={handleSelectStudent} />;
-    if (view === 'form' && selectedStudent) return <HealthForm student={selectedStudent} onBack={handleBackToList} />;
-    return null;
+    const handleSelectStudent = (student) => {
+        setSelectedStudent(student);
+        setView('detail');
+    };
+
+    const handleBackToList = () => {
+        setSelectedStudent(null);
+        setView('list');
+    };
+
+    if (view === 'list') {
+        return <StudentListView onSelectStudent={handleSelectStudent} />;
+    }
+    
+    if (view === 'detail' && selectedStudent) {
+        return <StudentHealthDetailView student={selectedStudent} onBack={handleBackToList} />;
+    }
+
+    return null; // Should not happen
 };
 
-// --- Student List Component ---
+// ==========================================================
+// --- 1. STUDENT LIST VIEW ---
+// ==========================================================
 const StudentListView = ({ onSelectStudent }) => {
-    const [classes, setClasses] = useState([]);
-    const [selectedClass, setSelectedClass] = useState(null);
-    const [students, setStudents] = useState([]);
+    const [classes, setClasses] = useState<string[]>([]);
+    const [selectedClass, setSelectedClass] = useState<string | null>(null);
+    const [students, setStudents] = useState<any[]>([]);
     const [isLoadingClasses, setIsLoadingClasses] = useState(true);
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [error, setError] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
-    const fetchClasses = useCallback(async () => {
-        setIsLoadingClasses(true);
-        setError('');
-        try {
-            // ★★★ 2. USE apiClient FOR ALL FETCH CALLS ★★★
-            const response = await apiClient.get('/health/classes');
-            const data = response.data;
-            setClasses(data);
-            if (data.length === 0) {
-                setError('No classes with assigned students were found.');
-            }
-        } catch (e: any) {
-            console.error("Error fetching classes:", e);
-            setError(e.response?.data?.message || 'Could not connect to the server.');
-        } finally {
-            setIsLoadingClasses(false);
-        }
-    }, []);
+    // Fetch available classes when the screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            const fetchClasses = async () => {
+                setIsLoadingClasses(true);
+                setError('');
+                try {
+                    const response = await apiClient.get('/health/classes');
+                    const data = response.data;
+                    setClasses(data);
+                    if (data.length > 0) {
+                        // ★★★ REQUIREMENT: Select first class by default ★★★
+                        fetchStudents(data[0]);
+                    } else {
+                        setError('No classes with assigned students were found.');
+                    }
+                } catch (e: any) {
+                    setError(e.response?.data?.message || 'Could not connect to the server.');
+                } finally {
+                    setIsLoadingClasses(false);
+                }
+            };
+            fetchClasses();
+        }, [])
+    );
 
-    useFocusEffect(fetchClasses);
+    const fetchStudents = async (classGroup: string) => {
+        if (!classGroup) return;
 
-    const fetchStudents = async (classGroup) => {
-        if (!classGroup) {
-            setStudents([]);
-            setSelectedClass(null);
-            return;
-        };
         setSelectedClass(classGroup);
         setIsLoadingStudents(true);
         setStudents([]);
@@ -70,43 +94,70 @@ const StudentListView = ({ onSelectStudent }) => {
                  setError('No students found in this class.');
             }
         } catch (e: any) { 
-            console.error(e);
-            setError(e.response?.data?.message || 'An error occurred while fetching students.');
+            setError(e.response?.data?.message || 'An error occurred fetching students.');
         } finally {
             setIsLoadingStudents(false);
         }
     };
     
+    // Filter students based on search term (name or roll number)
+    const filteredStudents = useMemo(() => {
+        if (!searchTerm) return students;
+        return students.filter(student => 
+            student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            student.roll_no?.toString().includes(searchTerm)
+        );
+    }, [students, searchTerm]);
+
+    const renderStatus = () => {
+        if (isLoadingClasses || isLoadingStudents) return <ActivityIndicator size="large" color={PRIMARY_COLOR} />;
+        if (error) return <Text style={styles.emptyText}>{error}</Text>;
+        if (students.length > 0 && filteredStudents.length === 0) return <Text style={styles.emptyText}>No students match your search.</Text>;
+        if (!selectedClass) return <Text style={styles.emptyText}>Select a class to see students.</Text>;
+        return null;
+    };
+
     return (
-        <View style={styles.container}>
+        <View style={styles.listContainer}>
             <View style={styles.pickerContainer}>
                 <Picker
                     selectedValue={selectedClass}
-                    onValueChange={(itemValue) => fetchStudents(itemValue)}
+                    onValueChange={(itemValue) => {
+                        if (itemValue) fetchStudents(itemValue);
+                    }}
                     enabled={!isLoadingClasses && classes.length > 0}
                 >
                     <Picker.Item label={isLoadingClasses ? "Loading classes..." : "Select a Class..."} value={null} />
                     {classes.map(c => <Picker.Item key={c} label={c} value={c} />)}
                 </Picker>
             </View>
-            <View style={styles.statusContainer}>
-                {isLoadingClasses || isLoadingStudents ? (
-                    <ActivityIndicator color={PRIMARY_COLOR} />
-                ) : error ? (
-                    <Text style={styles.emptyText}>{error}</Text>
-                ) : students.length === 0 && selectedClass ? (
-                    <Text style={styles.emptyText}>No students found in {selectedClass}.</Text>
-                ) : classes.length > 0 && !selectedClass ? (
-                     <Text style={styles.emptyText}>Select a class to see students.</Text>
-                ): null}
-            </View>
+
+            {/* ★★★ REQUIREMENT: Search Bar ★★★ */}
+            {students.length > 0 && (
+                 <View style={styles.searchContainer}>
+                    <MaterialIcons name="search" size={22} color="#999" style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search by name or roll number..."
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                    />
+                </View>
+            )}
+
+            <View style={styles.statusContainer}>{renderStatus()}</View>
+
             <FlatList 
-                data={students} 
+                data={filteredStudents} 
                 keyExtractor={(item) => item.id.toString()} 
                 renderItem={({ item }) => ( 
                     <TouchableOpacity style={styles.listItem} onPress={() => onSelectStudent(item)}>
                         <MaterialIcons name="person" size={24} color={PRIMARY_COLOR} />
-                        <Text style={styles.studentName}>{item.full_name}</Text>
+                        <View style={styles.studentInfo}>
+                            <Text style={styles.studentName}>{item.full_name}</Text>
+                            {/* ★★★ REQUIREMENT: Display Roll Number ★★★ */}
+                            <Text style={styles.rollNumber}>Roll No: {item.roll_no || 'N/A'}</Text>
+                        </View>
                         <MaterialIcons name="chevron-right" size={24} color="#ccc" />
                     </TouchableOpacity> 
                 )} 
@@ -115,67 +166,249 @@ const StudentListView = ({ onSelectStudent }) => {
     );
 };
 
-const HealthForm = ({ student, onBack }) => {
+// ==========================================================
+// --- 2. STUDENT DETAIL & EDIT VIEW ---
+// ==========================================================
+const StudentHealthDetailView = ({ student, onBack }) => {
+    const { user: editor } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [formData, setFormData] = useState({});
-    const { user: editor } = useAuth();
+    const [isEditing, setIsEditing] = useState(false);
+    const [record, setRecord] = useState<any>({});
+    const [editData, setEditData] = useState<any>({});
 
     useEffect(() => {
         const fetchRecord = async () => {
+            setLoading(true);
             try {
                 const response = await apiClient.get(`/health/record/${student.id}`);
                 const data = response.data;
-                if (data.last_checkup_date) { data.last_checkup_date = data.last_checkup_date.split('T')[0]; }
-                setFormData(data);
+                // Format date for input field if it exists
+                if (data.last_checkup_date) {
+                    data.last_checkup_date = data.last_checkup_date.split('T')[0];
+                }
+                setRecord(data);
+                setEditData(data); // Initialize edit form with fetched data
             } catch (error) {
-                // If no record exists, the server might send a 404. We'll start with an empty form.
-                setFormData({});
+                Alert.alert("Error", "Could not fetch student's health record.");
+                setRecord({ full_name: student.full_name }); // Start with a shell
+                setEditData({ full_name: student.full_name });
             } finally {
                 setLoading(false);
             }
         };
         fetchRecord();
-    }, [student]);
+    }, [student.id]);
 
-    const handleInputChange = (field, value) => { setFormData(prev => ({ ...prev, [field]: value })); };
-    const calculatedBmi = useMemo(() => { if (formData?.height_cm && formData?.weight_kg) { const h = Number(formData.height_cm)/100; const bmi = Number(formData.weight_kg)/(h*h); return isNaN(bmi) ? 'N/A' : bmi.toFixed(2); } return 'N/A'; }, [formData.height_cm, formData.weight_kg]);
-
-    const handleSaveChanges = async () => {
-        if (!editor) return Alert.alert("Error", "Could not identify the editor.");
+    const handleSave = async () => {
+        if (!editor) return Alert.alert("Error", "Authentication error. Cannot save.");
         setSaving(true);
         try {
-            await apiClient.post(`/health/record/${student.id}`, {
-                 ...formData, editorId: editor.id 
+            const response = await apiClient.post(`/health/record/${student.id}`, {
+                 ...editData,
+                 editorId: editor.id 
             });
-            Alert.alert("Success", "Health record saved."); 
-            onBack(); 
+            Alert.alert("Success", response.data.message || "Health record saved.");
+            setRecord(editData); // Update the view with the new data
+            setIsEditing(false); // Exit edit mode
         } catch (e: any) { 
             Alert.alert("Error", e.response?.data?.message || "Failed to save record."); 
-        } 
-        finally { setSaving(false); }
+        } finally {
+            setSaving(false);
+        }
     };
     
-    if (loading) return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    if (loading) {
+        return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    }
 
     return (
-        <ScrollView style={styles.container}>
-            <TouchableOpacity onPress={onBack} style={styles.backButtonForm}><MaterialIcons name="arrow-back" size={24} color={PRIMARY_COLOR} /><Text style={styles.backButtonText}>Back to Student List</Text></TouchableOpacity>
-            <Text style={styles.formTitle}>Editing: {student.full_name}</Text>
-            <FormInput label="Blood Group" value={formData.blood_group || ''} onChangeText={v => handleInputChange('blood_group', v)} />
-            <FormInput label="Height (cm)" value={formData.height_cm?.toString() || ''} onChangeText={v => handleInputChange('height_cm', v)} keyboardType="numeric" />
-            <FormInput label="Weight (kg)" value={formData.weight_kg?.toString() || ''} onChangeText={v => handleInputChange('weight_kg', v)} keyboardType="numeric" />
-            <View style={styles.inputContainer}><Text style={styles.label}>BMI (Calculated)</Text><TextInput style={[styles.input, styles.readOnly]} value={calculatedBmi} editable={false} /></View>
-            <FormInput label="Last Checkup Date (YYYY-MM-DD)" value={formData.last_checkup_date || ''} onChangeText={v => handleInputChange('last_checkup_date', v)} placeholder="YYYY-MM-DD" />
-            <FormInput label="Allergies" value={formData.allergies || ''} onChangeText={v => handleInputChange('allergies', v)} multiline />
-            <FormInput label="Medical Conditions" value={formData.medical_conditions || ''} onChangeText={v => handleInputChange('medical_conditions', v)} multiline />
-            <FormInput label="Medications" value={formData.medications || ''} onChangeText={v => handleInputChange('medications', v)} multiline />
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveChanges} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save Changes'}</Text></TouchableOpacity>
-        </ScrollView>
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"} 
+            style={{ flex: 1 }}
+        >
+            <ScrollView style={styles.detailContainer}>
+                <View style={styles.detailHeader}>
+                    <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={24} color={PRIMARY_COLOR} />
+                    </TouchableOpacity>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.detailTitle}>{record.full_name}</Text>
+                        <Text style={styles.detailSubtitle}>Roll No: {record.roll_no || 'N/A'}</Text>
+                    </View>
+                </View>
+
+                {/* ★★★ REQUIREMENT: New Admin View Layout & Edit Mode ★★★ */}
+                {isEditing ? (
+                    <EditView data={editData} setData={setEditData} onSave={handleSave} onCancel={() => setIsEditing(false)} isSaving={saving} />
+                ) : (
+                    <DisplayView data={record} onEdit={() => setIsEditing(true)} />
+                )}
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 };
 
-const FormInput = ({ label, multiline = false, ...props }) => ( <View style={styles.inputContainer}><Text style={styles.label}>{label}</Text><TextInput style={multiline ? styles.textarea : styles.input} multiline={multiline} {...props} /></View> );
-const styles = StyleSheet.create({ container: { flex: 1, padding: 10, backgroundColor: '#fff' }, centered: { flex: 1, justifyContent: 'center', alignItems: 'center' }, pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15 }, listItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' }, studentName: { flex: 1, marginLeft: 15, fontSize: 16 }, emptyText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 16 }, statusContainer: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center', minHeight: 60 }, backButtonForm: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 }, backButtonText: { color: PRIMARY_COLOR, marginLeft: 5, fontSize: 16 }, formTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' }, inputContainer: { marginBottom: 15 }, label: { marginBottom: 5, fontSize: 14, color: '#333' }, input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, fontSize: 16 }, textarea: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, fontSize: 16, minHeight: 80, textAlignVertical: 'top' }, readOnly: { backgroundColor: '#f0f0f0' }, saveButton: { backgroundColor: PRIMARY_COLOR, padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 10 }, saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }});
+
+// --- Sub-component for Displaying Health Data ---
+const DisplayView = ({ data, onEdit }) => {
+    const calculatedBmi = useMemo(() => {
+        if (data?.height_cm && data?.weight_kg) {
+            const heightM = data.height_cm / 100;
+            const bmi = data.weight_kg / (heightM * heightM);
+            return bmi.toFixed(2);
+        }
+        return 'N/A';
+    }, [data]);
+
+    const formatDate = (dateString?: string) => {
+        if (!dateString) return 'Not Set';
+        return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    
+    return (
+        <>
+            <View style={styles.card}>
+                <View style={styles.grid}>
+                    <InfoBox icon="opacity" label="Blood Group" value={data?.blood_group || 'N/A'} color="#e53935" />
+                    <InfoBox icon="height" label="Height" value={data?.height_cm ? `${data.height_cm} cm` : 'N/A'} color="#1e88e5" />
+                    <InfoBox icon="monitor-weight" label="Weight" value={data?.weight_kg ? `${data.weight_kg} kg` : 'N/A'} color="#fdd835" />
+                    <InfoBox icon="calculate" label="BMI" value={calculatedBmi} color="#43a047" />
+                </View>
+                <InfoBox icon="event" label="Last Checkup" value={formatDate(data?.last_checkup_date)} color="#8e24aa" isFullWidth />
+            </View>
+
+            <Section title="Allergies" icon="warning" content={data?.allergies || 'None reported'} />
+            <Section title="Medical Conditions" icon="local-hospital" content={data?.medical_conditions || 'None reported'} />
+            <Section title="Medications" icon="healing" content={data?.medications || 'None'} />
+
+            {/* Edit Floating Action Button */}
+            <TouchableOpacity onPress={onEdit} style={styles.fab}>
+                <MaterialIcons name="edit" size={24} color="#fff" />
+            </TouchableOpacity>
+        </>
+    );
+};
+
+// --- Sub-component for Editing Health Data ---
+const EditView = ({ data, setData, onSave, onCancel, isSaving }) => {
+    const handleInputChange = (field, value) => {
+        setData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const calculatedBmi = useMemo(() => {
+        if (data?.height_cm && data?.weight_kg) {
+            const h = Number(data.height_cm) / 100;
+            const bmi = Number(data.weight_kg) / (h * h);
+            return isNaN(bmi) ? 'N/A' : bmi.toFixed(2);
+        }
+        return 'N/A';
+    }, [data.height_cm, data.weight_kg]);
+    
+    return (
+        <View style={styles.formContainer}>
+            <FormInput label="Blood Group (e.g., A+, O-)" value={data.blood_group || ''} onChangeText={v => handleInputChange('blood_group', v)} />
+            <FormInput label="Height (cm)" value={data.height_cm?.toString() || ''} onChangeText={v => handleInputChange('height_cm', v)} keyboardType="numeric" />
+            <FormInput label="Weight (kg)" value={data.weight_kg?.toString() || ''} onChangeText={v => handleInputChange('weight_kg', v)} keyboardType="numeric" />
+            <View style={styles.inputContainer}>
+                <Text style={styles.label}>BMI (Calculated)</Text>
+                <TextInput style={[styles.input, styles.readOnly]} value={calculatedBmi} editable={false} />
+            </View>
+            <FormInput label="Last Checkup Date (YYYY-MM-DD)" value={data.last_checkup_date || ''} onChangeText={v => handleInputChange('last_checkup_date', v)} placeholder="YYYY-MM-DD" />
+            <FormInput label="Allergies" value={data.allergies || ''} onChangeText={v => handleInputChange('allergies', v)} multiline />
+            <FormInput label="Medical Conditions" value={data.medical_conditions || ''} onChangeText={v => handleInputChange('medical_conditions', v)} multiline />
+            <FormInput label="Medications" value={data.medications || ''} onChangeText={v => handleInputChange('medications', v)} multiline />
+
+            <View style={styles.buttonRow}>
+                <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onCancel} disabled={isSaving}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={onSave} disabled={isSaving}>
+                    <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+};
+
+// ==========================================================
+// --- REUSABLE HELPER COMPONENTS ---
+// ==========================================================
+const InfoBox = ({ icon, label, value, color, isFullWidth = false }) => (
+    <View style={[styles.infoBox, isFullWidth && styles.fullWidth]}>
+        <MaterialIcons name={icon} size={28} color={color} />
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+    </View>
+);
+
+const Section = ({ title, icon, content }) => (
+    <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+            <MaterialIcons name={icon} size={22} color={PRIMARY_COLOR} />
+            <Text style={styles.sectionTitle}>{title}</Text>
+        </View>
+        <Text style={styles.sectionContent}>{content}</Text>
+    </View>
+);
+
+const FormInput = ({ label, multiline = false, ...props }) => (
+    <View style={styles.inputContainer}>
+        <Text style={styles.label}>{label}</Text>
+        <TextInput style={multiline ? styles.textarea : styles.input} multiline={multiline} {...props} />
+    </View>
+);
+
+
+// ==========================================================
+// --- STYLESHEET ---
+// ==========================================================
+const styles = StyleSheet.create({
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: BACKGROUND_COLOR },
+    // List View Styles
+    listContainer: { flex: 1, backgroundColor: '#fff' },
+    pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, margin: 10 },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 8, marginHorizontal: 10, marginBottom: 10, paddingHorizontal: 10 },
+    searchIcon: { marginRight: 5 },
+    searchInput: { flex: 1, height: 45, fontSize: 16 },
+    statusContainer: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center', minHeight: 60 },
+    emptyText: { textAlign: 'center', marginTop: 20, color: '#666', fontSize: 16 },
+    listItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    studentInfo: { flex: 1, marginLeft: 15 },
+    studentName: { fontSize: 16, fontWeight: 'bold', color: TEXT_COLOR_DARK },
+    rollNumber: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
+    // Detail & Edit View Styles
+    detailContainer: { flex: 1, backgroundColor: BACKGROUND_COLOR, paddingHorizontal: 10 },
+    detailHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 10, marginHorizontal: -10, paddingHorizontal: 10 },
+    backButton: { padding: 5 },
+    headerTextContainer: { flex: 1, alignItems: 'center' },
+    detailTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK },
+    detailSubtitle: { fontSize: 14, color: TEXT_COLOR_MEDIUM },
+    fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: PRIMARY_COLOR, justifyContent: 'center', alignItems: 'center', elevation: 4 },
+    // Form Styles
+    formContainer: { padding: 10 },
+    inputContainer: { marginBottom: 15 },
+    label: { marginBottom: 5, fontSize: 14, color: '#333', fontWeight: '500' },
+    input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, fontSize: 16, backgroundColor: '#fff' },
+    textarea: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, fontSize: 16, minHeight: 80, textAlignVertical: 'top', backgroundColor: '#fff' },
+    readOnly: { backgroundColor: '#f0f0f0' },
+    buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 40 },
+    button: { flex: 1, padding: 15, borderRadius: 8, alignItems: 'center' },
+    saveButton: { backgroundColor: PRIMARY_COLOR, marginLeft: 5 },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+    cancelButton: { borderWidth: 1, borderColor: '#ccc', marginRight: 5 },
+    cancelButtonText: { color: TEXT_COLOR_DARK, fontSize: 16, fontWeight: 'bold' },
+    // Reusable Component Styles (copied from StudentHealthScreen)
+    card: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    infoBox: { width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 10 },
+    fullWidth: { width: '100%' },
+    infoLabel: { fontSize: 13, color: TEXT_COLOR_MEDIUM, marginTop: 5 },
+    infoValue: { fontSize: 16, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 2 },
+    sectionCard: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
+    sectionTitle: { fontSize: 16, fontWeight: 'bold', color: PRIMARY_COLOR, marginLeft: 10 },
+    sectionContent: { fontSize: 14, color: TEXT_COLOR_MEDIUM, lineHeight: 20, paddingHorizontal: 5 },
+});
 
 export default TeacherHealthAdminScreen;
