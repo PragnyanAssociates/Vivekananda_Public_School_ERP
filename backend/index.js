@@ -5471,10 +5471,9 @@ app.post('/api/food-menu', async (req, res) => {
 });
 
 
-// ✅ CORRECTED: PUT (update) a SINGLE food item's text ONLY.
+// ✅ CORRECTED: This route now only updates the food_item for a specific ID.
 app.put('/api/food-menu/:id', async (req, res) => {
     const { id } = req.params;
-    // This route now only expects and handles the food_item.
     const { food_item, editorId } = req.body;
 
     if (!editorId) {
@@ -5491,7 +5490,6 @@ app.put('/api/food-menu/:id', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
         }
 
-        // The SQL query is now simpler and only updates the food_item.
         const [result] = await connection.query(
             'UPDATE food_menu SET food_item = ? WHERE id = ?',
             [food_item, id]
@@ -5525,7 +5523,7 @@ app.put('/api/food-menu/:id', async (req, res) => {
 });
 
 
-// CORRECT: PUT route to update all meal times for a specific type (e.g., all 'Lunch' times).
+// CORRECT: This route updates the meal_time for ALL entries of a certain meal_type.
 app.put('/api/food-menu/time', async (req, res) => {
     const { meal_type, meal_time, editorId } = req.body;
 
