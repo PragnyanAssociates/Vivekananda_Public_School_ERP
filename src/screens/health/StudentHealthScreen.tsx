@@ -1,4 +1,4 @@
-// 📂 File: src/screens/health/StudentHealthScreen.tsx (MODIFIED & CORRECTED)
+// 📂 File: src/screens/health/StudentHealthScreen.tsx (UPDATED)
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
@@ -20,38 +20,49 @@ interface HealthData {
 const PRIMARY_COLOR = '#008080';
 const TEXT_COLOR_DARK = '#333';
 const TEXT_COLOR_MEDIUM = '#555';
+const BACKGROUND_COLOR = '#f0f4f7';
+
+// ★★★ NEW REUSABLE COMPONENT ★★★
+const ScreenHeader = ({ icon, title, subtitle }) => (
+  <View style={styles.headerCard}>
+    <View style={styles.headerContent}>
+      <View style={styles.headerIconContainer}>
+        <MaterialIcons name={icon} size={28} color={PRIMARY_COLOR} />
+      </View>
+      <View style={styles.headerTextContainer}>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={styles.headerSubtitle}>{subtitle}</Text>
+      </View>
+    </View>
+  </View>
+);
+
 
 const StudentHealthScreen = () => {
-  // ★★★ 1. GET isAuthLoading from useAuth() ★★★
   const { user, isLoading: isAuthLoading } = useAuth();
-  
   const [healthData, setHealthData] = useState<HealthData | null>(null);
-  // This local loading state is now ONLY for the API call itself
   const [isHealthLoading, setIsHealthLoading] = useState(true);
 
-  // ★★★ 2. MAKE useEffect DEPEND ON isAuthLoading ★★★
   useEffect(() => {
     const fetchHealthRecord = async () => {
-      // We only run the API call when auth is finished AND we have a user.
       if (!isAuthLoading && user) {
-        setIsHealthLoading(true); // Start the health-specific loader
+        setIsHealthLoading(true);
         try {
           const response = await apiClient.get(`/health/my-record/${user.id}`);
           setHealthData(response.data);
         } catch (error: any) {
           Alert.alert("Error", error.response?.data?.message || "Could not load your health record.");
-          setHealthData(null); // Clear data on error
+          setHealthData(null);
         } finally {
-          setIsHealthLoading(false); // Stop the health-specific loader
+          setIsHealthLoading(false);
         }
       } else if (!isAuthLoading && !user) {
-        // Auth is done, but there's no user. Stop loading and clear data.
         setIsHealthLoading(false);
         setHealthData(null);
       }
     };
     fetchHealthRecord();
-  }, [user, isAuthLoading]); // Effect now correctly depends on auth state
+  }, [user, isAuthLoading]);
 
   const calculatedBmi = useMemo(() => {
     if (healthData?.height_cm && healthData?.weight_kg) {
@@ -69,33 +80,48 @@ const StudentHealthScreen = () => {
     });
   };
 
-  // ★★★ 3. SHOW A SINGLE, RELIABLE LOADING SPINNER ★★★
-  // Show the spinner if either the auth context OR our local API call is loading.
   if (isAuthLoading || isHealthLoading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
   }
   
-  // After all loading is done, if there's still no data, show a message.
   if (!healthData) {
-      return <View style={styles.centered}><Text style={styles.errorText}>Your health record has not been updated yet.</Text></View>;
+      return (
+        <View style={styles.fullScreenContainer}>
+            <ScreenHeader 
+              icon="favorite"
+              title="My Health Record"
+              subtitle="Your personal health information"
+            />
+            <View style={styles.centered}>
+              <Text style={styles.errorText}>Your health record has not been updated yet.</Text>
+            </View>
+        </View>
+      );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.grid}>
-          <InfoBox icon="opacity" label="Blood Group" value={healthData?.blood_group || 'N/A'} color="#e53935" />
-          <InfoBox icon="height" label="Height" value={healthData?.height_cm ? `${healthData.height_cm} cm` : 'N/A'} color="#1e88e5" />
-          <InfoBox icon="monitor-weight" label="Weight" value={healthData?.weight_kg ? `${healthData.weight_kg} kg` : 'N/A'} color="#fdd835" />
-          <InfoBox icon="calculate" label="BMI" value={calculatedBmi} color="#43a047" />
+    <View style={styles.fullScreenContainer}>
+       <ScreenHeader 
+          icon="favorite"
+          title="My Health Record"
+          subtitle="Your personal health information"
+        />
+      <ScrollView style={styles.scrollContainer}>
+        <View style={styles.card}>
+          <View style={styles.grid}>
+            <InfoBox icon="opacity" label="Blood Group" value={healthData?.blood_group || 'N/A'} color="#e53935" />
+            <InfoBox icon="height" label="Height" value={healthData?.height_cm ? `${healthData.height_cm} cm` : 'N/A'} color="#1e88e5" />
+            <InfoBox icon="monitor-weight" label="Weight" value={healthData?.weight_kg ? `${healthData.weight_kg} kg` : 'N/A'} color="#fdd835" />
+            <InfoBox icon="calculate" label="BMI" value={calculatedBmi} color="#43a047" />
+          </View>
+          <InfoBox icon="event" label="Last Checkup" value={formatDate(healthData?.last_checkup_date)} color="#8e24aa" isFullWidth />
         </View>
-         <InfoBox icon="event" label="Last Checkup" value={formatDate(healthData?.last_checkup_date)} color="#8e24aa" isFullWidth />
-      </View>
-      
-      <Section title="Allergies" icon="warning" content={healthData?.allergies || 'None reported'} />
-      <Section title="Medical Conditions" icon="local-hospital" content={healthData?.medical_conditions || 'None reported'} />
-      <Section title="Medications" icon="healing" content={healthData?.medications || 'None'} />
-    </ScrollView>
+        
+        <Section title="Allergies" icon="warning" content={healthData?.allergies || 'None reported'} />
+        <Section title="Medical Conditions" icon="local-hospital" content={healthData?.medical_conditions || 'None reported'} />
+        <Section title="Medications" icon="healing" content={healthData?.medications || 'None'} />
+      </ScrollView>
+    </View>
   );
 };
 
@@ -118,10 +144,19 @@ const Section = ({ title, icon, content }) => (
 );
 
 const styles = StyleSheet.create({
+  fullScreenContainer: { flex: 1, backgroundColor: BACKGROUND_COLOR },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   errorText: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center' },
-  container: { flex: 1, padding: 10, backgroundColor: '#f0f4f7' },
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+  scrollContainer: { flex: 1, padding: 10, },
+  // Header Styles
+  headerCard: { backgroundColor: '#fff', padding: 15, margin: 10, borderRadius: 10, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+  headerContent: { flexDirection: 'row', alignItems: 'center' },
+  headerIconContainer: { backgroundColor: '#e0f2f1', borderRadius: 25, width: 50, height: 50, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  headerTextContainer: { flex: 1 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: TEXT_COLOR_DARK },
+  headerSubtitle: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
+  // Card Styles
+  card: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 15, elevation: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   infoBox: { width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 10 },
   fullWidth: { width: '100%' },
