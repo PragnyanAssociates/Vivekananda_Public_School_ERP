@@ -1,5 +1,3 @@
-// 📂 File: src/screens/NotificationsScreen.tsx (FINAL VERSION WITH COMPLETE NAVIGATION & FIX)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -13,9 +11,10 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native'; 
+import { useNavigation } from '@react-navigation/native';
 import apiClient from '../api/client';
 import { format } from 'date-fns';
+import { useAuth } from '../context/AuthContext'; // Import useAuth to check user role if needed
 
 // --- Style Constants and Icons ---
 const PRIMARY_COLOR = '#008080';
@@ -46,6 +45,8 @@ const notificationIcons = {
   suggestion: 'https://cdn-icons-png.flaticon.com/128/9722/9722906.png',
   payment: 'https://cdn-icons-png.flaticon.com/128/1198/1198291.png',
   kitchen: 'https://cdn-icons-png.flaticon.com/128/3081/3081448.png',
+  chat: 'https://cdn-icons-png.flaticon.com/128/13819/13819448.png',
+  'online-class': 'https://cdn-icons-png.flaticon.com/128/12330/12330756.png',
 };
 
 const getIconForTitle = (title: string = '') => {
@@ -56,14 +57,20 @@ const getIconForTitle = (title: string = '') => {
     if (lowerCaseTitle.includes('calendar')) return notificationIcons.calendar;
     if (lowerCaseTitle.includes('timetable') || lowerCaseTitle.includes('schedule')) return notificationIcons.timetable;
     if (lowerCaseTitle.includes('exam')) return notificationIcons.exam;
-    if (lowerCaseTitle.includes('report')) return notificationIcons.report;
+    if (lowerCaseTitle.includes('result') || lowerCaseTitle.includes('report')) return notificationIcons.report;
     if (lowerCaseTitle.includes('syllabus')) return notificationIcons.syllabus;
     if (lowerCaseTitle.includes('gallery')) return notificationIcons.gallery;
+    if (lowerCaseTitle.includes('health')) return notificationIcons.health;
+    if (lowerCaseTitle.includes('lab')) return notificationIcons.lab;
+    if (lowerCaseTitle.includes('chat')) return notificationIcons.chat;
+    if (lowerCaseTitle.includes('class')) return notificationIcons['online-class'];
+    if (lowerCaseTitle.includes('food') || lowerCaseTitle.includes('kitchen')) return notificationIcons.food;
     return notificationIcons.default;
 };
 
 const NotificationsScreen = ({ onUnreadCountChange }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>(); // Use <any> to simplify navigation calls
+  const { user } = useAuth(); // Get user to determine role-based navigation if needed
   const [filterStatus, setFilterStatus] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -95,10 +102,12 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   };
 
   const handleNotificationPress = async (notification) => {
+    // Mark notification as read on the server
     if (!notification.is_read) {
         try {
             await apiClient.put(`/notifications/${notification.id}/read`);
-            setNotifications(prev => 
+            // Update UI immediately
+            setNotifications(prev =>
                 prev.map(n => n.id === notification.id ? { ...n, is_read: 1 } : n)
             );
         } catch (error) {
@@ -106,48 +115,117 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         }
     }
 
+    // Stop if there's no link to navigate to
     if (!notification.link) {
+        console.log("Notification has no link to navigate to.");
         return;
     }
 
     try {
+        // Parse the link. Example: 'homework/123' -> ['homework', '123']
         const parts = notification.link.split('/').filter(Boolean);
         if (parts.length === 0) return;
 
-        const screen = parts[0];
-        const id1 = parts[1];
-        const id2 = parts[2];
+        const screen = parts[0].toLowerCase(); // Use lowercase for robust matching
+        const param1 = parts[1];
+        const param2 = parts[2];
 
-        console.log(`Navigating to screen: ${screen} with IDs:`, id1, id2);
+        console.log(`Navigating to screen: '${screen}' with params:`, param1, param2);
 
+        // --- ✅ COMPREHENSIVE NAVIGATION LOGIC BASED ON App.tsx ✅ ---
         switch (screen) {
+            // Core Features
             case 'calendar':
                 navigation.navigate('AcademicCalendar');
                 break;
-            // ★★★ THIS IS THE FIX ★★★
-            // The case now matches the backend link '/timetable'
             case 'timetable':
                 navigation.navigate('TimetableScreen');
                 break;
-            case 'Attendance':
-                navigation.navigate('AttendanceScreen');
+            case 'attendance':
+                navigation.navigate('Attendance');
                 break;
-            // ★★★ END OF FIX ★★★
+            case 'chat':
+            case 'groupchat':
+                 navigation.navigate('GroupChatScreen');
+                 break;
+            case 'online-class':
+                navigation.navigate('OnlineClassScreen');
+                break;
+
+            // Nested Navigators
             case 'gallery':
-                navigation.navigate('GalleryScreen', { screen: 'AlbumDetailScreen', params: { albumTitle: id1 } });
+                // Navigates into the 'Gallery' navigator to the 'AlbumDetail' screen
+                navigation.navigate('Gallery', {
+                    screen: 'AlbumDetail',
+                    params: { title: param1 } // param1 should be the album title
+                });
                 break;
             case 'homework':
-                navigation.navigate('StudentHomeworkScreen', { assignmentId: parseInt(id1, 10) });
+                // Navigates into the 'StudentHomework' navigator
+                navigation.navigate('StudentHomework', { screen: 'HomeworkList' });
                 break;
-            case 'submissions':
-                navigation.navigate('TeacherHomeworkSubmissions', { assignmentId: parseInt(id1, 10) });
+
+            // Role-based Screens (Assuming student for general notifications)
+            case 'events':
+                navigation.navigate(user?.role === 'admin' ? 'AdminEventsScreen' : 'StudentEventsScreen');
                 break;
-            case 'helpdesk':
-                 if (id1 === 'ticket') {
-                    navigation.navigate('HelpDeskTicketDetail', { ticketId: parseInt(id2, 10) });
-                 }
+            case 'health':
+                navigation.navigate(user?.role === 'teacher' ? 'TeacherHealthAdminScreen' : 'StudentHealthScreen');
+                break;
+            case 'exam-schedule':
+                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamScreen' : 'StudentExamScreen');
+                break;
+            case 'exams':
+                 navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamsScreen' : 'StudentExamsScreen');
                  break;
+            case 'materials':
+                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminMaterialsScreen' : 'StudentMaterialsScreen');
+                break;
+            case 'syllabus':
+                 navigation.navigate(user?.role === 'teacher' ? 'TeacherSyllabusScreen' : 'StudentSyllabusScreen');
+                 break;
+             case 'resources':
+                 navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResourcesScreen' : 'StudentResourcesScreen');
+                 break;
+            case 'ptm':
+                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminPTMScreen' : 'StudentPTMScreen');
+                break;
+            case 'labs':
+                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminLabsScreen' : 'StudentLabsScreen');
+                break;
+
+            // Results and Reports
+            case 'results':
+                if (param1 === 'report' && param2) {
+                    // Navigate to a specific report detail
+                    navigation.navigate('ReportDetailScreen', { reportId: parseInt(param2, 10) });
+                } else {
+                    // Navigate to the main results list screen
+                    navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResultsScreen' : 'StudentResultsScreen');
+                }
+                break;
+
+            // Teacher/Admin specific
+            case 'submissions': // For teachers checking homework
+                navigation.navigate('TeacherAdminHomeworkScreen');
+                break;
+            case 'leave': // For leave management
+                 navigation.navigate('AdminLM');
+                 break;
+             case 'ads': // For Ads management
+                 navigation.navigate('AdminAdDashboardScreen');
+                 break;
+
+            // Other Features
+            case 'food':
+                navigation.navigate('FoodScreen');
+                break;
+            case 'kitchen':
+                navigation.navigate('KitchenScreen');
+                break;
+
             default:
+                Alert.alert("Navigation", `This notification type (${screen}) doesn't have a configured screen.`);
                 console.warn(`No navigation route configured for link: ${notification.link}`);
         }
     } catch (e) {
@@ -176,7 +254,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
       <TouchableOpacity
         key={notification.id}
         style={[styles.notificationItem, !notification.is_read && styles.notificationItemUnread]}
-        onPress={() => handleNotificationPress(notification)} 
+        onPress={() => handleNotificationPress(notification)}
       >
         <Image
           source={{ uri: getIconForTitle(notification.title) }}
