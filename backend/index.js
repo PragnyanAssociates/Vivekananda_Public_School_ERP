@@ -5471,10 +5471,11 @@ app.post('/api/food-menu', async (req, res) => {
 });
 
 
-// PUT (update) a SINGLE food item's text and/or time (Admin only)
+// ✅ FIX: PUT (update) a SINGLE food item's text ONLY
 app.put('/api/food-menu/:id', async (req, res) => {
     const { id } = req.params;
-    const { food_item, meal_time, editorId } = req.body;
+    // The request now only contains food_item, not meal_time
+    const { food_item, editorId } = req.body;
 
     if (!editorId) {
         return res.status(401).json({ message: 'Unauthorized: User authentication is required.' });
@@ -5490,9 +5491,10 @@ app.put('/api/food-menu/:id', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
         }
 
+        // The SQL query is now simpler, only updating the food_item
         const [result] = await connection.query(
-            'UPDATE food_menu SET food_item = ?, meal_time = ? WHERE id = ?',
-            [food_item, meal_time, id]
+            'UPDATE food_menu SET food_item = ? WHERE id = ?',
+            [food_item, id]
         );
 
         if (result.affectedRows === 0) {
@@ -5523,7 +5525,7 @@ app.put('/api/food-menu/:id', async (req, res) => {
 });
 
 
-// ✅ NEW: PUT route to update all meal times for a specific type (e.g., all 'Lunch' times)
+// CORRECT: PUT route to update all meal times for a specific type (e.g., all 'Lunch' times)
 app.put('/api/food-menu/time', async (req, res) => {
     const { meal_type, meal_time, editorId } = req.body;
 
@@ -5544,13 +5546,11 @@ app.put('/api/food-menu/time', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
         }
 
-        // This is the core logic: Update all rows that match the meal_type
         await connection.query(
             'UPDATE food_menu SET meal_time = ? WHERE meal_type = ?',
             [meal_time, meal_type]
         );
 
-        // Notify users about the time change
         const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [editorId]);
         if (usersToNotify.length > 0) {
             const recipientIds = usersToNotify.map(u => u.id);
@@ -5571,6 +5571,7 @@ app.put('/api/food-menu/time', async (req, res) => {
         connection.release();
     }
 });
+
 
 
 

@@ -1,3 +1,5 @@
+// 📂 File: src/screens/food/FoodScreen.tsx (CORRECTED AND FINAL)
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -25,7 +27,6 @@ const FoodScreen = () => {
     const [menuData, setMenuData] = useState({});
     const [loading, setLoading] = useState(true);
     const [itemModalInfo, setItemModalInfo] = useState({ visible: false, mode: null, data: null });
-    // --- ✅ NEW: State for the global time editing modal ---
     const [isTimeModalVisible, setIsTimeModalVisible] = useState(false);
 
     const fetchMenu = useCallback(() => {
@@ -57,23 +58,27 @@ const FoodScreen = () => {
         }
     };
     
-    // --- ✅ MODIFIED: This function now handles ADD and EDIT for individual items ---
     const handleSaveItem = (values) => {
         if (!user) return;
         const { mode, data } = itemModalInfo;
         
-        // When adding a new item, assign the current global time to it.
-        if (mode === 'add') {
-            values.meal_time = displayTime === 'Not Set' ? '' : displayTime;
-        }
-
         const requestBody = { ...values, editorId: user.id };
         let request;
 
         if (mode === 'edit') {
-            request = apiClient.put(`/food-menu/${data.id}`, requestBody);
-        } else {
-            const addRequestBody = { ...requestBody, day_of_week: data.day_of_week, meal_type: data.meal_type };
+            // ✅ FIX: Only send the food_item and editorId when editing.
+            request = apiClient.put(`/food-menu/${data.id}`, { 
+                food_item: requestBody.food_item, 
+                editorId: requestBody.editorId 
+            });
+        } else { // 'add' mode
+            // When adding, we must include the day, type, and the current global time.
+            const addRequestBody = { 
+                ...requestBody, 
+                day_of_week: data.day_of_week, 
+                meal_type: data.meal_type,
+                meal_time: displayTime === 'Not Set' ? '' : displayTime
+            };
             request = apiClient.post('/food-menu', addRequestBody);
         }
         
@@ -86,13 +91,10 @@ const FoodScreen = () => {
             });
     };
 
-    // --- ✅ NEW: This function handles saving the GLOBAL lunch time ---
     const handleSaveTime = (newTime) => {
         if (!user) return;
         setIsTimeModalVisible(false);
 
-        // NOTE: This assumes you have a backend endpoint like '/api/food-menu/time'
-        // that updates the time for all 'Lunch' entries.
         apiClient.put('/food-menu/time', {
             meal_type: 'Lunch',
             meal_time: newTime,
@@ -102,7 +104,10 @@ const FoodScreen = () => {
             Alert.alert("Success", "Lunch time has been updated for the week.");
             fetchMenu();
         })
-        .catch(() => Alert.alert("Error", "Failed to update the lunch time."));
+        .catch((err) => {
+            const msg = err.response?.data?.message || "Failed to update the lunch time.";
+            Alert.alert("Error", msg);
+        });
     };
 
     return (
@@ -114,7 +119,7 @@ const FoodScreen = () => {
                         menuData={menuData} 
                         isAdmin={user?.role === 'admin'} 
                         onCellPress={handleCellPress} 
-                        onHeaderPress={() => setIsTimeModalVisible(true)} // Open time modal on press
+                        onHeaderPress={() => setIsTimeModalVisible(true)}
                         displayTime={displayTime}
                     />
                 </ScrollView>
@@ -134,7 +139,6 @@ const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayT
                 <View style={[styles.tableHeaderCell, styles.dayHeaderCell]}>
                     <Text style={styles.headerDayText}>Day</Text>
                 </View>
-                {/* --- ✅ MODIFIED: The header is now a TouchableOpacity --- */}
                 <TouchableOpacity 
                     style={[ styles.tableHeaderCell, styles.mealHeaderCell, styles.lastCell ]}
                     onPress={onHeaderPress}
@@ -168,25 +172,25 @@ const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayT
     );
 };
 
-// --- ✅ MODIFIED: This modal now conditionally shows the Time input ---
+// ✅ FIX: This modal now ONLY ever shows the Food Item input.
 const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
     const { mode, data } = modalInfo;
     const [foodItem, setFoodItem] = useState(data?.food_item || '');
-    const [mealTime, setMealTime] = useState(data?.meal_time || '');
 
     const handleSavePress = () => {
-        onSave({ food_item: foodItem, meal_time: mealTime });
+        // Only pass the foodItem back.
+        onSave({ food_item: foodItem });
     };
     
     const handleClearPress = () => { 
-        onSave({ food_item: '', meal_time: mealTime }); 
+        onSave({ food_item: '' }); 
     };
 
     if (!data) return null;
     
     const title = mode === 'add' 
         ? `Add ${data.day_of_week} Lunch` 
-        : `Edit ${data.day_of_week} Lunch`;
+        ? `Edit ${data.day_of_week} Lunch`;
 
     return (
         <Modal visible={true} transparent animationType="fade" onRequestClose={onClose}>
@@ -196,13 +200,7 @@ const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
                     <Text style={styles.inputLabel}>Food Item</Text>
                     <TextInput style={styles.input} value={foodItem} onChangeText={setFoodItem} placeholder="e.g., Rice & Dal" />
                     
-                    {/* --- ✅ CHANGE: Time input only shows in 'edit' mode --- */}
-                    {mode === 'edit' && (
-                        <>
-                            <Text style={styles.inputLabel}>Time</Text>
-                            <TextInput style={styles.input} value={mealTime} onChangeText={setMealTime} placeholder="e.g., 1:00 PM - 2:00 PM" />
-                        </>
-                    )}
+                    {/* The Time input is now permanently removed from this modal */}
 
                     <TouchableOpacity style={styles.saveButton} onPress={handleSavePress}><Text style={styles.saveButtonText}>Save Changes</Text></TouchableOpacity>
                     {mode === 'edit' && (<TouchableOpacity style={styles.clearButton} onPress={handleClearPress}><Text style={styles.clearButtonText}>Clear Food Entry</Text></TouchableOpacity>)}
@@ -213,7 +211,6 @@ const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
     );
 };
 
-// --- ✅ NEW: A separate, simpler modal just for editing the global time ---
 const EditTimeModal = ({ visible, onClose, onSave, initialTime }) => {
     const [time, setTime] = useState(initialTime === 'Not Set' ? '' : initialTime);
 
@@ -245,6 +242,7 @@ const EditTimeModal = ({ visible, onClose, onSave, initialTime }) => {
     );
 };
 
+// Styles remain the same
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: THEME.background },
     scrollContainer: { padding: 10 },
