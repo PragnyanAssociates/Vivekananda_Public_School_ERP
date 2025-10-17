@@ -1081,7 +1081,7 @@ app.get('/api/attendance/student-history-admin/:studentId', async (req, res) => 
 
 // 📂 File: server.js (or your main backend file)
 // ==========================================================
-// --- HEALTH API ROUTES (REVISED) ---
+// --- HEALTH API ROUTES (CORRECTED) ---
 // ==========================================================
 
 // Endpoint for a student to get their own record
@@ -1101,7 +1101,7 @@ app.get('/api/health/my-record/:userId', async (req, res) => {
             const userName = userRows.length > 0 ? userRows[0].full_name : 'Student';
             res.json({ full_name: userName, user_id: userId });
         }
-    } catch (error) => {
+    } catch (error) { // ★★★ THIS LINE IS NOW CORRECTED ★★★
         console.error("GET /api/health/my-record Error:", error);
         res.status(500).json({ message: "Error fetching health record." });
     }
@@ -1113,13 +1113,12 @@ app.get('/api/health/classes', async (req, res) => {
     try {
         const [results] = await db.query(query);
         res.json(results.map(r => r.class_group));
-    } catch (error) => {
+    } catch (error) {
         console.error("GET /api/health/classes Error:", error);
         res.status(500).json({ message: "Error fetching classes." });
     }
 });
 
-// ★★★ MODIFIED ENDPOINT ★★★
 // Fetches students for a class, now including their roll number.
 app.get('/api/health/students/:class_group', async (req, res) => {
     const { class_group } = req.params;
@@ -1132,7 +1131,7 @@ app.get('/api/health/students/:class_group', async (req, res) => {
         FROM users u
         LEFT JOIN user_profiles up ON u.id = up.user_id
         WHERE u.role = 'student' AND u.class_group = ?
-        ORDER BY CAST(up.roll_no AS UNSIGNED), up.roll_no, u.full_name`; // Sorts numerically then alphabetically
+        ORDER BY CAST(up.roll_no AS UNSIGNED), up.roll_no, u.full_name`;
     try {
         const [results] = await db.query(query, [class_group]);
         res.json(results);
@@ -1142,7 +1141,6 @@ app.get('/api/health/students/:class_group', async (req, res) => {
     }
 });
 
-// ★★★ MODIFIED ENDPOINT ★★★
 // Fetches a specific student's health record, now including their roll number for display.
 app.get('/api/health/record/:userId', async (req, res) => {
     const { userId } = req.params;
