@@ -5393,13 +5393,12 @@ app.delete('/api/permanent-inventory/:id', async (req, res) => {
 
 
 // ==========================================================
-// --- REVISED & SIMPLIFIED FOOD MENU API ROUTES ---
+// --- REVISED & SIMPLIFIED FOOD MENU API ROUTES (WITH FIX) ---
 // ==========================================================
 
 // GET the full weekly food menu (Accessible to all roles)
 app.get('/api/food-menu', async (req, res) => {
     try {
-        // OPTIMIZED: The query now only sorts by day, as we only care about Lunch.
         const query = `
             SELECT * FROM food_menu 
             ORDER BY FIELD(day_of_week, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
@@ -5461,9 +5460,7 @@ app.post('/api/food-menu', async (req, res) => {
         res.status(201).json({ message: 'Menu item created successfully.' });
 
     } catch (error) {
-        // ★★★ BETTER ERROR LOGGING ★★★
         console.error("Error creating food menu item:", error);
-        // Send a more specific error message if it's a database constraint issue
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'This menu item already exists. Please edit it instead.'});
         }
@@ -5520,6 +5517,56 @@ app.put('/api/food-menu/:id', async (req, res) => {
     } catch (error) {
         console.error("Error updating food menu item:", error);
         res.status(500).json({ message: 'Error updating menu item on the server.' });
+    } finally {
+        connection.release();
+    }
+});
+
+
+// ✅ NEW: PUT route to update all meal times for a specific type (e.g., all 'Lunch' times)
+app.put('/api/food-menu/time', async (req, res) => {
+    const { meal_type, meal_time, editorId } = req.body;
+
+    if (!editorId) {
+        return res.status(401).json({ message: 'Unauthorized: User authentication is required.' });
+    }
+    if (!meal_type) {
+        return res.status(400).json({ message: 'Meal type is required to update times.' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [[editor]] = await connection.query('SELECT role, full_name FROM users WHERE id = ?', [editorId]);
+        if (!editor || editor.role !== 'admin') {
+            await connection.rollback();
+            return res.status(403).json({ message: 'Forbidden: You do not have permission to perform this action.' });
+        }
+
+        // This is the core logic: Update all rows that match the meal_type
+        await connection.query(
+            'UPDATE food_menu SET meal_time = ? WHERE meal_type = ?',
+            [meal_time, meal_type]
+        );
+
+        // Notify users about the time change
+        const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [editorId]);
+        if (usersToNotify.length > 0) {
+            const recipientIds = usersToNotify.map(u => u.id);
+            const senderName = editor.full_name || "School Administration";
+            const notificationTitle = `Food Menu Schedule Updated`;
+            const notificationMessage = `The weekly schedule for ${meal_type} has been updated to ${meal_time || 'be removed'}.`;
+            
+            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/food-menu');
+        }
+        
+        await connection.commit();
+        res.status(200).json({ message: 'Weekly meal time updated successfully.' });
+
+    } catch (error) {
+        console.error("Error updating weekly meal time:", error);
+        res.status(500).json({ message: 'Error updating meal time on the server.' });
     } finally {
         connection.release();
     }

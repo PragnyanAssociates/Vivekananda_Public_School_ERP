@@ -217,12 +217,14 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
                  break;
 
             // Other Features
-            case 'food':
-                navigation.navigate('FoodScreen');
-                break;
+            // Add this case for food menu notifications
+              case 'food-menu':
+              case 'food':
+              navigation.navigate('FoodScreen');
+              break;
             case 'kitchen':
-                navigation.navigate('KitchenScreen');
-                break;
+            navigation.navigate('KitchenScreen');
+            break;
 
             default:
                 Alert.alert("Navigation", `This notification type (${screen}) doesn't have a configured screen.`);

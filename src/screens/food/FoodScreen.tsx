@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     Alert, ActivityIndicator, SafeAreaView, Modal, TextInput
@@ -13,20 +13,20 @@ const THEME = {
     border: '#e9ecef', dark: '#343a40',
 };
 
-// MODIFIED: Only showing days relevant to the school week
 const ORDERED_DAYS = [
     { full: 'Monday', short: 'Mon' }, { full: 'Tuesday', short: 'Tue' }, { full: 'Wednesday', short: 'Wed' },
     { full: 'Thursday', short: 'Thu' }, { full: 'Friday', short: 'Fri' }, { full: 'Saturday', short: 'Sat' },
 ];
 
-// MODIFIED: Only showing Lunch
 const MEAL_TYPES = ['Lunch'];
 
 const FoodScreen = () => {
     const { user } = useAuth();
     const [menuData, setMenuData] = useState({});
     const [loading, setLoading] = useState(true);
-    const [modalInfo, setModalInfo] = useState({ visible: false, mode: null, data: null });
+    const [itemModalInfo, setItemModalInfo] = useState({ visible: false, mode: null, data: null });
+    // --- ✅ NEW: State for the global time editing modal ---
+    const [isTimeModalVisible, setIsTimeModalVisible] = useState(false);
 
     const fetchMenu = useCallback(() => {
         setLoading(true);
@@ -38,42 +38,71 @@ const FoodScreen = () => {
 
     useFocusEffect(fetchMenu);
 
-    const openModal = (mode, data) => setModalInfo({ visible: true, mode, data });
-    const closeModal = () => setModalInfo({ visible: false, mode: null, data: null });
+    const displayTime = useMemo(() => {
+        for (const day of ORDERED_DAYS) {
+            const meal = menuData[day.full]?.find(m => m.meal_type === 'Lunch' && m.meal_time);
+            if (meal) { return meal.meal_time; }
+        }
+        return 'Not Set';
+    }, [menuData]);
+
+    const openItemModal = (mode, data) => setItemModalInfo({ visible: true, mode, data });
+    const closeItemModal = () => setItemModalInfo({ visible: false, mode: null, data: null });
 
     const handleCellPress = (meal, day, mealType) => {
         if (meal) {
-            openModal('edit', meal);
+            openItemModal('edit', meal);
         } else {
-            openModal('add', { day_of_week: day, meal_type: mealType });
+            openItemModal('add', { day_of_week: day, meal_type: mealType });
         }
     };
     
-    const handleSave = (values) => {
+    // --- ✅ MODIFIED: This function now handles ADD and EDIT for individual items ---
+    const handleSaveItem = (values) => {
         if (!user) return;
-        const { mode, data } = modalInfo;
+        const { mode, data } = itemModalInfo;
         
+        // When adding a new item, assign the current global time to it.
+        if (mode === 'add') {
+            values.meal_time = displayTime === 'Not Set' ? '' : displayTime;
+        }
+
         const requestBody = { ...values, editorId: user.id };
         let request;
 
         if (mode === 'edit') {
             request = apiClient.put(`/food-menu/${data.id}`, requestBody);
-        } else { // mode === 'add'
+        } else {
             const addRequestBody = { ...requestBody, day_of_week: data.day_of_week, meal_type: data.meal_type };
             request = apiClient.post('/food-menu', addRequestBody);
         }
         
-        closeModal();
-
+        closeItemModal();
         request
-        .then(() => {
-            fetchMenu(); 
+            .then(() => fetchMenu())
+            .catch((error) => {
+                const errorMessage = error.response?.data?.message || "An error occurred while saving.";
+                Alert.alert("Error", errorMessage);
+            });
+    };
+
+    // --- ✅ NEW: This function handles saving the GLOBAL lunch time ---
+    const handleSaveTime = (newTime) => {
+        if (!user) return;
+        setIsTimeModalVisible(false);
+
+        // NOTE: This assumes you have a backend endpoint like '/api/food-menu/time'
+        // that updates the time for all 'Lunch' entries.
+        apiClient.put('/food-menu/time', {
+            meal_type: 'Lunch',
+            meal_time: newTime,
+            editorId: user.id
         })
-        .catch((error) => {
-            // Provide a more specific error message from the server if available
-            const errorMessage = error.response?.data?.message || "An error occurred while saving.";
-            Alert.alert("Error", errorMessage);
-        });
+        .then(() => {
+            Alert.alert("Success", "Lunch time has been updated for the week.");
+            fetchMenu();
+        })
+        .catch(() => Alert.alert("Error", "Failed to update the lunch time."));
     };
 
     return (
@@ -85,26 +114,35 @@ const FoodScreen = () => {
                         menuData={menuData} 
                         isAdmin={user?.role === 'admin'} 
                         onCellPress={handleCellPress} 
+                        onHeaderPress={() => setIsTimeModalVisible(true)} // Open time modal on press
+                        displayTime={displayTime}
                     />
                 </ScrollView>
             }
-            {modalInfo.visible && <EditMenuModal modalInfo={modalInfo} onClose={closeModal} onSave={handleSave} />}
+            {itemModalInfo.visible && <EditMenuModal modalInfo={itemModalInfo} onClose={closeItemModal} onSave={handleSaveItem} />}
+            {isTimeModalVisible && <EditTimeModal visible={isTimeModalVisible} onClose={() => setIsTimeModalVisible(false)} onSave={handleSaveTime} initialTime={displayTime} />}
         </SafeAreaView>
     );
 };
 
-const FoodMenuTable = ({ menuData, isAdmin, onCellPress }) => {
+const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayTime }) => {
     const getMealForCell = (day, mealType) => menuData[day]?.find(m => m.meal_type === mealType);
 
     return (
         <View style={styles.table}>
             <View style={styles.tableHeaderRow}>
-                <View style={[styles.tableHeaderCell, styles.dayHeaderCell]}><Text style={styles.headerDayText}>Day</Text></View>
-                {MEAL_TYPES.map((mealType) => (
-                    <View key={mealType} style={[ styles.tableHeaderCell, styles.mealHeaderCell, styles.lastCell ]}>
-                        <Text style={styles.headerMealTypeText}>{mealType}</Text>
-                    </View>
-                ))}
+                <View style={[styles.tableHeaderCell, styles.dayHeaderCell]}>
+                    <Text style={styles.headerDayText}>Day</Text>
+                </View>
+                {/* --- ✅ MODIFIED: The header is now a TouchableOpacity --- */}
+                <TouchableOpacity 
+                    style={[ styles.tableHeaderCell, styles.mealHeaderCell, styles.lastCell ]}
+                    onPress={onHeaderPress}
+                    disabled={!isAdmin}
+                >
+                    <Text style={styles.headerMealTypeText}>Lunch</Text>
+                    <Text style={styles.headerMealTimeText}>{displayTime}</Text>
+                </TouchableOpacity>
             </View>
             {ORDERED_DAYS.map(({ full, short }) => (
                 <View key={full} style={styles.tableRow}>
@@ -112,18 +150,15 @@ const FoodMenuTable = ({ menuData, isAdmin, onCellPress }) => {
                     {MEAL_TYPES.map((mealType) => {
                         const meal = getMealForCell(full, mealType);
                         return (
-                            // ★★★ CRITICAL FIX HERE ★★★
-                            // The 'disabled' prop logic was incorrect. It should simply be '!isAdmin'.
-                            // This ensures that if the user IS an admin, the button is ALWAYS clickable.
-                            // If the user is NOT an admin, it is ALWAYS disabled.
                             <TouchableOpacity 
                                 key={mealType} 
                                 style={[ styles.tableCell, styles.mealCell, styles.lastCell ]} 
                                 onPress={() => onCellPress(meal, full, mealType)} 
-                                disabled={!isAdmin} // This is the corrected logic
+                                disabled={!isAdmin}
                             >
-                                <Text style={meal?.food_item ? styles.mealItemText : styles.notSetText} numberOfLines={2}>{meal?.food_item || 'Not set'}</Text>
-                                <Text style={meal?.meal_time ? styles.mealTimeText : styles.notSetText} numberOfLines={1}>{meal?.meal_time || 'No time set'}</Text>
+                                <Text style={meal?.food_item ? styles.mealItemText : styles.notSetText} numberOfLines={3}>
+                                    {meal?.food_item || 'Not set'}
+                                </Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -133,6 +168,7 @@ const FoodMenuTable = ({ menuData, isAdmin, onCellPress }) => {
     );
 };
 
+// --- ✅ MODIFIED: This modal now conditionally shows the Time input ---
 const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
     const { mode, data } = modalInfo;
     const [foodItem, setFoodItem] = useState(data?.food_item || '');
@@ -149,8 +185,8 @@ const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
     if (!data) return null;
     
     const title = mode === 'add' 
-        ? `Add ${data.day_of_week} ${data.meal_type}` 
-        : `Edit ${data.day_of_week} ${data.meal_type}`;
+        ? `Add ${data.day_of_week} Lunch` 
+        : `Edit ${data.day_of_week} Lunch`;
 
     return (
         <Modal visible={true} transparent animationType="fade" onRequestClose={onClose}>
@@ -159,8 +195,15 @@ const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
                     <Text style={styles.modalTitle}>{title}</Text>
                     <Text style={styles.inputLabel}>Food Item</Text>
                     <TextInput style={styles.input} value={foodItem} onChangeText={setFoodItem} placeholder="e.g., Rice & Dal" />
-                    <Text style={styles.inputLabel}>Time</Text>
-                    <TextInput style={styles.input} value={mealTime} onChangeText={setMealTime} placeholder="e.g., 1:00 PM - 2:00 PM" />
+                    
+                    {/* --- ✅ CHANGE: Time input only shows in 'edit' mode --- */}
+                    {mode === 'edit' && (
+                        <>
+                            <Text style={styles.inputLabel}>Time</Text>
+                            <TextInput style={styles.input} value={mealTime} onChangeText={setMealTime} placeholder="e.g., 1:00 PM - 2:00 PM" />
+                        </>
+                    )}
+
                     <TouchableOpacity style={styles.saveButton} onPress={handleSavePress}><Text style={styles.saveButtonText}>Save Changes</Text></TouchableOpacity>
                     {mode === 'edit' && (<TouchableOpacity style={styles.clearButton} onPress={handleClearPress}><Text style={styles.clearButtonText}>Clear Food Entry</Text></TouchableOpacity>)}
                     <TouchableOpacity onPress={onClose}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
@@ -170,7 +213,38 @@ const EditMenuModal = ({ modalInfo, onClose, onSave }) => {
     );
 };
 
-// Styles remain the same
+// --- ✅ NEW: A separate, simpler modal just for editing the global time ---
+const EditTimeModal = ({ visible, onClose, onSave, initialTime }) => {
+    const [time, setTime] = useState(initialTime === 'Not Set' ? '' : initialTime);
+
+    useEffect(() => {
+        setTime(initialTime === 'Not Set' ? '' : initialTime);
+    }, [initialTime]);
+
+    return (
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Update Weekly Lunch Time</Text>
+                    <Text style={styles.inputLabel}>Time</Text>
+                    <TextInput 
+                        style={styles.input} 
+                        value={time} 
+                        onChangeText={setTime} 
+                        placeholder="e.g., 1:00 PM - 1:45 PM" 
+                    />
+                    <TouchableOpacity style={styles.saveButton} onPress={() => onSave(time)}>
+                        <Text style={styles.saveButtonText}>Save Time</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={onClose}>
+                        <Text style={styles.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: THEME.background },
     scrollContainer: { padding: 10 },
@@ -182,16 +256,15 @@ const styles = StyleSheet.create({
     tableCell: { justifyContent: 'center', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4 },
     tableHeaderCell: { paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)' },
     dayHeaderCell: { flex: 0.7, alignItems: 'flex-start', paddingLeft: 10 },
-    mealHeaderCell: { flex: 1 },
+    mealHeaderCell: { flex: 1.3 },
     lastCell: { borderRightWidth: 0 },
     headerDayText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
     headerMealTypeText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' },
-    headerMealTimeText: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 10, fontWeight: '600', marginTop: 2 },
+    headerMealTimeText: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 11, fontWeight: '600', marginTop: 3 },
     dayCell: { flex: 0.7, alignItems: 'flex-start', paddingLeft: 10, borderRightWidth: 1, borderColor: THEME.border },
     dayCellText: { fontWeight: 'bold', fontSize: 14, color: THEME.primary },
-    mealCell: { flex: 1, borderRightWidth: 1, borderColor: THEME.border, minHeight: 65, paddingVertical: 8 },
-    mealItemText: { fontSize: 12, color: THEME.text, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
-    mealTimeText: { fontSize: 11, color: THEME.muted, fontWeight: '600', textAlign: 'center' },
+    mealCell: { flex: 1.3, borderRightWidth: 1, borderColor: THEME.border, minHeight: 65, paddingVertical: 8, paddingHorizontal: 8 },
+    mealItemText: { fontSize: 14, color: THEME.text, fontWeight: '600', textAlign: 'center' },
     notSetText: { fontSize: 12, color: THEME.muted, fontStyle: 'italic', textAlign: 'center' },
     modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
     modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 12, padding: 25, elevation: 10 },
