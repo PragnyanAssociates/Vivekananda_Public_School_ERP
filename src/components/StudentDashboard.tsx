@@ -35,7 +35,7 @@ import StudentPTMScreen from '../screens/ptm/StudentPTMScreen';
 import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
 import FoodScreen from '../screens/food/FoodScreen';
 import StudentHealthScreen from '../screens/health/StudentHealthScreen';
-import GroupChatScreen from '../screens/chat/GroupChatScreen';
+// import GroupChatScreen from '../screens/chat/GroupChatScreen';
 import StudentEventsScreen from '../screens/events/StudentEventsScreen';
 import StudentExamScreen from '../screens/exams_Schedule/StudentExamScreen';
 import StudentLabsScreen from '../screens/labs/StudentLabsScreen';
@@ -106,7 +106,7 @@ const StudentDashboard = ({ navigation }) => {
     { id: 'qa7', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
     { id: 'qa8', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
     { id: 'qa9', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'StudentHealthScreen' },
-    { id: 'qa10', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateToTab: 'GroupChatScreen' },
+    { id: 'qa10', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
     { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'StudentEventsScreen' },
     { id: 'qa15', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'StudentExamScreen' },
     { id: 'qa13', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'StudentLabsScreen' },
@@ -185,7 +185,7 @@ const StudentDashboard = ({ navigation }) => {
       case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
       case 'FoodScreen': return ( <><ContentScreenHeader title="Lunch Menu" onBack={handleBack} /><FoodScreen /></> );
       case 'StudentHealthScreen': return ( <><ContentScreenHeader title="Health Info" onBack={handleBack} /><StudentHealthScreen /></> );
-      case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
+      // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
       case 'StudentEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><StudentEventsScreen /></> );
       case 'StudentExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleBack} /><StudentExamScreen /></> );
       case 'StudentLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleBack} /><StudentLabsScreen /></> );

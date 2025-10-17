@@ -40,7 +40,8 @@ import AttendanceScreen from './src/screens/AttendanceScreen';
 // import TransportScreen from './src/screens/transport/TransportScreen';
 import GalleryScreen from './src/screens/gallery/GalleryScreen';
 import AlbumDetailScreen from './src/screens/gallery/AlbumDetailScreen';
-import GroupChatScreen from './src/screens/chat/GroupChatScreen';
+// import GroupChatScreen from './src/screens/chat/GroupChatScreen';
+import ChatStackNavigator from './src/navigation/ChatStackNavigator';
 
 import AdminLM from './src/components/AdminLM';
 import AdminEventsScreen from './src/screens/events/AdminEventsScreen';
@@ -225,11 +226,12 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="ReportDetailScreen" component={ReportDetailScreen} /> 
       {/* <Stack.Screen name="TransportScreen" component={TransportScreen} /> */}
       <Stack.Screen name="AboutUs" component={AboutUs} />
-      <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} />
+      {/* <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} /> */}
       <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
       <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} />
       <Stack.Screen name="KitchenScreen" component={KitchenScreen} />
       <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
+      <Stack.Screen name="ChatFeature" component={ChatStackNavigator} options={{ headerShown: false }} />
       {/* <Stack.Screen name="ChatAIScreen" component={ChatAIScreen} />
       <Stack.Screen name="DonorSuggestionsScreen" component={DonorSuggestionsScreen} />
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />

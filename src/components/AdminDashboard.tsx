@@ -40,7 +40,7 @@ import TeacherAdminPTMScreen from '../screens/ptm/TeacherAdminPTMScreen';
 import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
 import FoodScreen from '../screens/food/FoodScreen';
 import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen';
-import GroupChatScreen from '../screens/chat/GroupChatScreen';
+// import GroupChatScreen from '../screens/chat/GroupChatScreen';
 import AlumniScreen from '../screens/Alumni/AlumniScreen';
 import PreAdmissionsScreen from '../screens/Pre-Admissions/PreAdmissionsScreen';
 import AdminEventsScreen from '../screens/events/AdminEventsScreen';
@@ -114,7 +114,7 @@ const AdminDashboard = ({ navigation }) => {
     { id: 'qa8', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
     { id: 'qa9', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
     { id: 'qa10', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
-    { id: 'qa11', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateToTab: 'GroupChatScreen' },
+    { id: 'qa11', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
     { id: 'qa12', title: 'Alumni', imageSource: 'https://cdn-icons-png.flaticon.com/128/9517/9517272.png', navigateToTab: 'AlumniScreen' },
     { id: 'qa13', title: 'Pre-Admissions', imageSource: 'https://cdn-icons-png.flaticon.com/128/10220/10220958.png', navigateToTab: 'PreAdmissionsScreen' },
     { id: 'qa14', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
@@ -191,7 +191,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
         case 'FoodScreen': return ( <><ContentScreenHeader title="Lunch Menu" onBack={handleBack} /><FoodScreen /></> );
         case 'TeacherHealthAdminScreen': return ( <><ContentScreenHeader title="Healh Info" onBack={handleBack} /><TeacherHealthAdminScreen /></> );
-        case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
+        // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
         case 'AlumniScreen': return ( <><ContentScreenHeader title="Alumni" onBack={handleBack} /><AlumniScreen /></> );
         case 'PreAdmissionsScreen': return ( <><ContentScreenHeader title="Pre-Admissions" onBack={handleBack} /><PreAdmissionsScreen /></> );
         case 'AdminEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><AdminEventsScreen /></> );
