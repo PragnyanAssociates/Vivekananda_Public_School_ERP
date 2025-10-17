@@ -1,4 +1,4 @@
-// 📂 File: src/screens/food/FoodScreen.tsx (DEFINITIVE AND FINAL)
+// 📂 File: src/screens/food/FoodScreen.tsx (DEFINITIVE AND FINAL - NO CHANGES NEEDED)
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
@@ -226,7 +226,6 @@ const EditTimeModal = ({ visible, onClose, onSave, initialTime }) => {
     );
 };
 
-// Styles remain the same
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: THEME.background },
     scrollContainer: { padding: 10 },

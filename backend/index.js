@@ -5395,6 +5395,7 @@ app.delete('/api/permanent-inventory/:id', async (req, res) => {
 // ==========================================================
 // --- DEFINITIVE AND FINAL FOOD MENU API ROUTES ---
 // ==========================================================
+// Note: This file contains the corrected route order to fix the issue.
 
 // GET the full weekly food menu (Accessible to all roles)
 app.get('/api/food-menu', async (req, res) => {
@@ -5441,16 +5442,12 @@ app.post('/api/food-menu', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden.' });
         }
         
-        // This query will INSERT a new row, but if a row for that day/meal_type already exists,
-        // it will UPDATE the food_item instead. This prevents crashes on duplicate entries.
         const query = `
             INSERT INTO food_menu (day_of_week, meal_type, food_item, meal_time) 
             VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE food_item = VALUES(food_item), meal_time = VALUES(meal_time)
         `;
         await connection.query(query, [day_of_week, meal_type, food_item, meal_time]);
-
-        // Notification logic...
         
         await connection.commit();
         res.status(201).json({ message: 'Menu item created/updated successfully.' });
@@ -5464,17 +5461,45 @@ app.post('/api/food-menu', async (req, res) => {
 });
 
 
-// ✅ FINAL CORRECTED LOGIC FOR UPDATING A SINGLE ITEM
+// ✅ *** FIX APPLIED HERE ***
+// The specific '/time' route is placed BEFORE the generic '/:id' route.
+// This ensures that a request to '/api/food-menu/time' is handled correctly.
+
+// UPDATE TIME for the whole week
+app.put('/api/food-menu/time', async (req, res) => {
+    const { meal_type, meal_time, editorId } = req.body;
+
+    if (!editorId) {
+        return res.status(401).json({ message: 'Unauthorized.' });
+    }
+    if (!meal_type) {
+        return res.status(400).json({ message: 'Meal type is required.' });
+    }
+
+    try {
+        await db.query(
+            'UPDATE food_menu SET meal_time = ? WHERE meal_type = ?',
+            [meal_time, meal_type]
+        );
+
+        res.status(200).json({ message: 'Weekly meal time updated successfully.' });
+    } catch (error) {
+        console.error("Error updating weekly meal time:", error);
+        res.status(500).json({ message: 'Error updating meal time on the server.' });
+    }
+});
+
+
+// UPDATE a SINGLE food item
 app.put('/api/food-menu/:id', async (req, res) => {
     const { id } = req.params;
-    const { food_item, editorId } = req.body; // Only food_item is expected
+    const { food_item, editorId } = req.body; 
 
     if (!editorId) {
         return res.status(401).json({ message: 'Unauthorized.' });
     }
 
     try {
-        // This query is simple and only updates the food_item. It will not fail.
         const [result] = await db.query(
             'UPDATE food_menu SET food_item = ? WHERE id = ?',
             [food_item, id]
@@ -5488,33 +5513,6 @@ app.put('/api/food-menu/:id', async (req, res) => {
     } catch (error) {
         console.error("Error updating food menu item:", error);
         res.status(500).json({ message: 'Error updating menu item on the server.' });
-    }
-});
-
-
-// ✅ FINAL CORRECTED LOGIC FOR UPDATING TIME FOR THE WHOLE WEEK
-app.put('/api/food-menu/time', async (req, res) => {
-    const { meal_type, meal_time, editorId } = req.body;
-
-    if (!editorId) {
-        return res.status(401).json({ message: 'Unauthorized.' });
-    }
-    if (!meal_type) {
-        return res.status(400).json({ message: 'Meal type is required.' });
-    }
-
-    try {
-        // This query updates the meal_time for ALL rows matching the meal_type (e.g., 'Lunch')
-        // It's the correct way to handle a weekly time update with your table structure.
-        await db.query(
-            'UPDATE food_menu SET meal_time = ? WHERE meal_type = ?',
-            [meal_time, meal_type]
-        );
-
-        res.status(200).json({ message: 'Weekly meal time updated successfully.' });
-    } catch (error) {
-        console.error("Error updating weekly meal time:", error);
-        res.status(500).json({ message: 'Error updating meal time on the server.' });
     }
 });
 
