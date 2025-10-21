@@ -36,16 +36,13 @@ const GroupListScreen = () => {
         }
     }, [user, fetchGroups]));
 
-    // ADDED: useEffect for real-time updates via Socket.IO
     useEffect(() => {
         if (!user) return;
         
         socketRef.current = io(SERVER_URL, { transports: ['websocket'] });
 
-        // Listen for the event from the backend to refresh the list
         socketRef.current.on('updateGroupList', () => {
-            // Refetch the entire list to get updated order, last message, and unread counts
-            fetchGroups(false); // fetch without showing the full screen loader
+            fetchGroups(false); 
         });
 
         return () => {

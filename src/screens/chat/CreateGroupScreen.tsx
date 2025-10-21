@@ -22,7 +22,6 @@ const CreateGroupScreen = () => {
     useEffect(() => {
         const fetchOptions = async () => {
             try {
-                // CORRECTED: Matched API endpoint with backend
                 const response = await apiClient.get('/groups/options');
                 setGroupOptions(response.data);
             } catch (error: any) {

@@ -9,7 +9,7 @@ import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/nativ
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import { getProfileImageSource } from '../../utils/imageHelpers';
 import Video from 'react-native-video';
-import EmojiPicker, { EmojiType } from 'rn-emoji-keyboard';
+import EmojiPicker from 'rn-emoji-keyboard';
 
 const THEME = { primary: '#007bff', text: '#212529', muted: '#86909c', border: '#dee2e6', myMessageBg: '#dcf8c6', otherMessageBg: '#ffffff', white: '#ffffff' };
 
@@ -41,7 +41,6 @@ const GroupChatScreen = () => {
         markAsSeen();
         const fetchGroupDetails = async () => {
             try {
-                // CORRECTED: Use new, more efficient endpoint to get single group details.
                 const response = await apiClient.get(`/groups/${group.id}/details`);
                 const updatedGroup = response.data;
                 if (updatedGroup) {
@@ -73,7 +72,6 @@ const GroupChatScreen = () => {
             socketRef.current?.emit('joinGroup', { groupId: group.id });
         });
         socketRef.current.on('newMessage', (msg) => {
-            // This now handles messages from everyone, including the sender.
             if (msg.group_id === group.id) {
                 setMessages(prev => [...prev, msg]);
             }
@@ -95,9 +93,6 @@ const GroupChatScreen = () => {
     const sendMessage = (type: 'text' | 'image' | 'video', text: string | null, url: string | null) => {
         if (!user || !socketRef.current) return;
         
-        // CORRECTED: Removed optimistic message creation. The server will broadcast
-        // the message back to the sender, which becomes the single source of truth, preventing duplicates.
-        
         socketRef.current.emit('sendMessage', {
             userId: user.id,
             groupId: group.id,
@@ -115,7 +110,6 @@ const GroupChatScreen = () => {
         const formData = new FormData();
         formData.append('media', { uri: file.uri, type: file.type, name: file.fileName });
         try {
-            // CORRECTED: Matched API endpoint with backend
             const res = await apiClient.post('/groups/media', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
             sendMessage(type, null, res.data.fileUrl);
         } catch (error) {
@@ -171,7 +165,7 @@ const GroupChatScreen = () => {
         const renderContent = () => {
             switch (item.message_type) {
                 case 'image': return <Image source={{ uri: SERVER_URL + item.file_url }} style={styles.mediaMessage} />;
-                case 'video': return <Video source={{ uri: SERVER_URL + item.file_url }} style={styles.mediaMessage} controls paused resizeMode="cover" />;
+                case 'video': return <Video source={{ uri: SERVER_URL + item.file_url }} style={styles.mediaMessage} controls={false} paused resizeMode="cover" />;
                 default: return <Text style={styles.messageText}>{item.message_text}</Text>;
             }
         };
@@ -220,7 +214,7 @@ const GroupChatScreen = () => {
                     data={messages}
                     renderItem={renderMessageItem}
                     keyExtractor={(item) => item.id.toString()}
-                    contentContainerStyle={{ paddingVertical: 10 }}
+                    contentContainerStyle={{ paddingVertical: 10, paddingBottom: 20 }}
                     onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 />}

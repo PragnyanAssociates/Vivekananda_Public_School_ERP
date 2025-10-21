@@ -5789,6 +5789,7 @@ app.post('/api/admin/ad-payment-details', [verifyToken, isAdmin], paymentUpload.
 // ==========================================================
 
 // ★★★ 1. Multer Storage Configuration for Group Chat Media ★★★
+// This uses the 'multer' and 'path' constants already defined in your server file.
 const chatStorage = multer.diskStorage({
     destination: (req, file, cb) => { cb(null, '/data/uploads'); },
     filename: (req, file, cb) => { cb(null, `chat-media-${Date.now()}${path.extname(file.originalname)}`); }
@@ -5806,10 +5807,29 @@ const chatUpload = multer({
     }
 });
 
-// ★★★ 2. API Routes for Group Management ★★★
+// ★★★ 2. Helper Middleware for Group Creator Check ★★★
+// Defined here to be used in the routes below.
+const isGroupCreator = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const userId = req.user.id;
+        const [[group]] = await db.query('SELECT created_by FROM `groups` WHERE id = ?', [groupId]);
+        if (!group) {
+            return res.status(404).json({ message: 'Group not found.' });
+        }
+        if (group.created_by !== userId) {
+            return res.status(403).json({ message: 'Access denied. Only the group creator can perform this action.' });
+        }
+        next();
+    } catch (error) {
+        res.status(500).json({ message: 'Server error while verifying group ownership.' });
+    }
+};
+
+
+// ★★★ 3. API Routes for Group Management ★★★
 
 // Get available options (classes, roles) for creating a group.
-// CORRECTED: API endpoint standardized for consistency.
 app.get('/api/groups/options', verifyToken, async (req, res) => {
     try {
         const classQuery = `SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group ASC;`;
@@ -5904,12 +5924,11 @@ app.get('/api/groups', verifyToken, async (req, res) => {
     }
 });
 
-// ADDED: New endpoint to get details for a single group, which is more efficient.
+// Get details for a single group.
 app.get('/api/groups/:groupId/details', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
         const userId = req.user.id;
-        // First, check if the user is a member of the group (for security)
         const [[memberCheck]] = await db.query('SELECT group_id FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
         if (!memberCheck) {
             return res.status(403).json({ message: 'Access denied.' });
@@ -5924,7 +5943,6 @@ app.get('/api/groups/:groupId/details', verifyToken, async (req, res) => {
         res.status(500).json({ message: "Error fetching group details." });
     }
 });
-
 
 // Mark a group's messages as seen by the user.
 app.post('/api/groups/:groupId/seen', verifyToken, async (req, res) => {
@@ -5943,24 +5961,6 @@ app.post('/api/groups/:groupId/seen', verifyToken, async (req, res) => {
         res.status(500).json({ message: "Could not mark group as seen." });
     }
 });
-
-// Helper middleware to check if the user is the group creator.
-const isGroupCreator = async (req, res, next) => {
-    try {
-        const { groupId } = req.params;
-        const userId = req.user.id;
-        const [[group]] = await db.query('SELECT created_by FROM `groups` WHERE id = ?', [groupId]);
-        if (!group) {
-            return res.status(404).json({ message: 'Group not found.' });
-        }
-        if (group.created_by !== userId) {
-            return res.status(403).json({ message: 'Access denied. Only the group creator can perform this action.' });
-        }
-        next();
-    } catch (error) {
-        res.status(500).json({ message: 'Server error while verifying group ownership.' });
-    }
-};
 
 // Update group details (name, color).
 app.put('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res) => {
@@ -5990,17 +5990,14 @@ app.post('/api/groups/:groupId/dp', verifyToken, isGroupCreator, chatUpload.sing
 });
 
 // Delete a group.
-// CORRECTED: Added transaction to safely delete all related data.
 app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res) => {
     const { groupId } = req.params;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        // Delete related data first to avoid foreign key constraints
         await connection.query('DELETE FROM group_chat_messages WHERE group_id = ?', [groupId]);
         await connection.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
         await connection.query('DELETE FROM group_last_seen WHERE group_id = ?', [groupId]);
-        // Finally, delete the group itself
         await connection.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
         await connection.commit();
         res.json({ message: 'Group deleted successfully.' });
@@ -6013,7 +6010,8 @@ app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res)
     }
 });
 
-// ★★★ 3. API Routes for Chat Messages ★★★
+
+// ★★★ 4. API Routes for Chat Messages ★★★
 app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
@@ -6036,15 +6034,14 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     }
 });
 
-// CORRECTED: API endpoint standardized for consistency.
 app.post('/api/groups/media', verifyToken, chatUpload.single('media'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
     res.status(201).json({ fileUrl: `/uploads/${req.file.filename}` });
 });
 
-// ★★★ 4. Real-Time Socket.IO Logic ★★★
-// NOTE: Ensure you have `const server = http.createServer(app);` and `const io = new Server(...)` defined in your main server file.
 
+// ★★★ 5. Real-Time Socket.IO Logic ★★★
+// This `io` constant was defined above, before this block of code. This solves the ReferenceError.
 io.on('connection', (socket) => {
     console.log(`🔌 A user connected: ${socket.id}`);
     
@@ -6078,10 +6075,7 @@ io.on('connection', (socket) => {
                 WHERE m.id = ?`, [newMessageId]);
             await connection.commit();
             
-            // Broadcast the new message to everyone in the group room (including the sender).
             io.to(roomName).emit('newMessage', broadcastMessage);
-            
-            // ADDED: Broadcast a global event to tell all users' group list screens to refresh.
             io.emit('updateGroupList', { groupId: groupId });
 
         } catch (error) {
@@ -6103,13 +6097,11 @@ io.on('connection', (socket) => {
                  console.error(`🔒 SECURITY ALERT: User ${userId} tried to delete message ${messageId} they do not own.`);
                 return;
             }
-            // Check if this was the last message before deleting it.
             const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
             
             await connection.query('DELETE FROM group_chat_messages WHERE id = ?', [messageId]);
             io.to(roomName).emit('messageDeleted', messageId);
 
-            // ADDED: If the deleted message was the last one, trigger a group list refresh.
             if (lastMsgCheck && lastMsgCheck.id === messageId) {
                 io.emit('updateGroupList', { groupId: groupId });
             }
@@ -6142,7 +6134,6 @@ io.on('connection', (socket) => {
                 WHERE m.id = ?`, [messageId]);
             io.to(roomName).emit('messageEdited', updatedMessage);
 
-            // ADDED: If the edited message is the last one, trigger a group list refresh.
             const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
             if (lastMsgCheck && lastMsgCheck.id === messageId) {
                 io.emit('updateGroupList', { groupId: groupId });
