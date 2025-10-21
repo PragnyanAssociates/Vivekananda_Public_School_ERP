@@ -6441,7 +6441,6 @@ const alumniStorage = multer.diskStorage({
         
         // Ensure the directory exists (important for absolute paths in containers/servers)
         if (!fs.existsSync(uploadPath)) {
-            // Note: If /data is a mounted volume, this creation might require specific permissions.
             fs.mkdirSync(uploadPath, { recursive: true });
         }
         cb(null, uploadPath);
@@ -6452,11 +6451,34 @@ const alumniStorage = multer.diskStorage({
 });
 const alumniUpload = multer({ storage: alumniStorage });
 
-// GET all alumni records
+// GET all alumni records (NOW WITH SEARCH AND SORT)
 app.get('/api/alumni', async (req, res) => {
     try {
-        const query = "SELECT * FROM alumni_records ORDER BY alumni_name ASC";
-        const [records] = await db.query(query);
+        const { search, sortBy = 'alumni_name', sortOrder = 'ASC' } = req.query;
+
+        // Basic validation for sort parameters to prevent SQL injection
+        const allowedSortColumns = ['alumni_name', 'admission_no', 'school_outgoing_date', 'school_joined_date'];
+        const safeSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'alumni_name';
+        const safeSortOrder = (sortOrder.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
+
+        let whereClause = "";
+        const queryParams = [];
+
+        if (search) {
+            // Search by name, admission number, or present status
+            whereClause = "WHERE alumni_name LIKE ? OR admission_no LIKE ? OR present_status LIKE ?";
+            const searchTerm = `%${search}%`;
+            queryParams.push(searchTerm, searchTerm, searchTerm);
+        }
+
+        const query = `
+            SELECT * FROM alumni_records 
+            ${whereClause}
+            ORDER BY ${safeSortBy} ${safeSortOrder}
+            LIMIT 5000;
+        `;
+
+        const [records] = await db.query(query, queryParams);
         res.status(200).json(records);
     } catch (error) {
         console.error("GET /api/alumni Error:", error);
@@ -6571,10 +6593,10 @@ app.delete('/api/alumni/:id', async (req, res) => {
 
         // If an image path exists, delete the file from the server
         if (record && record.profile_pic_url) {
-            // --- MODIFICATION HERE: Construct absolute path using ALUMNI_STORAGE_PATH ---
+            // Construct absolute path using ALUMNI_STORAGE_PATH
             
             // 1. Remove the virtual '/uploads' prefix from the URL
-            const relativeFilename = record.profile_pic_url.replace('/uploads', ''); 
+            const relativeFilename = record.profile_pic_url.replace('/uploads/', ''); 
             // 2. Join the absolute storage directory with the remaining filename
             const filePath = path.join(ALUMNI_STORAGE_PATH, relativeFilename);
 
