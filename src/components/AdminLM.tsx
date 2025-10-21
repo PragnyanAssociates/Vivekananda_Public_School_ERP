@@ -18,7 +18,7 @@ const USER_ROLES = ['admin', 'teacher', 'student'];
 interface User {
   id: number;
   username: string;
-  password?: string; // MODIFIED: Password is now part of the User object
+  password?: string;
   full_name: string;
   role: 'student' | 'teacher' | 'admin';
   class_group: string;
@@ -37,7 +37,9 @@ const AdminLM = () => {
   const [formData, setFormData] = useState<any>({});
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NEW: State for eye icon
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  // NEW: State to manage the text input for adding a single subject
+  const [currentSubjectInput, setCurrentSubjectInput] = useState('');
 
   const fetchUsers = async () => {
     try {
@@ -75,14 +77,15 @@ const AdminLM = () => {
       admission_no: '', parent_name: '', aadhar_no: '', pen_no: ''
     });
     setIsPasswordVisible(false);
+    setCurrentSubjectInput(''); // NEW: Reset subject input
     setIsModalVisible(true);
   };
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    // MODIFIED: The full user object, including password, is now set
     setFormData({ ...user, subjects_taught: user.subjects_taught || [] });
     setIsPasswordVisible(false);
+    setCurrentSubjectInput(''); // NEW: Reset subject input
     setIsModalVisible(true);
   };
 
@@ -137,10 +140,8 @@ const AdminLM = () => {
     ]);
   };
 
-  // NEW: Function to show password in an alert
   const handleShowPassword = (user: User) => {
     if (user.password) {
-        // This checks if the password is still hashed. If so, it gives a helpful message.
         if (user.password.length > 30 && user.password.startsWith('$2b$')) {
              Alert.alert('Old Password', `This is an old, encrypted password. Please edit the user and set a new one to view it here.`);
         } else {
@@ -156,6 +157,23 @@ const AdminLM = () => {
     setExpandedClass(expandedClass === className ? null : className);
   };
   
+  // NEW: Function to add a subject to the formData state
+  const handleAddSubject = () => {
+      const subjectToAdd = currentSubjectInput.trim();
+      if (subjectToAdd && !formData.subjects_taught?.includes(subjectToAdd)) {
+          const updatedSubjects = [...(formData.subjects_taught || []), subjectToAdd];
+          setFormData({ ...formData, subjects_taught: updatedSubjects });
+          setCurrentSubjectInput(''); // Clear the input field after adding
+      }
+  };
+
+  // NEW: Function to remove a subject from the formData state
+  const handleRemoveSubject = (subjectToRemove: string) => {
+      const updatedSubjects = formData.subjects_taught.filter((sub: string) => sub !== subjectToRemove);
+      setFormData({ ...formData, subjects_taught: updatedSubjects });
+  };
+
+
   const renderUserItem = (item: User) => (
     <View style={styles.userRow}>
       <Icon 
@@ -170,7 +188,6 @@ const AdminLM = () => {
           <Text style={styles.userSubjects}>Subjects: {item.subjects_taught.join(', ')}</Text>
         )}
       </View>
-      {/* MODIFIED: Key button now shows the password */}
       <TouchableOpacity onPress={() => handleShowPassword(item)} style={styles.actionButton}>
         <Icon name="vpn-key" size={22} color="#F39C12" />
       </TouchableOpacity>
@@ -232,7 +249,6 @@ const AdminLM = () => {
                     <Text style={styles.inputLabel}>Username</Text>
                     <TextInput style={styles.input} placeholder="e.g., john.doe, STU101" value={formData.username} onChangeText={(val) => setFormData({ ...formData, username: val })} autoCapitalize="none" />
                     
-                    {/* MODIFIED: Password field with visibility toggle */}
                     <Text style={styles.inputLabel}>Password</Text>
                     <View style={styles.passwordContainer}>
                       <TextInput 
@@ -260,10 +276,33 @@ const AdminLM = () => {
                         </Picker>
                     </View>
                     
+                    {/* MODIFIED: Complete overhaul of the teacher subjects input section */}
                     {formData.role === 'teacher' ? (
                         <>
-                        <Text style={styles.inputLabel}>Subjects Taught (comma-separated)</Text>
-                        <TextInput style={styles.input} placeholder="e.g., Mathematics, Science" value={formData.subjects_taught?.join(', ') || ''} onChangeText={(val) => setFormData({ ...formData, subjects_taught: val.split(',').map(s => s.trim()).filter(Boolean) })}/>
+                            <Text style={styles.inputLabel}>Subjects Taught</Text>
+                            <View style={styles.subjectInputContainer}>
+                                <TextInput
+                                    style={styles.subjectInput}
+                                    placeholder="e.g., English"
+                                    value={currentSubjectInput}
+                                    onChangeText={setCurrentSubjectInput}
+                                    onSubmitEditing={handleAddSubject} // Allows adding by pressing 'enter' on keyboard
+                                />
+                                <TouchableOpacity style={styles.subjectAddButton} onPress={handleAddSubject}>
+                                    <Text style={styles.subjectAddButtonText}>Add</Text>
+                                </TouchableOpacity>
+                            </View>
+                            
+                            <View style={styles.subjectTagContainer}>
+                                {formData.subjects_taught?.map((subject: string, index: number) => (
+                                    <Animatable.View animation="fadeIn" duration={300} key={index} style={styles.subjectTag}>
+                                        <Text style={styles.subjectTagText}>{subject}</Text>
+                                        <TouchableOpacity onPress={() => handleRemoveSubject(subject)} style={styles.removeTagButton}>
+                                            <Icon name="close" size={16} color="#fff" />
+                                        </TouchableOpacity>
+                                    </Animatable.View>
+                                ))}
+                            </View>
                         </>
                     ) : formData.role === 'student' ? (
                         <>
@@ -307,7 +346,7 @@ const AdminLM = () => {
   );
 };
 
-// MODIFIED: Added styles for the password input with eye icon
+// MODIFIED: Added new styles for the subject tag input system
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F9FC' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FC' },
@@ -377,6 +416,63 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: '#95A5A6', marginRight: 10 },
   submitButton: { backgroundColor: '#27AE60', marginLeft: 10 },
   modalButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  
+  // NEW STYLES: For the subject input and tags
+  subjectInputContainer: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  subjectInput: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#2C3E50',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  subjectAddButton: {
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#008080',
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
+  },
+  subjectAddButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  subjectTagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
+  },
+  subjectTag: {
+    flexDirection: 'row',
+    backgroundColor: '#3498DB',
+    borderRadius: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  subjectTagText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginRight: 8,
+  },
+  removeTagButton: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    padding: 2,
+  },
 });
 
 export default AdminLM;
