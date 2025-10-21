@@ -23,90 +23,111 @@ const GroupChatScreen = () => {
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [editingMessage, setEditingMessage] = useState<any>(null);
-    const [isUploading, setIsUploading] = useState(false);
-    const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-    // New state for the reply feature
     const [replyingTo, setReplyingTo] = useState<any>(null);
+    const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
 
     const socketRef = useRef<Socket | null>(null);
     const flatListRef = useRef<FlatList | null>(null);
 
+    const markAsSeen = useCallback(async () => {
+        try {
+            await apiClient.post(`/groups/${group.id}/seen`);
+        } catch (error) {
+            console.log("Failed to mark group as seen.");
+        }
+    }, [group.id]);
+
     useFocusEffect(useCallback(() => {
+        markAsSeen();
         const fetchGroupDetails = async () => {
             try {
                 const response = await apiClient.get('/groups');
                 const updatedGroup = response.data.find((g: any) => g.id === group.id);
-                if (updatedGroup) setGroup(updatedGroup);
-            } catch (error) { console.log("Could not refetch group details."); }
+                if (updatedGroup) {
+                    setGroup(updatedGroup);
+                }
+            } catch (error) {
+                console.log("Could not refetch group details.");
+            }
         };
         fetchGroupDetails();
-    }, []));
+    }, [markAsSeen]));
 
     useEffect(() => {
         const fetchHistory = async () => {
             try {
                 const response = await apiClient.get(`/groups/${group.id}/history`);
                 setMessages(response.data);
-            } catch (error) { Alert.alert("Error", "Could not load chat history."); } 
-            finally { setLoading(false); }
+            } catch (error) {
+                Alert.alert("Error", "Could not load chat history.");
+            } finally {
+                setLoading(false);
+            }
         };
         fetchHistory();
 
         socketRef.current = io(SERVER_URL, { transports: ['websocket'] });
-        socketRef.current.on('connect', () => { socketRef.current?.emit('joinGroup', { groupId: group.id }); });
-        socketRef.current.on('newMessage', (msg) => { if(msg.group_id === group.id) setMessages(prev => [...prev, msg]); });
-        socketRef.current.on('messageDeleted', (id) => { setMessages(prev => prev.filter(msg => msg.id !== id)); });
-        socketRef.current.on('messageEdited', (msg) => { if(msg.group_id === group.id) setMessages(prev => prev.map(m => m.id === msg.id ? msg : m)); });
-        return () => { socketRef.current?.disconnect(); };
+        socketRef.current.on('connect', () => {
+            socketRef.current?.emit('joinGroup', { groupId: group.id });
+        });
+        socketRef.current.on('newMessage', (msg) => {
+            if (msg.group_id === group.id) setMessages(prev => [...prev, msg]);
+        });
+        socketRef.current.on('messageDeleted', (id) => {
+            setMessages(prev => prev.filter(msg => msg.id !== id));
+        });
+        socketRef.current.on('messageEdited', (msg) => {
+            if (msg.group_id === group.id) setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
+        });
+
+        return () => {
+            socketRef.current?.disconnect();
+        };
     }, [group.id]);
 
     const sendMessage = (type: 'text' | 'image' | 'video', text: string | null, url: string | null) => {
         if (!user || !socketRef.current) return;
         
-        // --- THIS IS THE FIX FOR INSTANT VISIBILITY (OPTIMISTIC UI) ---
-        const optimisticMessage = {
+        const optimisticMessage: any = {
             id: Date.now(),
             user_id: user.id,
             full_name: user.full_name,
             role: user.role,
-            class_group: user.class_group, // Assuming user object from AuthContext has this
-            profile_image_url: user.profile_image_url,
+            class_group: (user as any).class_group,
+            profile_image_url: (user as any).profile_image_url,
             message_type: type,
             message_text: text,
             file_url: url,
             timestamp: new Date().toISOString(),
             group_id: group.id,
-            // Add reply context to the optimistic message
             reply_text: replyingTo ? replyingTo.message_text : null,
             reply_type: replyingTo ? replyingTo.message_type : null,
             reply_sender_name: replyingTo ? (replyingTo.user_id === user.id ? 'You' : replyingTo.full_name) : null,
         };
         setMessages(prev => [...prev, optimisticMessage]);
         
-        // Send the real message to the server
         socketRef.current.emit('sendMessage', {
             userId: user.id,
             groupId: group.id,
             messageType: type,
             messageText: text,
             fileUrl: url,
-            replyToMessageId: replyingTo ? replyingTo.id : null, // Send the ID to the server
+            replyToMessageId: replyingTo ? replyingTo.id : null,
         });
 
         if (type === 'text') setNewMessage('');
-        setReplyingTo(null); // Clear reply state after sending
+        setReplyingTo(null);
     };
 
     const uploadFileAndSendMessage = async (file: Asset, type: 'image' | 'video') => {
-        // This function now uses the main `sendMessage` for optimistic UI
-        setIsUploading(true);
         const formData = new FormData();
         formData.append('media', { uri: file.uri, type: file.type, name: file.fileName });
         try {
-            const res = await apiClient.post('/group-chat/upload-media', { headers: { 'Content-Type': 'multipart/form-data' }});
-            sendMessage(type, null, res.data.fileUrl); // Call sendMessage with the uploaded URL
-        } catch (error) { Alert.alert("Upload Failed", "Could not send the file."); } 
-        finally { setIsUploading(false); }
+            const res = await apiClient.post('/group-chat/upload-media', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
+            sendMessage(type, null, res.data.fileUrl);
+        } catch (error) {
+            Alert.alert("Upload Failed", "Could not send the file.");
+        }
     };
     
     const handlePickMedia = () => {
@@ -123,19 +144,17 @@ const GroupChatScreen = () => {
         if (editingMessage) {
             socketRef.current?.emit('editMessage', { messageId: editingMessage.id, newText: newMessage.trim(), userId: user?.id, groupId: group.id });
             setEditingMessage(null);
-            setNewMessage('');
-            Keyboard.dismiss();
         } else {
             sendMessage('text', newMessage.trim(), null);
         }
+        setNewMessage('');
+        Keyboard.dismiss();
     };
     
     const onLongPressMessage = (message: any) => {
         if (!user) return;
         const options: any[] = [{ text: 'Cancel', style: 'cancel' }];
-        // Add Reply option first
         options.push({ text: 'Reply', onPress: () => setReplyingTo(message) });
-
         if (message.user_id === user.id) {
             if (message.message_type === 'text') {
                 options.push({ text: 'Edit', onPress: () => { setEditingMessage(message); setNewMessage(message.message_text); }});
@@ -203,7 +222,15 @@ const GroupChatScreen = () => {
             </View>
             <KeyboardAvoidingView style={{flex: 1, backgroundColor: group.background_color || '#e5ddd5'}} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
                 {loading ? <ActivityIndicator style={{flex: 1}} size="large" /> :
-                <FlatList ref={flatListRef} data={messages} renderItem={renderMessageItem} keyExtractor={(item, index) => `${item.id}-${index}`} contentContainerStyle={{ paddingVertical: 10 }} onContentSizeChange={() => flatListRef.current?.scrollToEnd({animated: false})} onLayout={() => flatListRef.current?.scrollToEnd({animated: false})} />}
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    renderItem={renderMessageItem}
+                    keyExtractor={(item, index) => `${item.id}-${index}`}
+                    contentContainerStyle={{ paddingVertical: 10 }}
+                    onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                />}
                 <View>
                     {replyingTo && (
                         <View style={styles.replyingBanner}>
@@ -241,7 +268,7 @@ const styles = StyleSheet.create({
     messageContainer: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.1, shadowRadius: 1 },
     myMessageContainer: { backgroundColor: THEME.myMessageBg, borderBottomRightRadius: 2 },
     otherMessageContainer: { backgroundColor: THEME.otherMessageBg, borderBottomLeftRadius: 2 },
-    mediaContainer: { padding: 5, },
+    mediaContainer: { padding: 5 },
     senderInfo: { flexDirection: 'row', marginBottom: 4, alignItems: 'baseline' },
     senderName: { fontWeight: 'bold', color: THEME.primary },
     senderDetails: { fontSize: 11, color: THEME.muted, marginLeft: 4 },

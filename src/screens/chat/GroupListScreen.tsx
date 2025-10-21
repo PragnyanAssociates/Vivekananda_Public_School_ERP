@@ -6,7 +6,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { getProfileImageSource } from '../../utils/imageHelpers';
 
-const THEME = { primary: '#007bff', background: '#f4f7fc', text: '#212529', muted: '#86909c', border: '#dee2e6', white: '#ffffff' };
+const THEME = { primary: '#007bff', background: '#f4f7fc', text: '#212529', muted: '#86909c', border: '#dee2e6', white: '#ffffff', accent: '#28a745' };
 
 const GroupListScreen = () => {
     const { user } = useAuth();
@@ -38,14 +38,27 @@ const GroupListScreen = () => {
         [groups, searchQuery]
     );
 
+    const formatTimestamp = (timestamp: string) => {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     const renderGroupItem = ({ item }: { item: any }) => (
         <TouchableOpacity style={styles.groupItem} onPress={() => navigation.navigate('GroupChat', { group: item })}>
             <Image source={getProfileImageSource(item.group_dp_url)} style={styles.avatar} />
             <View style={styles.groupInfo}>
                 <Text style={styles.groupName}>{item.name}</Text>
-                <Text style={styles.groupDesc} numberOfLines={1}>{item.description || "Tap to open chat"}</Text>
+                <Text style={styles.groupDesc} numberOfLines={1}>{item.last_message_text || "Tap to open chat"}</Text>
             </View>
-            <Icon name="chevron-right" size={24} color={THEME.muted} />
+            <View style={styles.metaInfo}>
+                <Text style={styles.timestamp}>{formatTimestamp(item.last_message_timestamp)}</Text>
+                {item.unread_count > 0 && (
+                    <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>{item.unread_count}</Text>
+                    </View>
+                )}
+            </View>
         </TouchableOpacity>
     );
 
@@ -79,7 +92,7 @@ const GroupListScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: THEME.background },
+    container: { flex: 1, backgroundColor: THEME.white },
     loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     header: { paddingTop: Platform.OS === 'android' ? 15 : 0, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: THEME.border, backgroundColor: THEME.white },
     headerTitle: { fontSize: 28, fontWeight: 'bold', color: THEME.text, marginBottom: 10 },
@@ -90,6 +103,10 @@ const styles = StyleSheet.create({
     groupInfo: { flex: 1 },
     groupName: { fontSize: 18, fontWeight: '600', color: THEME.text },
     groupDesc: { fontSize: 14, color: THEME.muted, marginTop: 2 },
+    metaInfo: { alignItems: 'flex-end' },
+    timestamp: { fontSize: 12, color: THEME.muted, marginBottom: 4 },
+    unreadBadge: { backgroundColor: THEME.accent, borderRadius: 12, minWidth: 24, height: 24, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+    unreadText: { color: THEME.white, fontWeight: 'bold', fontSize: 12 },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
     emptyText: { textAlign: 'center', fontSize: 16, color: THEME.muted },
     fab: { position: 'absolute', right: 20, bottom: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', elevation: 8 },
