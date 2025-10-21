@@ -41,8 +41,9 @@ const GroupChatScreen = () => {
         markAsSeen();
         const fetchGroupDetails = async () => {
             try {
-                const response = await apiClient.get('/groups');
-                const updatedGroup = response.data.find((g: any) => g.id === group.id);
+                // CORRECTED: Use new, more efficient endpoint to get single group details.
+                const response = await apiClient.get(`/groups/${group.id}/details`);
+                const updatedGroup = response.data;
                 if (updatedGroup) {
                     setGroup(updatedGroup);
                 }
@@ -55,6 +56,7 @@ const GroupChatScreen = () => {
 
     useEffect(() => {
         const fetchHistory = async () => {
+            setLoading(true);
             try {
                 const response = await apiClient.get(`/groups/${group.id}/history`);
                 setMessages(response.data);
@@ -71,13 +73,18 @@ const GroupChatScreen = () => {
             socketRef.current?.emit('joinGroup', { groupId: group.id });
         });
         socketRef.current.on('newMessage', (msg) => {
-            if (msg.group_id === group.id) setMessages(prev => [...prev, msg]);
+            // This now handles messages from everyone, including the sender.
+            if (msg.group_id === group.id) {
+                setMessages(prev => [...prev, msg]);
+            }
         });
         socketRef.current.on('messageDeleted', (id) => {
             setMessages(prev => prev.filter(msg => msg.id !== id));
         });
         socketRef.current.on('messageEdited', (msg) => {
-            if (msg.group_id === group.id) setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
+            if (msg.group_id === group.id) {
+                setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
+            }
         });
 
         return () => {
@@ -88,23 +95,8 @@ const GroupChatScreen = () => {
     const sendMessage = (type: 'text' | 'image' | 'video', text: string | null, url: string | null) => {
         if (!user || !socketRef.current) return;
         
-        const optimisticMessage: any = {
-            id: Date.now(),
-            user_id: user.id,
-            full_name: user.full_name,
-            role: user.role,
-            class_group: (user as any).class_group,
-            profile_image_url: (user as any).profile_image_url,
-            message_type: type,
-            message_text: text,
-            file_url: url,
-            timestamp: new Date().toISOString(),
-            group_id: group.id,
-            reply_text: replyingTo ? replyingTo.message_text : null,
-            reply_type: replyingTo ? replyingTo.message_type : null,
-            reply_sender_name: replyingTo ? (replyingTo.user_id === user.id ? 'You' : replyingTo.full_name) : null,
-        };
-        setMessages(prev => [...prev, optimisticMessage]);
+        // CORRECTED: Removed optimistic message creation. The server will broadcast
+        // the message back to the sender, which becomes the single source of truth, preventing duplicates.
         
         socketRef.current.emit('sendMessage', {
             userId: user.id,
@@ -123,7 +115,8 @@ const GroupChatScreen = () => {
         const formData = new FormData();
         formData.append('media', { uri: file.uri, type: file.type, name: file.fileName });
         try {
-            const res = await apiClient.post('/group-chat/upload-media', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
+            // CORRECTED: Matched API endpoint with backend
+            const res = await apiClient.post('/groups/media', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
             sendMessage(type, null, res.data.fileUrl);
         } catch (error) {
             Alert.alert("Upload Failed", "Could not send the file.");
@@ -194,7 +187,7 @@ const GroupChatScreen = () => {
                                 {item.role === 'student' && item.class_group && <Text style={styles.senderDetails}> ({item.class_group}{item.roll_no ? `, Roll: ${item.roll_no}` : ''})</Text>}
                             </View>
                         )}
-                        {item.reply_text && (
+                        {item.reply_to_message_id && (
                             <View style={[styles.replyContainer, isMyMessage ? styles.myReplyContainer : styles.otherReplyContainer]}>
                                 <Text style={styles.replySenderName}>{item.reply_sender_name}</Text>
                                 <Text style={styles.replyText} numberOfLines={1}>{item.reply_type === 'text' ? item.reply_text : 'Media'}</Text>
@@ -220,24 +213,24 @@ const GroupChatScreen = () => {
                 </TouchableOpacity>
                 <View style={{width: 34}} />
             </View>
-            <KeyboardAvoidingView style={{flex: 1, backgroundColor: group.background_color || '#e5ddd5'}} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+            <KeyboardAvoidingView style={{flex: 1, backgroundColor: group.background_color || '#e5ddd5'}} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
                 {loading ? <ActivityIndicator style={{flex: 1}} size="large" /> :
                 <FlatList
                     ref={flatListRef}
                     data={messages}
                     renderItem={renderMessageItem}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
+                    keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={{ paddingVertical: 10 }}
                     onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 />}
                 <View>
                     {replyingTo && (
                         <View style={styles.replyingBanner}>
                             <Icon name="reply" size={18} color={THEME.primary} />
                             <View style={styles.replyingTextContainer}>
-                                <Text style={styles.replyingToName}>{replyingTo.full_name}</Text>
-                                <Text numberOfLines={1}>{replyingTo.message_text}</Text>
+                                <Text style={styles.replyingToName}>{replyingTo.user_id === user?.id ? 'You' : replyingTo.full_name}</Text>
+                                <Text numberOfLines={1}>{replyingTo.message_text || 'Media'}</Text>
                             </View>
                             <Icon name="close" size={20} color={THEME.muted} onPress={cancelReply} />
                         </View>

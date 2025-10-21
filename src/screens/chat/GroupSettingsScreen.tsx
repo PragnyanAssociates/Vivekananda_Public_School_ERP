@@ -20,6 +20,7 @@ const GroupSettingsScreen = () => {
     const isCreator = user?.id === group.created_by;
 
     const handlePickImage = () => {
+        if (!isCreator) return;
         launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, async (response) => {
             if (response.didCancel || !response.assets) return;
             setIsSaving(true);
@@ -69,21 +70,25 @@ const GroupSettingsScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContainer}>
-                <View style={styles.dpContainer}>
-                    <Image source={getProfileImageSource(group.group_dp_url)} style={styles.dpImage} />
-                    {isCreator && (
-                        <TouchableOpacity style={styles.dpEditButton} onPress={handlePickImage}>
-                            <Icon name="camera" size={24} color={THEME.white} />
-                        </TouchableOpacity>
-                    )}
-                </View>
+                <TouchableOpacity onPress={handlePickImage} disabled={!isCreator}>
+                    <View style={styles.dpContainer}>
+                        <Image source={getProfileImageSource(group.group_dp_url)} style={styles.dpImage} />
+                        {isCreator && (
+                            <View style={styles.dpEditButton}>
+                                <Icon name="camera" size={24} color={THEME.white} />
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
+
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Group Name</Text>
                     <TextInput style={[styles.input, !isCreator && styles.disabledInput]} value={groupName} onChangeText={setGroupName} editable={isCreator} />
                 </View>
+                
                 {isCreator && (
                     <>
-                        <TouchableOpacity style={styles.saveButton} onPress={handleSaveChanges} disabled={isSaving}>
+                        <TouchableOpacity style={[styles.saveButton, isSaving && styles.disabledButton]} onPress={handleSaveChanges} disabled={isSaving}>
                             {isSaving ? <ActivityIndicator color={THEME.white} /> : <Text style={styles.buttonText}>Save Changes</Text>}
                         </TouchableOpacity>
                         <View style={{height: 15}} />
@@ -109,6 +114,7 @@ const styles = StyleSheet.create({
     disabledInput: { backgroundColor: THEME.background, color: THEME.muted },
     saveButton: { backgroundColor: THEME.primary, paddingVertical: 14, borderRadius: 8, alignItems: 'center', width: '100%' },
     deleteButton: { backgroundColor: THEME.danger, paddingVertical: 14, borderRadius: 8, alignItems: 'center', width: '100%' },
+    disabledButton: { backgroundColor: THEME.muted },
     buttonText: { color: THEME.white, fontSize: 16, fontWeight: 'bold' },
 });
 

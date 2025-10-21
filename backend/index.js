@@ -5809,7 +5809,8 @@ const chatUpload = multer({
 // ★★★ 2. API Routes for Group Management ★★★
 
 // Get available options (classes, roles) for creating a group.
-app.get('/api/chat/group-options', verifyToken, async (req, res) => {
+// CORRECTED: API endpoint standardized for consistency.
+app.get('/api/groups/options', verifyToken, async (req, res) => {
     try {
         const classQuery = `SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group ASC;`;
         const [classes] = await db.query(classQuery);
@@ -5875,7 +5876,7 @@ app.post('/api/groups', verifyToken, isTeacherOrAdmin, async (req, res) => {
     }
 });
 
-// Get all groups, sorted by latest message, with unread counts.
+// Get all groups for the logged-in user, sorted by latest message, with unread counts.
 app.get('/api/groups', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
@@ -5903,6 +5904,28 @@ app.get('/api/groups', verifyToken, async (req, res) => {
     }
 });
 
+// ADDED: New endpoint to get details for a single group, which is more efficient.
+app.get('/api/groups/:groupId/details', verifyToken, async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const userId = req.user.id;
+        // First, check if the user is a member of the group (for security)
+        const [[memberCheck]] = await db.query('SELECT group_id FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+        if (!memberCheck) {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+        const [[group]] = await db.query('SELECT * FROM `groups` WHERE id = ?', [groupId]);
+        if (!group) {
+            return res.status(404).json({ message: 'Group not found.' });
+        }
+        res.json(group);
+    } catch (error) {
+        console.error("Error fetching group details:", error);
+        res.status(500).json({ message: "Error fetching group details." });
+    }
+});
+
+
 // Mark a group's messages as seen by the user.
 app.post('/api/groups/:groupId/seen', verifyToken, async (req, res) => {
     const { groupId } = req.params;
@@ -5927,7 +5950,10 @@ const isGroupCreator = async (req, res, next) => {
         const { groupId } = req.params;
         const userId = req.user.id;
         const [[group]] = await db.query('SELECT created_by FROM `groups` WHERE id = ?', [groupId]);
-        if (!group || group.created_by !== userId) {
+        if (!group) {
+            return res.status(404).json({ message: 'Group not found.' });
+        }
+        if (group.created_by !== userId) {
             return res.status(403).json({ message: 'Access denied. Only the group creator can perform this action.' });
         }
         next();
@@ -5964,14 +5990,26 @@ app.post('/api/groups/:groupId/dp', verifyToken, isGroupCreator, chatUpload.sing
 });
 
 // Delete a group.
+// CORRECTED: Added transaction to safely delete all related data.
 app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res) => {
     const { groupId } = req.params;
+    const connection = await db.getConnection();
     try {
-        await db.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
+        await connection.beginTransaction();
+        // Delete related data first to avoid foreign key constraints
+        await connection.query('DELETE FROM group_chat_messages WHERE group_id = ?', [groupId]);
+        await connection.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
+        await connection.query('DELETE FROM group_last_seen WHERE group_id = ?', [groupId]);
+        // Finally, delete the group itself
+        await connection.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
+        await connection.commit();
         res.json({ message: 'Group deleted successfully.' });
     } catch (error) {
+        await connection.rollback();
         console.error("Error deleting group:", error);
         res.status(500).json({ message: 'Failed to delete group.' });
+    } finally {
+        connection.release();
     }
 });
 
@@ -5982,6 +6020,7 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
         const query = `
             SELECT 
                 m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                m.reply_to_message_id,
                 u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
                 reply_m.message_text as reply_text, reply_m.message_type as reply_type, reply_u.full_name as reply_sender_name
             FROM group_chat_messages m JOIN users u ON m.user_id = u.id
@@ -5997,19 +6036,23 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     }
 });
 
-app.post('/api/group-chat/upload-media', verifyToken, chatUpload.single('media'), (req, res) => {
+// CORRECTED: API endpoint standardized for consistency.
+app.post('/api/groups/media', verifyToken, chatUpload.single('media'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
     res.status(201).json({ fileUrl: `/uploads/${req.file.filename}` });
 });
 
 // ★★★ 4. Real-Time Socket.IO Logic ★★★
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
+// NOTE: Ensure you have `const server = http.createServer(app);` and `const io = new Server(...)` defined in your main server file.
 
 io.on('connection', (socket) => {
     console.log(`🔌 A user connected: ${socket.id}`);
+    
     socket.on('joinGroup', (data) => {
-        if (data.groupId) socket.join(`group-${data.groupId}`);
+        if (data.groupId) {
+            socket.join(`group-${data.groupId}`);
+            console.log(`User ${socket.id} joined group room: group-${data.groupId}`);
+        }
     });
 
     socket.on('sendMessage', async (data) => {
@@ -6026,15 +6069,21 @@ io.on('connection', (socket) => {
             );
             const newMessageId = result.insertId;
             const [[broadcastMessage]] = await connection.query(`
-                SELECT m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
+                SELECT m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                m.reply_to_message_id, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
                 reply_m.message_text as reply_text, reply_m.message_type as reply_type, reply_u.full_name as reply_sender_name
                 FROM group_chat_messages m JOIN users u ON m.user_id = u.id LEFT JOIN user_profiles p ON m.user_id = p.user_id
                 LEFT JOIN group_chat_messages reply_m ON m.reply_to_message_id = reply_m.id
                 LEFT JOIN users reply_u ON reply_m.user_id = reply_u.id
                 WHERE m.id = ?`, [newMessageId]);
             await connection.commit();
-            // Broadcast to all clients in the room, including the sender, to update unread counts
+            
+            // Broadcast the new message to everyone in the group room (including the sender).
             io.to(roomName).emit('newMessage', broadcastMessage);
+            
+            // ADDED: Broadcast a global event to tell all users' group list screens to refresh.
+            io.emit('updateGroupList', { groupId: groupId });
+
         } catch (error) {
             await connection.rollback();
             console.error('❌ CRITICAL ERROR: Failed to save and broadcast message.', error);
@@ -6054,8 +6103,16 @@ io.on('connection', (socket) => {
                  console.error(`🔒 SECURITY ALERT: User ${userId} tried to delete message ${messageId} they do not own.`);
                 return;
             }
+            // Check if this was the last message before deleting it.
+            const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
+            
             await connection.query('DELETE FROM group_chat_messages WHERE id = ?', [messageId]);
             io.to(roomName).emit('messageDeleted', messageId);
+
+            // ADDED: If the deleted message was the last one, trigger a group list refresh.
+            if (lastMsgCheck && lastMsgCheck.id === messageId) {
+                io.emit('updateGroupList', { groupId: groupId });
+            }
         } catch (error) {
             console.error(`❌ CRITICAL ERROR: Failed to delete message ${messageId}.`, error);
         } finally {
@@ -6076,13 +6133,20 @@ io.on('connection', (socket) => {
             }
             await connection.query('UPDATE group_chat_messages SET message_text = ?, is_edited = TRUE WHERE id = ?', [newText, messageId]);
             const [[updatedMessage]] = await connection.query(`
-                SELECT m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
+                SELECT m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                m.reply_to_message_id, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
                 reply_m.message_text as reply_text, reply_m.message_type as reply_type, reply_u.full_name as reply_sender_name
                 FROM group_chat_messages m JOIN users u ON m.user_id = u.id LEFT JOIN user_profiles p ON m.user_id = p.user_id
                 LEFT JOIN group_chat_messages reply_m ON m.reply_to_message_id = reply_m.id
                 LEFT JOIN users reply_u ON reply_m.user_id = reply_u.id
                 WHERE m.id = ?`, [messageId]);
             io.to(roomName).emit('messageEdited', updatedMessage);
+
+            // ADDED: If the edited message is the last one, trigger a group list refresh.
+            const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
+            if (lastMsgCheck && lastMsgCheck.id === messageId) {
+                io.emit('updateGroupList', { groupId: groupId });
+            }
         } catch (error) {
             console.error(`❌ CRITICAL ERROR: Failed to edit message ${messageId}.`, error);
         } finally {

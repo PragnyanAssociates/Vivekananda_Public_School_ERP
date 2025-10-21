@@ -22,7 +22,8 @@ const CreateGroupScreen = () => {
     useEffect(() => {
         const fetchOptions = async () => {
             try {
-                const response = await apiClient.get('/chat/group-options');
+                // CORRECTED: Matched API endpoint with backend
+                const response = await apiClient.get('/groups/options');
                 setGroupOptions(response.data);
             } catch (error: any) {
                 Alert.alert("Error", "Could not fetch group options.");

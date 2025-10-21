@@ -1,10 +1,12 @@
-import React, { useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, Alert, Platform, TextInput, Image } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { getProfileImageSource } from '../../utils/imageHelpers';
+import { io, Socket } from 'socket.io-client';
+import { SERVER_URL } from '../../../apiConfig';
 
 const THEME = { primary: '#007bff', background: '#f4f7fc', text: '#212529', muted: '#86909c', border: '#dee2e6', white: '#ffffff', accent: '#28a745' };
 
@@ -14,24 +16,43 @@ const GroupListScreen = () => {
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const socketRef = useRef<Socket | null>(null);
 
-    const fetchGroups = async () => {
+    const fetchGroups = useCallback(async (showLoader = false) => {
+        if (showLoader) setLoading(true);
         try {
             const response = await apiClient.get('/groups');
             setGroups(response.data);
         } catch (error: any) {
             Alert.alert("Error", error.response?.data?.message || "Could not fetch groups.");
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
-    };
+    }, []);
 
     useFocusEffect(useCallback(() => {
         if (user) {
-            setLoading(true);
-            fetchGroups();
+            fetchGroups(true);
         }
-    }, [user]));
+    }, [user, fetchGroups]));
+
+    // ADDED: useEffect for real-time updates via Socket.IO
+    useEffect(() => {
+        if (!user) return;
+        
+        socketRef.current = io(SERVER_URL, { transports: ['websocket'] });
+
+        // Listen for the event from the backend to refresh the list
+        socketRef.current.on('updateGroupList', () => {
+            // Refetch the entire list to get updated order, last message, and unread counts
+            fetchGroups(false); // fetch without showing the full screen loader
+        });
+
+        return () => {
+            socketRef.current?.disconnect();
+        };
+    }, [user, fetchGroups]);
+
 
     const filteredGroups = useMemo(() =>
         groups.filter(group => group.name.toLowerCase().includes(searchQuery.toLowerCase())),
