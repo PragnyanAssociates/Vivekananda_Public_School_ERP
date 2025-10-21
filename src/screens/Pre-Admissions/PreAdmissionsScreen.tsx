@@ -12,7 +12,7 @@ import apiClient from '../../api/client';
 import { launchImageLibrary, ImagePickerResponse, Asset } from 'react-native-image-picker';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+  UIManager.setLayoutLayoutAnimationEnabledExperimental(true);
 }
 
 const { width, height } = Dimensions.get('window');
@@ -54,7 +54,8 @@ const formatDate = (dateString?: string, includeTime = false): string => {
 const toYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
 const getCurrentYear = () => new Date().getFullYear();
 
-// --- COMPONENTS (Reused from Alumni) ---
+
+// --- UX COMPONENTS (Shared Styling) ---
 
 const StatusPill = ({ status }: { status: Status }) => { 
     const statusStyle = { 
@@ -398,6 +399,7 @@ const PreAdmissionsScreen: React.FC = () => {
             
             <TouchableOpacity style={preadmissionStyles.fab} onPress={() => handleOpenModal()}><MaterialIcons name="add" size={24} color="#fff" /></TouchableOpacity>
             
+            {/* --- Modal Forms --- */}
             <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
                 <ScrollView style={preadmissionStyles.modalContainer} contentContainerStyle={{paddingBottom: 50}}>
                     <Text style={preadmissionStyles.modalTitle}>{isEditing ? 'Edit Application' : 'New Application'}</Text>
@@ -459,6 +461,7 @@ const PreAdmissionsScreen: React.FC = () => {
     );
 };
 
+// --- Styles Definition (Consolidated) ---
 const preadmissionStyles = StyleSheet.create({ 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F4F7' }, 
     container: { flex: 1, backgroundColor: '#F0F4F7' }, 
@@ -531,11 +534,10 @@ const preadmissionStyles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
     },
-    // --- End Search & Header Block ---
     
     // --- Card Styles ---
     card: { backgroundColor: '#FFFFFF', borderRadius: 12, marginVertical: 6, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 5, overflow: 'hidden' }, 
-    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16 }, // Align start for avatar consistency
+    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16 }, 
     avatarWrapper: { marginRight: 12 },
     avatarImage: { 
         width: 55, height: 55, borderRadius: 27.5, 

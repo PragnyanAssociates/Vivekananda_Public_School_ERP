@@ -40,9 +40,13 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-const ALUMNI_STORAGE_PATH = '/data/uploads';
-const PRE_ADMISSIONS_SUBPATH = 'preadmissions/';
-const PRE_ADMISSIONS_ABSOLUTE_PATH = path.join(ROOT_STORAGE_PATH, PRE_ADMISSIONS_SUBPATH);
+
+
+const ROOT_STORAGE_PATH = '/data/uploads'; 
+const PRE_ADMISSIONS_SUBPATH = 'preadmissions'; // Subfolder for organization
+const PRE_ADMISSIONS_ABSOLUTE_PATH = require('path').join(ROOT_STORAGE_PATH, PRE_ADMISSIONS_SUBPATH);
+
+
 app.use('/uploads', express.static('/data/uploads'));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
@@ -6636,24 +6640,25 @@ app.delete('/api/alumni/:id', async (req, res) => {
 // ==========================================================
 
 // Multer storage config for pre-admission photos
-const preAdmissionsStorage = multer.diskStorage({
+const preAdmissionsStorage = require('multer').diskStorage({
     destination: (req, file, cb) => {
         const uploadPath = PRE_ADMISSIONS_ABSOLUTE_PATH; // Use absolute dedicated path
-        if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
+        // Ensure the directory exists
+        if (!require('fs').existsSync(uploadPath)) {
+            require('fs').mkdirSync(uploadPath, { recursive: true });
         }
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        cb(null, `preadmission-photo-${Date.now()}${path.extname(file.originalname)}`);
+        cb(null, `preadmission-photo-${Date.now()}${require('path').extname(file.originalname)}`);
     }
 });
-const preAdmissionsUpload = multer({ storage: preAdmissionsStorage });
+const preAdmissionsUpload = require('multer')({ storage: preAdmissionsStorage });
 
 // GET all pre-admission records (NOW WITH SEARCH AND YEAR FILTER)
 app.get('/api/preadmissions', async (req, res) => {
     try {
-        const { search, year, status } = req.query; // status filter added implicitly
+        const { search, year } = req.query; 
         
         let whereClauses = [];
         const queryParams = [];
@@ -6673,7 +6678,6 @@ app.get('/api/preadmissions', async (req, res) => {
 
         let whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : "";
         
-        // Sorting remains by submission date DESC by default for pre-admissions
         const query = `
             SELECT * FROM pre_admissions 
             ${whereClause}
@@ -6692,8 +6696,8 @@ app.get('/api/preadmissions', async (req, res) => {
 // POST a new pre-admission record
 app.post('/api/preadmissions', preAdmissionsUpload.single('photo'), async (req, res) => {
     const fields = req.body;
-    // URL uses the public path: /uploads/preadmissions/
-    const photo_url = req.file ? `/uploads/preadmissions/${req.file.filename}` : null; 
+    // The public URL must reflect the subfolder used for storage
+    const photo_url = req.file ? `/uploads/${PRE_ADMISSIONS_SUBPATH}/${req.file.filename}` : null; 
 
     if (!fields.admission_no || !fields.student_name || !fields.joining_grade) {
         return res.status(400).json({ message: "Admission No, Student Name, and Joining Grade are required." });
@@ -6748,7 +6752,7 @@ app.put('/api/preadmissions/:id', preAdmissionsUpload.single('photo'), async (re
 
     if (req.file) {
         setClauses.push('photo_url = ?');
-        params.push(`/uploads/preadmissions/${req.file.filename}`);
+        params.push(`/uploads/${PRE_ADMISSIONS_SUBPATH}/${req.file.filename}`);
     }
 
     if (setClauses.length === 0) {
@@ -6768,7 +6772,7 @@ app.put('/api/preadmissions/:id', preAdmissionsUpload.single('photo'), async (re
     }
 });
 
-// DELETE a pre-admission record (Storage Path Fix Applied)
+// DELETE a pre-admission record
 app.delete('/api/preadmissions/:id', async (req, res) => {
     const { id } = req.params;
     
@@ -6784,13 +6788,12 @@ app.delete('/api/preadmissions/:id', async (req, res) => {
 
         // If an image path exists, delete the file from the server
         if (record && record.photo_url) {
-             // 1. Remove the virtual '/uploads/' prefix
+            // Fix: Reconstruct absolute path using defined constants
             const relativeFilename = record.photo_url.replace('/uploads/', ''); 
-            // 2. Join the absolute storage directory with the remaining path (e.g., /data/uploads/preadmissions/filename)
-            const filePath = path.join(ROOT_STORAGE_PATH, relativeFilename);
+            const filePath = require('path').join(ROOT_STORAGE_PATH, relativeFilename);
 
-            if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
+            if (require('fs').existsSync(filePath)) {
+                require('fs').unlink(filePath, (err) => {
                     if (err) console.error("Failed to delete pre-admission photo:", err);
                 });
             }
