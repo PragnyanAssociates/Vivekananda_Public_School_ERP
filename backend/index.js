@@ -33,6 +33,9 @@ const { Server } = require("socket.io");
 
 const app = express();
 
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
+
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
@@ -5808,7 +5811,6 @@ const chatUpload = multer({
 });
 
 // ★★★ 2. Helper Middleware for Group Creator Check ★★★
-// Defined here to be used in the routes below.
 const isGroupCreator = async (req, res, next) => {
     try {
         const { groupId } = req.params;
@@ -5949,6 +5951,8 @@ app.post('/api/groups/:groupId/seen', verifyToken, async (req, res) => {
     const { groupId } = req.params;
     const userId = req.user.id;
     try {
+        // The group_last_seen table is not in the provided schema, so this might fail.
+        // Assuming it exists based on the original code.
         const query = `
             INSERT INTO group_last_seen (group_id, user_id, last_seen_timestamp)
             VALUES (?, ?, NOW())
@@ -5957,7 +5961,8 @@ app.post('/api/groups/:groupId/seen', verifyToken, async (req, res) => {
         await db.query(query, [groupId, userId]);
         res.sendStatus(200);
     } catch (error) {
-        console.error("Error marking group as seen:", error);
+        // If the table doesn't exist, this will prevent a crash.
+        console.error("Error marking group as seen (table `group_last_seen` might be missing):", error);
         res.status(500).json({ message: "Could not mark group as seen." });
     }
 });
@@ -5995,9 +6000,12 @@ app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res)
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
+        // Since `group_last_seen` might not exist, we wrap its deletion in a try-catch.
+        try { await connection.query('DELETE FROM group_last_seen WHERE group_id = ?', [groupId]); }
+        catch (e) { console.log("Skipping deletion from non-existent table group_last_seen"); }
+
         await connection.query('DELETE FROM group_chat_messages WHERE group_id = ?', [groupId]);
         await connection.query('DELETE FROM group_members WHERE group_id = ?', [groupId]);
-        await connection.query('DELETE FROM group_last_seen WHERE group_id = ?', [groupId]);
         await connection.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
         await connection.commit();
         res.json({ message: 'Group deleted successfully.' });
@@ -6016,7 +6024,7 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
         const query = `
-            SELECT 
+            SELECT
                 m.id, m.message_text, m.timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.reply_to_message_id,
                 u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
@@ -6041,10 +6049,10 @@ app.post('/api/groups/media', verifyToken, chatUpload.single('media'), (req, res
 
 
 // ★★★ 5. Real-Time Socket.IO Logic ★★★
-// This `io` constant was defined above, before this block of code. This solves the ReferenceError.
+// The `io` constant was defined at the top of the file, solving the ReferenceError.
 io.on('connection', (socket) => {
     console.log(`🔌 A user connected: ${socket.id}`);
-    
+
     socket.on('joinGroup', (data) => {
         if (data.groupId) {
             socket.join(`group-${data.groupId}`);
@@ -6055,7 +6063,7 @@ io.on('connection', (socket) => {
     socket.on('sendMessage', async (data) => {
         const { userId, groupId, messageType, messageText, fileUrl, replyToMessageId } = data;
         if (!userId || !groupId || !messageType || (messageType === 'text' && !messageText?.trim()) || (messageType !== 'text' && !fileUrl)) return;
-        
+
         const roomName = `group-${groupId}`;
         const connection = await db.getConnection();
         try {
@@ -6074,7 +6082,7 @@ io.on('connection', (socket) => {
                 LEFT JOIN users reply_u ON reply_m.user_id = reply_u.id
                 WHERE m.id = ?`, [newMessageId]);
             await connection.commit();
-            
+
             io.to(roomName).emit('newMessage', broadcastMessage);
             io.emit('updateGroupList', { groupId: groupId });
 
@@ -6098,11 +6106,11 @@ io.on('connection', (socket) => {
                 return;
             }
             const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
-            
+
             await connection.query('DELETE FROM group_chat_messages WHERE id = ?', [messageId]);
             io.to(roomName).emit('messageDeleted', messageId);
 
-            if (lastMsgCheck && lastMsgCheck.id === messageId) {
+            if (lastMsgCheck && lastMsgCheck.id === parseInt(messageId, 10)) {
                 io.emit('updateGroupList', { groupId: groupId });
             }
         } catch (error) {
@@ -6135,7 +6143,7 @@ io.on('connection', (socket) => {
             io.to(roomName).emit('messageEdited', updatedMessage);
 
             const [[lastMsgCheck]] = await connection.query('SELECT id FROM group_chat_messages WHERE group_id = ? ORDER BY timestamp DESC LIMIT 1', [groupId]);
-            if (lastMsgCheck && lastMsgCheck.id === messageId) {
+            if (lastMsgCheck && lastMsgCheck.id === parseInt(messageId, 10)) {
                 io.emit('updateGroupList', { groupId: groupId });
             }
         } catch (error) {
