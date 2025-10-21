@@ -40,6 +40,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+const ALUMNI_STORAGE_PATH = '/data/uploads';
 app.use('/uploads', express.static('/data/uploads'));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
@@ -6435,9 +6436,12 @@ app.get('/api/subjects/all-unique', verifyToken, async (req, res) => {
 // Add a dedicated multer storage config for alumni photos
 const alumniStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadPath = 'uploads/';
-        // Ensure the directory exists
+        // Use the new absolute storage path
+        const uploadPath = ALUMNI_STORAGE_PATH; 
+        
+        // Ensure the directory exists (important for absolute paths in containers/servers)
         if (!fs.existsSync(uploadPath)) {
+            // Note: If /data is a mounted volume, this creation might require specific permissions.
             fs.mkdirSync(uploadPath, { recursive: true });
         }
         cb(null, uploadPath);
@@ -6463,7 +6467,8 @@ app.get('/api/alumni', async (req, res) => {
 // POST a new alumni record (now handles file upload)
 app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => {
     const fields = req.body;
-    const profile_pic_url = req.file ? `/uploads/${req.file.filename}` : null;
+    // The URL stored in the DB must still use the public virtual path '/uploads/'
+    const profile_pic_url = req.file ? `/uploads/${req.file.filename}` : null; 
 
     if (!fields.admission_no || !fields.alumni_name) {
         return res.status(400).json({ message: "Admission Number and Alumni Name are required." });
@@ -6521,6 +6526,7 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
 
     if (req.file) {
         setClauses.push('profile_pic_url = ?');
+        // The URL stored in the DB must still use the public virtual path '/uploads/'
         params.push(`/uploads/${req.file.filename}`);
     }
 
@@ -6565,8 +6571,13 @@ app.delete('/api/alumni/:id', async (req, res) => {
 
         // If an image path exists, delete the file from the server
         if (record && record.profile_pic_url) {
-            // Construct absolute path
-            const filePath = path.join(__dirname, '..', record.profile_pic_url); // Adjust '..' if necessary based on your folder structure
+            // --- MODIFICATION HERE: Construct absolute path using ALUMNI_STORAGE_PATH ---
+            
+            // 1. Remove the virtual '/uploads' prefix from the URL
+            const relativeFilename = record.profile_pic_url.replace('/uploads', ''); 
+            // 2. Join the absolute storage directory with the remaining filename
+            const filePath = path.join(ALUMNI_STORAGE_PATH, relativeFilename);
+
             if (fs.existsSync(filePath)) {
                 fs.unlink(filePath, (err) => {
                     if (err) console.error("Failed to delete alumni image file:", err);
@@ -6584,6 +6595,7 @@ app.delete('/api/alumni/:id', async (req, res) => {
         connection.release();
     }
 });
+
 
 
 
