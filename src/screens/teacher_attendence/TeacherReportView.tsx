@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, ScrollView, Platform, UIManager, LayoutAnimation, SafeAreaView } from 'react-native';
 import apiClient from '../../api/client';
-import DateTimePicker from '@react-native-community/datetimePicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 

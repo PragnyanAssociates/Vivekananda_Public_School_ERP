@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, TextInput, Platform, UIManager, LayoutAnimation, SafeAreaView } from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import DateTimePicker from '@react-native-community/datetimePicker';
-import TeacherReportView from './TeacherReportView'; // Import the new reusable component
+import DateTimePicker from '@react-native-community/datetimepicker'; 
+import TeacherReportView from './TeacherReportView';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 
-// --- Local Interfaces ---
+// ... (Interface and Theme Constants remain the same)
 interface Teacher {
   id: number;
   full_name: string;
@@ -15,11 +15,10 @@ interface Teacher {
   subjects_taught?: string[]; 
 }
 
-// Extend Teacher interface for the marking state
 interface TeacherMarking extends Teacher {
   status: 'P' | 'A' | 'L'; 
 }
-// --- Theme Constants ---
+
 const PRIMARY_COLOR = '#008080';
 const TEXT_COLOR_DARK = '#37474F';
 const TEXT_COLOR_MEDIUM = '#566573';
@@ -27,49 +26,73 @@ const BORDER_COLOR = '#E0E0E0';
 const GREEN = '#43A047';
 const RED = '#E53935';
 const WHITE = '#FFFFFF';
-
 const API_BASE_URL = '/teacher-attendance';
+
 
 const TeacherAttendanceMarkingScreen = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'marking' | 'reporting'>('marking');
-  const [teachers, setTeachers] = useState<TeacherMarking[]>([]); // For marking
-  const [allTeachersForReport, setAllTeachersForReport] = useState<Teacher[]>([]); // For reporting selection
+  const [teachers, setTeachers] = useState<TeacherMarking[]>([]); 
+  const [allTeachersForReport, setAllTeachersForReport] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [attendanceDate, setAttendanceDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
+  const [markingState, setMarkingState] = useState<'LOADING' | 'MARKING' | 'SUCCESS_SUMMARY'>('LOADING');
 
-  const fetchTeachers = useCallback(async () => {
-    setIsLoading(true);
+  
+  const fetchBaseTeacherData = useCallback(async (dateToCheck: Date) => {
+    const dateString = dateToCheck.toISOString().slice(0, 10);
+    
     try {
-      const response = await apiClient.get<Teacher[]>(`${API_BASE_URL}/teachers`);
-      
-      const teachersData = response.data.map(t => {
-          // Assuming backend already parsed subjects_taught into an array
-          const subjects = (t.subjects_taught && Array.isArray(t.subjects_taught)) ? t.subjects_taught : [];
-          
-          return {
-              ...t,
-              subjects_taught: subjects,
-              status: 'P',
-          } as TeacherMarking;
-      });
+        const response = await apiClient.get<Teacher[]>(`${API_BASE_URL}/teachers`);
+        const teachersData = response.data.map(t => {
+            const subjects = (t.subjects_taught && Array.isArray(t.subjects_taught)) ? t.subjects_taught : [];
+            return { ...t, subjects_taught: subjects } as TeacherMarking;
+        });
 
-      setTeachers(teachersData);
-      setAllTeachersForReport(teachersData);
+        // --- CHECK SAVED STATUS (CRITICAL FIX) ---
+        // We will query the report API for the FIRST teacher listed for today's date.
+        // If we get any history records back, we assume marking has occurred.
+        let attendanceExists = false;
+        if (teachersData.length > 0) {
+            const firstTeacherId = teachersData[0].id;
+            try {
+                const reportRes = await apiClient.get(`${API_BASE_URL}/report/${firstTeacherId}?period=daily&targetDate=${dateString}`);
+                if (reportRes.data.detailedHistory && reportRes.data.detailedHistory.length > 0) {
+                    attendanceExists = true;
+                }
+            } catch (e) {
+                // Ignore API error if teacher hasn't been marked before, still treat as new marking.
+            }
+        }
+        
+        setTeachers(teachersData);
+        setAllTeachersForReport(teachersData);
+        
+        if (attendanceExists) {
+            setMarkingState('SUCCESS_SUMMARY'); // Show Edit button
+        } else {
+            setMarkingState('MARKING'); // Show P/A list
+        }
+
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Failed to load teachers.");
+        Alert.alert("Error", error.response?.data?.message || "Failed to load teacher base data.");
+        setMarkingState('MARKING'); // Fallback to marking
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   }, []);
-
+  
+  
+  // Load data when component mounts or attendanceDate changes
   useEffect(() => {
-    fetchTeachers();
-  }, [fetchTeachers]);
+      setIsLoading(true);
+      fetchBaseTeacherData(attendanceDate);
+  }, [attendanceDate, fetchBaseTeacherData]); // Reruns when date or component mounts
+
 
   const handleStatusChange = (teacherId: number, status: 'P' | 'A' | 'L') => {
     setTeachers(prev =>
@@ -81,6 +104,7 @@ const TeacherAttendanceMarkingScreen = () => {
     setShowDatePicker(false);
     if (selectedDate) {
       setAttendanceDate(selectedDate);
+      // The useEffect hook above will trigger data loading when attendanceDate changes
     }
   };
 
@@ -102,14 +126,14 @@ const TeacherAttendanceMarkingScreen = () => {
 
     try {
       setIsLoading(true);
-      // This API call triggers the notification creation on the backend
       await apiClient.post(`${API_BASE_URL}/mark`, {
         date: dateString,
         attendanceData,
       });
 
-      // Show success and confirm notification was sent
-      Alert.alert("Success", "Attendance marked successfully! Absent teachers have been notified.");
+      // SUCCESS: Switch to Summary View immediately
+      setMarkingState('SUCCESS_SUMMARY');
+      
     } catch (error: any) {
       Alert.alert("Submission Error", error.response?.data?.message || 'Failed to submit attendance.');
     } finally {
@@ -176,6 +200,29 @@ const TeacherAttendanceMarkingScreen = () => {
     </Animatable.View>
   );
 
+  // --- Render Success Summary View ---
+  const renderSuccessSummary = () => (
+      <View style={styles.summaryContainer}>
+          <Icon name="check-circle-outline" size={80} color={GREEN} />
+          <Text style={styles.summaryTitle}>Attendance Marked!</Text>
+          <Text style={styles.summaryMessage}>
+              Attendance for {attendanceDate.toLocaleDateString()} has been saved successfully.
+              You can click "Edit Attendance" to make any changes.
+          </Text>
+          <TouchableOpacity 
+              style={styles.editButton}
+              onPress={() => {
+                  // When clicking Edit, switch back to MARKING state
+                  setMarkingState('MARKING');
+                  // We need to reload the actual status for the date for editing
+                  loadMarkingDataForDate(attendanceDate);
+              }}
+          >
+              <Text style={styles.editButtonText}>Edit Attendance</Text>
+          </TouchableOpacity>
+      </View>
+  );
+
 
   // --- Conditional Rendering for Report View ---
   if (selectedTeacherId) {
@@ -226,24 +273,28 @@ const TeacherAttendanceMarkingScreen = () => {
                         />
                     )}
                 </View>
+                
+                {markingState === 'LOADING' && <View style={styles.center}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>}
+                {markingState === 'SUCCESS_SUMMARY' && renderSuccessSummary()}
+                
+                {markingState === 'MARKING' && (
+                    <>
+                        <Text style={styles.listTitle}>Teacher List ({teachers.length})</Text>
 
-                <Text style={styles.listTitle}>Teacher List ({teachers.length})</Text>
+                        <FlatList
+                            data={teachers}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={renderTeacherMarkingItem}
+                            contentContainerStyle={{ paddingBottom: 100 }}
+                            ListEmptyComponent={<Text style={styles.emptyText}>No teacher records found.</Text>}
+                        />
 
-                {isLoading ? (
-                    <View style={styles.center}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>
-                ) : (
-                    <FlatList
-                        data={teachers}
-                        keyExtractor={(item) => item.id.toString()}
-                        renderItem={renderTeacherMarkingItem}
-                        contentContainerStyle={{ paddingBottom: 100 }}
-                        ListEmptyComponent={<Text style={styles.emptyText}>No teacher records found.</Text>}
-                    />
+                        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitAttendance} disabled={isLoading}>
+                            <Text style={styles.submitBtnText}>SUBMIT ATTENDANCE</Text>
+                        </TouchableOpacity>
+                    </>
                 )}
 
-                <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitAttendance} disabled={isLoading}>
-                    <Text style={styles.submitBtnText}>SUBMIT ATTENDANCE</Text>
-                </TouchableOpacity>
             </View>
         )}
 
@@ -325,6 +376,13 @@ const styles = StyleSheet.create({
   searchBar: { flex: 1, height: 45, fontSize: 16, color: TEXT_COLOR_DARK },
   searchIcon: { marginRight: 8 },
   reportSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 20, marginHorizontal: 10, marginVertical: 4, backgroundColor: WHITE, borderRadius: 8, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+
+  // --- Success Summary View Styles ---
+  summaryContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, backgroundColor: WHITE },
+  summaryTitle: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 15, marginBottom: 10 },
+  summaryMessage: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center', marginBottom: 30 },
+  editButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 8 },
+  editButtonText: { color: WHITE, fontSize: 16, fontWeight: 'bold' },
 });
 
 export default TeacherAttendanceMarkingScreen;
