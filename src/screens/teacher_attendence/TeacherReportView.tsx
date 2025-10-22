@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, ScrollView, Platform, UIManager, LayoutAnimation, SafeAreaView } from 'react-native';
 import apiClient from '../../api/client';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimePicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 
@@ -30,11 +30,6 @@ interface AttendanceReport {
   detailedHistory: AttendanceRecord[];
 }
 // --- End Local Interfaces ---
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutLayoutAnimationEnabledExperimental(true);
-}
 
 // --- Reusable Sub-components ---
 const SummaryCard = ({ label, value, color, delay }) => ( 
@@ -193,7 +188,7 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
 };
 
 
-// --- Styles (Combined from your provided files) ---
+// --- Styles (Combined and Centralized) ---
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F4F6F8' },
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },

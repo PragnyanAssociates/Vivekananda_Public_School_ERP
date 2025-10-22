@@ -14,7 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../api/client';
 import { format } from 'date-fns';
-import { useAuth } from '../context/AuthContext'; // Import useAuth to check user role if needed
+import { useAuth } from '../context/AuthContext'; 
 
 // --- Style Constants and Icons ---
 const PRIMARY_COLOR = '#008080';
@@ -47,6 +47,7 @@ const notificationIcons = {
   kitchen: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png',
   chat: 'https://cdn-icons-png.flaticon.com/128/13819/13819448.png',
   'online-class': 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png',
+  attendance: 'https://cdn-icons-png.flaticon.com/128/992/992683.png', // New icon
 };
 
 const getIconForTitle = (title: string = '') => {
@@ -65,12 +66,13 @@ const getIconForTitle = (title: string = '') => {
     if (lowerCaseTitle.includes('chat')) return notificationIcons.chat;
     if (lowerCaseTitle.includes('class')) return notificationIcons['online-class'];
     if (lowerCaseTitle.includes('food') || lowerCaseTitle.includes('kitchen')) return notificationIcons.food;
+    if (lowerCaseTitle.includes('attendance') || lowerCaseTitle.includes('absent')) return notificationIcons.attendance;
     return notificationIcons.default;
 };
 
 const NotificationsScreen = ({ onUnreadCountChange }) => {
-  const navigation = useNavigation<any>(); // Use <any> to simplify navigation calls
-  const { user } = useAuth(); // Get user to determine role-based navigation if needed
+  const navigation = useNavigation<any>(); 
+  const { user } = useAuth(); 
   const [filterStatus, setFilterStatus] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,24 +117,30 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         }
     }
 
-    // Stop if there's no link to navigate to
     if (!notification.link) {
         console.log("Notification has no link to navigate to.");
         return;
     }
 
     try {
-        // Parse the link. Example: 'homework/123' -> ['homework', '123']
         const parts = notification.link.split('/').filter(Boolean);
         if (parts.length === 0) return;
 
-        const screen = parts[0].toLowerCase(); // Use lowercase for robust matching
+        const screen = parts[0].toLowerCase();
         const param1 = parts[1];
         const param2 = parts[2];
 
         console.log(`Navigating to screen: '${screen}' with params:`, param1, param2);
 
-        // --- ✅ COMPREHENSIVE NAVIGATION LOGIC BASED ON App.tsx ✅ ---
+        // --- ✅ ADDED TEACHER ATTENDANCE CASES ✅ ---
+        if (user?.role === 'teacher' && (screen === 'teacher-attendance' || screen === 'my-attendance-report')) {
+            return navigation.navigate('TeacherAttendanceReportScreen');
+        }
+        if (user?.role === 'admin' && (screen === 'teacher-attendance')) {
+            return navigation.navigate('TeacherAttendanceMarkingScreen');
+        }
+        // --- END NEW CASES ---
+        
         switch (screen) {
             // Core Features
             case 'calendar':
@@ -154,22 +162,21 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
 
             // Nested Navigators
             case 'gallery':
-                // Navigates into the 'Gallery' navigator to the 'AlbumDetail' screen
                 navigation.navigate('Gallery', {
                     screen: 'AlbumDetail',
-                    params: { title: param1 } // param1 should be the album title
+                    params: { title: param1 } 
                 });
                 break;
             case 'homework':
-                // Navigates into the 'StudentHomework' navigator
                 navigation.navigate('StudentHomework', { screen: 'HomeworkList' });
                 break;
 
-            // Role-based Screens (Assuming student for general notifications)
+            // Role-based Screens 
             case 'events':
                 navigation.navigate(user?.role === 'admin' ? 'AdminEventsScreen' : 'StudentEventsScreen');
                 break;
             case 'health':
+            case 'health-info':
                 navigation.navigate(user?.role === 'teacher' ? 'TeacherHealthAdminScreen' : 'StudentHealthScreen');
                 break;
             case 'exam-schedule':
@@ -195,29 +202,26 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
                 break;
 
             // Results and Reports
-            case 'results':
+            case 'reports':
                 if (param1 === 'report' && param2) {
-                    // Navigate to a specific report detail
                     navigation.navigate('ReportDetailScreen', { reportId: parseInt(param2, 10) });
                 } else {
-                    // Navigate to the main results list screen
                     navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResultsScreen' : 'StudentResultsScreen');
                 }
                 break;
 
             // Teacher/Admin specific
-            case 'submissions': // For teachers checking homework
+            case 'submissions': 
                 navigation.navigate('TeacherAdminHomeworkScreen');
                 break;
-            case 'leave': // For leave management
+            case 'leave': 
                  navigation.navigate('AdminLM');
                  break;
-             case 'ads': // For Ads management
+             case 'ads': 
                  navigation.navigate('AdminAdDashboardScreen');
                  break;
 
             // Other Features
-            // Add this case for food menu notifications
               case 'food-menu':
               case 'food':
               navigation.navigate('FoodScreen');

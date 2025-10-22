@@ -2,21 +2,17 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, TextInput, Platform, UIManager, LayoutAnimation, SafeAreaView } from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimePicker';
 import TeacherReportView from './TeacherReportView'; // Import the new reusable component
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutLayoutAnimationEnabledExperimental(true);
-}
 
 // --- Local Interfaces ---
 interface Teacher {
   id: number;
   full_name: string;
   username: string;
+  subjects_taught?: string[]; 
 }
 
 // Extend Teacher interface for the marking state
@@ -37,14 +33,13 @@ const API_BASE_URL = '/teacher-attendance';
 const TeacherAttendanceMarkingScreen = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'marking' | 'reporting'>('marking');
-  const [teachers, setTeachers] = useState<TeacherMarking[]>([]);
-  const [allTeachersForReport, setAllTeachersForReport] = useState<Teacher[]>([]);
+  const [teachers, setTeachers] = useState<TeacherMarking[]>([]); // For marking
+  const [allTeachersForReport, setAllTeachersForReport] = useState<Teacher[]>([]); // For reporting selection
   const [isLoading, setIsLoading] = useState(true);
   const [attendanceDate, setAttendanceDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // State for Admin Viewing Report Feature
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
 
   const fetchTeachers = useCallback(async () => {
@@ -52,14 +47,19 @@ const TeacherAttendanceMarkingScreen = () => {
     try {
       const response = await apiClient.get<Teacher[]>(`${API_BASE_URL}/teachers`);
       
-      // Separate lists: one for marking, one for the static report list
-      const initialTeachers: TeacherMarking[] = response.data.map(t => ({
-        ...t,
-        status: 'P',
-      }));
-      
-      setTeachers(initialTeachers);
-      setAllTeachersForReport(response.data);
+      const teachersData = response.data.map(t => {
+          // Assuming backend already parsed subjects_taught into an array
+          const subjects = (t.subjects_taught && Array.isArray(t.subjects_taught)) ? t.subjects_taught : [];
+          
+          return {
+              ...t,
+              subjects_taught: subjects,
+              status: 'P',
+          } as TeacherMarking;
+      });
+
+      setTeachers(teachersData);
+      setAllTeachersForReport(teachersData);
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || "Failed to load teachers.");
     } finally {
@@ -90,7 +90,6 @@ const TeacherAttendanceMarkingScreen = () => {
     }
     
     const dateString = attendanceDate.toISOString().slice(0, 10);
-    const teachersToMark = teachers.filter(t => t.status !== 'P'); // Only send changes if you optimize backend
     
     const attendanceData = teachers.map(t => ({
       teacher_id: t.id,
@@ -103,12 +102,14 @@ const TeacherAttendanceMarkingScreen = () => {
 
     try {
       setIsLoading(true);
+      // This API call triggers the notification creation on the backend
       await apiClient.post(`${API_BASE_URL}/mark`, {
         date: dateString,
         attendanceData,
       });
 
-      Alert.alert("Success", "Attendance marked successfully!");
+      // Show success and confirm notification was sent
+      Alert.alert("Success", "Attendance marked successfully! Absent teachers have been notified.");
     } catch (error: any) {
       Alert.alert("Submission Error", error.response?.data?.message || 'Failed to submit attendance.');
     } finally {
@@ -123,9 +124,10 @@ const TeacherAttendanceMarkingScreen = () => {
 
   const filteredReportList = useMemo(() => {
     if (!searchQuery) return allTeachersForReport;
+    const lowerQuery = searchQuery.toLowerCase();
     return allTeachersForReport.filter(t => 
-        t.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        t.id.toString().includes(searchQuery)
+        t.full_name.toLowerCase().includes(lowerQuery) || 
+        (t.subjects_taught && t.subjects_taught.some(sub => sub.toLowerCase().includes(lowerQuery)))
     );
   }, [allTeachersForReport, searchQuery]);
 
@@ -135,7 +137,9 @@ const TeacherAttendanceMarkingScreen = () => {
     <View style={styles.teacherRow}>
       <View style={styles.teacherInfo}>
         <Text style={styles.teacherName}>{item.full_name}</Text>
-        <Text style={styles.teacherId}>ID: {item.id}</Text>
+        <Text style={styles.teacherSubjects}>
+            { (item.subjects_taught?.length ? item.subjects_taught.join(', ') : `ID: ${item.id}`) }
+        </Text>
       </View>
       
       <View style={styles.statusButtons}>
@@ -163,7 +167,9 @@ const TeacherAttendanceMarkingScreen = () => {
       >
         <View style={styles.teacherInfo}>
             <Text style={styles.teacherName}>{item.full_name}</Text>
-            <Text style={styles.teacherId}>ID: {item.id}</Text>
+            <Text style={styles.teacherSubjects}>
+                { (item.subjects_taught?.length ? item.subjects_taught.join(', ') : `ID: ${item.id}`) }
+            </Text>
         </View>
         <Icon name="chevron-right" size={24} color={TEXT_COLOR_MEDIUM} />
       </TouchableOpacity>
@@ -247,7 +253,7 @@ const TeacherAttendanceMarkingScreen = () => {
                     <Icon name="magnify" size={22} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchBar}
-                        placeholder="Search teacher by name or ID..."
+                        placeholder="Search teacher by name or subject..."
                         value={searchQuery}
                         onChangeText={handleSearch}
                         placeholderTextColor={TEXT_COLOR_MEDIUM}
@@ -283,25 +289,25 @@ const styles = StyleSheet.create({
   tabButtonTextActive: { color: PRIMARY_COLOR },
 
   // --- Header/Date Selector (Marking Tab) ---
-  header: { padding: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginBottom: 10 },
-  dateSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 },
-  label: { fontSize: 16, fontWeight: '500', color: TEXT_COLOR_MEDIUM },
-  dateInput: { borderWidth: 1, borderColor: BORDER_COLOR, padding: 10, borderRadius: 5, width: '60%', backgroundColor: WHITE },
+  header: { paddingHorizontal: 20, paddingTop: 15, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginBottom: 10, textAlign: 'left' },
+  dateSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 10, paddingBottom: 20 },
+  label: { fontSize: 16, fontWeight: '500', color: TEXT_COLOR_DARK, marginRight: 15 },
+  dateInput: { borderWidth: 1, borderColor: BORDER_COLOR, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 5, backgroundColor: WHITE },
   listTitle: { fontSize: 16, fontWeight: 'bold', padding: 10, backgroundColor: '#E0E0E0', color: TEXT_COLOR_DARK },
   
   // --- Marking List Rows ---
-  teacherRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: WHITE },
+  teacherRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: WHITE },
   teacherInfo: { flex: 1, marginRight: 10 },
   teacherName: { fontSize: 16, fontWeight: 'bold', color: TEXT_COLOR_DARK },
-  teacherId: { fontSize: 12, color: TEXT_COLOR_MEDIUM },
+  teacherSubjects: { fontSize: 13, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
   
   statusButtons: { flexDirection: 'row' },
   statusButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 10, borderWidth: 1.5 },
   
   presentButton: { borderColor: GREEN },
-  absentButton: { borderColor: RED },
-
+  absentButton: { borderColor: RED, backgroundColor: WHITE },
+  
   presentText: { color: GREEN, fontWeight: 'bold' },
   absentText: { color: RED, fontWeight: 'bold' },
 
@@ -315,10 +321,10 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', marginTop: 20, color: TEXT_COLOR_MEDIUM },
 
   // --- Report Selection List ---
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, marginHorizontal: 15, marginTop: 15, marginBottom: 10, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR, paddingHorizontal: 10 },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, marginHorizontal: 15, marginVertical: 15, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR, paddingHorizontal: 10 },
   searchBar: { flex: 1, height: 45, fontSize: 16, color: TEXT_COLOR_DARK },
   searchIcon: { marginRight: 8 },
-  reportSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, marginHorizontal: 10, marginVertical: 4, backgroundColor: WHITE, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 3 },
+  reportSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 20, marginHorizontal: 10, marginVertical: 4, backgroundColor: WHITE, borderRadius: 8, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
 });
 
 export default TeacherAttendanceMarkingScreen;

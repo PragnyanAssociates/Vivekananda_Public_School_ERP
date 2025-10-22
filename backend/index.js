@@ -6947,17 +6947,16 @@ app.post('/api/resources/textbooks', async (req, res) => {
 
 
 // ==========================================================
-// --- TEACHER ATTENDANCE MODULE API ROUTES (NEW) ---
+// --- TEACHER ATTENDANCE MODULE API ROUTES (FINAL) ---
 // ==========================================================
 
 // Helper function to calculate teacher attendance report statistics
 const calculateTeacherAttendanceStats = (records) => {
     const totalDays = records.length;
-    // Count P and A statuses explicitly, ignoring L (Late/Leave) if you only want P/A totals for the percentage calculation
+    // Only count P and A statuses for the percentage calculation
     const daysPresent = records.filter(r => r.status === 'P').length;
     const daysAbsent = records.filter(r => r.status === 'A').length;
     
-    // Total days counted for the percentage calculation (excluding records with 'L' status if present)
     const totalCountedDays = daysPresent + daysAbsent; 
     
     const overallPercentage = totalCountedDays > 0 
@@ -6972,27 +6971,46 @@ const calculateTeacherAttendanceStats = (records) => {
     };
 };
 
-// 1. ADMIN: Get list of teachers for marking attendance
+// 1. ADMIN: Get list of teachers for marking/reporting (Now fetches subjects_taught)
 app.get('/api/teacher-attendance/teachers', verifyToken, isAdmin, async (req, res) => {
     try {
+        // MODIFIED: Select 'subjects_taught' field
         const [teachers] = await db.query(
-            // Fetches all users who are marked as 'teacher'
-            'SELECT id, full_name, username FROM users WHERE role = ? ORDER BY full_name',
+            'SELECT id, full_name, username, subjects_taught FROM users WHERE role = ? ORDER BY full_name',
             ['teacher']
         );
-        res.json(teachers);
+        
+        // Parse the subjects_taught JSON string into an array before sending
+        const parsedTeachers = teachers.map(t => {
+            let subjects = [];
+            if (t.subjects_taught && typeof t.subjects_taught === 'string') {
+                try {
+                    subjects = JSON.parse(t.subjects_taught);
+                } catch (e) {
+                    subjects = [];
+                }
+            } else if (Array.isArray(t.subjects_taught)) {
+                 subjects = t.subjects_taught;
+            }
+            return {
+                id: t.id,
+                full_name: t.full_name,
+                username: t.username,
+                subjects_taught: subjects, // Frontend now uses this
+            };
+        });
+
+        res.json(parsedTeachers);
     } catch (err) {
         console.error('Error fetching teachers for attendance:', err);
         res.status(500).send('Server error');
     }
 });
 
-// 2. ADMIN: Mark attendance for teachers
-// (Input: { date: 'YYYY-MM-DD', attendanceData: [{ teacher_id: 201, status: 'P' }, ...] })
+// 2. ADMIN: Mark attendance for teachers (Includes Notification Logic)
 app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) => {
     const { date, attendanceData } = req.body;
-    // Securely get Admin ID from the JWT payload
-    const adminId = req.user.id;
+    const adminId = req.user.id; // Admin ID from JWT
 
     if (!date || !attendanceData || attendanceData.length === 0) {
         return res.status(400).send('Missing date or attendance data.');
@@ -7011,7 +7029,7 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
             date, 
             item.status, // Expected to be 'P', 'A', or 'L'
             adminId
-        ]).filter(item => ['P', 'A', 'L'].includes(item[2])); // Basic validation
+        ]).filter(item => ['P', 'A', 'L'].includes(item[2]));
 
         if (values.length === 0) {
             await connection.rollback();
@@ -7020,6 +7038,28 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
 
         const insertQuery = 'INSERT INTO teacher_attendance (teacher_id, date, status, marked_by_admin_id) VALUES ?';
         await connection.query(insertQuery, [values]);
+
+        // 3. Notification Logic for Absent Teachers
+        const absentTeachers = attendanceData.filter(item => item.status === 'A');
+
+        if (absentTeachers.length > 0) {
+            const absentTeacherIds = absentTeachers.map(item => item.teacher_id);
+            const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [adminId]);
+            const senderName = admin.full_name || "School Administration";
+            
+            const notificationTitle = `Attendance Alert: You were marked Absent`;
+            const notificationMessage = `Your attendance was recorded as Absent for ${date}. Please check your attendance report.`;
+            
+            // Assuming createBulkNotifications and connection are available in scope
+            await createBulkNotifications(
+                connection, 
+                absentTeacherIds, 
+                senderName, 
+                notificationTitle, 
+                notificationMessage, 
+                '/teacher-attendance' // Link to the report screen
+            );
+        }
 
         await connection.commit();
         res.status(200).send('Attendance marked successfully.');
@@ -7041,7 +7081,7 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
     const { period, targetDate, targetMonth } = req.query;
     const loggedInUser = req.user; 
 
-    // Security Check: Teacher can only view their own report unless logged in as Admin
+    // Security Check
     if (loggedInUser.role === 'teacher' && String(loggedInUser.id) !== teacherId) {
         return res.status(403).json({ message: 'Access denied. You can only view your own report.' });
     }
@@ -7050,32 +7090,25 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
     let params = [teacherId];
 
     try {
-        // --- Filtering based on Period ---
         if (period === 'daily' && targetDate) {
             query += ' AND date = ?';
             params.push(targetDate);
         } else if (period === 'monthly' && targetMonth) {
-            // targetMonth is expected to be YYYY-MM
             query += ' AND DATE_FORMAT(date, "%Y-%m") = ?';
             params.push(targetMonth);
         } 
-        // 'overall' needs no date filtering
 
         const [records] = await db.query(query + ' ORDER BY date DESC', params);
         
-        // --- Calculate Stats ---
         const stats = calculateTeacherAttendanceStats(records);
         
-        // Detailed history is simply all records retrieved by the query
-        const detailedHistory = records;
-
         res.json({
             stats: {
                 overallPercentage: stats.overallPercentage,
                 daysPresent: stats.daysPresent,
                 daysAbsent: stats.daysAbsent,
             },
-            detailedHistory
+            detailedHistory: records
         });
 
     } catch (err) {
@@ -7083,6 +7116,8 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
         res.status(500).send('Server error fetching report');
     }
 });
+
+
 
 
 // By using "server.listen", you enable both your API routes and the real-time chat.
