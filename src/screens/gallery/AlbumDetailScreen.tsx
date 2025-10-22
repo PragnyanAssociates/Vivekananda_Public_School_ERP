@@ -122,7 +122,27 @@ const AlbumDetailScreen: FC = () => {
             <FlatList data={filteredItems} keyExtractor={(item) => item.id.toString()} numColumns={NUM_COLUMNS} renderItem={renderGridItem} contentContainerStyle={styles.listContainer} ListEmptyComponent={<View style={styles.emptyContainer}><Icon name="images-outline" size={60} color="#ccc" /><Text style={styles.emptyText}>No items found in this album.</Text></View>} />
             {isAdmin && (<Animatable.View animation="zoomIn" duration={400} delay={300} style={styles.fabContainer}><TouchableOpacity style={styles.fab} onPress={handleAddItem} disabled={isSubmitting}>{isSubmitting ? <ActivityIndicator color="#fff" /> : <Icon name="add" size={30} color="white" />}</TouchableOpacity></Animatable.View>)}
             <Modal visible={isImageModalVisible} transparent={true} animationType="none" onRequestClose={closeModals}><Animatable.View style={styles.modalContainer} animation="fadeIn"><TouchableOpacity style={styles.closeButton} onPress={closeModals}><Icon name="close" size={32} color="white" /></TouchableOpacity><AnimatableFastImage source={{ uri: selectedImageUri!, priority: FastImage.priority.high }} style={styles.fullscreenImage} resizeMode={FastImage.resizeMode.contain} animation="zoomIn" /></Animatable.View></Modal>
-            <Modal visible={isVideoModalVisible} transparent={true} animationType="none" onRequestClose={closeModals}><Animatable.View style={styles.modalContainer} animation="fadeIn"><TouchableOpacity style={styles.closeButton} onPress={closeModals}><Icon name="close" size={32} color="white" /></TouchableOpacity>{selectedVideoUri && ( <AnimatableVideo source={{ uri: selectedVideoUri }} style={styles.fullscreenVideo} controls={true} resizeMode="contain" animation="zoomIn" /> )}</Animatable.View></Modal>
+            
+            {/* VIDEO MODAL: FIX APPLIED HERE */}
+            <Modal visible={isVideoModalVisible} transparent={true} animationType="none" onRequestClose={closeModals}>
+                <Animatable.View style={styles.modalContainer} animation="fadeIn">
+                    <TouchableOpacity style={styles.closeButton} onPress={closeModals}>
+                        <Icon name="close" size={32} color="white" />
+                    </TouchableOpacity>
+                    {selectedVideoUri && ( 
+                        <AnimatableVideo 
+                            source={{ uri: selectedVideoUri }} 
+                            style={styles.fullscreenVideo} 
+                            controls={true} 
+                            resizeMode="contain" 
+                            animation="zoomIn" 
+                            // 🔥 FIX: Ensure sound plays and bypasses the iOS silent switch
+                            muted={false} 
+                            ignoreSilentSwitch="ignore"
+                        /> 
+                    )}
+                </Animatable.View>
+            </Modal>
         </SafeAreaView>
     );
 };
