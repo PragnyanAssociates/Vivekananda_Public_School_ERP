@@ -31,8 +31,8 @@ interface StudentMark {
     student_id: number;
     full_name: string;
     roll_no: string;
-    marks: { [subject: string]: number | undefined }; // Current exam marks (editable)
-    totalMarks?: { [subject: string]: { [exam: string]: number } }; // Detailed history (read-only for overall calc)
+    marks: { [subject: string]: number | undefined }; 
+    totalMarks?: { [subject: string]: { [exam: string]: number } }; 
 }
 
 interface ExamConfig {
@@ -41,9 +41,30 @@ interface ExamConfig {
 }
 
 
-// --- Report Card View Component (Student Only) ---
+// --- 1. Class Selection Screen (Admin/Teacher) ---
+
+const ClassListScreen = ({ onSelectClass }) => (
+    <ScrollView style={styles.classListContainer} contentContainerStyle={{ paddingVertical: 20 }}>
+        <Text style={styles.listTitle}>Select Class for Mark Entry</Text>
+        {CLASS_GROUPS.map(classGroup => (
+            <TouchableOpacity
+                key={classGroup}
+                style={styles.classButton}
+                onPress={() => onSelectClass(classGroup)}
+            >
+                <Icon name="book-open-page-variant" size={24} color="#FFF" style={{ marginRight: 15 }} />
+                <Text style={styles.classButtonText}>{classGroup}</Text>
+                <Icon name="chevron-right" size={24} color="#FFF" />
+            </TouchableOpacity>
+        ))}
+    </ScrollView>
+);
+
+// --- 2. Report Card View Component (Student Only) ---
 
 const ProgressCardView = ({ studentId }) => {
+    // ... (ProgressCardView content remains the same as previous iteration) ...
+    
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -88,10 +109,9 @@ const ProgressCardView = ({ studentId }) => {
         <ScrollView contentContainerStyle={styles.cardScrollView}>
             <View style={styles.cardContainer}>
                 
-                {/* --- FRONT SIDE (Image 4) --- */}
+                {/* --- FRONT SIDE --- */}
                 <View style={[styles.cardSection, styles.cardFront]}>
                     <View style={styles.cardHeader}>
-                        {/* Sample School Logo */}
                         <Image
                             source={{ uri: 'https://cdn-icons-png.flaticon.com/128/992/992683.png' }} 
                             style={styles.logo}
@@ -101,7 +121,6 @@ const ProgressCardView = ({ studentId }) => {
                             <Text style={styles.reportTitle}>PROGRESS CARD (2023-2024)</Text>
                             <Text style={styles.reportSubtitle}>Class: {studentDetails.class_group}</Text>
                         </View>
-                        {/* Profile Picture */}
                         <Image 
                             source={{ uri: studentDetails.profile_image_url || 'https://cdn-icons-png.flaticon.com/128/3135/3135715.png' }}
                             style={styles.profileImage}
@@ -151,7 +170,7 @@ const ProgressCardView = ({ studentId }) => {
                     </View>
                 </View>
 
-                {/* --- BACK SIDE (Image 5) --- */}
+                {/* --- BACK SIDE --- */}
                 <View style={[styles.cardSection, styles.cardBack]}>
                     <Text style={[styles.sectionTitle, { marginBottom: 15 }]}>Academic Assessment (Marks Out of Max.)</Text>
                     
@@ -194,19 +213,19 @@ const ProgressCardView = ({ studentId }) => {
 };
 
 
-// --- Mark Input Grid Component (Admin/Teacher) ---
+// --- 3. Mark Input Grid Component (Admin/Teacher) ---
 
-const MarkInputGrid = ({ classGroup, config }) => {
+const MarkInputGrid = ({ classGroup, config, onGoBack }) => {
     const { user } = useAuth();
     const [marksData, setMarksData] = useState<StudentMark[]>([]);
-    const [selectedExam, setSelectedExam] = useState('Overall'); // Default to Overall view
+    const [selectedExam, setSelectedExam] = useState('Overall'); 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [allExamMarks, setAllExamMarks] = useState<StudentMark[]>([]); // Data for "Overall" calculation
+    const [allExamMarks, setAllExamMarks] = useState<StudentMark[]>([]); 
     
     const isOverallView = selectedExam === 'Overall';
     
-    // Authorization check: Admin can edit any column. Teacher can only edit subjects they teach.
+    // Authorization check
     const teacherSubjects = useMemo(() => {
         if (user?.role === 'admin') return config.subjects; 
         try {
@@ -216,6 +235,9 @@ const MarkInputGrid = ({ classGroup, config }) => {
             return [];
         }
     }, [user, config.subjects]);
+    
+    // Fetch logic (kept the same, responsible for populating marksData/allExamMarks)
+    // ... (fetchAllMarks, fetchSpecificMarks, useEffects remain the same) ...
     
     // 1. Fetch ALL marks for overall calculation
     const fetchAllMarks = useCallback(async () => {
@@ -230,10 +252,8 @@ const MarkInputGrid = ({ classGroup, config }) => {
 
         try {
             const results = await Promise.all(marksPromises);
-            
             const studentBaseMap = {};
             
-            // 1. Collect the list of unique students
             results.forEach(response => {
                  response.data.forEach(student => {
                     if (!studentBaseMap[student.student_id]) {
@@ -243,7 +263,6 @@ const MarkInputGrid = ({ classGroup, config }) => {
                             roll_no: student.roll_no,
                             totalMarks: {} 
                         };
-                        // Initialize totalMarks structure
                         config.subjects.forEach(subject => {
                             studentBaseMap[student.student_id].totalMarks[subject] = {};
                         });
@@ -251,7 +270,6 @@ const MarkInputGrid = ({ classGroup, config }) => {
                  });
             });
 
-            // 2. Populate the detailed marks map (TotalMarks)
             results.forEach((response, index) => {
                 const examType = config.examTypes[index];
                 
@@ -260,7 +278,6 @@ const MarkInputGrid = ({ classGroup, config }) => {
                     if (studentBaseMap[studentId]) { 
                         config.subjects.forEach(subject => {
                              const mark = student.marks[subject];
-                             // Store mark only if it exists (not undefined/null)
                              if (mark !== undefined && mark !== null) {
                                 studentBaseMap[studentId].totalMarks[subject][examType] = mark;
                              }
@@ -271,13 +288,12 @@ const MarkInputGrid = ({ classGroup, config }) => {
             
             setAllExamMarks(Object.values(studentBaseMap));
             
-            // If currently in 'Overall' view, update the main marksData array
             if (selectedExam === 'Overall') {
                  setMarksData(Object.values(studentBaseMap).map(s => ({
                     student_id: s.student_id,
                     full_name: s.full_name,
                     roll_no: s.roll_no,
-                    marks: {} // This is empty in Overall view as marks are calculated
+                    marks: {} 
                  })));
             }
 
@@ -310,14 +326,13 @@ const MarkInputGrid = ({ classGroup, config }) => {
     
     
     useEffect(() => {
-        fetchAllMarks(); // Always fetch all marks to keep overall data current
+        fetchAllMarks(); 
     }, [fetchAllMarks]);
     
     useEffect(() => {
         if (!isOverallView) {
             fetchSpecificMarks();
         } else {
-            // Re-map the comprehensive student list for the Overall view display
             setMarksData(allExamMarks.map(s => ({
                 student_id: s.student_id,
                 full_name: s.full_name,
@@ -330,13 +345,11 @@ const MarkInputGrid = ({ classGroup, config }) => {
 
     const handleExamTypeChange = (itemValue) => {
         setSelectedExam(itemValue);
-        // Loading status will be set in useEffect triggered by selectedExam change
     };
 
     const handleMarkChange = (student_id: number, subject: string, value: string) => {
         if (isOverallView) return; 
         
-        // Treat empty string as undefined/null for database upsert
         const mark = value === '' ? undefined : parseInt(value, 10);
         
         setMarksData(prevData =>
@@ -355,39 +368,25 @@ const MarkInputGrid = ({ classGroup, config }) => {
         );
     };
     
-    /**
-     * Calculates total marks for a subject column OR overall total based on the view
-     * @param studentId The ID of the student
-     * @param subject The subject name (ignored if calculateRowTotal is true)
-     * @param calculateRowTotal If true, calculates the row's total across all subjects.
-     */
     const calculateMark = (studentId: number, subject: string, calculateRowTotal: boolean): number => {
         const student = (isOverallView ? allExamMarks : marksData).find(s => s.student_id === studentId);
         if (!student) return 0;
 
         if (isOverallView) {
-            // Overall View Logic
-            
-            // 1. Calculate GRAND ROW TOTAL (Sum of all subject overall totals)
             if (calculateRowTotal) {
                 return config.subjects.reduce((sum, subj) => sum + calculateMark(studentId, subj, false), 0);
             }
             
-            // 2. Calculate SUBJECT TOTAL (Sum of all recorded exam marks for this subject)
             if (!student.totalMarks?.[subject]) return 0;
             return Object.values(student.totalMarks[subject]).reduce((sum, mark) => sum + (mark || 0), 0);
 
         } else {
-            // Single Exam View Logic
-            
-            // 1. Calculate ROW TOTAL (Sum of subjects for the current single exam)
             if (calculateRowTotal) {
                 return config.subjects.reduce((sum, subj) => {
                     const mark = student.marks[subj];
                     return sum + (typeof mark === 'number' && !isNaN(mark) ? mark : 0);
                 }, 0);
             } else {
-                // 2. Individual subject mark
                  const mark = student.marks[subject];
                  return (typeof mark === 'number' && !isNaN(mark) ? mark : 0);
             }
@@ -402,14 +401,10 @@ const MarkInputGrid = ({ classGroup, config }) => {
         }
         if (isSaving) return;
         
-        // Prepare data for API
         const marksToSave = marksData.map(student => {
             const filteredMarks = {};
             Object.entries(student.marks).forEach(([subject, mark]) => {
-                // Check permissions (Admin can edit, Teacher needs subject permission)
                 if ((user?.role === 'admin' || teacherSubjects.includes(subject))) {
-                    // Only include marks that are explicitly set (number) OR undefined (empty input)
-                    // Null values are filtered by API logic
                     filteredMarks[subject] = mark; 
                 }
             });
@@ -425,7 +420,6 @@ const MarkInputGrid = ({ classGroup, config }) => {
                 teacherId: user.id
             });
             Alert.alert('Success', `${selectedExam} marks saved successfully.`);
-            // Refetch all marks to ensure overall totals are updated immediately
             fetchAllMarks(); 
         } catch (error: any) {
             Alert.alert('Error', error.response?.data?.message || 'Failed to save marks.');
@@ -444,12 +438,10 @@ const MarkInputGrid = ({ classGroup, config }) => {
         return <Text style={styles.noDataText}>No students found in this class.</Text>;
     }
     
-    // Calculate total width needed for horizontal scrolling
     const fixedWidth = 50 + 150; // Roll No + Name
     const subjectsWidth = config.subjects.length * SUBJECT_COLUMN_WIDTH;
     const totalColumnWidth = fixedWidth + subjectsWidth + 60; 
     
-    // Display the current teacher's subject assignment
     const teacherAssignmentInfo = teacherSubjects.length === config.subjects.length && user?.role === 'admin' 
         ? 'Admin (All Subjects)'
         : teacherSubjects.join(', ') || 'None Assigned';
@@ -458,9 +450,16 @@ const MarkInputGrid = ({ classGroup, config }) => {
     return (
         <View style={styles.gridContainer}>
             
+            <View style={styles.gridHeader}>
+                <TouchableOpacity onPress={onGoBack} style={styles.backButton}>
+                    <Icon name="arrow-left" size={24} color={PRIMARY_COLOR} />
+                </TouchableOpacity>
+                <Text style={styles.gridClassTitle}>{classGroup} - Mark Entry</Text>
+            </View>
+
             <View style={styles.teacherInfoBox}>
-                <Text style={styles.teacherInfoLabel}>Assigned Subject(s):</Text>
-                <Text style={styles.teacherInfoValue}>{teacherAssignmentInfo}</Text>
+                <Text style={styles.teacherInfoLabel}>Assigned Teacher/Subject(s):</Text>
+                <Text style={styles.teacherInfoValue}>{user.full_name} ({teacherAssignmentInfo})</Text> 
             </View>
             
             <View style={styles.pickerWrapperHorizontal}>
@@ -479,18 +478,26 @@ const MarkInputGrid = ({ classGroup, config }) => {
                 </View>
             </View>
             
+            <View style={styles.attendanceNote}>
+                <Icon name="calendar-check" size={14} color={PRIMARY_COLOR} />
+                <Text style={styles.attendanceNoteText}>Attendance days are tracked in the dedicated Attendance module, not manually entered here.</Text>
+            </View>
+
             
             <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                 <View style={{ width: totalColumnWidth }}>
-                    {/* Header Row */}
+                    {/* Header Row (Matches Image 2 format) */}
                     <View style={styles.marksInputHeader}>
-                        <Text style={[styles.marksInputCell, styles.headerCell, { width: 50 }]}>Roll No</Text>
+                        <Text style={[styles.marksInputCell, styles.headerCell, { width: 50, borderRightWidth: 0 }]}>Roll No</Text>
                         <Text style={[styles.marksInputCell, styles.headerCell, { width: 150 }]}>Name</Text>
                         
                         {config.subjects.map(subject => (
                             <Text 
                                 key={subject} 
-                                style={[styles.marksInputCell, styles.headerCell, { width: SUBJECT_COLUMN_WIDTH, backgroundColor: teacherSubjects.includes(subject) || user?.role === 'admin' ? PRIMARY_COLOR : TEXT_COLOR_MEDIUM }]}
+                                style={[styles.marksInputCell, styles.headerCell, { 
+                                    width: SUBJECT_COLUMN_WIDTH, 
+                                    backgroundColor: teacherSubjects.includes(subject) || user?.role === 'admin' ? PRIMARY_COLOR : TEXT_COLOR_MEDIUM 
+                                }]}
                             >
                                 {subject}
                             </Text>
@@ -502,14 +509,14 @@ const MarkInputGrid = ({ classGroup, config }) => {
                     {/* Data Rows */}
                     {studentsToDisplay.map((student, index) => (
                         <View key={student.student_id} style={[styles.marksInputRow, index % 2 !== 0 && {backgroundColor: HEADER_COLOR}]}>
-                            <Text style={[styles.marksInputCell, { width: 50, fontWeight: 'bold' }]}>{student.roll_no}</Text>
-                            <Text style={[styles.marksInputCell, { width: 150, textAlign: 'left' }]} numberOfLines={2}>{student.full_name}</Text>
+                            <Text style={[styles.marksInputCell, { width: 50, fontWeight: 'bold', borderRightWidth: 0 }]}>{student.roll_no}</Text>
+                            <Text style={[styles.marksInputCell, { width: 150, textAlign: 'left', paddingLeft: 10 }]} numberOfLines={2}>{student.full_name}</Text>
                             
                             {config.subjects.map(subject => {
                                 const isEditable = !isOverallView && (user?.role === 'admin' || teacherSubjects.includes(subject));
                                 
                                 const displayMark = isOverallView 
-                                    ? calculateMark(student.student_id, subject, false) // Subject total
+                                    ? calculateMark(student.student_id, subject, false) 
                                     : (student.marks[subject]?.toString() ?? '');
                                 
                                 return (
@@ -526,7 +533,7 @@ const MarkInputGrid = ({ classGroup, config }) => {
                                             value={displayMark.toString()}
                                             onChangeText={(text) => handleMarkChange(student.student_id, subject, text)}
                                             editable={isEditable}
-                                            placeholder={isEditable ? '...' : '-'}
+                                            placeholder={isEditable ? '0' : '-'}
                                         />
                                     </View>
                                 );
@@ -538,31 +545,27 @@ const MarkInputGrid = ({ classGroup, config }) => {
                         </View>
                     ))}
                     
-                    {/* Total Row (Column Sums) */}
+                    {/* Total Row (Column Sums - Matches Image 2) */}
                      <View style={[styles.marksInputRow, styles.totalRow]}>
-                        <Text style={[styles.marksInputCell, { width: 50, fontWeight: 'bold' }]}>SUM</Text>
+                        <Text style={[styles.marksInputCell, { width: 50, fontWeight: '900', color: PRIMARY_COLOR, borderRightWidth: 0 }]}>Total</Text>
                         <Text style={[styles.marksInputCell, { width: 150 }]}></Text>
                         
                         {config.subjects.map(subject => {
-                             // Calculate overall total for this subject across all displayed students
                              const subjectColumnTotal = studentsToDisplay.reduce((sum, student) => {
-                                 const markValue = isOverallView 
-                                    ? calculateMark(student.student_id, subject, false) // Sum of overall marks
-                                    : calculateMark(student.student_id, subject, false); // Sum of marks for the single exam
+                                 const markValue = calculateMark(student.student_id, subject, false);
                                  return sum + markValue;
                              }, 0);
 
                             return (
                                 <Text 
                                     key={subject} 
-                                    style={[styles.marksInputCell, styles.totalCell, { width: SUBJECT_COLUMN_WIDTH }]}
+                                    style={[styles.marksInputCell, styles.totalCell, { width: SUBJECT_COLUMN_WIDTH, borderRightColor: '#9C27B0' }]}
                                 >
                                     {subjectColumnTotal}
                                 </Text>
                             );
                         })}
                         
-                        {/* Grand Total Column */}
                         <Text style={[styles.marksInputCell, styles.totalCell, { width: 60, backgroundColor: PRIMARY_COLOR, color: 'white' }]}>
                              {studentsToDisplay.reduce((grandTotal, student) => {
                                  return grandTotal + calculateMark(student.student_id, '', true);
@@ -598,30 +601,29 @@ const MarkInputGrid = ({ classGroup, config }) => {
 };
 
 
-// --- Main Report Card Router ---
+// --- 4. Main Report Card Router ---
 
 const ReportCardScreen = () => {
     const { user } = useAuth();
     
-    // Default selected class should be the user's class if student, or Class 10 if Admin/Teacher
-    const defaultClass = user?.role === 'student' ? user.class_group : CLASS_GROUPS[CLASS_GROUPS.length - 1];
-    
-    const [selectedClass, setSelectedClass] = useState(defaultClass || CLASS_GROUPS[0]);
+    const [selectedClass, setSelectedClass] = useState<string | null>(null);
     const [examConfig, setExamConfig] = useState<ExamConfig | null>(null);
-    const [loadingConfig, setLoadingConfig] = useState(true);
+    const [loadingConfig, setLoadingConfig] = useState(false);
     
     const isStudent = user?.role === 'student';
 
+    // Student logic: automatically load their class report card
     useEffect(() => {
-        // Ensure student uses their assigned class
         if (isStudent && user?.class_group) {
+            // Students skip the class selection step and go straight to their view
             setSelectedClass(user.class_group);
         }
     }, [user, isStudent]);
 
+    // Configuration fetch logic for Admin/Teacher view
     useEffect(() => {
         const fetchConfig = async () => {
-            if (!selectedClass) return;
+            if (!selectedClass || isStudent) return;
             setLoadingConfig(true);
             try {
                 const response = await apiClient.get(`/reportcard/config/${selectedClass}`);
@@ -634,58 +636,58 @@ const ReportCardScreen = () => {
             }
         };
         fetchConfig();
-    }, [selectedClass]);
+    }, [selectedClass, isStudent]);
 
 
     if (!user) return <Text style={styles.noDataText}>Please log in.</Text>;
 
     if (isStudent) {
-        // Student sees their own Progress Card (View Only)
-        return <ProgressCardView studentId={user.id} />;
+        if (!selectedClass) return <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 50 }} />;
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                 <View style={styles.header}>
+                    <Text style={styles.headerTitle}>Student Progress Card</Text>
+                </View>
+                <ProgressCardView studentId={user.id} />
+            </SafeAreaView>
+        );
     }
     
-    // Teacher/Admin interface
+    // --- Admin/Teacher Flow ---
+
+    if (!selectedClass) {
+        // Stage 1: Class Selection (Matching Image 1)
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.header}>
+                    <Text style={styles.headerTitle}>Report Card Management</Text>
+                </View>
+                <ClassListScreen onSelectClass={setSelectedClass} />
+            </SafeAreaView>
+        );
+    }
+    
     if (loadingConfig) {
         return <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 50 }} />;
     }
     
     if (!examConfig) {
-         return <Text style={styles.noDataText}>Configuration failed for selected class. Check backend constants.</Text>;
+         return <Text style={styles.noDataText}>Configuration failed for {selectedClass}.</Text>;
     }
 
-
+    // Stage 2: Mark Input Grid (Matching Image 2 table structure)
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Report Card Management</Text>
-                </View>
-                
-                <View style={styles.pickerContainerWrapper}>
-                    <View style={styles.pickerContainer}>
-                        <Text style={styles.pickerLabel}>Select Class:</Text>
-                        <View style={styles.pickerStyle}>
-                            <Picker
-                                selectedValue={selectedClass}
-                                onValueChange={(itemValue) => setSelectedClass(itemValue)}
-                                style={styles.picker}
-                            >
-                                {CLASS_GROUPS.map(c => (
-                                    <Picker.Item key={c} label={c} value={c} />
-                                ))}
-                            </Picker>
-                        </View>
-                    </View>
-                </View>
-                
-                {/* Exam Type Picker is now inside MarkInputGrid */}
-                
-                {examConfig && (
-                    <MarkInputGrid 
-                        classGroup={selectedClass} 
-                        config={examConfig} 
-                    />
-                )}
+                {/* Header is now contained within the Grid component with a back button */}
+                <MarkInputGrid 
+                    classGroup={selectedClass} 
+                    config={examConfig} 
+                    onGoBack={() => {
+                        setSelectedClass(null); // Go back to the class list
+                        setExamConfig(null);
+                    }}
+                />
             </ScrollView>
         </SafeAreaView>
     );
@@ -697,36 +699,78 @@ const styles = StyleSheet.create({
     header: { padding: 15, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, backgroundColor: 'white', alignItems: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK },
     
-    // Picker/Controls Styles
-    pickerContainerWrapper: { backgroundColor: 'white', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, marginHorizontal: 10, marginTop: 10, borderRadius: 10 },
-    pickerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-    pickerLabel: { fontSize: 15, color: TEXT_COLOR_MEDIUM, marginRight: 10, fontWeight: '600' },
-    pickerStyle: { flex: 1, borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 6, height: 40, justifyContent: 'center', backgroundColor: HEADER_COLOR },
-    picker: { height: 40, width: '100%', color: TEXT_COLOR_DARK },
+    // --- Class List Styles (New) ---
+    classListContainer: { paddingHorizontal: 15 },
+    listTitle: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_COLOR, marginBottom: 15, textAlign: 'center' },
+    classButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: PRIMARY_COLOR,
+        padding: 20,
+        borderRadius: 10,
+        marginVertical: 8,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+    },
+    classButtonText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: 'white',
+        flex: 1,
+    },
     
-    // Teacher/Admin Grid Styles
+    // --- Grid Header (New for navigation) ---
+    gridHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingBottom: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: BORDER_COLOR,
+        marginBottom: 10,
+    },
+    backButton: {
+        marginRight: 10,
+        padding: 5,
+    },
+    gridClassTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: TEXT_COLOR_DARK,
+    },
+
+    // --- Grid Styles (Compact) ---
     gridContainer: { flex: 1, padding: 15, backgroundColor: 'white', marginTop: 10, marginHorizontal: 10, borderRadius: 10, elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, marginBottom: 20 },
     pickerWrapperHorizontal: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, marginTop: 10 },
     
-    // Grid structure
-    marksInputHeader: { flexDirection: 'row', backgroundColor: PRIMARY_COLOR, borderTopLeftRadius: 8, borderTopRightRadius: 8, minWidth: '100%' },
-    marksInputRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: HEADER_COLOR, backgroundColor: 'white' },
+    marksInputHeader: { flexDirection: 'row', backgroundColor: PRIMARY_COLOR, borderTopLeftRadius: 8, borderTopRightRadius: 8, minWidth: '100%', height: 40 }, 
+    marksInputRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: HEADER_COLOR, backgroundColor: 'white', minHeight: 35 }, 
     
-    marksInputCell: { paddingVertical: 8, paddingHorizontal: 5, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: BORDER_COLOR, fontSize: 13, color: TEXT_COLOR_DARK, minHeight: 45 },
+    marksInputCell: { 
+        paddingVertical: 5, 
+        paddingHorizontal: 3, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        borderRightWidth: 1, 
+        borderRightColor: BORDER_COLOR, 
+        fontSize: 13, 
+        color: TEXT_COLOR_DARK, 
+        minHeight: 35, 
+    },
     headerCell: { fontWeight: 'bold', color: 'white', textAlign: 'center', fontSize: 12 },
     
-    // Total Row Style
-    totalRow: { backgroundColor: '#E0E0E0', borderTopWidth: 2, borderTopColor: ACCENT_COLOR },
-    totalCell: { fontWeight: '900', color: TEXT_COLOR_DARK, fontSize: 14 },
+    totalRow: { backgroundColor: '#CCC', borderTopWidth: 2, borderTopColor: PRIMARY_COLOR, minHeight: 40 }, 
+    totalCell: { fontWeight: '900', color: TEXT_COLOR_DARK, fontSize: 14, backgroundColor: '#CCC' },
 
-    // Input Field
     marksInputField: { 
         width: '100%', 
         height: '100%', 
-        paddingHorizontal: 3, 
-        paddingVertical: 4, 
+        paddingHorizontal: 2, 
+        paddingVertical: 2, 
         textAlign: 'center', 
-        backgroundColor: 'white', 
+        backgroundColor: 'transparent', 
         fontSize: 14, 
         color: PRIMARY_COLOR,
         fontWeight: 'bold',
@@ -739,16 +783,16 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontWeight: 'normal',
     },
-
-    saveButton: { backgroundColor: PRIMARY_COLOR, padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 20, marginHorizontal: 5, elevation: 3 },
-    saveButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
     
-    overallInfoContainer: { padding: 10, backgroundColor: '#E1F5FE', borderRadius: 8, marginTop: 15, borderWidth: 1, borderColor: PRIMARY_COLOR },
-    overallInfoText: { fontSize: 13, color: TEXT_COLOR_MEDIUM, textAlign: 'center', fontWeight: '500' },
-    
-    teacherInfoBox: { paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: HEADER_COLOR, marginBottom: 5 },
+    teacherInfoBox: { paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: HEADER_COLOR, marginBottom: 10 },
     teacherInfoLabel: { fontSize: 12, color: TEXT_COLOR_MEDIUM },
     teacherInfoValue: { fontSize: 14, fontWeight: 'bold', color: PRIMARY_COLOR },
+    
+    attendanceNote: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: '#FFF3E0', borderRadius: 5, marginBottom: 15, borderWidth: 1, borderColor: ACCENT_COLOR },
+    attendanceNoteText: { marginLeft: 5, flexShrink: 1, fontSize: 12, color: TEXT_COLOR_MEDIUM },
+
+    overallInfoContainer: { padding: 10, backgroundColor: '#E1F5FE', borderRadius: 8, marginTop: 15, borderWidth: 1, borderColor: PRIMARY_COLOR },
+    overallInfoText: { fontSize: 13, color: TEXT_COLOR_MEDIUM, textAlign: 'center', fontWeight: '500' },
     
     noDataText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: TEXT_COLOR_MEDIUM },
     
@@ -758,35 +802,27 @@ const styles = StyleSheet.create({
     cardSection: { padding: 20, margin: 5, borderRadius: 10 },
     cardFront: { backgroundColor: '#F9F9FF' }, 
     cardBack: { backgroundColor: '#FFFFFF' },
-    
     cardHeader: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 2, borderBottomColor: ACCENT_COLOR, paddingBottom: 15, marginBottom: 15 },
     logo: { width: 50, height: 50, resizeMode: 'contain', marginRight: 15 },
     schoolName: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_COLOR },
     reportTitle: { fontSize: 24, fontWeight: '900', color: TEXT_COLOR_DARK, marginVertical: 4 },
     reportSubtitle: { fontSize: 14, color: TEXT_COLOR_MEDIUM },
     profileImage: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: PRIMARY_COLOR, marginLeft: 10 },
-    
     detailsBox: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10, marginTop: 5 },
     detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#EEE' },
     detailLabel: { fontSize: 14, color: TEXT_COLOR_MEDIUM, fontWeight: '500' },
     detailValue: { fontSize: 14, color: TEXT_COLOR_DARK, fontWeight: '700' },
-    
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: PRIMARY_COLOR, marginTop: 10, borderLeftWidth: 4, borderColor: ACCENT_COLOR, paddingLeft: 10, marginBottom: 5 },
-
-    // Attendance Table Styles
     attendanceTable: { marginTop: 10, borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 8, overflow: 'hidden' },
     attendanceRowHeader: { flexDirection: 'row', backgroundColor: PRIMARY_COLOR, },
     attendanceCellHeader: { flex: 1, padding: 10, textAlign: 'center', color: 'white', fontWeight: 'bold', fontSize: 12, borderRightWidth: 1, borderRightColor: '#532C9E' },
     attendanceRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, backgroundColor: '#FFF' },
     attendanceCell: { flex: 1, padding: 10, textAlign: 'center', fontSize: 13, color: TEXT_COLOR_DARK, borderRightWidth: 1, borderRightColor: BORDER_COLOR },
     attendanceFooter: { backgroundColor: '#E8EAF6', borderTopWidth: 2, borderTopColor: PRIMARY_COLOR },
-
-    // Marks Table Styles (Student View)
     marksTableHeader: { flexDirection: 'row', backgroundColor: '#9575CD', height: 60 },
     marksCellHeader: { width: 50, padding: 5, textAlign: 'center', color: 'white', fontWeight: 'bold', fontSize: 10, borderRightWidth: 1, borderRightColor: '#532C9E', justifyContent: 'center', alignItems: 'center' },
     marksTableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, backgroundColor: '#FFF' },
     marksCell: { width: 50, padding: 8, textAlign: 'center', fontSize: 12, color: TEXT_COLOR_DARK, borderRightWidth: 1, borderRightColor: BORDER_COLOR },
-
     signatureContainer: { marginTop: 30, padding: 10, backgroundColor: HEADER_COLOR, borderRadius: 8 },
     signatureText: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginBottom: 10, fontWeight: '500' },
 });

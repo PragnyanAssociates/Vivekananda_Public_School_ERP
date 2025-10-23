@@ -7205,7 +7205,6 @@ app.get('/api/reportcard/marks/:classGroup/:examType', async (req, res) => {
 
 // 3. Save/Update marks for multiple students/subjects (Teacher/Admin Input)
 app.post('/api/reportcard/marks', async (req, res) => {
-    // Note: teacherId is included to record who entered/last updated the marks.
     const { classGroup, examType, marksData, teacherId } = req.body;
     
     if (!classGroup || !examType || !Array.isArray(marksData) || !teacherId) {
@@ -7218,9 +7217,7 @@ app.post('/api/reportcard/marks', async (req, res) => {
 
         const valuesToInsert = marksData.flatMap(studentMark => {
             return Object.entries(studentMark.marks).map(([subject_name, marks_obtained]) => {
-                // Only insert/update if a mark value (including 0) is provided
                 if (marks_obtained !== null && marks_obtained !== undefined) {
-                    // Ensure marks_obtained is treated as an integer
                     const markInt = parseInt(marks_obtained, 10); 
                     if (isNaN(markInt)) return null;
 
@@ -7288,7 +7285,6 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
         const [marks] = await db.query(marksQuery, [studentId]);
 
         // C. Calculate Monthly Attendance
-        // NOTE: This assumes an 'attendance_records' table exists with student_id, attendance_date, and status columns.
         const attendanceQuery = `
             SELECT 
                 DATE_FORMAT(attendance_date, '%Y-%m') as month, 
@@ -7302,11 +7298,10 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
         const [attendance] = await db.query(attendanceQuery, [studentId]);
         
         // D. Structure Marks data for frontend display
-        const overallTotals = {};
+        const overallTotals = {}; // THIS IS THE OVERALL MARKS SUM
         const subjectMarksMap = {}; 
 
         marks.forEach(m => {
-            // Detailed map for the back side of the card
             if (!subjectMarksMap[m.subject_name]) {
                 subjectMarksMap[m.subject_name] = {};
             }
@@ -7318,8 +7313,8 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
 
         res.status(200).json({
             studentDetails: student,
-            marks: subjectMarksMap, // Detailed marks per exam
-            overallTotals: overallTotals, // Summed marks
+            marks: subjectMarksMap, 
+            overallTotals: overallTotals, 
             attendance: attendance
         });
 
