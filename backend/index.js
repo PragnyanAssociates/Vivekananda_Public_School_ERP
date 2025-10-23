@@ -7124,8 +7124,8 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 
 // ==========================================================
 // --- REPORT CARD API ROUTES ---
+// (Assuming 'db' is your MySQL connection pool)
 // ==========================================================
-
 
 // --- REPORT CARD SYSTEM CONSTANTS ---
 const EXAM_TYPES = [
@@ -7157,7 +7157,6 @@ app.get('/api/reportcard/config/:classGroup', (req, res) => {
     if (!subjects) {
         return res.status(404).json({ message: 'Invalid class group.' });
     }
-    // Note: 'Overall' is handled client-side for dynamic summation
     res.status(200).json({ subjects, examTypes: EXAM_TYPES });
 });
 
@@ -7206,6 +7205,7 @@ app.get('/api/reportcard/marks/:classGroup/:examType', async (req, res) => {
 
 // 3. Save/Update marks for multiple students/subjects (Teacher/Admin Input)
 app.post('/api/reportcard/marks', async (req, res) => {
+    // Note: teacherId is included to record who entered/last updated the marks.
     const { classGroup, examType, marksData, teacherId } = req.body;
     
     if (!classGroup || !examType || !Array.isArray(marksData) || !teacherId) {
@@ -7218,13 +7218,18 @@ app.post('/api/reportcard/marks', async (req, res) => {
 
         const valuesToInsert = marksData.flatMap(studentMark => {
             return Object.entries(studentMark.marks).map(([subject_name, marks_obtained]) => {
+                // Only insert/update if a mark value (including 0) is provided
                 if (marks_obtained !== null && marks_obtained !== undefined) {
+                    // Ensure marks_obtained is treated as an integer
+                    const markInt = parseInt(marks_obtained, 10); 
+                    if (isNaN(markInt)) return null;
+
                     return [
                         studentMark.student_id,
                         classGroup,
                         subject_name,
                         examType,
-                        marks_obtained,
+                        markInt,
                         teacherId
                     ];
                 }
@@ -7261,11 +7266,12 @@ app.post('/api/reportcard/marks', async (req, res) => {
 app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
     const { studentId } = req.params;
     try {
-        // A. Fetch Student & Profile Info
+        // A. Fetch Student & Profile Info (including DP, DOB, Parent Name)
         const studentInfoQuery = `
             SELECT 
                 u.full_name, u.class_group, u.subjects_taught,
-                up.roll_no, up.admission_date, up.dob, up.parent_name, up.profile_image_url
+                up.roll_no, DATE_FORMAT(up.admission_date, '%Y-%m-%d') as admission_date, 
+                DATE_FORMAT(up.dob, '%Y-%m-%d') as dob, up.parent_name, up.profile_image_url
             FROM users u
             JOIN user_profiles up ON u.id = up.user_id
             WHERE u.id = ? AND u.role = 'student'
@@ -7282,11 +7288,12 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
         const [marks] = await db.query(marksQuery, [studentId]);
 
         // C. Calculate Monthly Attendance
+        // NOTE: This assumes an 'attendance_records' table exists with student_id, attendance_date, and status columns.
         const attendanceQuery = `
             SELECT 
                 DATE_FORMAT(attendance_date, '%Y-%m') as month, 
-                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as days_present,
-                COUNT(DISTINCT attendance_date) as total_days_in_month 
+                COUNT(CASE WHEN status = 'Present' THEN 1 END) as days_present,
+                COUNT(DISTINCT attendance_date) as total_working_days 
             FROM attendance_records 
             WHERE student_id = ?
             GROUP BY month
@@ -7294,12 +7301,12 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
         `;
         const [attendance] = await db.query(attendanceQuery, [studentId]);
         
-        // D. Calculate Overall Subject Totals (sum of all discrete exams)
+        // D. Structure Marks data for frontend display
         const overallTotals = {};
-        const subjectMarksMap = {}; // Detailed map for the back side of the card
+        const subjectMarksMap = {}; 
 
         marks.forEach(m => {
-            // Group by subject for display
+            // Detailed map for the back side of the card
             if (!subjectMarksMap[m.subject_name]) {
                 subjectMarksMap[m.subject_name] = {};
             }
@@ -7311,8 +7318,8 @@ app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
 
         res.status(200).json({
             studentDetails: student,
-            marks: subjectMarksMap,
-            overallTotals: overallTotals,
+            marks: subjectMarksMap, // Detailed marks per exam
+            overallTotals: overallTotals, // Summed marks
             attendance: attendance
         });
 
