@@ -26,6 +26,8 @@ import AboutUs from './src/components/AboutUs';
 // import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 
+import ReportCardScreen from './src/screens/report/ReportCardScreen';
+
 // Authenticated Dashboards
 import AdminDashboard from './src/components/AdminDashboard';
 import TeacherDashboard from './src/components/TeacherDashboard';
@@ -241,6 +243,8 @@ const AuthenticatedStack = () => {
           headerTitleStyle: { fontWeight: 'bold' } }} />
       <Stack.Screen name="TeacherAttendanceMarkingScreen" component={TeacherAttendanceMarkingScreen} />
       <Stack.Screen name="TeacherAttendanceReportScreen" component={TeacherAttendanceReportScreen} />  
+
+      <Stack.Screen name="ReportCardScreen" component={ReportCardScreen} />
       {/* <Stack.Screen name="ChatAIScreen" component={ChatAIScreen} />
       <Stack.Screen name="DonorSuggestionsScreen" component={DonorSuggestionsScreen} />
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />

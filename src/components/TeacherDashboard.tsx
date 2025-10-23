@@ -42,7 +42,7 @@ import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen
 import AdminEventsScreen from '../screens/events/AdminEventsScreen';
 import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
 import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
-import TeacherAdminResultsScreen from '../screens/results/TeacherAdminResultsScreen';
+import ReportCardScreen from '../screens/report/ReportCardScreen';
 import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
 import TeacherSyllabusScreen from '../screens/syllabus/TeacherSyllabusScreen';
 import TeacherAdminResourcesScreen from '../screens/syllabus_Textbook/TeacherAdminResourcesScreen';
@@ -119,7 +119,7 @@ const TeacherDashboard = ({ navigation }) => {
     { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
     { id: 'qa12', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'TeacherAdminExamScreen' },
     { id: 'qa13', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'TeacherAdminLabsScreen' },
-    { id: 'qa14', title: 'Progress Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateToTab: 'TeacherAdminResultsScreen' },
+    { id: 'qa18', title: 'Progress Reports', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateToTab: 'ReportCardScreen' },
     { id: 'qa15', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
     { id: 'qa20', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'TeacherSyllabusScreen' },
     { id: 'qa22', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
@@ -203,7 +203,7 @@ const TeacherDashboard = ({ navigation }) => {
       case 'AdminEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><AdminEventsScreen /></> );
       case 'TeacherAdminExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleBack} /><TeacherAdminExamScreen /></> );
       case 'TeacherAdminLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleBack} /><TeacherAdminLabsScreen /></> );
-      case 'TeacherAdminResultsScreen': return ( <><ContentScreenHeader title="Progress Reports" onBack={handleBack} /><TeacherAdminResultsScreen /></> );
+      case 'ReportCardScreen': return ( <><ContentScreenHeader title="Progress Reports" onBack={handleBack} /><ReportCardScreen /></> );
       case 'TeacherAdminMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleBack} /><TeacherAdminMaterialsScreen /></> );
       case 'TeacherSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleBack} /><TeacherSyllabusScreen /></> );
       case 'TeacherAdminResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><TeacherAdminResourcesScreen /></> );
