@@ -7,7 +7,7 @@ import TeacherReportView from './TeacherReportView';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 
-// ... (Interface and Theme Constants remain the same)
+// --- Local Interfaces ---
 interface Teacher {
   id: number;
   full_name: string;
@@ -18,7 +18,7 @@ interface Teacher {
 interface TeacherMarking extends Teacher {
   status: 'P' | 'A' | 'L'; 
 }
-
+// --- Theme Constants ---
 const PRIMARY_COLOR = '#008080';
 const TEXT_COLOR_DARK = '#37474F';
 const TEXT_COLOR_MEDIUM = '#566573';
@@ -26,8 +26,8 @@ const BORDER_COLOR = '#E0E0E0';
 const GREEN = '#43A047';
 const RED = '#E53935';
 const WHITE = '#FFFFFF';
-const API_BASE_URL = '/teacher-attendance';
 
+const API_BASE_URL = '/teacher-attendance';
 
 const TeacherAttendanceMarkingScreen = () => {
   const { user } = useAuth();
@@ -43,44 +43,33 @@ const TeacherAttendanceMarkingScreen = () => {
   const [markingState, setMarkingState] = useState<'LOADING' | 'MARKING' | 'SUCCESS_SUMMARY'>('LOADING');
 
   
-  const fetchBaseTeacherData = useCallback(async (dateToCheck: Date) => {
+  // --- CORE FUNCTION TO FETCH LIST AND CHECK STATUS ---
+  const loadMarkingDataForDate = useCallback(async (dateToCheck: Date) => {
     const dateString = dateToCheck.toISOString().slice(0, 10);
     
     try {
-        const response = await apiClient.get<Teacher[]>(`${API_BASE_URL}/teachers`);
-        const teachersData = response.data.map(t => {
-            const subjects = (t.subjects_taught && Array.isArray(t.subjects_taught)) ? t.subjects_taught : [];
-            return { ...t, subjects_taught: subjects } as TeacherMarking;
-        });
+        // 1. Fetch the attendance sheet for the specified date
+        const response = await apiClient.get<TeacherMarking[]>(`${API_BASE_URL}/sheet?date=${dateString}`);
+        const teachersData = response.data; // This now includes the 'status' field ('P', 'A', 'L') from the sheet endpoint
 
-        // --- CHECK SAVED STATUS (CRITICAL FIX) ---
-        // We will query the report API for the FIRST teacher listed for today's date.
-        // If we get any history records back, we assume marking has occurred.
-        let attendanceExists = false;
-        if (teachersData.length > 0) {
-            const firstTeacherId = teachersData[0].id;
-            try {
-                const reportRes = await apiClient.get(`${API_BASE_URL}/report/${firstTeacherId}?period=daily&targetDate=${dateString}`);
-                if (reportRes.data.detailedHistory && reportRes.data.detailedHistory.length > 0) {
-                    attendanceExists = true;
-                }
-            } catch (e) {
-                // Ignore API error if teacher hasn't been marked before, still treat as new marking.
-            }
-        }
-        
+        // Set both the mutable marking list and the static report list
         setTeachers(teachersData);
-        setAllTeachersForReport(teachersData);
+        setAllTeachersForReport(teachersData); // Use the same data structure for easy switching
+
+        // 2. Check if *any* teacher was marked Absent or Late (meaning attendance was saved)
+        const attendanceExists = teachersData.some(t => t.status === 'A' || t.status === 'L');
         
         if (attendanceExists) {
-            setMarkingState('SUCCESS_SUMMARY'); // Show Edit button
+            setMarkingState('SUCCESS_SUMMARY'); 
         } else {
-            setMarkingState('MARKING'); // Show P/A list
+            setMarkingState('MARKING'); 
         }
 
     } catch (error: any) {
+        // Log the error response body if available for better debugging
+        console.error("Failed to load teacher base data:", error.response?.data || error.message);
         Alert.alert("Error", error.response?.data?.message || "Failed to load teacher base data.");
-        setMarkingState('MARKING'); // Fallback to marking
+        setMarkingState('MARKING'); // Fallback state
     } finally {
         setIsLoading(false);
     }
@@ -90,8 +79,8 @@ const TeacherAttendanceMarkingScreen = () => {
   // Load data when component mounts or attendanceDate changes
   useEffect(() => {
       setIsLoading(true);
-      fetchBaseTeacherData(attendanceDate);
-  }, [attendanceDate, fetchBaseTeacherData]); // Reruns when date or component mounts
+      loadMarkingDataForDate(attendanceDate);
+  }, [attendanceDate, loadMarkingDataForDate]); 
 
 
   const handleStatusChange = (teacherId: number, status: 'P' | 'A' | 'L') => {
@@ -104,7 +93,6 @@ const TeacherAttendanceMarkingScreen = () => {
     setShowDatePicker(false);
     if (selectedDate) {
       setAttendanceDate(selectedDate);
-      // The useEffect hook above will trigger data loading when attendanceDate changes
     }
   };
 
@@ -212,10 +200,8 @@ const TeacherAttendanceMarkingScreen = () => {
           <TouchableOpacity 
               style={styles.editButton}
               onPress={() => {
-                  // When clicking Edit, switch back to MARKING state
+                  // Switch back to MARKING state, the data is already in 'teachers' state
                   setMarkingState('MARKING');
-                  // We need to reload the actual status for the date for editing
-                  loadMarkingDataForDate(attendanceDate);
               }}
           >
               <Text style={styles.editButtonText}>Edit Attendance</Text>
@@ -274,10 +260,11 @@ const TeacherAttendanceMarkingScreen = () => {
                     )}
                 </View>
                 
-                {markingState === 'LOADING' && <View style={styles.center}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>}
+                {/* LOADING/SUMMARY/MARKING Views */}
+                {isLoading && <View style={styles.center}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>}
                 {markingState === 'SUCCESS_SUMMARY' && renderSuccessSummary()}
                 
-                {markingState === 'MARKING' && (
+                {markingState === 'MARKING' && !isLoading && (
                     <>
                         <Text style={styles.listTitle}>Teacher List ({teachers.length})</Text>
 
