@@ -7133,204 +7133,152 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 
 
 // ==========================================================
-// --- REPORT CARD API ROUTES ---
-// (Assuming 'db' is your MySQL connection pool)
+// --- PROGRESS CARD (REPORTS) API ROUTES ---
+// (Paste this entire block into your main server.js file)
 // ==========================================================
 
-// --- REPORT CARD SYSTEM CONSTANTS ---
-const EXAM_TYPES = [
-    'Assignment 1', 'Assignment 2', 'Assignment 3', 'Assignment 4',
-    'Unit Test 1', 'Unit Test 2', 'Unit Test 3', 'Unit Test 4',
-    'SA 1', 'SA 2'
-];
+const ACADEMIC_YEAR = "2023-2024"; // You can make this dynamic later if needed
 
-const SUBJECT_GROUPS = {
-    'LKG': ['All subjects'],
-    'UKG': ['All subjects'],
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Math'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Math'],
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Math'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Math'],
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Math'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Math', 'Science', 'Social'],
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Math', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Math', 'Science', 'Social'],
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Math', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Math', 'Science', 'Social'],
-};
-// --- END CONSTANTS ---
+// --- TEACHER / ADMIN ROUTES ---
 
-// 1. Get subjects and exams for a given class
-app.get('/api/reportcard/config/:classGroup', (req, res) => {
+// GET: A list of all students in a specific class for selection
+app.get('/api/reports/students/:classGroup', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { classGroup } = req.params;
-    const subjects = SUBJECT_GROUPS[classGroup];
-    if (!subjects) {
-        return res.status(404).json({ message: 'Invalid class group.' });
-    }
-    res.status(200).json({ subjects, examTypes: EXAM_TYPES });
-});
-
-// 2. Get students and their marks for a specific exam type (For Teacher/Admin Input Grid)
-app.get('/api/reportcard/marks/:classGroup/:examType', async (req, res) => {
-    const { classGroup, examType } = req.params;
     try {
-        // Fetch all students in the class
-        const studentsQuery = `
-            SELECT u.id AS student_id, u.full_name, up.roll_no
-            FROM users u
-            JOIN user_profiles up ON u.id = up.user_id
-            WHERE u.role = 'student' AND u.class_group = ?
-            ORDER BY CAST(up.roll_no AS UNSIGNED)
-        `;
-        const [students] = await db.query(studentsQuery, [classGroup]);
-
-        // Fetch marks for the specific exam
-        const marksQuery = `
-            SELECT student_id, subject_name, marks_obtained
-            FROM report_cards
-            WHERE class_group = ? AND exam_type = ?
-        `;
-        const [marks] = await db.query(marksQuery, [classGroup, examType]);
-
-        // Map marks to students/subjects for easy grid rendering
-        const marksMap = marks.reduce((acc, m) => {
-            acc[m.student_id] = acc[m.student_id] || {};
-            acc[m.student_id][m.subject_name] = m.marks_obtained;
-            return acc;
-        }, {});
-
-        const result = students.map(s => ({
-            student_id: s.student_id,
-            full_name: s.full_name,
-            roll_no: s.roll_no,
-            marks: marksMap[s.student_id] || {}
-        }));
-
-        res.status(200).json(result);
+        const [students] = await db.query(
+            "SELECT id, full_name, username AS roll_no FROM users WHERE role = 'student' AND class_group = ? ORDER BY full_name",
+            [classGroup]
+        );
+        res.json(students);
     } catch (error) {
-        console.error("GET /api/reportcard/marks Error:", error);
-        res.status(500).json({ message: 'Failed to fetch marks data.' });
+        console.error("Error fetching students by class:", error);
+        res.status(500).json({ message: "Failed to fetch students" });
     }
 });
 
-// 3. Save/Update marks for multiple students/subjects (Teacher/Admin Input)
-app.post('/api/reportcard/marks', async (req, res) => {
-    const { classGroup, examType, marksData, teacherId } = req.body;
-    
-    if (!classGroup || !examType || !Array.isArray(marksData) || !teacherId) {
-        return res.status(400).json({ message: 'Missing required fields.' });
+// GET: All existing marks and attendance for a specific student to pre-fill the entry form
+app.get('/api/reports/student-data/:studentId', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+    const { studentId } = req.params;
+    try {
+        const [marks] = await db.query(
+            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
+            [studentId, ACADEMIC_YEAR]
+        );
+        const [attendance] = await db.query(
+            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
+            [studentId, ACADEMIC_YEAR]
+        );
+        res.json({ marks, attendance });
+    } catch (error) {
+        console.error("Error fetching student data:", error);
+        res.status(500).json({ message: "Failed to fetch student data" });
+    }
+});
+
+// POST: Save or update marks for a student. Uses 'UPSERT' logic for efficiency.
+app.post('/api/reports/marks', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+    const { studentId, classGroup, marks } = req.body;
+
+    if (!studentId || !classGroup || !Array.isArray(marks)) {
+        return res.status(400).json({ message: "Invalid data provided." });
     }
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        const valuesToInsert = marksData.flatMap(studentMark => {
-            return Object.entries(studentMark.marks).map(([subject_name, marks_obtained]) => {
-                if (marks_obtained !== null && marks_obtained !== undefined) {
-                    const markInt = parseInt(marks_obtained, 10); 
-                    if (isNaN(markInt)) return null;
+        const query = `
+            INSERT INTO report_student_marks (student_id, academic_year, class_group, subject, exam_type, marks_obtained)
+            VALUES ?
+            ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)
+        `;
 
-                    return [
-                        studentMark.student_id,
-                        classGroup,
-                        subject_name,
-                        examType,
-                        markInt,
-                        teacherId
-                    ];
-                }
-                return null;
-            }).filter(Boolean);
-        });
+        const values = marks.map(m => [
+            studentId, ACADEMIC_YEAR, classGroup, m.subject,
+            m.exam_type, m.marks_obtained === '' ? null : m.marks_obtained
+        ]);
 
-        if (valuesToInsert.length > 0) {
-            const query = `
-                INSERT INTO report_cards 
-                    (student_id, class_group, subject_name, exam_type, marks_obtained, teacher_id) 
-                VALUES ? 
-                ON DUPLICATE KEY UPDATE 
-                    marks_obtained = VALUES(marks_obtained), 
-                    teacher_id = VALUES(teacher_id)
-            `;
-            await connection.query(query, [valuesToInsert]);
+        if (values.length > 0) {
+            await connection.query(query, [values]);
         }
-        
-        await connection.commit();
-        res.status(201).json({ message: 'Marks updated successfully!' });
 
+        await connection.commit();
+        res.status(200).json({ message: "Marks saved successfully!" });
     } catch (error) {
         await connection.rollback();
-        console.error("POST /api/reportcard/marks Error:", error);
-        res.status(500).json({ message: 'Error saving marks.' });
+        console.error("Error saving marks:", error);
+        res.status(500).json({ message: "Failed to save marks." });
     } finally {
         connection.release();
     }
 });
 
+// POST: Save or update attendance for a student.
+app.post('/api/reports/attendance', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+    const { studentId, attendance } = req.body;
 
-// 4. Get student's detailed progress card data (For Student View)
-app.get('/api/reportcard/progresscard/:studentId', async (req, res) => {
-    const { studentId } = req.params;
+    if (!studentId || !Array.isArray(attendance)) {
+        return res.status(400).json({ message: "Invalid data provided." });
+    }
+
+    const connection = await db.getConnection();
     try {
-        // A. Fetch Student & Profile Info (including DP, DOB, Parent Name)
-        const studentInfoQuery = `
-            SELECT 
-                u.full_name, u.class_group, u.subjects_taught,
-                up.roll_no, DATE_FORMAT(up.admission_date, '%Y-%m-%d') as admission_date, 
-                DATE_FORMAT(up.dob, '%Y-%m-%d') as dob, up.parent_name, up.profile_image_url
-            FROM users u
-            JOIN user_profiles up ON u.id = up.user_id
-            WHERE u.id = ? AND u.role = 'student'
+        await connection.beginTransaction();
+        const query = `
+            INSERT INTO report_student_attendance (student_id, academic_year, month, working_days, present_days)
+            VALUES ?
+            ON DUPLICATE KEY UPDATE working_days = VALUES(working_days), present_days = VALUES(present_days)
         `;
-        const [[student]] = await db.query(studentInfoQuery, [studentId]);
-        if (!student) return res.status(404).json({ message: 'Student not found.' });
-        
-        // B. Fetch All Marks
-        const marksQuery = `
-            SELECT subject_name, exam_type, marks_obtained
-            FROM report_cards
-            WHERE student_id = ?
-        `;
-        const [marks] = await db.query(marksQuery, [studentId]);
+        const values = attendance.map(a => [
+            studentId, ACADEMIC_YEAR, a.month,
+            a.working_days === '' ? null : a.working_days,
+            a.present_days === '' ? null : a.present_days
+        ]);
 
-        // C. Calculate Monthly Attendance
-        const attendanceQuery = `
-            SELECT 
-                DATE_FORMAT(attendance_date, '%Y-%m') as month, 
-                COUNT(CASE WHEN status = 'Present' THEN 1 END) as days_present,
-                COUNT(DISTINCT attendance_date) as total_working_days 
-            FROM attendance_records 
-            WHERE student_id = ?
-            GROUP BY month
-            ORDER BY month
-        `;
-        const [attendance] = await db.query(attendanceQuery, [studentId]);
-        
-        // D. Structure Marks data for frontend display
-        const overallTotals = {}; // THIS IS THE OVERALL MARKS SUM
-        const subjectMarksMap = {}; 
+        if (values.length > 0) {
+           await connection.query(query, [values]);
+        }
 
-        marks.forEach(m => {
-            if (!subjectMarksMap[m.subject_name]) {
-                subjectMarksMap[m.subject_name] = {};
-            }
-            subjectMarksMap[m.subject_name][m.exam_type] = m.marks_obtained;
-            
-            // Sum up for overall total
-            overallTotals[m.subject_name] = (overallTotals[m.subject_name] || 0) + m.marks_obtained;
-        });
+        await connection.commit();
+        res.status(200).json({ message: "Attendance saved successfully!" });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Error saving attendance:", error);
+        res.status(500).json({ message: "Failed to save attendance." });
+    } finally {
+        connection.release();
+    }
+});
 
-        res.status(200).json({
-            studentDetails: student,
-            marks: subjectMarksMap, 
-            overallTotals: overallTotals, 
-            attendance: attendance
-        });
+// --- STUDENT ROUTE ---
+
+// GET: All data for the logged-in student's personal report card
+app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
+    const studentId = req.user.id; // From JWT payload
+    try {
+        const [[studentInfo]] = await db.query(
+            "SELECT id, full_name, username AS roll_no, class_group FROM users WHERE id = ?",
+            [studentId]
+        );
+
+        if (!studentInfo) {
+            return res.status(404).json({ message: "Student not found" });
+        }
+
+        const [marks] = await db.query(
+            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
+            [studentId, ACADEMIC_YEAR]
+        );
+        const [attendance] = await db.query(
+            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
+            [studentId, ACADEMIC_YEAR]
+        );
+
+        res.json({ studentInfo, marks, attendance });
 
     } catch (error) {
-        console.error("GET /api/reportcard/progresscard Error:", error);
-        res.status(500).json({ message: 'Failed to fetch progress card data.' });
+        console.error("Error fetching report card data:", error);
+        res.status(500).json({ message: "Failed to fetch report card" });
     }
 });
 

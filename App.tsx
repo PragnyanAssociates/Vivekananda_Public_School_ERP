@@ -51,7 +51,7 @@ import AdminEventsScreen from './src/screens/events/AdminEventsScreen';
 import TeacherAdminPTMScreen from './src/screens/ptm/TeacherAdminPTMScreen';
 import TeacherAdminHomeworkScreen from './src/screens/homework/TeacherAdminHomeworkScreen';
 import TeacherAdminExamScreen from './src/screens/exams_Schedule/TeacherAdminExamScreen';
-import TeacherAdminResultsScreen from './src/screens/results/TeacherAdminResultsScreen';
+// import TeacherAdminResultsScreen from './src/screens/results/TeacherAdminResultsScreen';
 import AdminSyllabusScreen from './src/screens/syllabus/AdminSyllabusScreen';
 // import AdminSuggestionsScreen from './src/screens/suggestions/AdminSuggestionsScreen';
 // import AdminPaymentScreen from './src/screens/payments/AdminPaymentScreen';
@@ -72,7 +72,7 @@ import TeacherSyllabusScreen from './src/screens/syllabus/TeacherSyllabusScreen'
 
 // Student-Specific Screens
 import StudentHealthScreen from './src/screens/health/StudentHealthScreen';
-import StudentResultsScreen from './src/screens/results/StudentResultsScreen';
+// import StudentResultsScreen from './src/screens/results/StudentResultsScreen';
 import StudentSyllabusScreen from './src/screens/syllabus/StudentSyllabusScreen';
 
 import StudentExamsScreen from './src/screens/exams/StudentExamsScreen';
@@ -82,7 +82,7 @@ import StudentEventsScreen from './src/screens/events/StudentEventsScreen';
 import StudentPTMScreen from './src/screens/ptm/StudentPTMScreen';
 import StudentExamScreen from './src/screens/exams_Schedule/StudentExamScreen';
 import StudentMaterialsScreen from './src/screens/study-materials/StudentMaterialsScreen';
-import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
+// import ReportDetailScreen from './src/screens/results/ReportDetailScreen';
 import StudentHomeworkScreen from './src/screens/homework/StudentHomeworkScreen';
 import OnlineClassScreen from './src/screens/Online_Class/OnlineClassScreen';
 import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResourcesScreen';
@@ -227,9 +227,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="TeacherAdminLabsScreen" component={TeacherAdminLabsScreen} />
       <Stack.Screen name="StudentLabsScreen" component={StudentLabsScreen} /> 
       <Stack.Screen name="TeacherAdminHomeworkScreen" component={TeacherAdminHomeworkScreen} />
-      <Stack.Screen name="TeacherAdminResultsScreen" component={TeacherAdminResultsScreen} />
-      <Stack.Screen name="StudentResultsScreen" component={StudentResultsScreen} />
-      <Stack.Screen name="ReportDetailScreen" component={ReportDetailScreen} /> 
+       
       {/* <Stack.Screen name="TransportScreen" component={TransportScreen} /> */}
       <Stack.Screen name="AboutUs" component={AboutUs} />
       {/* <Stack.Screen name="GroupChatScreen" component={GroupChatScreen} /> */}
