@@ -7133,20 +7133,55 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 
 
 // ==========================================================
-// --- PROGRESS CARD (REPORTS) API ROUTES ---
+// --- PROGRESS CARD (REPORTS) API ROUTES (WITH DYNAMIC YEAR) ---
 // (Paste this entire block into your main server.js file)
 // ==========================================================
 
-const ACADEMIC_YEAR = "2023-2024"; // You can make this dynamic later if needed
+/**
+ * Calculates the current academic year based on a cutoff month.
+ * Assumes the academic year starts in June.
+ * e.g., If today is June 2024 -> returns "2024-2025"
+ * e.g., If today is May 2024 -> returns "2023-2024"
+ * @returns {string} The academic year in "YYYY-YYYY" format.
+ */
+const getCurrentAcademicYear = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0 = January, 5 = June
+
+    // The academic year starts in June (month index 5).
+    const startMonth = 5; 
+
+    if (currentMonth >= startMonth) {
+        // We are in the current academic year (e.g., June 2024 or later)
+        return `${currentYear}-${currentYear + 1}`;
+    } else {
+        // We are in the tail end of the previous academic year (e.g., Jan-May 2024)
+        return `${currentYear - 1}-${currentYear}`;
+    }
+};
+
 
 // --- TEACHER / ADMIN ROUTES ---
 
-// GET: A list of all students in a specific class for selection
+// GET: A list of all unique student classes
+app.get('/api/reports/classes', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+    try {
+        const query = "SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group";
+        const [classes] = await db.query(query);
+        res.json(classes.map(c => c.class_group));
+    } catch (error) {
+        console.error("Error fetching classes:", error);
+        res.status(500).json({ message: "Failed to fetch classes" });
+    }
+});
+
+// GET: All students in a specific class for selection
 app.get('/api/reports/students/:classGroup', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { classGroup } = req.params;
     try {
         const [students] = await db.query(
-            "SELECT id, full_name, username AS roll_no FROM users WHERE role = 'student' AND class_group = ? ORDER BY full_name",
+            "SELECT id, full_name, username FROM users WHERE role = 'student' AND class_group = ? ORDER BY CAST(username AS UNSIGNED), full_name",
             [classGroup]
         );
         res.json(students);
@@ -7159,16 +7194,17 @@ app.get('/api/reports/students/:classGroup', [verifyToken, isTeacherOrAdmin], as
 // GET: All existing marks and attendance for a specific student to pre-fill the entry form
 app.get('/api/reports/student-data/:studentId', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { studentId } = req.params;
+    const academicYear = getCurrentAcademicYear(); // DYNAMIC
     try {
         const [marks] = await db.query(
             "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
-            [studentId, ACADEMIC_YEAR]
+            [studentId, academicYear]
         );
         const [attendance] = await db.query(
             "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
-            [studentId, ACADEMIC_YEAR]
+            [studentId, academicYear]
         );
-        res.json({ marks, attendance });
+        res.json({ marks, attendance, academicYear }); // Send the year to the frontend
     } catch (error) {
         console.error("Error fetching student data:", error);
         res.status(500).json({ message: "Failed to fetch student data" });
@@ -7178,6 +7214,8 @@ app.get('/api/reports/student-data/:studentId', [verifyToken, isTeacherOrAdmin],
 // POST: Save or update marks for a student. Uses 'UPSERT' logic for efficiency.
 app.post('/api/reports/marks', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { studentId, classGroup, marks } = req.body;
+    const academicYear = getCurrentAcademicYear(); // DYNAMIC
+    const adminId = req.user.id; // From verifyToken middleware
 
     if (!studentId || !classGroup || !Array.isArray(marks)) {
         return res.status(400).json({ message: "Invalid data provided." });
@@ -7194,13 +7232,25 @@ app.post('/api/reports/marks', [verifyToken, isTeacherOrAdmin], async (req, res)
         `;
 
         const values = marks.map(m => [
-            studentId, ACADEMIC_YEAR, classGroup, m.subject,
+            studentId, academicYear, classGroup, m.subject,
             m.exam_type, m.marks_obtained === '' ? null : m.marks_obtained
         ]);
 
         if (values.length > 0) {
             await connection.query(query, [values]);
         }
+        
+        // Notification Logic (using your existing createNotification function)
+        const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [adminId]);
+        const senderName = admin.full_name || "School Administration";
+        await createNotification(
+            connection,
+            studentId,
+            senderName,
+            `Marks Updated`,
+            `Your marks for the ${academicYear} year have been updated. Please check your progress report.`,
+            '/my-report-card' 
+        );
 
         await connection.commit();
         res.status(200).json({ message: "Marks saved successfully!" });
@@ -7216,6 +7266,7 @@ app.post('/api/reports/marks', [verifyToken, isTeacherOrAdmin], async (req, res)
 // POST: Save or update attendance for a student.
 app.post('/api/reports/attendance', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { studentId, attendance } = req.body;
+    const academicYear = getCurrentAcademicYear(); // DYNAMIC
 
     if (!studentId || !Array.isArray(attendance)) {
         return res.status(400).json({ message: "Invalid data provided." });
@@ -7230,7 +7281,7 @@ app.post('/api/reports/attendance', [verifyToken, isTeacherOrAdmin], async (req,
             ON DUPLICATE KEY UPDATE working_days = VALUES(working_days), present_days = VALUES(present_days)
         `;
         const values = attendance.map(a => [
-            studentId, ACADEMIC_YEAR, a.month,
+            studentId, academicYear, a.month,
             a.working_days === '' ? null : a.working_days,
             a.present_days === '' ? null : a.present_days
         ]);
@@ -7250,14 +7301,16 @@ app.post('/api/reports/attendance', [verifyToken, isTeacherOrAdmin], async (req,
     }
 });
 
+
 // --- STUDENT ROUTE ---
 
 // GET: All data for the logged-in student's personal report card
 app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
     const studentId = req.user.id; // From JWT payload
+    const academicYear = getCurrentAcademicYear(); // DYNAMIC
     try {
         const [[studentInfo]] = await db.query(
-            "SELECT id, full_name, username AS roll_no, class_group FROM users WHERE id = ?",
+            "SELECT u.id, u.full_name, u.class_group, p.roll_no, p.profile_image_url FROM users u LEFT JOIN user_profiles p ON u.id = p.user_id WHERE u.id = ?",
             [studentId]
         );
 
@@ -7267,14 +7320,14 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
 
         const [marks] = await db.query(
             "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
-            [studentId, ACADEMIC_YEAR]
+            [studentId, academicYear]
         );
         const [attendance] = await db.query(
             "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
-            [studentId, ACADEMIC_YEAR]
+            [studentId, academicYear]
         );
 
-        res.json({ studentInfo, marks, attendance });
+        res.json({ studentInfo, marks, attendance, academicYear }); // Send the year
 
     } catch (error) {
         console.error("Error fetching report card data:", error);
