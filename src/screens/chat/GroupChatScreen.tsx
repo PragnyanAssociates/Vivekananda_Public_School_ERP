@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, Keyboard, Modal, Pressable, PermissionsAndroid } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, Keyboard, Modal, Pressable, PermissionsAndroid, Dimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
@@ -12,8 +12,9 @@ import Video from 'react-native-video';
 import EmojiPicker from 'rn-emoji-keyboard';
 import { v4 as uuidv4 } from 'uuid';
 import RNFS from 'react-native-fs';
-import { pick, types, isCancel } from '@react-native-documents/picker'; // <-- CORRECTED IMPORT
+import { pick, types, isCancel } from '@react-native-documents/picker';
 import FileViewer from 'react-native-file-viewer';
+import ImageViewing from 'react-native-image-viewing';
 
 const THEME = { primary: '#007bff', text: '#212529', muted: '#86909c', border: '#dee2e6', myMessageBg: '#dcf8c6', otherMessageBg: '#ffffff', white: '#ffffff', destructive: '#dc3545' };
 
@@ -34,14 +35,10 @@ const getFileIcon = (fileName: string) => {
     const extension = fileName?.split('.').pop()?.toLowerCase();
     switch (extension) {
         case 'pdf': return { name: 'file-pdf-box', color: '#E53E3E' };
-        case 'doc':
-        case 'docx': return { name: 'file-word-box', color: '#2B579A' };
-        case 'xls':
-        case 'xlsx': return { name: 'file-excel-box', color: '#1D6F42' };
-        case 'ppt':
-        case 'pptx': return { name: 'file-powerpoint-box', color: '#D04423' };
-        case 'zip':
-        case 'rar': return { name: 'folder-zip', color: '#fbc02d' };
+        case 'doc': case 'docx': return { name: 'file-word-box', color: '#2B579A' };
+        case 'xls': case 'xlsx': return { name: 'file-excel-box', color: '#1D6F42' };
+        case 'ppt': case 'pptx': return { name: 'file-powerpoint-box', color: '#D04423' };
+        case 'zip': case 'rar': return { name: 'folder-zip', color: '#fbc02d' };
         default: return { name: 'file-document-outline', color: '#6c757d' };
     }
 };
@@ -61,9 +58,20 @@ const GroupChatScreen = () => {
     const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<any>(null);
 
+    const [isImageViewerVisible, setImageViewerVisible] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [selectedVideoUri, setSelectedVideoUri] = useState<string | null>(null);
+
     const socketRef = useRef<Socket | null>(null);
     const flatListRef = useRef<FlatList | null>(null);
     const initialLoadDone = useRef(false);
+
+    const imageMessages = useMemo(() =>
+        messages
+            .filter(msg => msg.message_type === 'image' && msg.file_url)
+            .map(msg => ({ uri: SERVER_URL + msg.file_url })),
+        [messages]
+    );
 
     const markAsSeen = useCallback(async () => {
         try { await apiClient.post(`/groups/${group.id}/seen`); } 
@@ -136,14 +144,9 @@ const GroupChatScreen = () => {
     const sendMessage = (type: 'text' | 'image' | 'video' | 'file', text: string | null, url: string | null, clientMessageId?: string, fileName?: string) => {
         if (!user || !socketRef.current) return;
         socketRef.current.emit('sendMessage', {
-            userId: user.id,
-            groupId: group.id,
-            messageType: type,
-            messageText: text,
-            fileUrl: url,
-            fileName: fileName,
-            replyToMessageId: replyingTo ? replyingTo.id : null,
-            clientMessageId: clientMessageId,
+            userId: user.id, groupId: group.id, messageType: type,
+            messageText: text, fileUrl: url, fileName: fileName,
+            replyToMessageId: replyingTo ? replyingTo.id : null, clientMessageId: clientMessageId,
         });
         if (type === 'text') setNewMessage('');
         setReplyingTo(null);
@@ -153,9 +156,8 @@ const GroupChatScreen = () => {
         if (!user) return;
         const clientMessageId = uuidv4();
         const tempMessage = {
-            id: clientMessageId, clientMessageId, user_id: user.id, full_name: user.fullName,
-            profile_image_url: user.profileImageUrl, group_id: group.id, message_type: type,
-            file_url: null, localUri: file.uri, file_name: file.fileName,
+            id: clientMessageId, clientMessageId, user_id: user.id, full_name: user.fullName, profile_image_url: user.profileImageUrl,
+            group_id: group.id, message_type: type, file_url: null, localUri: file.uri, file_name: file.fileName,
             message_text: null, timestamp: new Date().toISOString(), status: 'uploading', progress: 0,
         };
         setMessages(prev => [...prev, tempMessage]);
@@ -190,35 +192,22 @@ const GroupChatScreen = () => {
         });
     };
     
-    // --- CORRECTED: Function to pick documents using the new library ---
     const handlePickDocument = async () => {
         try {
-            const results = await pick({
-                type: [types.allFiles],
-                allowMultiSelection: false, // Ensure only one file is picked
-            });
-
+            const results = await pick({ type: [types.allFiles], allowMultiSelection: false });
             if (results && results.length > 0) {
                 const doc = results[0];
                 const file = { uri: doc.uri, type: doc.type, fileName: doc.name };
                 uploadFile(file, 'file');
             }
         } catch (err) {
-            if (!isCancel(err)) { // Use the imported isCancel function
-                Alert.alert("Error", "Could not pick the document.");
-            }
+            if (!isCancel(err)) { Alert.alert("Error", "Could not pick the document."); }
         }
     };
 
     const showAttachmentMenu = () => {
-        Alert.alert(
-            "Attach a file",
-            "What would you like to send?",
-            [
-                { text: "Image or Video", onPress: handlePickImageVideo },
-                { text: "Document", onPress: handlePickDocument },
-                { text: "Cancel", style: "cancel" }
-            ]
+        Alert.alert("Attach a file", "What would you like to send?",
+            [{ text: "Image or Video", onPress: handlePickImageVideo }, { text: "Document", onPress: handlePickDocument }, { text: "Cancel", style: "cancel" }]
         );
     };
 
@@ -230,14 +219,26 @@ const GroupChatScreen = () => {
         } else {
             sendMessage('text', newMessage.trim(), null);
         }
-        setNewMessage('');
-        Keyboard.dismiss();
+        setNewMessage(''); Keyboard.dismiss();
     };
 
     const onLongPressMessage = (message: any) => {
         if (!user || message.status === 'uploading') return;
         setSelectedMessage(message);
         setOptionsModalVisible(true);
+    };
+
+    const handleMediaPress = (item: any) => {
+        if (item.status === 'uploading' || item.status === 'failed' || !item.file_url) return;
+        if (item.message_type === 'image') {
+            const index = imageMessages.findIndex(img => img.uri === SERVER_URL + item.file_url);
+            if (index > -1) {
+                setCurrentImageIndex(index);
+                setImageViewerVisible(true);
+            }
+        } else if (item.message_type === 'video') {
+            setSelectedVideoUri(SERVER_URL + item.file_url);
+        }
     };
 
     const handleDeleteMessage = (messageId: number) => {
@@ -248,47 +249,42 @@ const GroupChatScreen = () => {
         if (!fileUrl) return Alert.alert("Error", "No file available.");
         const fullUrl = SERVER_URL + fileUrl;
         const localPath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
-
         try {
             if (Platform.OS === 'android') {
                 const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
-                if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-                    return Alert.alert("Permission Denied", "Storage permission is required.");
-                }
+                if (granted !== PermissionsAndroid.RESULTS.GRANTED) return Alert.alert("Permission Denied", "Storage permission is required.");
             }
-            
-            setOptionsModalVisible(false);
+            closeOptionsModal(); // Close the modal before starting download
             const fileExists = await RNFS.exists(localPath);
-
             if (fileExists) {
                 if (action === 'open') FileViewer.open(localPath);
                 else Alert.alert("Already Downloaded", `File is already in your Downloads folder.`);
                 return;
             }
-
             Alert.alert(action === 'open' ? "Opening..." : "Downloading...", "Please wait while the file is being downloaded.");
-            const download = RNFS.downloadFile({ fromUrl: fullUrl, toFile: localPath });
-            await download.promise;
-            
-            if (action === 'open') {
-                FileViewer.open(localPath);
-            } else {
-                Alert.alert("Download Complete", `File saved as ${fileName} in your Downloads folder.`);
-            }
+            await RNFS.downloadFile({ fromUrl: fullUrl, toFile: localPath }).promise;
+            if (action === 'open') FileViewer.open(localPath);
+            else Alert.alert("Download Complete", `File saved as ${fileName} in your Downloads folder.`);
             if (Platform.OS === 'android') RNFS.scanFile(localPath);
-        } catch (err) {
-            Alert.alert("Error", "An error occurred during the file operation.");
-        }
+        } catch (err) { Alert.alert("Error", "An error occurred during the file operation."); }
     };
     
     const cancelReply = () => setReplyingTo(null);
     const cancelEdit = () => { setEditingMessage(null); setNewMessage(''); Keyboard.dismiss(); };
+    
+    // --- MODIFIED: New function to close modal and clear selection ---
+    const closeOptionsModal = () => {
+        setOptionsModalVisible(false);
+        setSelectedMessage(null); // This is key to remove the highlight
+    };
 
     const renderMessageItem = ({ item }: { item: any }) => {
         if (item.type === 'date') return <View style={styles.dateSeparator}><Text style={styles.dateSeparatorText}>{item.date}</Text></View>;
         
         const isMyMessage = item.user_id === user?.id;
         const messageTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // --- MODIFIED: Check if the current item is the one that was long-pressed ---
+        const isSelected = selectedMessage && selectedMessage.id === item.id;
 
         const renderContent = () => {
             const sourceUri = item.localUri || (SERVER_URL + item.file_url);
@@ -306,17 +302,28 @@ const GroupChatScreen = () => {
             };
 
             switch (item.message_type) {
-                case 'image': return <View><Image source={{ uri: sourceUri }} style={styles.mediaMessage} />{renderUploadOverlay()}</View>;
-                case 'video': return <View><Video source={{ uri: sourceUri }} style={styles.mediaMessage} controls={false} paused resizeMode="cover" />{renderUploadOverlay()}</View>;
+                case 'image':
+                    return (
+                        <TouchableOpacity disabled={isUploading || isFailed} onPress={() => handleMediaPress(item)}>
+                            <Image source={{ uri: sourceUri }} style={styles.mediaMessage} />
+                            {renderUploadOverlay()}
+                        </TouchableOpacity>
+                    );
+                case 'video':
+                    return (
+                        <TouchableOpacity disabled={isUploading || isFailed} onPress={() => handleMediaPress(item)}>
+                            <Video source={{ uri: sourceUri }} style={styles.mediaMessage} controls={false} paused resizeMode="cover" />
+                            <View style={styles.videoPlayIconContainer}><Icon name="play-circle" size={50} color="rgba(255, 255, 255, 0.8)" /></View>
+                            {renderUploadOverlay()}
+                        </TouchableOpacity>
+                    );
                 case 'file': {
                     const iconInfo = getFileIcon(item.file_name);
                     return (
                         <TouchableOpacity disabled={isUploading || isFailed} onPress={() => downloadAndOpenFile(item.file_url, item.file_name, 'open')}>
                             <View style={styles.fileContainer}>
                                 <Icon name={iconInfo.name} size={48} color={iconInfo.color} />
-                                <View style={styles.fileInfo}>
-                                    <Text style={styles.fileName} numberOfLines={2}>{item.file_name}</Text>
-                                </View>
+                                <View style={styles.fileInfo}><Text style={styles.fileName} numberOfLines={2}>{item.file_name}</Text></View>
                                 {renderUploadOverlay()}
                             </View>
                         </TouchableOpacity>
@@ -327,7 +334,7 @@ const GroupChatScreen = () => {
         };
 
         return (
-            <TouchableOpacity onLongPress={() => onLongPressMessage(item)} activeOpacity={0.8}>
+            <TouchableOpacity onLongPress={() => onLongPressMessage(item)} activeOpacity={0.8} style={isSelected ? styles.highlightedMessage : null}>
                 <View style={[styles.messageRow, isMyMessage ? styles.myMessageRow : styles.otherMessageRow]}>
                     {!isMyMessage && <Image source={getProfileImageSource(item.profile_image_url)} style={styles.senderDp} />}
                     <View style={[styles.messageContainer, isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer, item.message_type !== 'text' && styles.mediaContainer]}>
@@ -359,38 +366,44 @@ const GroupChatScreen = () => {
         const isMedia = ['image', 'video', 'file'].includes(selectedMessage.message_type);
 
         return (
-            <Modal animationType="fade" transparent={true} visible={isOptionsModalVisible} onRequestClose={() => setOptionsModalVisible(false)}>
-                <Pressable style={styles.modalOverlay} onPress={() => setOptionsModalVisible(false)}>
+            <Modal animationType="fade" transparent={true} visible={isOptionsModalVisible} onRequestClose={closeOptionsModal}>
+                <Pressable style={styles.modalOverlay} onPress={closeOptionsModal}>
                     <Pressable style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Message Options</Text>
-                        <TouchableOpacity style={styles.modalOption} onPress={() => { setReplyingTo(selectedMessage); setOptionsModalVisible(false); }}>
-                            <Text style={styles.modalOptionText}>Reply</Text>
-                        </TouchableOpacity>
-                        {isMedia && (
-                            <TouchableOpacity style={styles.modalOption} onPress={() => downloadAndOpenFile(selectedMessage.file_url, selectedMessage.file_name, 'download')}>
-                                <Text style={styles.modalOptionText}>Download</Text>
-                            </TouchableOpacity>
-                        )}
-                        {isMyMessage && selectedMessage.message_type === 'text' && (
-                            <TouchableOpacity style={styles.modalOption} onPress={() => { setEditingMessage(selectedMessage); setNewMessage(selectedMessage.message_text); setOptionsModalVisible(false); }}>
-                                <Text style={styles.modalOptionText}>Edit</Text>
-                            </TouchableOpacity>
-                        )}
-                        {isMyMessage && (
-                            <TouchableOpacity style={styles.modalOption} onPress={() => { handleDeleteMessage(selectedMessage.id); setOptionsModalVisible(false); }}>
-                                <Text style={[styles.modalOptionText, styles.destructiveText]}>Delete</Text>
-                            </TouchableOpacity>
-                        )}
-                        <TouchableOpacity style={styles.modalOption} onPress={() => setOptionsModalVisible(false)}><Text style={styles.modalOptionText}>Cancel</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.modalOption} onPress={() => { setReplyingTo(selectedMessage); closeOptionsModal(); }}><Text style={styles.modalOptionText}>Reply</Text></TouchableOpacity>
+                        {isMedia && (<TouchableOpacity style={styles.modalOption} onPress={() => downloadAndOpenFile(selectedMessage.file_url, selectedMessage.file_name, 'download')}><Text style={styles.modalOptionText}>Download</Text></TouchableOpacity>)}
+                        {isMyMessage && selectedMessage.message_type === 'text' && (<TouchableOpacity style={styles.modalOption} onPress={() => { setEditingMessage(selectedMessage); setNewMessage(selectedMessage.message_text); closeOptionsModal(); }}><Text style={styles.modalOptionText}>Edit</Text></TouchableOpacity>)}
+                        {isMyMessage && (<TouchableOpacity style={styles.modalOption} onPress={() => { handleDeleteMessage(selectedMessage.id); closeOptionsModal(); }}><Text style={[styles.modalOptionText, styles.destructiveText]}>Delete</Text></TouchableOpacity>)}
+                        <TouchableOpacity style={styles.modalOption} onPress={closeOptionsModal}><Text style={styles.modalOptionText}>Cancel</Text></TouchableOpacity>
                     </Pressable>
                 </Pressable>
             </Modal>
         );
     };
 
+    const renderVideoPlayer = () => (
+        <Modal visible={!!selectedVideoUri} transparent={true} onRequestClose={() => setSelectedVideoUri(null)}>
+            <View style={styles.videoModalContainer}>
+                <TouchableOpacity style={styles.videoCloseButton} onPress={() => setSelectedVideoUri(null)}>
+                    <Icon name="close" size={32} color={THEME.white} />
+                </TouchableOpacity>
+                {selectedVideoUri && (
+                    <Video source={{ uri: selectedVideoUri }} style={styles.fullScreenVideo} controls={true} resizeMode="contain" />
+                )}
+            </View>
+        </Modal>
+    );
+
     return (
         <SafeAreaView style={{flex: 1, backgroundColor: THEME.white}}>
             {renderOptionsModal()}
+            {renderVideoPlayer()}
+            <ImageViewing
+                images={imageMessages}
+                imageIndex={currentImageIndex}
+                visible={isImageViewerVisible}
+                onRequestClose={() => setImageViewerVisible(false)}
+            />
             <View style={styles.header}>
                 <Icon name="arrow-left" size={24} color={THEME.primary} onPress={() => navigation.goBack()} style={{padding: 5}}/>
                 <TouchableOpacity style={styles.headerContent} onPress={() => navigation.navigate('GroupSettings', { group })}>
@@ -432,7 +445,6 @@ const GroupChatScreen = () => {
     );
 };
 
-// --- STYLES (NO CHANGES FROM PREVIOUS RESPONSE) ---
 const styles = StyleSheet.create({
     header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: THEME.border, backgroundColor: THEME.white, justifyContent: 'space-between' },
     headerContent: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 5 },
@@ -447,7 +459,7 @@ const styles = StyleSheet.create({
     messageContainer: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.1, shadowRadius: 1 },
     myMessageContainer: { backgroundColor: THEME.myMessageBg, borderBottomRightRadius: 2 },
     otherMessageContainer: { backgroundColor: THEME.otherMessageBg, borderBottomLeftRadius: 2 },
-    mediaContainer: { padding: 5 },
+    mediaContainer: { padding: 5, backgroundColor: 'transparent' },
     senderInfo: { flexDirection: 'row', marginBottom: 4, alignItems: 'baseline' },
     senderName: { fontWeight: 'bold', color: THEME.primary },
     senderDetails: { fontSize: 11, color: THEME.muted, marginLeft: 4 },
@@ -475,12 +487,22 @@ const styles = StyleSheet.create({
     fileInfo: { flex: 1, marginLeft: 10, justifyContent: 'center' },
     fileName: { fontSize: 15, fontWeight: '500', color: THEME.text },
     fileSize: { fontSize: 12, color: THEME.muted, marginTop: 2 },
-    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+    // MODIFIED: modalOverlay is now transparent to let the highlight show through
+    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
     modalContent: { width: '80%', backgroundColor: 'white', borderRadius: 10, paddingVertical: 10, elevation: 5 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, color: THEME.text },
     modalOption: { paddingVertical: 15, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: THEME.border },
     modalOptionText: { fontSize: 16, color: THEME.primary },
-    destructiveText: { color: THEME.destructive }
+    destructiveText: { color: THEME.destructive },
+    videoPlayIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+    videoModalContainer: { flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
+    fullScreenVideo: { width: Dimensions.get('window').width, height: Dimensions.get('window').height },
+    videoCloseButton: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20, zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 5 },
+    // --- NEW: Style for the message highlight ---
+    highlightedMessage: {
+        backgroundColor: 'rgba(0, 80, 255, 0.15)', // A subtle blueish highlight
+        borderRadius: 15, // Should roughly match the message bubble's curvature
+    },
 });
 
 export default GroupChatScreen;
