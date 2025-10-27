@@ -7264,7 +7264,7 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
         );
 
         if (students.length === 0) {
-            return res.json({ students: [], marks: [], attendance: [] });
+            return res.json({ students: [], marks: [], attendance: [], assignments: [] });
         }
 
         const studentIds = students.map(s => s.id);
@@ -7279,7 +7279,16 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
             [studentIds, academicYear]
         );
 
-        res.json({ students, marks, attendance });
+        // This is included so the "Assign Teachers" screen continues to work correctly.
+        const [assignments] = await db.query(
+            `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
+             FROM report_teacher_assignments ta
+             JOIN users u ON ta.teacher_id = u.id
+             WHERE ta.class_group = ? AND ta.academic_year = ?`,
+            [classGroup, academicYear]
+        );
+
+        res.json({ students, marks, attendance, assignments });
 
     } catch (error) {
         console.error("Error fetching class data:", error);
@@ -7292,32 +7301,33 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     const { marksPayload } = req.body;
     const academicYear = getCurrentAcademicYear();
 
-    if (!Array.isArray(marksPayload)) {
-        return res.status(400).json({ message: "Invalid data format." });
-    }
-    if (marksPayload.length === 0) {
-        return res.status(200).json({ message: "No marks data to save." });
+    if (!Array.isArray(marksPayload) || marksPayload.length === 0) {
+        return res.status(400).json({ message: "Invalid or empty marks data." });
     }
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // PERMISSION CHECK REMOVED: Now any authenticated teacher/admin can save.
-
         const query = `
             INSERT INTO report_student_marks (student_id, academic_year, class_group, subject, exam_type, marks_obtained)
             VALUES ? 
             ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)`;
         
-        const values = marksPayload.map(m => [
-            m.student_id, 
-            academicYear, 
-            m.class_group, 
-            m.subject,
-            m.exam_type, 
-            m.marks_obtained === '' || m.marks_obtained === null ? null : m.marks_obtained
-        ]);
+        // **FIX APPLIED HERE**: Robustly parse marks to prevent SQL errors
+        const values = marksPayload.map(m => {
+            const parsedMarks = parseInt(m.marks_obtained, 10);
+            const finalMarks = isNaN(parsedMarks) ? null : parsedMarks;
+            
+            return [
+                m.student_id, 
+                academicYear, 
+                m.class_group, 
+                m.subject,
+                m.exam_type, 
+                finalMarks
+            ];
+        });
         
         await connection.query(query, [values]);
         await connection.commit();
@@ -7336,11 +7346,8 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     const { attendancePayload } = req.body;
     const academicYear = getCurrentAcademicYear();
     
-    if (!Array.isArray(attendancePayload)) {
-        return res.status(400).json({ message: "Invalid data format." });
-    }
-    if (attendancePayload.length === 0) {
-        return res.status(200).json({ message: "No attendance data to save." });
+    if (!Array.isArray(attendancePayload) || attendancePayload.length === 0) {
+        return res.status(400).json({ message: "Invalid or empty attendance data." });
     }
 
     const connection = await db.getConnection();
@@ -7353,13 +7360,21 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
                 working_days = VALUES(working_days), 
                 present_days = VALUES(present_days)`;
         
-        const values = attendancePayload.map(a => [
-            a.student_id, 
-            academicYear, 
-            a.month,
-            a.working_days === '' || a.working_days === null ? null : a.working_days,
-            a.present_days === '' || a.present_days === null ? null : a.present_days
-        ]);
+        // **FIX APPLIED HERE**: Robustly parse attendance to prevent SQL errors
+        const values = attendancePayload.map(a => {
+            const working = parseInt(a.working_days, 10);
+            const present = parseInt(a.present_days, 10);
+            const finalWorking = isNaN(working) ? null : working;
+            const finalPresent = isNaN(present) ? null : present;
+            
+            return [
+                a.student_id, 
+                academicYear, 
+                a.month,
+                finalWorking,
+                finalPresent
+            ];
+        });
         
         await connection.query(query, [values]);
         await connection.commit();
