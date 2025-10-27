@@ -39,7 +39,8 @@ const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } 
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 
 const ROOT_STORAGE_PATH = '/data/uploads'; 
@@ -7279,7 +7280,6 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
             [studentIds, academicYear]
         );
 
-        // This is included so the "Assign Teachers" screen continues to work correctly.
         const [assignments] = await db.query(
             `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
              FROM report_teacher_assignments ta
@@ -7314,7 +7314,6 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
             VALUES ? 
             ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)`;
         
-        // **FIX APPLIED HERE**: Robustly parse marks to prevent SQL errors
         const values = marksPayload.map(m => {
             const parsedMarks = parseInt(m.marks_obtained, 10);
             const finalMarks = isNaN(parsedMarks) ? null : parsedMarks;
@@ -7360,7 +7359,6 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
                 working_days = VALUES(working_days), 
                 present_days = VALUES(present_days)`;
         
-        // **FIX APPLIED HERE**: Robustly parse attendance to prevent SQL errors
         const values = attendancePayload.map(a => {
             const working = parseInt(a.working_days, 10);
             const present = parseInt(a.present_days, 10);
@@ -7432,7 +7430,6 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
         res.status(500).json({ message: "Failed to fetch report card" });
     }
 });
-
 
 
 
