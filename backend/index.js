@@ -141,6 +141,7 @@ const videoUpload = multer({
 });
 
 
+// THIS IS THE CORRECT CODE
 const db = mysql.createPool({
     host: process.env.MYSQLHOST,
     user: process.env.MYSQLUSER,
