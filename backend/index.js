@@ -28,6 +28,16 @@ const { Server } = require("socket.io");
 // const openai = new OpenAI({
 //     apiKey: process.env.OPENAI_API_KEY,
 // });
+// ★★★★★ ADD THIS MANDATORY DEBUGGING BLOCK ★★★★★
+console.log("--- [STARTUP LOGS - VIVEKANANDA APP] ---");
+console.log("--- Checking All Environment Variables ---");
+console.log("MYSQLHOST:", process.env.MYSQLHOST);
+console.log("MYSQLUSER:", process.env.MYSQLUSER);
+console.log("MYSQLDATABASE:", process.env.MYSQLDATABASE);
+console.log("MYSQLPORT:", process.env.MYSQLPORT);
+console.log("Is MYSQLPASSWORD present?:", process.env.MYSQLPASSWORD ? "Yes" : "No, it is UNDEFINED");
+console.log("--- [END OF DEBUG LOGS] ---");
+// ★★★★★ END OF DEBUGGING BLOCK ★★★★★
 
 
 
