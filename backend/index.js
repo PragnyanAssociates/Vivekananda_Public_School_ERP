@@ -2825,20 +2825,20 @@ app.delete('/api/homework/submission/:submissionId', async (req, res) => {
 
 
 // ==========================================================
-// --- EXAM SCHEDULE API ROUTES ---
+// --- EXAM SCHEDULE API ROUTES (MODIFIED) ---
 // ==========================================================
 
 // --- TEACHER / ADMIN ROUTES ---
 
-// Get all exam schedules created (for the main list view)
+// Get all exam schedules created
 app.get('/api/exam-schedules', async (req, res) => {
     try {
         const query = `
-            SELECT es.id, es.title, es.class_group, u.full_name as created_by
+            SELECT es.id, es.title, es.class_group, es.exam_type, u.full_name as created_by
             FROM exam_schedules es
             JOIN users u ON es.created_by_id = u.id
             ORDER BY es.updated_at DESC
-        `;
+        `; // ★ MODIFIED: Added es.exam_type
         const [schedules] = await db.query(query);
         res.json(schedules);
     } catch (error) {
@@ -2847,7 +2847,7 @@ app.get('/api/exam-schedules', async (req, res) => {
     }
 });
 
-// Get a single, detailed exam schedule for editing
+// Get a single, detailed exam schedule for editing (No changes needed, already uses *)
 app.get('/api/exam-schedules/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -2865,8 +2865,9 @@ app.get('/api/exam-schedules/:id', async (req, res) => {
 
 // Create a new exam schedule
 app.post('/api/exam-schedules', async (req, res) => {
-    const { class_group, title, subtitle, schedule_data, created_by_id } = req.body;
-    if (!class_group || !title || !schedule_data || !created_by_id) {
+    // ★ MODIFIED: Added exam_type
+    const { class_group, title, subtitle, exam_type, schedule_data, created_by_id } = req.body;
+    if (!class_group || !title || !schedule_data || !created_by_id || !exam_type) {
         return res.status(400).json({ message: "Missing required fields." });
     }
 
@@ -2874,45 +2875,27 @@ app.post('/api/exam-schedules', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Step 1: Create the exam schedule record
         const query = `
-            INSERT INTO exam_schedules (class_group, title, subtitle, schedule_data, created_by_id)
-            VALUES (?, ?, ?, ?, ?)
-        `;
-        await connection.query(query, [class_group, title, subtitle, JSON.stringify(schedule_data), created_by_id]);
-        
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR CREATION ★★★★★
+            INSERT INTO exam_schedules (class_group, title, subtitle, exam_type, schedule_data, created_by_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `; // ★ MODIFIED: Added exam_type column
+        // ★ MODIFIED: Added exam_type to values array
+        await connection.query(query, [class_group, title, subtitle, exam_type, JSON.stringify(schedule_data), created_by_id]);
 
-        // 1. Find all students in the affected class group
+        // (Notification logic remains the same)
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         const studentIds = students.map(s => s.id);
-
-        // 2. Find all unique teachers assigned to that class in the main timetable
         const [teachers] = await connection.query("SELECT DISTINCT teacher_id FROM timetables WHERE class_group = ?", [class_group]);
         const teacherIds = teachers.map(t => t.teacher_id);
-        
-        // 3. Combine lists, ensuring no duplicates
         const allRecipientIds = [...new Set([...studentIds, ...teacherIds])];
-
-        // 4. Prepare notification details
         const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by_id]);
         const senderName = admin.full_name || "School Administration";
         const notificationTitle = `New Exam Schedule Published`;
         const notificationMessage = `The schedule for "${title}" (${class_group}) has been published. Please check the details.`;
 
-        // 5. Send notifications
         if (allRecipientIds.length > 0) {
-            await createBulkNotifications(
-                connection,
-                allRecipientIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/exam-schedule' // A generic link to the exam schedule screen
-            );
+            await createBulkNotifications(connection, allRecipientIds, senderName, notificationTitle, notificationMessage, '/exam-schedule');
         }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC FOR CREATION ★★★★★
 
         await connection.commit();
         res.status(201).json({ message: "Exam schedule created and users notified successfully." });
@@ -2929,53 +2912,35 @@ app.post('/api/exam-schedules', async (req, res) => {
 // Update an existing exam schedule
 app.put('/api/exam-schedules/:id', async (req, res) => {
     const { id } = req.params;
-    const { class_group, title, subtitle, schedule_data, created_by_id } = req.body; // Assuming created_by_id is passed on update as well for sender info
+    // ★ MODIFIED: Added exam_type
+    const { class_group, title, subtitle, exam_type, schedule_data, created_by_id } = req.body;
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // Step 1: Update the schedule record
         const query = `
-            UPDATE exam_schedules 
-            SET class_group = ?, title = ?, subtitle = ?, schedule_data = ?
+            UPDATE exam_schedules
+            SET class_group = ?, title = ?, subtitle = ?, exam_type = ?, schedule_data = ?
             WHERE id = ?
-        `;
-        await connection.query(query, [class_group, title, subtitle, JSON.stringify(schedule_data), id]);
+        `; // ★ MODIFIED: Added exam_type to SET clause
+        // ★ MODIFIED: Added exam_type to values array
+        await connection.query(query, [class_group, title, subtitle, exam_type, JSON.stringify(schedule_data), id]);
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
-
-        // 1. Find all students in the affected class group
+        // (Notification logic remains the same)
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
         const studentIds = students.map(s => s.id);
-
-        // 2. Find all unique teachers assigned to that class in the main timetable
         const [teachers] = await connection.query("SELECT DISTINCT teacher_id FROM timetables WHERE class_group = ?", [class_group]);
         const teacherIds = teachers.map(t => t.teacher_id);
-        
-        // 3. Combine lists, ensuring no duplicates
         const allRecipientIds = [...new Set([...studentIds, ...teacherIds])];
-
-        // 4. Prepare notification details. We need the admin's name who made the change.
-        // For this to work, ensure the `user.id` of the admin is passed from the form as `created_by_id`.
         const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by_id]);
         const senderName = admin.full_name || "School Administration";
         const notificationTitle = `Exam Schedule Updated`;
         const notificationMessage = `The schedule for "${title}" (${class_group}) has been modified. Please review the updated details.`;
 
-        // 5. Send notifications
         if (allRecipientIds.length > 0) {
-            await createBulkNotifications(
-                connection,
-                allRecipientIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/exam-schedule'
-            );
+            await createBulkNotifications(connection, allRecipientIds, senderName, notificationTitle, notificationMessage, '/exam-schedule');
         }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
 
         await connection.commit();
         res.status(200).json({ message: "Exam schedule updated and users notified successfully." });
@@ -2989,7 +2954,7 @@ app.put('/api/exam-schedules/:id', async (req, res) => {
     }
 });
 
-// Delete an exam schedule
+// Delete an exam schedule (No changes needed)
 app.delete('/api/exam-schedules/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -3002,76 +2967,28 @@ app.delete('/api/exam-schedules/:id', async (req, res) => {
 });
 
 
-// --- STUDENT ROUTE ---
+// --- STUDENT ROUTE --- (No changes needed, already uses *)
 app.get('/api/exam-schedules/class/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
-    
     try {
-        // 🔍 DEBUG: Log the incoming request
-        console.log('🔥 =================================');
-        console.log('🔍 API CALLED: /api/exam-schedules/class/' + classGroup);
-        console.log('📅 Timestamp:', new Date().toISOString());
-        console.log('🔥 =================================');
-        
-        // 🐛 DEBUG: Log the exact query we're about to execute
         const query = `
-            SELECT 
+            SELECT
                 es.*,
                 u.full_name AS created_by
             FROM exam_schedules es
             LEFT JOIN users u ON es.created_by_id = u.id
-            WHERE es.class_group = ? 
+            WHERE es.class_group = ?
             ORDER BY es.updated_at DESC
         `;
-        
-        console.log('📝 SQL Query:', query.trim());
-        console.log('🎯 Query Parameters:', [classGroup]);
-        
-        // Execute the database query
         const [schedules] = await db.query(query, [classGroup]);
-        
-        // 🐛 DEBUG: Log exactly what the database returned
-        console.log('🔥 DATABASE RESPONSE:');
-        console.log('📊 Type:', Array.isArray(schedules) ? 'Array' : 'Object');
-        console.log('📈 Raw Length:', schedules ? schedules.length : 'null/undefined');
-        console.log('🔢 Actual Count:', schedules ? Object.keys(schedules).length : 0);
-        
-        if (schedules && schedules.length > 0) {
-            console.log('📦 Schedule Details:');
-            schedules.forEach((schedule, index) => {
-                console.log(`  ${index + 1}. ID: ${schedule.id}, Title: "${schedule.title}", Class: "${schedule.class_group}"`);
-            });
-        } else {
-            console.log('❌ No schedules found in database result');
-        }
-        
-        // Check for empty results
+
         if (!schedules || schedules.length === 0) {
-            console.log('❌ Returning 404 - No schedules found');
             return res.status(404).json({ message: "No exam schedules found for your class." });
         }
-        
-        // 🐛 DEBUG: Log exactly what we're about to return to the client
-        console.log('🚀 ABOUT TO SEND RESPONSE:');
-        console.log('📊 Response Type:', Array.isArray(schedules) ? 'Array' : 'Object');
-        console.log('📈 Response Length:', schedules.length);
-        console.log('🎯 Response Preview:', JSON.stringify(schedules).substring(0, 300) + '...');
-        console.log('📦 Response Titles:', schedules.map(s => s.title));
-        
-        // 🔥 CRITICAL: Make sure we're returning the full array
-        console.log('✅ Sending full schedules array to client...');
-        res.json(schedules); // This MUST be 'schedules', NOT 'schedules[0]'
-        
-        console.log('🔥 Response sent successfully');
-        console.log('🔥 =================================');
-        
+        res.json(schedules);
+
     } catch (error) {
-        console.error('❌ ERROR in exam-schedules API:');
-        console.error('❌ Error Message:', error.message);
-        console.error('❌ Error Stack:', error.stack);
-        console.error('❌ Class Group:', classGroup);
-        console.error('🔥 =================================');
-        
+        console.error('ERROR in exam-schedules API:', error);
         res.status(500).json({ message: "Failed to fetch exam schedules." });
     }
 });

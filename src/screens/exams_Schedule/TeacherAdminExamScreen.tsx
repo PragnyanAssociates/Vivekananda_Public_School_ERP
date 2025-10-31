@@ -1,11 +1,8 @@
-// 📂 File: src/screens/exams/TeacherAdminExamScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '../../context/AuthContext';
-// ★★★ 1. IMPORT apiClient AND REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 
 // --- Reusable Components ---
@@ -15,6 +12,7 @@ const defaultSpecialRow = { type: 'special', mainText: 'Teacher Work Day', subTe
 const ScheduleTableView = ({ schedule }: { schedule: any }) => (
     <View style={styles.scheduleContainer}>
         <Text style={styles.scheduleTitle}>{schedule.title}</Text>
+        {schedule.exam_type && <Text style={styles.examTypeLabel}>{schedule.exam_type} Exam</Text>}
         <Text style={styles.scheduleSubtitle}>{schedule.subtitle}</Text>
         <View style={styles.table}>
             <View style={styles.tableHeader}>
@@ -46,7 +44,7 @@ const ScheduleTableView = ({ schedule }: { schedule: any }) => (
     </View>
 );
 
-// --- Main Component with View Logic ---
+// --- Main Component ---
 const TeacherAdminExamScreen = () => {
     const { user } = useAuth();
     const [view, setView] = useState('list');
@@ -55,20 +53,23 @@ const TeacherAdminExamScreen = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [editingSchedule, setEditingSchedule] = useState<any>(null);
+    // Form State
     const [title, setTitle] = useState('');
     const [subtitle, setSubtitle] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
+    const [examType, setExamType] = useState('Internal'); // ★ NEW: State for exam type
     const [rows, setRows] = useState<any[]>([defaultRow]);
     const [isSaving, setIsSaving] = useState(false);
     const [studentClasses, setStudentClasses] = useState([]);
+    // ★ NEW: State for tabs
+    const [activeTab, setActiveTab] = useState('Internal');
 
     const fetchSchedules = useCallback(async () => {
         setIsLoading(true);
         try {
-            // ★★★ 2. USE apiClient FOR ALL FETCH CALLS ★★★
             const response = await apiClient.get('/exam-schedules');
             setSchedules(response.data);
-        } catch (e: any) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch schedules."); } 
+        } catch (e: any) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch schedules."); }
         finally { setIsLoading(false); }
     }, []);
 
@@ -114,6 +115,7 @@ const TeacherAdminExamScreen = () => {
         setTitle('');
         setSubtitle('');
         setSelectedClass('');
+        setExamType('Internal'); // ★ NEW: Reset exam type
         setRows([defaultRow]);
     };
 
@@ -130,6 +132,7 @@ const TeacherAdminExamScreen = () => {
             setTitle(data.title);
             setSubtitle(data.subtitle);
             setSelectedClass(data.class_group);
+            setExamType(data.exam_type || 'Internal'); // ★ NEW: Set exam type for editing
             setRows(data.schedule_data || [defaultRow]);
             setIsModalVisible(true);
         } catch (e: any) { Alert.alert("Error", "Could not load schedule for editing."); }
@@ -153,7 +156,8 @@ const TeacherAdminExamScreen = () => {
             return Alert.alert("Validation Error", "Title, Class, and at least one row are required.");
         }
         setIsSaving(true);
-        const payload = { title, subtitle, class_group: selectedClass, schedule_data: rows, created_by_id: user?.id };
+        // ★ MODIFIED: Add exam_type to payload
+        const payload = { title, subtitle, class_group: selectedClass, exam_type: examType, schedule_data: rows, created_by_id: user?.id };
         try {
             if (editingSchedule) {
                 await apiClient.put(`/exam-schedules/${editingSchedule.id}`, payload);
@@ -163,9 +167,12 @@ const TeacherAdminExamScreen = () => {
             Alert.alert("Success", `Schedule ${editingSchedule ? 'updated' : 'created'}!`);
             setIsModalVisible(false);
             fetchSchedules();
-        } catch (e: any) { Alert.alert("Error", e.response?.data?.message || e.message); } 
+        } catch (e: any) { Alert.alert("Error", e.response?.data?.message || e.message); }
         finally { setIsSaving(false); }
     };
+
+    // ★ NEW: Filter schedules based on the active tab
+    const filteredSchedules = schedules.filter(schedule => schedule.exam_type === activeTab);
 
     if (view === 'detail' && selectedSchedule) {
         return (
@@ -181,8 +188,24 @@ const TeacherAdminExamScreen = () => {
 
     return (
         <View style={styles.container}>
+            {/* ★ NEW: Tab Container */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'Internal' && styles.tabButtonActive]}
+                    onPress={() => setActiveTab('Internal')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'Internal' && styles.tabTextActive]}>Internal Exams</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'External' && styles.tabButtonActive]}
+                    onPress={() => setActiveTab('External')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'External' && styles.tabTextActive]}>External Exams</Text>
+                </TouchableOpacity>
+            </View>
+
             <FlatList
-                data={schedules}
+                data={filteredSchedules} // ★ MODIFIED: Use filtered data
                 keyExtractor={(item: any) => item.id.toString()}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
@@ -204,8 +227,8 @@ const TeacherAdminExamScreen = () => {
                         </View>
                     </View>
                 )}
-                ListHeaderComponent={<Text style={styles.headerTitle}>Published Exam Schedules</Text>}
-                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No schedules created yet.</Text>}
+                // ★ MODIFIED: Updated empty text message
+                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No {activeTab.toLowerCase()} schedules created yet.</Text>}
                 onRefresh={fetchSchedules}
                 refreshing={isLoading}
                 contentContainerStyle={{ paddingBottom: 80 }}
@@ -215,7 +238,7 @@ const TeacherAdminExamScreen = () => {
             </TouchableOpacity>
 
             <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide">
-                <ScrollView style={styles.modalView}>
+                <ScrollView style={styles.modalView} contentContainerStyle={{ paddingBottom: 50 }}>
                     <Text style={styles.modalTitle}>{editingSchedule ? 'Edit Schedule' : 'Create New Schedule'}</Text>
                     <Text style={styles.label}>Title</Text>
                     <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="e.g., Final Term Exam" />
@@ -223,6 +246,16 @@ const TeacherAdminExamScreen = () => {
                     <TextInput style={styles.input} value={subtitle} onChangeText={setSubtitle} placeholder="e.g., March 2025" />
                     <Text style={styles.label}>Class</Text>
                     <View style={styles.pickerContainer}><Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)}><Picker.Item label="-- Select a class --" value="" />{studentClasses.map((c: string) => <Picker.Item key={c} label={c} value={c} />)}</Picker></View>
+                    
+                    {/* ★ NEW: Exam Type Picker */}
+                    <Text style={styles.label}>Exam Type</Text>
+                    <View style={styles.pickerContainer}>
+                        <Picker selectedValue={examType} onValueChange={itemValue => setExamType(itemValue)}>
+                            <Picker.Item label="Internal Exam" value="Internal" />
+                            <Picker.Item label="External Exam" value="External" />
+                        </Picker>
+                    </View>
+
                     <Text style={styles.label}>Schedule Rows</Text>
                     {rows.map((row, index) => (
                         <View key={index} style={styles.rowEditor}>
@@ -242,12 +275,18 @@ const TeacherAdminExamScreen = () => {
     );
 };
 
-// Styles remain the same
+// ★ ADDED NEW STYLES AND MODIFIED EXISTING ONES
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f6f8' },
+    // Tab styles
+    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingTop: 15, backgroundColor: '#f4f6f8', },
+    tabButton: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
+    tabButtonActive: { borderBottomColor: '#1e88e5' },
+    tabText: { fontSize: 16, color: '#546e7a', fontWeight: '500' },
+    tabTextActive: { color: '#1e88e5', fontWeight: 'bold' },
+
     backButton: { flexDirection: 'row', alignItems: 'center', padding: 15 },
     backButtonText: { marginLeft: 5, fontSize: 18, color: '#333', fontWeight: '500' },
-    headerTitle: { fontSize: 24, fontWeight: 'bold', paddingHorizontal: 15, paddingTop: 15, paddingBottom: 5, color: '#263238' },
     card: { backgroundColor: '#fff', borderRadius: 12, marginHorizontal: 15, marginVertical: 8, padding: 20, elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     cardContent: { flex: 1 },
     cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#37474f' },
@@ -262,11 +301,11 @@ const styles = StyleSheet.create({
     label: { fontSize: 16, fontWeight: '500', color: '#444', marginBottom: 5, marginLeft: 5, marginTop: 10 },
     input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 5 },
     halfInput: { width: '48%', margin: '1%'},
-    pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, backgroundColor: '#fff' },
+    pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, backgroundColor: '#fff', marginBottom: 5 },
     rowEditor: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginBottom: 10, backgroundColor: '#fafafa', paddingTop: 30 },
     deleteRowBtn: { position: 'absolute', top: 0, right: 0, backgroundColor: '#ef5350', width: 28, height: 28, borderTopRightRadius: 8, justifyContent: 'center', alignItems: 'center' },
     addRowButtons: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30, marginBottom: 50 },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30 },
     modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginHorizontal: 5, elevation: 2 },
     addBtn: { backgroundColor: '#0288d1' },
     addSpecialBtn: { backgroundColor: '#ffa000' },
@@ -275,7 +314,8 @@ const styles = StyleSheet.create({
     btnText: { color: '#fff', fontWeight: 'bold' },
     scheduleContainer: { backgroundColor: '#ffffff', borderRadius: 12, margin: 15, marginTop: 0, padding: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }},
     scheduleTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#212121' },
-    scheduleSubtitle: { fontSize: 16, color: '#757575', textAlign: 'center', marginBottom: 20 },
+    examTypeLabel: { textAlign: 'center', color: '#FF6347', fontSize: 14, fontWeight: 'bold', marginTop: 4, backgroundColor: '#ffebee', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 15, alignSelf: 'center' },
+    scheduleSubtitle: { fontSize: 16, color: '#757575', textAlign: 'center', marginBottom: 20, marginTop: 4 },
     table: { borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, overflow: 'hidden' },
     tableHeader: { flexDirection: 'row', backgroundColor: '#f7f9fc', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
     headerCell: { paddingVertical: 14, paddingHorizontal: 6, fontWeight: 'bold', textAlign: 'center', color: '#455a64', fontSize: 14 },

@@ -1,10 +1,7 @@
-// 📂 File: src/screens/exams/StudentExamScreen.tsx (MODIFIED & CORRECTED)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
-// ★★★ 1. IMPORT apiClient AND REMOVE API_BASE_URL ★★★
 import apiClient from '../../api/client';
 
 const StudentExamScreen = () => {
@@ -24,29 +21,22 @@ const StudentExamScreen = () => {
         setIsLoading(true);
         setError(null);
         try {
-            // ★★★ 2. USE apiClient ★★★
             const response = await apiClient.get(`/exam-schedules/class/${user.class_group}`);
             const data = response.data;
-            
+
             if (Array.isArray(data)) {
                 setSchedules(data);
-                if (data.length === 1) {
+                if (data.length > 0) {
                     setSelectedSchedule(data[0]);
-                    setShowList(false);
-                } else if (data.length > 1) {
-                    setSelectedSchedule(data[0]);
-                    setShowList(true);
-                } else { // Handle empty array case
+                    setShowList(data.length > 1);
+                } else {
                     throw new Error("No exam schedule has been published for your class yet.");
                 }
-            } else { // Handle single object case
-                setSchedules([data]);
-                setSelectedSchedule(data);
-                setShowList(false);
+            } else {
+                 throw new Error("Received an unexpected data format.");
             }
         } catch (e: any) {
-            // ★★★ IMPROVED ERROR HANDLING ★★★
-            const errorMessage = e.response?.status === 404 
+            const errorMessage = e.response?.status === 404
                 ? "No exam schedule has been published for your class yet."
                 : e.response?.data?.message || "Failed to fetch the exam schedule.";
             setError(errorMessage);
@@ -121,7 +111,7 @@ const StudentExamScreen = () => {
     };
 
     return (
-        <ScrollView 
+        <ScrollView
             style={styles.container}
             contentContainerStyle={styles.scrollContent}
             refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchSchedule} colors={['#FF6347']} />}
@@ -132,7 +122,7 @@ const StudentExamScreen = () => {
             </View>
 
             {isLoading && !selectedSchedule && <ActivityIndicator size="large" color="#FF6347" style={{ marginTop: 50 }}/>}
-            
+
             {error && (
                  <View style={styles.errorContainer}>
                     <MaterialIcons name="error-outline" size={24} color="#757575" />
@@ -143,6 +133,10 @@ const StudentExamScreen = () => {
             {selectedSchedule && (
                 <View style={styles.scheduleContainer}>
                     <Text style={styles.scheduleTitle}>{selectedSchedule.title}</Text>
+                    {/* ★ NEW: Display Exam Type */}
+                    {selectedSchedule.exam_type && (
+                        <Text style={styles.examTypeLabel}>{selectedSchedule.exam_type} Exam</Text>
+                    )}
                     <Text style={styles.scheduleSubtitle}>{selectedSchedule.subtitle}</Text>
                     {renderScheduleSelector()}
                     {renderTable()}
@@ -152,7 +146,7 @@ const StudentExamScreen = () => {
     );
 };
 
-// Styles remain the same
+// ★ ADDED NEW STYLE
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f6f8' },
     scrollContent: { padding: 15, paddingBottom: 40 },
@@ -162,11 +156,13 @@ const styles = StyleSheet.create({
     errorText: { fontSize: 16, color: '#757575', textAlign: 'center', marginTop: 10 },
     scheduleContainer: { backgroundColor: '#ffffff', borderRadius: 12, padding: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
     scheduleTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#212121' },
-    scheduleSubtitle: { fontSize: 16, color: '#757575', textAlign: 'center', marginBottom: 20 },
+    // ★ NEW: Style for the exam type badge
+    examTypeLabel: { textAlign: 'center', color: '#FF6347', fontSize: 14, fontWeight: 'bold', marginTop: 4, backgroundColor: '#ffebee', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 15, alignSelf: 'center' },
+    scheduleSubtitle: { fontSize: 16, color: '#757575', textAlign: 'center', marginBottom: 20, marginTop: 4 },
     selectorContainer: { marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#e0e0e0', paddingBottom: 15 },
     selectorLabel: { fontSize: 16, fontWeight: 'bold', color: '#455a64', marginBottom: 10 },
     selectorButton: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#e0e0e0' },
-    selectorButtonActive: { backgroundColor: '#e3f2fd', borderColor: '#FF6347' },
+    selectorButtonActive: { backgroundColor: '#fff0eb', borderColor: '#FF6347' },
     selectorButtonText: { fontSize: 14, color: '#666', textAlign: 'center' },
     selectorButtonTextActive: { color: '#FF6347', fontWeight: 'bold' },
     table: { borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, overflow: 'hidden' },
