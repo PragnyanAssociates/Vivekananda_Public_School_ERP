@@ -7,25 +7,25 @@ import {
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client';
 
+// ★ IMPORTANT: REPLACE WITH YOUR ACTUAL SERVER URL ★
+// This is needed to correctly load cover images from your backend.
+const SERVER_URL = 'https://vivekanandapublicschoolerp-production.up.railway.app'; 
 
 const StudentResourcesScreen = () => {
     const [view, setView] = useState('CLASS_LIST'); 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
-    // This state will now hold ALL classes from the users table
     const [availableClasses, setAvailableClasses] = useState([]);
     const [selectedClass, setSelectedClass] = useState<string | null>(null);
     const [selectedBoard, setSelectedBoard] = useState<'state' | 'central' | null>(null);
     const [subjects, setSubjects] = useState([]);
 
-    // ★ 1. UPDATED to call the new '/api/all-classes' endpoint
-    const fetchAllClasses = useCallback(async () => {
+    const fetchAvailableClasses = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            // Changed the endpoint to get the full class list
-            const response = await apiClient.get('/all-classes');
+            const response = await apiClient.get('/resources/classes');
             setAvailableClasses(response.data);
         } catch (e) {
             setError("Could not load available classes.");
@@ -35,8 +35,8 @@ const StudentResourcesScreen = () => {
     }, []);
 
     useEffect(() => {
-        fetchAllClasses();
-    }, [fetchAllClasses]);
+        fetchAvailableClasses();
+    }, [fetchAvailableClasses]);
 
     const handleClassPress = (classGroup: string) => {
         setSelectedClass(classGroup);
@@ -53,10 +53,6 @@ const StudentResourcesScreen = () => {
         setIsLoading(true);
         try {
             const response = await apiClient.get(`/resources/syllabus/class/${selectedClass}/${selectedBoard}`);
-            if (response.data.length === 0) {
-                 Alert.alert("Not Found", "Syllabus has not been published for this class and board yet.");
-                 return;
-            }
             setSubjects(response.data);
             setView('SUBJECTS');
         } catch (e) {
@@ -111,7 +107,6 @@ const StudentResourcesScreen = () => {
             <View style={styles.centeredContainer}>
                 <MaterialIcons name="error-outline" size={30} color="#757575" />
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity onPress={fetchAllClasses}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
             </View>
         );
     }
@@ -122,7 +117,7 @@ const StudentResourcesScreen = () => {
                 {renderHeader(`Syllabus - ${selectedClass}`, 'OPTIONS', 'Back to Options')}
                 <FlatList
                     data={subjects}
-                    keyExtractor={(item) => item.id.toString()}
+                    keyExtractor={(item: any) => item.id.toString()}
                     numColumns={2}
                     renderItem={({ item }) => {
                         const imageUri = item.cover_image_url
@@ -137,6 +132,7 @@ const StudentResourcesScreen = () => {
                         );
                     }}
                     contentContainerStyle={styles.gridContainer}
+                    ListEmptyComponent={<Text style={styles.errorText}>No syllabus found for this class.</Text>}
                 />
             </SafeAreaView>
         );
@@ -186,13 +182,13 @@ const StudentResourcesScreen = () => {
                 keyExtractor={(item) => item}
                 numColumns={3}
                 renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.classGridItem} onPress={() => handleClassPress(item)}>
+                    <TouchableOpacity style={styles.classGridItem} onPress={() => handleClassPress(item as string)}>
                         <Text style={styles.classGridText}>{item.replace('Class ', '')}</Text>
                     </TouchableOpacity>
                 )}
                 contentContainerStyle={styles.gridContainer}
-                ListEmptyComponent={<Text style={styles.errorText}>No classes found in the system.</Text>}
-                refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchAllClasses} />}
+                ListEmptyComponent={<Text style={styles.errorText}>No resources have been published yet.</Text>}
+                refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchAvailableClasses} />}
             />
         </SafeAreaView>
     );
@@ -203,9 +199,8 @@ const styles = StyleSheet.create({
     centeredContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     loader: { flex: 1, justifyContent: 'center' },
     errorText: { marginTop: 20, textAlign: 'center', fontSize: 16, color: '#757575' },
-    retryText: { color: '#008080', marginTop: 10, fontSize: 16, fontWeight: 'bold' },
-    mainHeaderText: { fontSize: 22, fontWeight: 'bold', color: '#263238', padding: 15, textAlign: 'center' },
-    backButton: { flexDirection: 'row', alignItems: 'center', padding: 15, alignSelf: 'flex-start' },
+    mainHeaderText: { fontSize: 22, fontWeight: 'bold', color: '#263238', paddingHorizontal: 15, marginBottom: 10, textAlign: 'center' },
+    backButton: { flexDirection: 'row', alignItems: 'center', padding: 15 },
     backButtonText: { marginLeft: 5, fontSize: 18, color: '#333', fontWeight: '500' },
     optionCard: { width: '80%', paddingVertical: 20, paddingHorizontal: 10, marginVertical: 15, backgroundColor: '#fff', borderRadius: 12, alignItems: 'center', elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
     optionText: { fontSize: 18, fontWeight: 'bold', color: '#37474f', marginTop: 15, textAlign: 'center' },

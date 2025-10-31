@@ -7,8 +7,9 @@ import { Picker } from '@react-native-picker/picker';
 import { launchImageLibrary, ImagePickerResponse } from 'react-native-image-picker';
 import apiClient from '../../api/client';
 
-
-// ★ 1. REMOVED the hardcoded CLASS_GROUPS array
+// ★ IMPORTANT: REPLACE WITH YOUR ACTUAL SERVER URL ★
+// This is needed to correctly load cover images from your backend.
+const SERVER_URL = 'https://vivekanandapublicschoolerp-production.up.railway.app'; 
 
 const TeacherAdminResourcesScreen = () => {
     const [mainView, setMainView] = useState('syllabus');
@@ -20,7 +21,6 @@ const TeacherAdminResourcesScreen = () => {
     const [editingItem, setEditingItem] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // ★ 2. ADDED state to hold the dynamic list of classes
     const [allClasses, setAllClasses] = useState([]);
 
     // Form State
@@ -29,14 +29,13 @@ const TeacherAdminResourcesScreen = () => {
     const [url, setUrl] = useState('');
     const [selectedImage, setSelectedImage] = useState<ImagePickerResponse | null>(null);
     
-    // ★ 3. UPDATED to fetch all data, including the new class list
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
             const [syllabusRes, textbookRes, classesRes] = await Promise.all([
                 apiClient.get('/resources/syllabus'),
                 apiClient.get('/resources/textbooks'),
-                apiClient.get('/all-classes') // Fetch the dynamic class list
+                apiClient.get('/all-classes')
             ]);
             setSyllabi(syllabusRes.data);
             setTextbooks(textbookRes.data);
@@ -64,7 +63,14 @@ const TeacherAdminResourcesScreen = () => {
 
     const openCreateModal = () => {
         resetForm();
-        setIsModalVisible(true);
+        if (mainView === 'textbooks' && !editingItem) {
+           // For creating textbook, find if an entry already exists to pre-fill
+           const existing = textbooks.find(t => (t as any).class_group === selectedClass && (t as any).syllabus_type === boardView);
+           if (existing) openEditModal(existing);
+           else setIsModalVisible(true);
+        } else {
+           setIsModalVisible(true);
+        }
     };
 
     const openEditModal = (item: any) => {
@@ -151,7 +157,7 @@ const TeacherAdminResourcesScreen = () => {
         return (
             <FlatList
                 data={data}
-                keyExtractor={(item) => `${item.id}-${item.class_group}`}
+                keyExtractor={(item: any) => `${item.id}-${item.class_group}`}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <View style={styles.cardContent}>
@@ -206,14 +212,13 @@ const TeacherAdminResourcesScreen = () => {
 
             <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide">
                 <ScrollView style={styles.modalView} keyboardShouldPersistTaps="handled">
-                    <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Create'} {mainView === 'syllabus' ? 'Syllabus' : 'Textbook'}</Text>
+                    <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Create'} {mainView === 'syllabus' ? 'Syllabus' : 'Textbook Link'}</Text>
                     
                     <Text style={styles.label}>Class*</Text>
                     <View style={styles.pickerContainer}>
-                        {/* ★ 4. UPDATED Picker to use dynamic `allClasses` state */}
-                        <Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)}>
+                        <Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)} enabled={!editingItem}>
                             <Picker.Item label="-- Select a class --" value="" />
-                            {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                            {allClasses.map((c: string) => <Picker.Item key={c} label={c} value={c} />)}
                         </Picker>
                     </View>
 
