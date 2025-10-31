@@ -1,24 +1,24 @@
 <!-- 📂 File: android/app/src/main/AndroidManifest.xml (FINAL CORRECTED VERSION) -->
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     
-    <!-- Permissions for newer Android (13+) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     
-    <!-- Permissions for older Android. READ is safe for all versions. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     
-    <!-- ✅ FIX: Removed maxSdkVersion="28" to allow this permission on Android 10, 11, 12 -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:replace="android:maxSdkVersion" />
 
-    <!-- ✅ Important for saving files to Download directory -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-
+    <!-- ✅ THE FINAL FIX IS HERE: Add tools:node="replace" to the application tag -->
+    <!-- This tells the merger to use YOUR application settings and override any conflicting library settings. -->
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
@@ -27,8 +27,9 @@
       android:allowBackup="false"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
-      android:requestLegacyExternalStorage="true"
-      android:supportsRtl="true">
+      android:supportsRtl="true"
+      android:requestLegacyExternalStorage="true"  
+      tools:node="replace">
       
       <meta-data
           android:name="com.google.android.geo.API_KEY"
@@ -42,13 +43,11 @@
         android:windowSoftInputMode="adjustPan"
         android:exported="true">
         
-        <!-- This is the intent filter that makes your app appear on the home screen -->
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
 
-        <!-- ✅ FIX: The deep link intent filter is now correctly placed INSIDE the activity tag -->
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
@@ -58,7 +57,6 @@
 
       </activity>
     </application>
-     <!-- ✅ ADD THIS ENTIRE BLOCK HERE -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
