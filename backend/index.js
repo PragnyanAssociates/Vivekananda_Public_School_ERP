@@ -6914,6 +6914,31 @@ app.post('/api/resources/textbooks', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Error saving textbook link.' }); }
 });
 
+app.get('/api/all-classes', async (req, res) => {
+    try {
+        // This query fetches all unique, non-empty class groups from the users table.
+        // It also sorts them naturally (e.g., Class 1, Class 2, ..., Class 10)
+        const query = `
+            SELECT DISTINCT class_group 
+            FROM users 
+            WHERE class_group IS NOT NULL AND class_group != ''
+            ORDER BY 
+                CASE 
+                    WHEN class_group LIKE 'LKG' THEN 1
+                    WHEN class_group LIKE 'UKG' THEN 2
+                    WHEN class_group LIKE 'Class %' THEN 3
+                    ELSE 4
+                END,
+                CAST(SUBSTRING_INDEX(class_group, ' ', -1) AS UNSIGNED);
+        `;
+        const [classes] = await db.query(query);
+        res.status(200).json(classes.map(c => c.class_group));
+    } catch (error) {
+        console.error("GET /api/all-classes Error:", error);
+        res.status(500).json({ message: 'Could not fetch class list.' });
+    }
+});
+
 
 
 

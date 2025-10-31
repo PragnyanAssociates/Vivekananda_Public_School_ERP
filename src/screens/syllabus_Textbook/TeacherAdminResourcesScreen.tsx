@@ -6,13 +6,13 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { launchImageLibrary, ImagePickerResponse } from 'react-native-image-picker';
 import apiClient from '../../api/client';
-import { SERVER_URL } from '../../apiConfig';
 
-const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+
+// ★ 1. REMOVED the hardcoded CLASS_GROUPS array
 
 const TeacherAdminResourcesScreen = () => {
-    const [mainView, setMainView] = useState('syllabus'); // syllabus, textbooks
-    const [boardView, setBoardView] = useState('state'); // state, central
+    const [mainView, setMainView] = useState('syllabus');
+    const [boardView, setBoardView] = useState<'state' | 'central'>('state'); 
     const [syllabi, setSyllabi] = useState([]);
     const [textbooks, setTextbooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -20,21 +20,27 @@ const TeacherAdminResourcesScreen = () => {
     const [editingItem, setEditingItem] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    // ★ 2. ADDED state to hold the dynamic list of classes
+    const [allClasses, setAllClasses] = useState([]);
+
     // Form State
     const [selectedClass, setSelectedClass] = useState('');
     const [subjectName, setSubjectName] = useState('');
     const [url, setUrl] = useState('');
     const [selectedImage, setSelectedImage] = useState<ImagePickerResponse | null>(null);
     
+    // ★ 3. UPDATED to fetch all data, including the new class list
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [syllabusRes, textbookRes] = await Promise.all([
+            const [syllabusRes, textbookRes, classesRes] = await Promise.all([
                 apiClient.get('/resources/syllabus'),
-                apiClient.get('/resources/textbooks')
+                apiClient.get('/resources/textbooks'),
+                apiClient.get('/all-classes') // Fetch the dynamic class list
             ]);
             setSyllabi(syllabusRes.data);
             setTextbooks(textbookRes.data);
+            setAllClasses(classesRes.data);
         } catch (e) { Alert.alert("Error", "Failed to fetch data."); } 
         finally { setIsLoading(false); }
     }, []);
@@ -68,7 +74,7 @@ const TeacherAdminResourcesScreen = () => {
         if (mainView === 'syllabus') {
             setSubjectName(item.subject_name);
         }
-        setSelectedImage(null); // Reset selected image on edit
+        setSelectedImage(null);
         setIsModalVisible(true);
     };
 
@@ -95,7 +101,7 @@ const TeacherAdminResourcesScreen = () => {
         const data = new FormData();
         data.append('class_group', selectedClass);
         data.append('url', url);
-        data.append('syllabus_type', boardView); // Use the currently selected board tab
+        data.append('syllabus_type', boardView); 
 
         if (mainView === 'syllabus') {
             if (!subjectName) {
@@ -145,7 +151,7 @@ const TeacherAdminResourcesScreen = () => {
         return (
             <FlatList
                 data={data}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item) => `${item.id}-${item.class_group}`}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <View style={styles.cardContent}>
@@ -159,8 +165,9 @@ const TeacherAdminResourcesScreen = () => {
                         </View>
                     </View>
                 )}
-                ListEmptyComponent={<Text style={styles.emptyText}>{`No ${mainView} added for ${boardView} board yet.`}</Text>}
+                ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>{`No ${mainView} added for ${boardView} board yet.`}</Text></View>}
                 refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchData} />}
+                contentContainerStyle={{ flexGrow: 1 }}
             />
         );
     };
@@ -176,13 +183,19 @@ const TeacherAdminResourcesScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.nestedTabContainer}>
-                <TouchableOpacity style={[styles.nestedTab, boardView === 'state' && styles.nestedTabActive]} onPress={() => setBoardView('state')}>
-                    <Text style={[styles.nestedTabText, boardView === 'state' && styles.nestedTabTextActive]}>State Board</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.nestedTab, boardView === 'central' && styles.nestedTabActive]} onPress={() => setBoardView('central')}>
-                    <Text style={[styles.nestedTabText, boardView === 'central' && styles.nestedTabTextActive]}>Central Board</Text>
-                </TouchableOpacity>
+            <View style={styles.boardPickerWrapper}>
+                <Text style={styles.boardPickerLabel}>Board:</Text>
+                <View style={styles.boardPickerContainer}>
+                    <Picker
+                        selectedValue={boardView}
+                        onValueChange={(itemValue) => setBoardView(itemValue)}
+                        style={styles.boardPicker}
+                        dropdownIconColor="#333"
+                    >
+                        <Picker.Item label="State Board" value="state" />
+                        <Picker.Item label="Central Board" value="central" />
+                    </Picker>
+                </View>
             </View>
 
             {isLoading ? <ActivityIndicator style={{marginTop: 20}} size="large" /> : renderList()}
@@ -197,9 +210,10 @@ const TeacherAdminResourcesScreen = () => {
                     
                     <Text style={styles.label}>Class*</Text>
                     <View style={styles.pickerContainer}>
-                        <Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)} enabled={!editingItem}>
+                        {/* ★ 4. UPDATED Picker to use dynamic `allClasses` state */}
+                        <Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)}>
                             <Picker.Item label="-- Select a class --" value="" />
-                            {CLASS_GROUPS.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                            {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
                         </Picker>
                     </View>
 
@@ -213,7 +227,7 @@ const TeacherAdminResourcesScreen = () => {
                             <Text style={styles.label}>Cover Image (Optional)</Text>
                             <TouchableOpacity style={styles.imagePicker} onPress={handleChoosePhoto}>
                                 <MaterialIcons name="image" size={24} color="#555" />
-                                <Text style={styles.imagePickerText}>Select Cover Image</Text>
+                                <Text style={styles.imagePickerText}>{editingItem?.cover_image_url || selectedImage ? 'Change Image' : 'Select Cover Image'}</Text>
                             </TouchableOpacity>
                             
                             { (selectedImage?.assets?.[0]?.uri || editingItem?.cover_image_url) && 
@@ -249,11 +263,33 @@ const styles = StyleSheet.create({
     tabActive: { borderBottomColor: '#008080' },
     tabText: { fontSize: 16, color: '#757575' },
     tabTextActive: { color: '#008080', fontWeight: 'bold' },
-    nestedTabContainer: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#e0e0e0', paddingVertical: 4 },
-    nestedTab: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
-    nestedTabActive: { backgroundColor: '#fff', elevation: 1 },
-    nestedTabText: { fontSize: 14, fontWeight: '600', color: '#666' },
-    nestedTabTextActive: { color: '#000' },
+    boardPickerWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#ddd',
+    },
+    boardPickerLabel: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        marginRight: 10,
+    },
+    boardPickerContainer: {
+        flex: 1,
+        height: 50,
+        justifyContent: 'center',
+        backgroundColor: '#f5f5f5',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#ccc',
+    },
+    boardPicker: {
+        color: '#000',
+    },
     card: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 20, elevation: 2, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     cardContent: { flex: 1, marginRight: 10 },
     cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#37474f' },
@@ -262,6 +298,7 @@ const styles = StyleSheet.create({
     cardActions: { flexDirection: 'row' },
     actionButton: { padding: 8 },
     fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: '#1e88e5', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4 },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' },
     modalView: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' },
     modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
