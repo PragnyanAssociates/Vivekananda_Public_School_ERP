@@ -1,7 +1,7 @@
 // 📂 File: src/screens/labs/TeacherAdminLabsScreen.tsx (REPLACE THIS FILE)
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Modal, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Modal, TextInput, Alert, ScrollView, Platform } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { launchImageLibrary, ImagePickerResponse } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
@@ -9,6 +9,7 @@ import { LabCard, Lab } from './LabCard';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 const TeacherAdminLabsScreen = () => {
     const { user } = useAuth();
@@ -17,17 +18,23 @@ const TeacherAdminLabsScreen = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLab, setEditingLab] = useState<Lab | null>(null);
     
-    // Updated initial state with all new fields
+    // --- CORRECTED STATE MANAGEMENT ---
+    // The 'class_datetime' is removed from here to be handled separately.
     const initialFormState = { 
         title: '', subject: '', lab_type: '', description: '', access_url: '',
-        topic: '', video_url: '', meet_link: '', class_datetime: '',
+        topic: '', video_url: '', meet_link: '',
     };
     const [formData, setFormData] = useState(initialFormState);
+    
+    // This will now be the single source of truth for the selected date.
+    const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
+
     const [selectedImage, setSelectedImage] = useState<ImagePickerResponse | null>(null);
     const [selectedFile, setSelectedFile] = useState<any | null>(null);
-
     const [studentClasses, setStudentClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState<string>('');
+    const [showPicker, setShowPicker] = useState(false);
+    const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
 
     const fetchLabs = useCallback(async () => {
         if (!user) return;
@@ -53,6 +60,35 @@ const TeacherAdminLabsScreen = () => {
         fetchStudentClasses();
     }, [fetchLabs]);
 
+    // --- CORRECTED DATETIME LOGIC ---
+
+    const showMode = (currentMode: 'date' | 'time') => {
+        setShowPicker(true);
+        setPickerMode(currentMode);
+    };
+    
+    const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        setShowPicker(Platform.OS === 'ios'); // Hide on Android, keep open for time on iOS
+
+        if (event.type === 'set' && selectedDate) {
+            const currentDate = selectedDate;
+            
+            // On Android, date and time are picked in separate modals.
+            // After picking the date, we immediately show the time picker.
+            if (Platform.OS === 'android' && pickerMode === 'date') {
+                setScheduleDate(currentDate); // Temporarily set date
+                showMode('time'); // Immediately show time picker
+            } else {
+                // On iOS, or after picking time on Android, we set the final date.
+                setScheduleDate(currentDate);
+            }
+        }
+    };
+
+    const clearDateTime = () => {
+        setScheduleDate(null);
+    };
+    
     const handleChoosePhoto = () => {
         launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => {
             if (response.didCancel) return;
@@ -73,6 +109,8 @@ const TeacherAdminLabsScreen = () => {
     const handleOpenModal = (lab: Lab | null = null) => {
         setEditingLab(lab);
         if (lab) {
+            // Set the date object directly from the lab data
+            setScheduleDate(lab.class_datetime ? new Date(lab.class_datetime) : null);
             setFormData({ 
                 title: lab.title, 
                 subject: lab.subject, 
@@ -82,10 +120,11 @@ const TeacherAdminLabsScreen = () => {
                 topic: lab.topic || '',
                 video_url: lab.video_url || '',
                 meet_link: lab.meet_link || '',
-                class_datetime: lab.class_datetime ? new Date(lab.class_datetime).toISOString().slice(0, 16) : ''
             });
             setSelectedClass(lab.class_group || '');
         } else {
+            // Reset everything for a new lab
+            setScheduleDate(null);
             setFormData(initialFormState);
             setSelectedClass('');
         }
@@ -98,12 +137,19 @@ const TeacherAdminLabsScreen = () => {
         }
         
         const data = new FormData();
-        // Append all form data fields
         Object.keys(formData).forEach(key => {
-            if (formData[key]) { // Only append if value is not empty
-                data.append(key, formData[key]);
-            }
+            const value = formData[key as keyof typeof formData];
+            if (value) { data.append(key, value); }
         });
+
+        // --- CORRECTED DATE FORMATTING ON SAVE ---
+        if (scheduleDate) {
+            // This function creates a 'YYYY-MM-DD HH:mm:ss' string from the local date
+            // object, which MySQL understands perfectly without timezone issues.
+            const pad = (num: number) => num.toString().padStart(2, '0');
+            const formattedDateTime = `${scheduleDate.getFullYear()}-${pad(scheduleDate.getMonth() + 1)}-${pad(scheduleDate.getDate())} ${pad(scheduleDate.getHours())}:${pad(scheduleDate.getMinutes())}:00`;
+            data.append('class_datetime', formattedDateTime);
+        }
 
         if (user) data.append('created_by', user.id.toString());
         data.append('class_group', selectedClass);
@@ -192,7 +238,29 @@ const TeacherAdminLabsScreen = () => {
                     <TextInput style={styles.textarea} placeholder="Detailed instructions for the lab..." value={formData.description} onChangeText={t => setFormData({...formData, description: t})} multiline />
                     
                     <Text style={styles.label}>Scheduled Time (Optional)</Text>
-                    <TextInput style={styles.input} placeholder="YYYY-MM-DDTHH:mm" value={formData.class_datetime} onChangeText={t => setFormData({...formData, class_datetime: t})} />
+                    <View style={styles.datePickerContainer}>
+                        <TouchableOpacity style={styles.datePickerButton} onPress={() => showMode('date')}>
+                            <Text style={styles.datePickerText}>
+                                {scheduleDate ? scheduleDate.toLocaleString() : 'Select Date & Time'}
+                            </Text>
+                        </TouchableOpacity>
+                        {scheduleDate ? (
+                            <TouchableOpacity style={styles.clearDateButton} onPress={clearDateTime}>
+                                <MaterialIcons name="clear" size={24} color="#666" />
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
+
+                    {showPicker && (
+                        <DateTimePicker
+                            testID="dateTimePicker"
+                            value={scheduleDate || new Date()}
+                            mode={pickerMode}
+                            is24Hour={true}
+                            display="default"
+                            onChange={handleDateChange}
+                        />
+                    )}
 
                     <TouchableOpacity style={styles.uploadButton} onPress={handleChoosePhoto}><MaterialIcons name="image" size={20} color="#fff" /><Text style={styles.uploadButtonText}>{editingLab?.cover_image_url || selectedImage ? 'Change Cover Image' : 'Select Cover Image'}</Text></TouchableOpacity>
                     {selectedImage?.assets?.[0]?.uri && <Text style={styles.fileNameText}>Selected: {selectedImage.assets[0].fileName}</Text>}
@@ -222,7 +290,6 @@ const TeacherAdminLabsScreen = () => {
     );
 };
 
-// Add new styles for labels etc.
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f0f4f8' },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -249,6 +316,34 @@ const styles = StyleSheet.create({
     saveButton: { backgroundColor: '#00796b' },
     saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, backgroundColor: '#fff' },
+    datePickerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    datePickerButton: {
+        flex: 1,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ccc',
+        borderTopLeftRadius: 8,
+        borderBottomLeftRadius: 8,
+        padding: 14,
+        justifyContent: 'center',
+    },
+    datePickerText: {
+        fontSize: 16,
+        color: '#333',
+    },
+    clearDateButton: {
+        padding: 11,
+        backgroundColor: '#f0f0f0',
+        borderWidth: 1,
+        borderLeftWidth: 0,
+        borderColor: '#ccc',
+        borderTopRightRadius: 8,
+        borderBottomRightRadius: 8,
+    },
 });
 
 export default TeacherAdminLabsScreen;
