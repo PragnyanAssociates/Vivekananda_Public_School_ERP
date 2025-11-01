@@ -1,18 +1,21 @@
 // 📂 File: src/screens/admin/TeacherAdminResourcesScreen.tsx (REPLACE THIS FILE)
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, RefreshControl, Image } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, RefreshControl, Image, Linking } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { launchImageLibrary, ImagePickerResponse } from 'react-native-image-picker';
+import { useNavigation } from '@react-navigation/native'; // ★ IMPORT useNavigation
 import apiClient from '../../api/client';
 
 const SERVER_URL = 'https://vivekanandapublicschoolerp-production.up.railway.app'; 
 
 const TeacherAdminResourcesScreen = () => {
+    const navigation = useNavigation(); // ★ INITIALIZE navigation
     const [mainView, setMainView] = useState<'syllabus' | 'textbooks'>('syllabus');
     const [boardView, setBoardView] = useState<'state' | 'central'>('state');
     
+    // ... (all other state variables remain the same)
     const [syllabi, setSyllabi] = useState([]);
     const [textbooks, setTextbooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +23,6 @@ const TeacherAdminResourcesScreen = () => {
     const [editingItem, setEditingItem] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [allClasses, setAllClasses] = useState([]);
-
     const [modalResourceType, setModalResourceType] = useState<'syllabus' | 'textbook'>('syllabus');
     const [modalBoardType, setModalBoardType] = useState<'state' | 'central'>('state');
     const [selectedClass, setSelectedClass] = useState('');
@@ -28,7 +30,6 @@ const TeacherAdminResourcesScreen = () => {
     const [url, setUrl] = useState('');
     const [selectedImage, setSelectedImage] = useState<ImagePickerResponse | null>(null);
     
-    // ★ UPDATED ★ Now calls the new unified API endpoints
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -46,123 +47,80 @@ const TeacherAdminResourcesScreen = () => {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleChoosePhoto = () => {
-        launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => {
-            if (response.didCancel || response.errorCode) return;
-            setSelectedImage(response);
-        });
-    };
-
-    const resetForm = () => {
-        setEditingItem(null);
-        setSelectedClass('');
-        setSubjectName('');
-        setUrl('');
-        setSelectedImage(null);
-        setModalResourceType(mainView === 'syllabus' ? 'syllabus' : 'textbook');
-        setModalBoardType(boardView);
-    };
-
-    const openCreateModal = () => {
-        resetForm();
-        setIsModalVisible(true);
-    };
-
-    const openEditModal = (item: any, type: 'syllabus' | 'textbook') => {
-        setEditingItem(item);
-        setModalResourceType(type);
-        setModalBoardType(item.syllabus_type);
-        setSelectedClass(item.class_group);
-        setUrl(item.url || '');
-        setSubjectName(item.subject_name || '');
-        setSelectedImage(null);
-        setIsModalVisible(true);
-    };
-
-    const handleDelete = (item: any) => {
-        const resourceName = mainView.slice(0, -1); // 'syllabus' or 'textbook'
-        Alert.alert(`Confirm Delete`, `Delete ${resourceName} for ${item.subject_name} (${item.class_group})?`, [
-            { text: "Cancel", style: 'cancel' },
-            { text: "Delete", style: 'destructive', onPress: async () => {
-                try {
-                    // ★ UPDATED ★ Uses the new unified delete endpoint
-                    await apiClient.delete(`/resources/${item.id}`);
-                    fetchData();
-                } catch(e) { Alert.alert("Error", `Could not delete ${resourceName}.`); }
-            }},
-        ]);
-    };
-
-    // ★ UNIFIED ★ A single save logic for both syllabi and textbooks
-    const handleSave = async () => {
-        if (!selectedClass || !url || !modalBoardType || !modalResourceType || !subjectName) {
-            return Alert.alert("Validation Error", "All fields with * are required.");
+    // ★ NEW ★ Function to handle clicks on resource cards
+    const handleCardPress = async (item) => {
+        if (!item.url) {
+            Alert.alert("Not Available", "The link for this item has not been provided yet.");
+            return;
         }
-        setIsSaving(true);
-        
-        const data = new FormData();
-        data.append('class_group', selectedClass);
-        data.append('url', url);
-        data.append('syllabus_type', modalBoardType);
-        data.append('subject_name', subjectName);
-        data.append('resource_type', modalResourceType);
 
-        if (selectedImage?.assets?.[0]) {
-            data.append('coverImage', {
-                uri: selectedImage.assets[0].uri,
-                type: selectedImage.assets[0].type,
-                name: selectedImage.assets[0].fileName,
-            });
-        }
-        
-        try {
-            const config = { headers: { 'Content-Type': 'multipart/form-data' } };
-            if (editingItem) {
-                await apiClient.put(`/resources/${editingItem.id}`, data, config);
+        // Check if the URL is for a PDF
+        if (item.url.toLowerCase().endsWith('.pdf')) {
+            navigation.navigate('PDFViewer', { url: item.url, title: item.subject_name });
+        } else {
+            // For all other links, open in the system browser
+            const canOpen = await Linking.canOpenURL(item.url);
+            if (canOpen) {
+                await Linking.openURL(item.url);
             } else {
-                await apiClient.post('/resources', data, config);
+                Alert.alert("Error", `Could not open the link.`);
             }
-        } catch (e: any) {
-            setIsSaving(false);
-            return Alert.alert("Error", e.response?.data?.message || "An error occurred while saving.");
         }
-        
-        Alert.alert("Success", "Resource saved successfully!");
-        setIsSaving(false);
-        setIsModalVisible(false);
-        fetchData();
     };
     
+    // ... (handleChoosePhoto, resetForm, openCreateModal, openEditModal, handleDelete, and handleSave functions remain exactly the same)
+    const handleChoosePhoto = () => { launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => { if (response.didCancel || response.errorCode) return; setSelectedImage(response); }); };
+    const resetForm = () => { setEditingItem(null); setSelectedClass(''); setSubjectName(''); setUrl(''); setSelectedImage(null); setModalResourceType(mainView === 'syllabus' ? 'syllabus' : 'textbook'); setModalBoardType(boardView); };
+    const openCreateModal = () => { resetForm(); setIsModalVisible(true); };
+    const openEditModal = (item, type) => { setEditingItem(item); setModalResourceType(type); setModalBoardType(item.syllabus_type); setSelectedClass(item.class_group); setUrl(item.url || ''); setSubjectName(item.subject_name || ''); setSelectedImage(null); setIsModalVisible(true); };
+    const handleDelete = (item) => { const resourceName = mainView.slice(0, -1); Alert.alert(`Confirm Delete`, `Delete ${resourceName} for ${item.subject_name} (${item.class_group})?`, [{ text: "Cancel", style: 'cancel' }, { text: "Delete", style: 'destructive', onPress: async () => { try { await apiClient.delete(`/resources/${item.id}`); fetchData(); } catch(e) { Alert.alert("Error", `Could not delete ${resourceName}.`); }}},]);};
+    const handleSave = async () => { if (!selectedClass || !url || !modalBoardType || !modalResourceType || !subjectName) { return Alert.alert("Validation Error", "All fields with * are required."); } setIsSaving(true); const data = new FormData(); data.append('class_group', selectedClass); data.append('url', url); data.append('syllabus_type', modalBoardType); data.append('subject_name', subjectName); data.append('resource_type', modalResourceType); if (selectedImage?.assets?.[0]) { data.append('coverImage', { uri: selectedImage.assets[0].uri, type: selectedImage.assets[0].type, name: selectedImage.assets[0].fileName, }); } try { const config = { headers: { 'Content-Type': 'multipart/form-data' } }; if (editingItem) { await apiClient.put(`/resources/${editingItem.id}`, data, config); } else { await apiClient.post('/resources', data, config); } } catch (e) { setIsSaving(false); return Alert.alert("Error", e.response?.data?.message || "An error occurred while saving."); } Alert.alert("Success", "Resource saved successfully!"); setIsSaving(false); setIsModalVisible(false); fetchData(); };
+
     const renderList = () => {
         const isSyllabus = mainView === 'syllabus';
         const baseData = isSyllabus ? syllabi : textbooks;
-        const filteredData = baseData.filter((item: any) => item.syllabus_type === boardView);
+        const filteredData = baseData.filter((item) => item.syllabus_type === boardView);
         const emptyTextMessage = `No ${mainView.slice(0, -1)} added for ${boardView} board yet.`;
 
         return (
             <FlatList
                 data={filteredData}
-                keyExtractor={(item: any) => item.id.toString()}
-                renderItem={({ item }) => (
-                    <View style={styles.card}>
-                        <View style={styles.cardContent}>
-                            <Text style={styles.cardTitle}>{item.subject_name}</Text>
-                            <Text style={styles.cardSubtitle}>{item.class_group}</Text>
-                            <Text style={styles.urlText} numberOfLines={1}>URL: {item.url}</Text>
-                        </View>
-                        <View style={styles.cardActions}>
-                            <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(item, isSyllabus ? 'syllabus' : 'textbook')}><MaterialIcons name="edit" size={22} color="#0288d1" /></TouchableOpacity>
-                            <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(item)}><MaterialIcons name="delete" size={22} color="#d32f2f" /></TouchableOpacity>
-                        </View>
-                    </View>
-                )}
+                keyExtractor={(item) => item.id.toString()}
+                numColumns={2} 
+                contentContainerStyle={styles.gridContainer}
+                renderItem={({ item }) => {
+                    const imageUri = item.cover_image_url
+                        ? `${SERVER_URL}${item.cover_image_url}`
+                        : `https://via.placeholder.com/300x400/DCDCDC/808080?text=${item.subject_name.replace(' ', '+')}`;
+                    
+                    return (
+                        // ★ WRAPPED the card in TouchableOpacity to make it clickable
+                        <TouchableOpacity style={styles.gridItem} onPress={() => handleCardPress(item)}>
+                            <Image source={{ uri: imageUri }} style={styles.coverImage} />
+                            
+                            <View style={styles.actionsOverlay}>
+                                <TouchableOpacity style={styles.iconButton} onPress={() => openEditModal(item, isSyllabus ? 'syllabus' : 'textbook')}>
+                                    <MaterialIcons name="edit" size={18} color="#0288d1" />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.iconButton} onPress={() => handleDelete(item)}>
+                                    <MaterialIcons name="delete" size={18} color="#d32f2f" />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.infoContainer}>
+                                <Text style={styles.gridTitle} numberOfLines={1}>{item.subject_name}</Text>
+                                <Text style={styles.gridSubtitle}>{item.class_group}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    );
+                }}
                 ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>{emptyTextMessage}</Text></View>}
                 refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchData} />}
-                contentContainerStyle={{ flexGrow: 1 }}
             />
         );
     };
     
+    // ... (The rest of the return statement and styles remain exactly the same)
     return (
         <View style={styles.container}>
             <View style={styles.tabContainer}>
@@ -173,7 +131,6 @@ const TeacherAdminResourcesScreen = () => {
                     <Text style={[styles.tabText, mainView === 'textbooks' && styles.tabTextActive]}>Textbooks Management</Text>
                 </TouchableOpacity>
             </View>
-
             <View style={styles.boardPickerWrapper}>
                 <Text style={styles.boardPickerLabel}>Filter by Board:</Text>
                 <View style={styles.boardPickerContainer}>
@@ -183,74 +140,33 @@ const TeacherAdminResourcesScreen = () => {
                     </Picker>
                 </View>
             </View>
-
             {isLoading ? <ActivityIndicator style={{marginTop: 20}} size="large" /> : renderList()}
-            
             <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
                 <MaterialIcons name="add" size={28} color="#fff" />
             </TouchableOpacity>
-
             <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide">
                 <ScrollView style={styles.modalView} keyboardShouldPersistTaps="handled">
                     <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Create'} Resource</Text>
-                    
                     <Text style={styles.label}>Resource Type*</Text>
-                    <View style={styles.pickerContainer}>
-                        <Picker selectedValue={modalResourceType} onValueChange={itemValue => setModalResourceType(itemValue)} enabled={!editingItem}>
-                            <Picker.Item label="Syllabus" value="syllabus" />
-                            <Picker.Item label="Textbook" value="textbook" />
-                        </Picker>
-                    </View>
-
+                    <View style={styles.pickerContainer}><Picker selectedValue={modalResourceType} onValueChange={itemValue => setModalResourceType(itemValue)} enabled={!editingItem}><Picker.Item label="Syllabus" value="syllabus" /><Picker.Item label="Textbook" value="textbook" /></Picker></View>
                     <Text style={styles.label}>Board Type*</Text>
-                    <View style={styles.pickerContainer}>
-                        <Picker selectedValue={modalBoardType} onValueChange={itemValue => setModalBoardType(itemValue)}>
-                            <Picker.Item label="State Board" value="state" />
-                            <Picker.Item label="Central Board" value="central" />
-                        </Picker>
-                    </View>
-
+                    <View style={styles.pickerContainer}><Picker selectedValue={modalBoardType} onValueChange={itemValue => setModalBoardType(itemValue)}><Picker.Item label="State Board" value="state" /><Picker.Item label="Central Board" value="central" /></Picker></View>
                     <Text style={styles.label}>Class*</Text>
-                    <View style={styles.pickerContainer}>
-                        <Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)} enabled={!editingItem}>
-                            <Picker.Item label="-- Select a class --" value="" />
-                            {allClasses.map((c: string) => <Picker.Item key={c} label={c} value={c} />)}
-                        </Picker>
-                    </View>
-
-                    {/* ★ UNIFIED FIELDS ★ These fields now appear for both resource types */}
+                    <View style={styles.pickerContainer}><Picker selectedValue={selectedClass} onValueChange={itemValue => setSelectedClass(itemValue)} enabled={!editingItem}><Picker.Item label="-- Select a class --" value="" />{allClasses.map((c) => <Picker.Item key={c} label={c} value={c} />)}</Picker></View>
                     <Text style={styles.label}>Subject Name*</Text>
                     <TextInput style={styles.input} value={subjectName} onChangeText={setSubjectName} placeholder="e.g., English, Mathematics..." />
-                    
                     <Text style={styles.label}>{modalResourceType === 'syllabus' ? 'Syllabus' : 'Textbook'} URL*</Text>
                     <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://..." keyboardType="url" />
-
                     <Text style={styles.label}>Cover Image (Optional)</Text>
-                    <TouchableOpacity style={styles.imagePicker} onPress={handleChoosePhoto}>
-                        <MaterialIcons name="image" size={24} color="#555" />
-                        <Text style={styles.imagePickerText}>{editingItem?.cover_image_url || selectedImage ? 'Change Image' : 'Select Cover Image'}</Text>
-                    </TouchableOpacity>
-                    
-                    { (selectedImage?.assets?.[0]?.uri || editingItem?.cover_image_url) && 
-                        <Image 
-                            style={styles.previewImage} 
-                            source={{ uri: selectedImage?.assets?.[0]?.uri || `${SERVER_URL}${editingItem.cover_image_url}` }} 
-                        />
-                    }
-
-                    <View style={styles.modalActions}>
-                        <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}><Text style={styles.btnText}>Cancel</Text></TouchableOpacity>
-                        <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={handleSave} disabled={isSaving}>
-                            {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Save</Text>}
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity style={styles.imagePicker} onPress={handleChoosePhoto}><MaterialIcons name="image" size={24} color="#555" /><Text style={styles.imagePickerText}>{editingItem?.cover_image_url || selectedImage ? 'Change Image' : 'Select Cover Image'}</Text></TouchableOpacity>
+                    { (selectedImage?.assets?.[0]?.uri || editingItem?.cover_image_url) && <Image style={styles.previewImage} source={{ uri: selectedImage?.assets?.[0]?.uri || `${SERVER_URL}${editingItem.cover_image_url}` }} /> }
+                    <View style={styles.modalActions}><TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}><Text style={styles.btnText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Save</Text>}</TouchableOpacity></View>
                 </ScrollView>
             </Modal>
         </View>
     );
 };
 
-// --- ★ NO CHANGE IN STYLES ★ ---
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f6f8' },
     tabContainer: { flexDirection: 'row', backgroundColor: '#fff', elevation: 2 },
@@ -262,16 +178,18 @@ const styles = StyleSheet.create({
     boardPickerLabel: { fontSize: 16, fontWeight: 'bold', color: '#333', marginRight: 10, },
     boardPickerContainer: { flex: 1, height: 45, justifyContent: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, },
     boardPicker: { color: '#000', },
-    card: { backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginVertical: 8, padding: 20, elevation: 2, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cardContent: { flex: 1, marginRight: 10 },
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#37474f' },
-    cardSubtitle: { fontSize: 14, color: '#546e7a', marginTop: 4 },
-    urlText: { fontSize: 13, color: '#546e7a', marginTop: 4, fontStyle: 'italic' },
-    cardActions: { flexDirection: 'row' },
-    actionButton: { padding: 8 },
     fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: '#1e88e5', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4 },
-    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#777' },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
+    emptyText: { textAlign: 'center', fontSize: 16, color: '#777' },
+    gridContainer: { paddingHorizontal: '1.5%', paddingTop: 8, },
+    // ★ MODIFIED ★ gridItem is no longer a TouchableOpacity itself
+    gridItem: { width: '47%', marginHorizontal: '1.5%', marginBottom: 12, backgroundColor: '#fff', borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2.5, },
+    coverImage: { width: '100%', aspectRatio: 3 / 4, backgroundColor: '#e0e0e0', borderTopLeftRadius: 10, borderTopRightRadius: 10, },
+    infoContainer: { padding: 8, alignItems: 'center', },
+    gridTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', textAlign: 'center', },
+    gridSubtitle: { fontSize: 12, color: '#757575', marginTop: 2, textAlign: 'center', },
+    actionsOverlay: { position: 'absolute', top: 6, right: 6, flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 15, padding: 2, elevation: 5, },
+    iconButton: { padding: 5, },
     modalView: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' },
     modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' },
     label: { fontSize: 16, fontWeight: '500', color: '#444', marginBottom: 5, marginLeft: 5, marginTop: 10 },

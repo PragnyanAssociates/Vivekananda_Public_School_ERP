@@ -90,6 +90,9 @@ import StudentResourcesScreen from './src/screens/syllabus_Textbook/StudentResou
 
 import TeacherAttendanceMarkingScreen from './src/screens/teacher_attendence/TeacherAttendanceMarkingScreen';
 import TeacherAttendanceReportScreen from './src/screens/teacher_attendence/TeacherAttendanceReportScreen';
+
+
+import PDFViewerScreen from './src/screens/syllabus_Textbook/PDFViewerScreen';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -250,6 +253,8 @@ const AuthenticatedStack = () => {
           headerTintColor: '#008080',
           headerTitleStyle: { fontWeight: 'bold' } }} />
       <Stack.Screen name="StudentProgressReport" component={StudentReportNavigator} options={{ headerShown: false }} />
+
+      <Stack.Screen name="PDFViewer" component={PDFViewerScreen} options={{ headerShown: false }} />
       {/* <Stack.Screen name="ChatAIScreen" component={ChatAIScreen} />
       <Stack.Screen name="DonorSuggestionsScreen" component={DonorSuggestionsScreen} />
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />
