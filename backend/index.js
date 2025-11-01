@@ -1621,10 +1621,10 @@ app.post('/api/events', async (req, res) => {
 
 // ADMIN/TEACHER: Get all events for the management view (simplified).
 app.get('/api/events/all-for-admin', async (req, res) => {
-    // Simplified query without RSVP counts.
     const query = `
-        SELECT e.* 
+        SELECT e.*, u.full_name as creator_name
         FROM events e
+        LEFT JOIN users u ON e.created_by = u.id
         ORDER BY e.event_datetime DESC`;
     try {
         const [events] = await db.query(query);
@@ -1632,6 +1632,84 @@ app.get('/api/events/all-for-admin', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error fetching admin event list.' });
+    }
+});
+
+// ADMIN/TEACHER: Update an existing event.
+app.put('/api/events/:eventId', async (req, res) => {
+    const { eventId } = req.params;
+    const { title, category, event_datetime, location, description, target_class, userId } = req.body;
+
+    // Basic validation
+    if (!title || !event_datetime || !target_class || !userId) {
+        return res.status(400).json({ message: 'Missing required fields for update.' });
+    }
+
+    try {
+        // Security Check: Ensure the user is the creator or an admin
+        const [[event]] = await db.query('SELECT created_by FROM events WHERE id = ?', [eventId]);
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found.' });
+        }
+        
+        const [[user]] = await db.query('SELECT role FROM users WHERE id = ?', [userId]);
+        if (!user) {
+             return res.status(404).json({ message: 'User not found.' });
+        }
+
+        if (event.created_by !== userId && user.role !== 'admin') {
+            return res.status(403).json({ message: 'You are not authorized to edit this event.' });
+        }
+
+        // Proceed with update
+        const query = `
+            UPDATE events SET
+            title = ?, category = ?, event_datetime = ?, location = ?, description = ?, target_class = ?
+            WHERE id = ?`;
+        
+        await db.query(query, [title, category, event_datetime, location, description, target_class, eventId]);
+        
+        res.status(200).json({ message: 'Event updated successfully!' });
+
+    } catch (error) {
+        console.error("Error updating event:", error);
+        res.status(500).json({ message: 'Error updating event.' });
+    }
+});
+
+// 📂 File: server.js (ADD THIS NEW ROUTE)
+// ADMIN/TEACHER: Delete an event.
+app.delete('/api/events/:eventId', async (req, res) => {
+    const { eventId } = req.params;
+    const { userId } = req.body; // Sent from frontend for authorization
+
+     if (!userId) {
+        return res.status(400).json({ message: 'User ID is required for authorization.' });
+    }
+
+    try {
+        // Security Check: Ensure the user is the creator or an admin
+        const [[event]] = await db.query('SELECT created_by FROM events WHERE id = ?', [eventId]);
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found.' });
+        }
+
+        const [[user]] = await db.query('SELECT role FROM users WHERE id = ?', [userId]);
+         if (!user) {
+             return res.status(404).json({ message: 'User not found.' });
+        }
+
+        if (event.created_by !== userId && user.role !== 'admin') {
+            return res.status(403).json({ message: 'You are not authorized to delete this event.' });
+        }
+
+        // Proceed with deletion
+        await db.query('DELETE FROM events WHERE id = ?', [eventId]);
+        res.status(200).json({ message: 'Event deleted successfully.' });
+
+    } catch (error) {
+        console.error("Error deleting event:", error);
+        res.status(500).json({ message: 'Error deleting event.' });
     }
 });
 
