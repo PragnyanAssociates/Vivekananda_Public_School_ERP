@@ -3754,21 +3754,25 @@ app.get('/api/reports/:reportId/details', async (req, res) => {
 });
 
 // ===============================================================
-// --- TEACHER PERFORMANCE MODULE API ROUTES (UPDATED) ---
+// --- TEACHER PERFORMANCE MODULE API ROUTES (CORRECTED) ---
 // ===============================================================
 
 // Helper function to calculate average and total marks for a given set of assignments
 const calculateTeacherPerformance = async (db, teacherId, academicYear) => {
+    // ★★★ FIX ★★★: Added rta.academic_year = rsm.academic_year to the JOIN condition.
+    // This was the critical missing piece causing marks to be double-counted.
     const performanceQuery = `
         SELECT
             rta.subject,
             rta.class_group,
             AVG(rsm.marks_obtained) AS average_marks,
             SUM(rsm.marks_obtained) AS total_marks,
-            COUNT(DISTINCT rsm.student_id) AS student_count
+            COUNT(rsm.id) AS mark_entries_count
         FROM report_teacher_assignments AS rta
         JOIN report_student_marks AS rsm
-            ON rta.class_group = rsm.class_group AND rta.subject = rsm.subject
+            ON rta.class_group = rsm.class_group
+            AND rta.subject = rsm.subject
+            AND rta.academic_year = rsm.academic_year -- This condition fixes the bug
         WHERE
             rta.teacher_id = ?
             AND rta.academic_year = ?
@@ -3805,9 +3809,15 @@ app.get('/api/performance/admin/all-teachers/:academicYear', async (req, res) =>
             let totalAverage = 0;
             let overallTotalMarks = 0;
             if (performance.length > 0) {
-                const totalMarksSum = performance.reduce((sum, p) => sum + parseFloat(p.average_marks), 0);
-                totalAverage = totalMarksSum / performance.length;
-                overallTotalMarks = performance.reduce((sum, p) => sum + parseInt(p.total_marks || 0, 10), 0);
+                // ★★★ IMPROVEMENT ★★★: Calculate a more accurate overall average.
+                const totalMarksSum = performance.reduce((sum, p) => sum + parseInt(p.total_marks || 0, 10), 0);
+                const totalEntries = performance.reduce((sum, p) => sum + parseInt(p.mark_entries_count || 0, 10), 0);
+                
+                if (totalEntries > 0) {
+                    totalAverage = totalMarksSum / totalEntries;
+                }
+                
+                overallTotalMarks = totalMarksSum;
             }
             
             allPerformanceData.push({

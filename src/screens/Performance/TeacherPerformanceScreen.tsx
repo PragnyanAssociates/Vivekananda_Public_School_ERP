@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator,
     TouchableOpacity, RefreshControl, FlatList
@@ -29,6 +29,9 @@ const TeacherPerformanceScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
+    
+    // ★★★ NEW ★★★: State for sorting, default is 'high-low'
+    const [sortOrder, setSortOrder] = useState('high-low');
 
     const fetchData = async () => {
         if (!userId || !selectedYear) return;
@@ -59,9 +62,32 @@ const TeacherPerformanceScreen = () => {
         fetchData();
     };
 
+    // ★★★ NEW ★★★: Memoized sorting logic for admin data
+    const sortedAdminData = useMemo(() => {
+        if (userRole !== 'admin' || !performanceData || performanceData.length === 0) {
+            return performanceData;
+        }
+        
+        // Create a copy to avoid mutating the original state array
+        const dataToSort = [...performanceData];
+        
+        return dataToSort.sort((a, b) => {
+            const avgA = parseFloat(a.overall_average);
+            const avgB = parseFloat(b.overall_average);
+
+            if (sortOrder === 'high-low') {
+                return avgB - avgA; // For descending order
+            } else {
+                return avgA - avgB; // For ascending order
+            }
+        });
+    }, [performanceData, sortOrder, userRole]);
+
+
     const renderAdminView = () => (
         <FlatList
-            data={performanceData}
+            // ★★★ MODIFIED ★★★: Use the sorted data
+            data={sortedAdminData} 
             keyExtractor={item => item.teacher_id.toString()}
             renderItem={({ item }) => (
                 <View style={styles.teacherCard}>
@@ -139,15 +165,31 @@ const TeacherPerformanceScreen = () => {
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>Teacher Performance</Text>
-                <View style={styles.pickerContainer}>
-                    <Picker
-                        selectedValue={selectedYear}
-                        onValueChange={(itemValue) => setSelectedYear(itemValue)}
-                    >
-                        {ACADEMIC_YEARS.map(year => (
-                            <Picker.Item key={year} label={`Year: ${year}`} value={year} />
-                        ))}
-                    </Picker>
+                {/* ★★★ MODIFIED ★★★: New layout for filters */}
+                <View style={styles.filtersRow}>
+                    <View style={[styles.pickerContainer, { flex: 1 }]}>
+                        <Picker
+                            selectedValue={selectedYear}
+                            onValueChange={(itemValue) => setSelectedYear(itemValue)}
+                        >
+                            {ACADEMIC_YEARS.map(year => (
+                                <Picker.Item key={year} label={`${year}`} value={year} />
+                            ))}
+                        </Picker>
+                    </View>
+
+                    {/* Show sort picker only for admin */}
+                    {userRole === 'admin' && (
+                        <View style={[styles.pickerContainer, { flex: 1, marginLeft: 10 }]}>
+                            <Picker
+                                selectedValue={sortOrder}
+                                onValueChange={(itemValue) => setSortOrder(itemValue)}
+                            >
+                                <Picker.Item label="Sort: High to Low" value="high-low" />
+                                <Picker.Item label="Sort: Low to High" value="low-high" />
+                            </Picker>
+                        </View>
+                    )}
                 </View>
             </View>
 
@@ -180,6 +222,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#2c3e50',
         marginBottom: 15,
+    },
+    // ★★★ NEW ★★★
+    filtersRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     pickerContainer: {
         borderWidth: 1,
