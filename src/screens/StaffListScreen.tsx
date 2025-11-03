@@ -1,11 +1,12 @@
-import React, { useState, useCallback } from 'react'; // Import useCallback
+import React, { useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator,
     TouchableOpacity, Image, RefreshControl
 } from 'react-native';
-// ★★★ STEP 1: Import useFocusEffect from React Navigation ★★★
 import { useFocusEffect } from '@react-navigation/native';
-import apiClient from '../api/client'; // Make sure this path is correct
+import apiClient from '../api/client';
+// ★★★ STEP 1: Import SERVER_URL from your config file ★★★
+import { SERVER_URL } from '../../apiConfig'; // Adjust this path if necessary
 
 const StaffListScreen = ({ navigation }) => {
     const [admins, setAdmins] = useState([]);
@@ -13,7 +14,6 @@ const StaffListScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Renamed fetchStaff to be more descriptive and handle loading state better
     const loadStaffData = async () => {
         try {
             const response = await apiClient.get('/staff/all');
@@ -27,11 +27,8 @@ const StaffListScreen = ({ navigation }) => {
         }
     };
 
-    // ★★★ STEP 2: Replace useEffect with useFocusEffect ★★★
-    // This will run the function inside it every time the screen comes into focus (i.e., when you navigate back to it).
     useFocusEffect(
       useCallback(() => {
-        // Set loading to true only if it's the first load
         if (admins.length === 0 && teachers.length === 0) {
             setLoading(true);
         }
@@ -44,25 +41,32 @@ const StaffListScreen = ({ navigation }) => {
         loadStaffData();
     };
 
-    const StaffMember = ({ item }) => (
-        <TouchableOpacity
-            style={styles.staffMemberContainer}
-            onPress={() => navigation.navigate('StaffDetail', { staffId: item.id })}
-        >
-            <Image
-                source={
-                    item.profile_image_url
-                        ? { uri: item.profile_image_url }
-                        // The backend will now add a timestamp to the URL to prevent caching issues.
-                        : require('../assets/default_avatar.png') 
-                }
-                style={styles.avatar}
-            />
-            <Text style={styles.staffName} numberOfLines={2}>
-                {item.full_name}
-            </Text>
-        </TouchableOpacity>
-    );
+    const StaffMember = ({ item }) => {
+        // ★★★ STEP 2: Construct the full image URL ★★★
+        const imageUrl = item.profile_image_url
+            ? `${SERVER_URL}${item.profile_image_url.startsWith('/') ? '' : '/'}${item.profile_image_url}`
+            : null;
+
+        return (
+            <TouchableOpacity
+                style={styles.staffMemberContainer}
+                onPress={() => navigation.navigate('StaffDetail', { staffId: item.id })}
+            >
+                <Image
+                    // ★★★ STEP 3: Use the constructed URL or the default avatar ★★★
+                    source={
+                        imageUrl
+                            ? { uri: imageUrl }
+                            : require('../assets/default_avatar.png')
+                    }
+                    style={styles.avatar}
+                />
+                <Text style={styles.staffName} numberOfLines={2}>
+                    {item.full_name}
+                </Text>
+            </TouchableOpacity>
+        );
+    };
 
     const StaffSection = ({ title, data }) => (
         <View style={styles.sectionContainer}>

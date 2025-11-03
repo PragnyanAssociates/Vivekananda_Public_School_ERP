@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, ActivityIndicator, Image
+    View, Text, StyleSheet, ScrollView, ActivityIndicator, Image,
+    TouchableOpacity, Modal, Pressable // ★★★ STEP 1: Import necessary components
 } from 'react-native';
-import apiClient from './api/client'; // Make sure this path is correct
+import apiClient from '../api/client';
+// ★★★ STEP 2: Import your server URL config ★★★
+import { SERVER_URL } from '../../apiConfig'; // Make sure this path is correct
 
 const StaffDetailScreen = ({ route }) => {
     const { staffId } = route.params;
     const [staffDetails, setStaffDetails] = useState(null);
     const [loading, setLoading] = useState(true);
+    // ★★★ STEP 3: Add state to manage the image viewer modal ★★★
+    const [isViewerVisible, setViewerVisible] = useState(false);
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -16,7 +21,6 @@ const StaffDetailScreen = ({ route }) => {
                 setStaffDetails(response.data);
             } catch (error) {
                 console.error('Error fetching staff details:', error);
-                // Handle error, maybe show an alert
             } finally {
                 setLoading(false);
             }
@@ -42,35 +46,71 @@ const StaffDetailScreen = ({ route }) => {
         return <View style={styles.loaderContainer}><Text>Could not load staff details.</Text></View>;
     }
 
-    return (
-        <ScrollView style={styles.container}>
-            <View style={styles.profileHeader}>
-                <Image
-                    source={
-                        staffDetails.profile_image_url
-                            ? { uri: staffDetails.profile_image_url }
-                            // ★★★ CORRECTED PATH ★★★
-                            : require('../assets/default_avatar.png')
-                    }
-                    style={styles.avatar}
-                />
-                <Text style={styles.fullName}>{staffDetails.full_name}</Text>
-                <Text style={styles.role}>{staffDetails.role.charAt(0).toUpperCase() + staffDetails.role.slice(1)}</Text>
-            </View>
+    // ★★★ STEP 4: Construct the full, absolute image URL ★★★
+    const imageUrl = staffDetails.profile_image_url
+        ? `${SERVER_URL}${staffDetails.profile_image_url.startsWith('/') ? '' : '/'}${staffDetails.profile_image_url}`
+        : null;
 
-            <View style={styles.detailsContainer}>
-                <DetailRow label="Full Name" value={staffDetails.full_name} />
-                <DetailRow label="Mobile No" value={staffDetails.phone} />
-                <DetailRow label="Email Address" value={staffDetails.email} />
-                <DetailRow label="Address" value={staffDetails.address} />
-                <DetailRow label="Username" value={staffDetails.username} />
-                <DetailRow label="Date of Birth" value={staffDetails.dob} />
-                <DetailRow label="Gender" value={staffDetails.gender} />
-            </View>
-        </ScrollView>
+    return (
+        <View style={{ flex: 1 }}>
+            {/* ★★★ STEP 5: Add the Modal for viewing the enlarged image ★★★ */}
+            <Modal
+                visible={isViewerVisible}
+                transparent={true}
+                onRequestClose={() => setViewerVisible(false)}
+                animationType="fade"
+            >
+                <Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}>
+                    <View style={styles.modalContent}>
+                        <Image
+                            source={
+                                imageUrl
+                                    ? { uri: imageUrl }
+                                    : require('../assets/default_avatar.png')
+                            }
+                            style={styles.enlargedAvatar}
+                            resizeMode="contain"
+                        />
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setViewerVisible(false)}>
+                            <Text style={styles.closeButtonText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
+            </Modal>
+
+            <ScrollView style={styles.container}>
+                <View style={styles.profileHeader}>
+                    {/* ★★★ STEP 6: Make the profile image pressable ★★★ */}
+                    <TouchableOpacity onPress={() => setViewerVisible(true)}>
+                        <Image
+                            // ★★★ STEP 7: Use the new `imageUrl` variable ★★★
+                            source={
+                                imageUrl
+                                    ? { uri: imageUrl }
+                                    : require('../assets/default_avatar.png')
+                            }
+                            style={styles.avatar}
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.fullName}>{staffDetails.full_name}</Text>
+                    <Text style={styles.role}>{staffDetails.role.charAt(0).toUpperCase() + staffDetails.role.slice(1)}</Text>
+                </View>
+
+                <View style={styles.detailsContainer}>
+                    <DetailRow label="Full Name" value={staffDetails.full_name} />
+                    <DetailRow label="Mobile No" value={staffDetails.phone} />
+                    <DetailRow label="Email Address" value={staffDetails.email} />
+                    <DetailRow label="Address" value={staffDetails.address} />
+                    <DetailRow label="Username" value={staffDetails.username} />
+                    <DetailRow label="Date of Birth" value={staffDetails.dob} />
+                    <DetailRow label="Gender" value={staffDetails.gender} />
+                </View>
+            </ScrollView>
+        </View>
     );
 };
 
+// ★★★ STEP 8: Add new styles for the modal and its contents ★★★
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -126,14 +166,45 @@ const styles = StyleSheet.create({
     detailLabel: {
         fontSize: 16,
         color: '#7f8c8d',
-        flex: 2, // Takes up 2 parts of the space
+        flex: 2,
     },
     detailValue: {
         fontSize: 16,
         color: '#2c3e50',
-        flex: 3, // Takes up 3 parts of the space
+        flex: 3,
         fontWeight: '500',
         textAlign: 'right',
+    },
+    // Styles for the image viewer modal
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        width: '90%',
+        height: '70%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    enlargedAvatar: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 10,
+    },
+    closeButton: {
+        position: 'absolute',
+        bottom: -60, // Position it below the image
+        backgroundColor: '#fff',
+        paddingVertical: 12,
+        paddingHorizontal: 35,
+        borderRadius: 25,
+    },
+    closeButtonText: {
+        color: '#2c3e50',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
 
