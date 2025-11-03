@@ -3754,16 +3754,17 @@ app.get('/api/reports/:reportId/details', async (req, res) => {
 });
 
 // ===============================================================
-// --- TEACHER PERFORMANCE MODULE API ROUTES ---
+// --- TEACHER PERFORMANCE MODULE API ROUTES (UPDATED) ---
 // ===============================================================
 
-// Helper function to calculate average marks for a given set of assignments
+// Helper function to calculate average and total marks for a given set of assignments
 const calculateTeacherPerformance = async (db, teacherId, academicYear) => {
     const performanceQuery = `
         SELECT
             rta.subject,
             rta.class_group,
             AVG(rsm.marks_obtained) AS average_marks,
+            SUM(rsm.marks_obtained) AS total_marks,
             COUNT(DISTINCT rsm.student_id) AS student_count
         FROM report_teacher_assignments AS rta
         JOIN report_student_marks AS rsm
@@ -3801,17 +3802,19 @@ app.get('/api/performance/admin/all-teachers/:academicYear', async (req, res) =>
         for (const teacher of teachers) {
             const performance = await calculateTeacherPerformance(db, teacher.id, academicYear);
             
-            // Calculate an overall average for the teacher across all their subjects/classes
             let totalAverage = 0;
+            let overallTotalMarks = 0;
             if (performance.length > 0) {
-                const totalMarks = performance.reduce((sum, p) => sum + parseFloat(p.average_marks), 0);
-                totalAverage = totalMarks / performance.length;
+                const totalMarksSum = performance.reduce((sum, p) => sum + parseFloat(p.average_marks), 0);
+                totalAverage = totalMarksSum / performance.length;
+                overallTotalMarks = performance.reduce((sum, p) => sum + parseInt(p.total_marks || 0, 10), 0);
             }
             
             allPerformanceData.push({
                 teacher_id: teacher.id,
                 teacher_name: teacher.full_name,
                 overall_average: totalAverage.toFixed(2),
+                overall_total: overallTotalMarks,
                 detailed_performance: performance
             });
         }

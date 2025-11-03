@@ -31,6 +31,7 @@ const TeacherPerformanceScreen = () => {
     const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
 
     const fetchData = async () => {
+        if (!userId || !selectedYear) return;
         setLoading(true);
         try {
             let response;
@@ -51,7 +52,7 @@ const TeacherPerformanceScreen = () => {
 
     useEffect(() => {
         fetchData();
-    }, [selectedYear]);
+    }, [selectedYear, userId]);
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -62,29 +63,35 @@ const TeacherPerformanceScreen = () => {
         <FlatList
             data={performanceData}
             keyExtractor={item => item.teacher_id.toString()}
-            ListHeaderComponent={() => (
-                <View style={[styles.tableRow, styles.headerRow]}>
-                    <Text style={[styles.headerText, styles.teacherNameCell]}>Teacher Name</Text>
-                    <Text style={[styles.headerText, styles.classCell]}>Class/Subject</Text>
-                    <Text style={[styles.headerText, styles.averageCell]}>Avg. Marks</Text>
-                </View>
-            )}
             renderItem={({ item }) => (
                 <View style={styles.teacherCard}>
                     <View style={styles.teacherHeader}>
                         <Text style={styles.teacherName}>{item.teacher_name}</Text>
-                        <Text style={styles.overallAverage}>
-                            Overall Avg: <Text style={styles.overallAverageValue}>{item.overall_average}%</Text>
-                        </Text>
+                         <View style={styles.teacherStatsContainer}>
+                            <Text style={styles.overallStat}>
+                                Total: <Text style={styles.overallValue}>{item.overall_total}</Text>
+                            </Text>
+                            <Text style={styles.overallStat}>
+                                Avg: <Text style={styles.overallValue}>{item.overall_average}%</Text>
+                            </Text>
+                        </View>
                     </View>
+
                     {item.detailed_performance.length > 0 ? (
-                        item.detailed_performance.map((detail, index) => (
-                            <View key={index} style={styles.detailRow}>
-                                <Text style={styles.detailTextPlaceholder}></Text> 
-                                <Text style={styles.detailClassSubject}>{`${detail.class_group} - ${detail.subject}`}</Text>
-                                <Text style={styles.detailAverage}>{parseFloat(detail.average_marks).toFixed(2)}%</Text>
+                        <>
+                            <View style={styles.detailHeaderRow}>
+                                <Text style={[styles.detailHeaderText, styles.detailClassSubject]}>Class / Subject</Text>
+                                <Text style={[styles.detailHeaderText, styles.detailTotal]}>Total Marks</Text>
+                                <Text style={[styles.detailHeaderText, styles.detailAverage]}>Average</Text>
                             </View>
-                        ))
+                            {item.detailed_performance.map((detail, index) => (
+                                <View key={index} style={styles.detailRow}>
+                                    <Text style={styles.detailClassSubject}>{`${detail.class_group} - ${detail.subject}`}</Text>
+                                    <Text style={styles.detailTotal}>{detail.total_marks}</Text>
+                                    <Text style={styles.detailAverage}>{parseFloat(detail.average_marks).toFixed(2)}%</Text>
+                                </View>
+                            ))}
+                        </>
                     ) : (
                         <View style={styles.detailRow}>
                             <Text style={styles.noDataText}>No performance data available for this year.</Text>
@@ -93,6 +100,7 @@ const TeacherPerformanceScreen = () => {
                 </View>
             )}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            contentContainerStyle={{ paddingBottom: 20 }}
         />
     );
 
@@ -102,15 +110,17 @@ const TeacherPerformanceScreen = () => {
             keyExtractor={(item, index) => `${item.class_group}-${item.subject}-${index}`}
             ListHeaderComponent={() => (
                 <View style={[styles.tableRow, styles.headerRow]}>
-                    <Text style={[styles.headerText, { flex: 2 }]}>Class Group</Text>
-                    <Text style={[styles.headerText, { flex: 3 }]}>Subject</Text>
-                    <Text style={[styles.headerText, { flex: 2, textAlign: 'right' }]}>Average Marks</Text>
+                    <Text style={[styles.headerText, { flex: 2.5 }]}>Class Group</Text>
+                    <Text style={[styles.headerText, { flex: 2.5 }]}>Subject</Text>
+                    <Text style={[styles.headerText, { flex: 2, textAlign: 'right' }]}>Total Marks</Text>
+                    <Text style={[styles.headerText, { flex: 2, textAlign: 'right' }]}>Average</Text>
                 </View>
             )}
             renderItem={({ item }) => (
                 <View style={styles.tableRow}>
-                    <Text style={[styles.cellText, { flex: 2 }]}>{item.class_group}</Text>
-                    <Text style={[styles.cellText, { flex: 3 }]}>{item.subject}</Text>
+                    <Text style={[styles.cellText, { flex: 2.5 }]}>{item.class_group}</Text>
+                    <Text style={[styles.cellText, { flex: 2.5 }]}>{item.subject}</Text>
+                    <Text style={[styles.cellText, { flex: 2, textAlign: 'right' }]}>{item.total_marks}</Text>
                     <Text style={[styles.cellText, { flex: 2, textAlign: 'right', fontWeight: 'bold' }]}>
                         {parseFloat(item.average_marks).toFixed(2)}%
                     </Text>
@@ -142,7 +152,7 @@ const TeacherPerformanceScreen = () => {
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
+                <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 50 }} />
             ) : userRole === 'admin' ? (
                 renderAdminView()
             ) : (
@@ -159,7 +169,9 @@ const styles = StyleSheet.create({
     },
     header: {
         backgroundColor: '#ffffff',
-        padding: 15,
+        paddingHorizontal: 15,
+        paddingTop: 15,
+        paddingBottom: 10,
         borderBottomWidth: 1,
         borderBottomColor: '#dfe4ea',
     },
@@ -167,25 +179,27 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         color: '#2c3e50',
-        marginBottom: 10,
+        marginBottom: 15,
     },
     pickerContainer: {
         borderWidth: 1,
         borderColor: '#ced4da',
         borderRadius: 8,
         backgroundColor: '#ffffff',
+        justifyContent: 'center',
     },
     // Admin View Styles
     teacherCard: {
         backgroundColor: '#fff',
         marginHorizontal: 15,
-        marginVertical: 8,
+        marginTop: 15,
         borderRadius: 8,
         elevation: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
+        overflow: 'hidden',
     },
     teacherHeader: {
         flexDirection: 'row',
@@ -193,43 +207,60 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 15,
         backgroundColor: '#34495e',
-        borderTopLeftRadius: 8,
-        borderTopRightRadius: 8,
     },
     teacherName: {
         fontSize: 18,
         fontWeight: 'bold',
         color: '#ffffff',
+        flexShrink: 1,
     },
-    overallAverage: {
+    teacherStatsContainer: {
+       alignItems: 'flex-end',
+    },
+    overallStat: {
         fontSize: 14,
         color: '#ecf0f1',
     },
-    overallAverageValue: {
+    overallValue: {
         fontWeight: 'bold',
         color: '#2ecc71',
     },
+    detailHeaderRow: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        backgroundColor: '#ecf0f1',
+        borderBottomWidth: 1,
+        borderBottomColor: '#dfe4ea',
+    },
+    detailHeaderText: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: '#34495e',
+    },
     detailRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         paddingVertical: 12,
         paddingHorizontal: 15,
         borderBottomWidth: 1,
         borderBottomColor: '#f0f2f5',
     },
-    detailTextPlaceholder: {
-        width: 150, // To align with the header text
-    },
     detailClassSubject: {
-        flex: 1,
+        flex: 3,
         fontSize: 15,
         color: '#34495e',
     },
+    detailTotal: {
+        flex: 2,
+        fontSize: 15,
+        color: '#2c3e50',
+        textAlign: 'right',
+    },
     detailAverage: {
+        flex: 2,
         fontSize: 15,
         fontWeight: 'bold',
         color: '#2c3e50',
-        width: 100,
         textAlign: 'right',
     },
     // Teacher View & Shared Styles
@@ -246,7 +277,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#e9ecef',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
-        marginTop: 10,
+        marginTop: 15,
+        borderBottomWidth: 2,
+        borderBottomColor: '#d1d8e0',
     },
     headerText: {
         fontSize: 14,
@@ -256,16 +289,6 @@ const styles = StyleSheet.create({
     cellText: {
         fontSize: 15,
         color: '#2c3e50',
-    },
-    teacherNameCell: {
-        flex: 3,
-    },
-    classCell: {
-        flex: 4,
-    },
-    averageCell: {
-        flex: 2,
-        textAlign: 'right',
     },
     noDataContainer: {
         flex: 1,
