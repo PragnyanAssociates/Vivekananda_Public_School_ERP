@@ -29,32 +29,11 @@ import { Image } from 'react-native'; // Keep this for non-cached images like ic
 // --- COMPONENT IMPORTS ---
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AcademicCalendar from './AcademicCalendar';
-import AdminLM from './AdminLM';
 import ProfileScreen from '../screens/ProfileScreen';
-import TimetableScreen from '../screens/TimetableScreen';
-import AttendanceScreen from '../screens/AttendanceScreen';
-import TeacherAdminHomeworkScreen from '../screens/homework/TeacherAdminHomeworkScreen';
 import AboutUs from './AboutUs';
-import TeacherAdminExamsScreen from '../screens/exams/TeacherAdminExamsScreen';
-import TeacherAdminPTMScreen from '../screens/ptm/TeacherAdminPTMScreen';
-import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
 import FoodScreen from '../screens/food/FoodScreen';
-import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen';
-// import GroupChatScreen from '../screens/chat/GroupChatScreen';
-import AlumniScreen from '../screens/Alumni/AlumniScreen';
-import PreAdmissionsScreen from '../screens/Pre-Admissions/PreAdmissionsScreen';
-import AdminEventsScreen from '../screens/events/AdminEventsScreen';
-import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
 import KitchenScreen from '../screens/kitchen/KitchenScreen';
-import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
-// import MarksEntryScreen from '../screens/report/MarksEntryScreen';
-import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
-import AdminSyllabusScreen from '../screens/syllabus/AdminSyllabusScreen';
-import TeacherAdminResourcesScreen from '../screens/syllabus_Textbook/TeacherAdminResourcesScreen';
-import TeacherAttendanceMarkingScreen from '../screens/teacher_attendence/TeacherAttendanceMarkingScreen';
 
-import TeacherPerformanceScreen from '../screens/Performance/TeacherPerformanceScreen';
-import StudentStackNavigator from '../screens/StudentStackNavigator';
 
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -71,7 +50,7 @@ const GRADIENT_COLORS = [TERTIARY_COLOR, '#ffffffff'];
 
 const MAIN_TABS = ['home', 'calendar', 'profile'];
 
-const AdminDashboard = ({ navigation }) => {
+const OthersDashboard = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuth();
@@ -107,34 +86,11 @@ const AdminDashboard = ({ navigation }) => {
     : require('../assets/default_avatar.png');
 
   const allQuickAccessItems = [
-    { id: 'qa0', title: 'LM', imageSource: 'https://cdn-icons-png.flaticon.com/128/15096/15096966.png', navigateToTab: 'AdminLM' },
-    { id: 'qa25', title: 'Staff', imageSource: 'https://cdn-icons-png.flaticon.com/128/12105/12105197.png', navigateToTab: 'StaffNavigator' },
-    { id: 'qa25', title: 'Students', imageSource: 'https://cdn-icons-png.flaticon.com/128/16405/16405976.png', navigateToTab: 'StudentStackNavigator' },
-    { id: 'qa23', title: 'Teacher Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceMarkingScreen' },
-    { id: 'qa24', title: 'Teacher Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png', navigateToTab: 'TeacherPerformanceScreen' },
-    { id: 'qa18', title: 'Student Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/18479/18479099.png', navigateTo: 'ReportScreen' },
-    { id: 'qa1', title: 'Time Table', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
-    { id: 'qa2', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-    { id: 'qa3', title: 'Homework', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
+    
     { id: 'qa4', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa5', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
-    { id: 'qa6', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913475.png', navigateToTab: 'TeacherAdminExamsScreen' },
-    { id: 'qa7', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/11277/11277118.png', navigateToTab: 'TeacherAdminPTMScreen' },
-    { id: 'qa8', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'OnlineClassScreen' },
     { id: 'qa9', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
-    { id: 'qa10', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
-    { id: 'qa11', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
-    { id: 'qa12', title: 'Alumni', imageSource: 'https://cdn-icons-png.flaticon.com/128/9517/9517272.png', navigateToTab: 'AlumniScreen' },
-    { id: 'qa13', title: 'Pre-Admissions', imageSource: 'https://cdn-icons-png.flaticon.com/128/10220/10220958.png', navigateToTab: 'PreAdmissionsScreen' },
-    { id: 'qa14', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
-    { id: 'qa15', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'TeacherAdminExamScreen' },
     { id: 'qa16', title: 'Kitchen', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
-    { id: 'qa17', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'TeacherAdminLabsScreen' },
-    { id: 'qa19', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
-    { id: 'qa20', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'AdminSyllabusScreen' },
-    { id: 'qa22', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
-    { id: 'qa-ads-manage', title: 'Ads Management', imageSource: 'https://cdn-icons-png.flaticon.com/128/19006/19006038.png', navigateTo: 'AdminAdDashboardScreen' },
-    { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
 
   ];
 
@@ -189,30 +145,9 @@ const AdminDashboard = ({ navigation }) => {
         case 'allNotifications': return ( <><ContentScreenHeader title="Notifications" onBack={handleBack} /><NotificationsScreen onUnreadCountChange={setUnreadNotificationsCount} /></> );
         case 'calendar': return ( <><ContentScreenHeader title="Academic Calendar" onBack={handleBack} /><AcademicCalendar /></> );
         case 'profile': return ( <><ContentScreenHeader title="My Profile" onBack={handleBack} /><ProfileScreen /></> );
-        case 'AdminLM': return ( <><ContentScreenHeader title="Login Management" onBack={handleBack} /><AdminLM /></> );
-        case 'Timetable': return ( <><ContentScreenHeader title="Time Table Management" onBack={handleBack} /><TimetableScreen /></> );
-        case 'Attendance': return ( <><ContentScreenHeader title="Attendance" onBack={handleBack} /><AttendanceScreen /></> );
-        case 'TeacherAdminHomeworkScreen': return ( <> <ContentScreenHeader title="Homework" onBack={handleBack} /> <TeacherAdminHomeworkScreen /> </> );
         case 'AboutUs': return ( <><ContentScreenHeader title="About Us" onBack={handleBack} /><AboutUs /></> );
-        case 'TeacherAdminExamsScreen': return ( <><ContentScreenHeader title="Exams" onBack={handleBack} /><TeacherAdminExamsScreen /></> );
-        case 'TeacherAdminPTMScreen': return ( <><ContentScreenHeader title="Parents-Teacher Meetings" onBack={handleBack} /><TeacherAdminPTMScreen /></> );
-        case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
         case 'FoodScreen': return ( <><ContentScreenHeader title="Lunch Menu" onBack={handleBack} /><FoodScreen /></> );
-        case 'TeacherHealthAdminScreen': return ( <><ContentScreenHeader title="Healh Info" onBack={handleBack} /><TeacherHealthAdminScreen /></> );
-        // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
-        case 'AlumniScreen': return ( <><ContentScreenHeader title="Alumni" onBack={handleBack} /><AlumniScreen /></> );
-        case 'PreAdmissionsScreen': return ( <><ContentScreenHeader title="Pre-Admissions" onBack={handleBack} /><PreAdmissionsScreen /></> );
-        case 'AdminEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><AdminEventsScreen /></> );
-        case 'TeacherAdminExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleBack} /><TeacherAdminExamScreen /></> );
         case 'KitchenScreen': return ( <><ContentScreenHeader title="Kitchen" onBack={handleBack} /><KitchenScreen /></> );
-        case 'TeacherAdminLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleBack} /><TeacherAdminLabsScreen /></> );
-        // case 'MarksEntryScreen': return ( <><ContentScreenHeader title="Progress Reports" onBack={handleBack} /><MarksEntryScreen /></> );
-        case 'TeacherAdminMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleBack} /><TeacherAdminMaterialsScreen /></> );
-        case 'AdminSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleBack} /><AdminSyllabusScreen /></> );
-        case 'TeacherAdminResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><TeacherAdminResourcesScreen /></> );
-        case 'TeacherAttendanceMarkingScreen': return ( <><ContentScreenHeader title="Teacher Attendence" onBack={handleBack} /><TeacherAttendanceMarkingScreen /></> );
-        case 'TeacherPerformanceScreen': return ( <><ContentScreenHeader title="Teacher Performance" onBack={handleBack} /><TeacherPerformanceScreen /></> );
-        case 'StudentStackNavigator': return ( <><ContentScreenHeader title="Students" onBack={handleBack} /><StudentStackNavigator /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
       }
@@ -340,4 +275,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default AdminDashboard;
+export default OthersDashboard;

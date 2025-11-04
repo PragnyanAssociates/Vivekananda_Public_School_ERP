@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  View, Text, StyleSheet, TextInput, Image, 
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, 
-  ScrollView, StatusBar, SafeAreaView, Pressable, Animated 
+import {
+  View, Text, StyleSheet, TextInput, Image,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  ScrollView, StatusBar, SafeAreaView, Pressable, Animated
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,7 @@ import Feather from 'react-native-vector-icons/Feather';
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type LoginScreenProps = {
-  route: { params: { role: 'admin' | 'teacher' | 'student' |  'Driver'; } }
+  route: { params: { role: 'admin' | 'teacher' | 'student' | 'others'; } }
 };
 
 type NavigationProp = {
@@ -29,20 +29,15 @@ export default function LoginScreen({ route }: LoginScreenProps) {
   const { login } = useAuth();
   const navigation = useNavigation<NavigationProp>();
 
-  // --- Animation Hooks ---
   const headerAnim = useRef(new Animated.Value(0)).current;
   const formAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // --- Focus State for Inputs ---
   const [isUserFocused, setIsUserFocused] = useState(false);
   const [isPassFocused, setIsPassFocused] = useState(false);
-  
-  // --- NEW: State for Password Visibility ---
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   useEffect(() => {
-    // Staggered entry animation for a smooth, professional appearance
     Animated.stagger(200, [
       Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true }),
       Animated.spring(formAnim, { toValue: 1, useNativeDriver: true }),
@@ -50,7 +45,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
   }, []);
 
   const triggerShake = () => {
-    shakeAnim.setValue(0); // Reset before shaking
+    shakeAnim.setValue(0);
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 10, duration: 80, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: -10, duration: 80, useNativeDriver: true }),
@@ -62,7 +57,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
   const handleLogin = async () => {
     if (!username || !password) {
       Alert.alert("Input Required", "Please enter your details.");
-      triggerShake(); // Shake on validation error
+      triggerShake();
       return;
     }
     setIsLoggingIn(true);
@@ -74,25 +69,31 @@ export default function LoginScreen({ route }: LoginScreenProps) {
       });
       const data = await response.json();
       if (response.ok) {
-        if (data.user.role !== role) {
+        // ==========================================================
+        // --- THIS IS THE CORRECTED LINE ---
+        // ==========================================================
+        // Compare roles in a case-insensitive way to fix the "Others" login issue.
+        if (data.user.role.toLowerCase() !== role.toLowerCase()) {
+        // ==========================================================
+        // --- END OF CORRECTION ---
+        // ==========================================================
           Alert.alert("Login Failed", `You are not registered as a ${role}.`);
-          triggerShake(); // Shake on role mismatch
+          triggerShake();
         } else {
           await login(data.user, data.token);
         }
       } else {
         Alert.alert("Login Failed", data.message || "Invalid credentials.");
-        triggerShake(); // Shake on invalid credentials
+        triggerShake();
       }
     } catch (error) {
       Alert.alert("An Error Occurred", "Could not connect to the server.");
-      triggerShake(); // Shake on network error
+      triggerShake();
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  // --- Animated Styles ---
   const headerStyle = { opacity: headerAnim, transform: [{ scale: headerAnim }] };
   const formStyle = { opacity: formAnim, transform: [{ translateY: formAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] };
   const shakeStyle = { transform: [{ translateX: shakeAnim }] };
@@ -103,7 +104,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
         <StatusBar barStyle="dark-content" />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContainer}>
-            
+
             <Animated.View style={[styles.header, headerStyle]}>
               <Image source={require("../assets/logo.png")} style={styles.logo}/>
               <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -111,53 +112,52 @@ export default function LoginScreen({ route }: LoginScreenProps) {
 
             <Animated.View style={[styles.formContainer, formStyle, shakeStyle]}>
               <Text style={styles.title}>{capitalize(role)} Login</Text>
-              
+
               <View style={[styles.inputContainer, isUserFocused && styles.inputContainerFocused]}>
                 <Feather name={role === 'student' ? 'hash' : 'user'} size={20} color={isUserFocused ? "#007BFF" : "#888"} style={styles.inputIcon} />
-                <TextInput 
-                  style={styles.input} 
-                  placeholder={role === 'student' ? 'Student ID' : 'Username'} 
-                  value={username} 
-                  onChangeText={setUsername} 
-                  autoCapitalize="none" 
+                <TextInput
+                  style={styles.input}
+                  placeholder={role === 'student' ? 'Student ID' : 'Username'}
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
                   placeholderTextColor="#888"
                   onFocus={() => setIsUserFocused(true)}
                   onBlur={() => setIsUserFocused(false)}
                 />
               </View>
 
-              {/* --- MODIFIED PASSWORD INPUT --- */}
               <View style={[styles.inputContainer, isPassFocused && styles.inputContainerFocused]}>
                 <Feather name="lock" size={20} color={isPassFocused ? "#007BFF" : "#888"} style={styles.inputIcon} />
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Password" 
-                  secureTextEntry={!isPasswordVisible} // Dynamic visibility
-                  value={password} 
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  secureTextEntry={!isPasswordVisible}
+                  value={password}
                   onChangeText={setPassword}
                   placeholderTextColor="#888"
                   onFocus={() => setIsPassFocused(true)}
                   onBlur={() => setIsPassFocused(false)}
-                  textContentType="password" // Helps with password managers
+                  textContentType="password"
                 />
-                <Pressable 
-                  onPress={() => setIsPasswordVisible(!isPasswordVisible)} 
+                <Pressable
+                  onPress={() => setIsPasswordVisible(!isPasswordVisible)}
                   style={styles.eyeIconContainer}
                 >
-                  <Feather 
-                    name={isPasswordVisible ? "eye" : "eye-off"} 
-                    size={20} 
-                    color={isPassFocused ? "#007BFF" : "#888"} 
+                  <Feather
+                    name={isPasswordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color={isPassFocused ? "#007BFF" : "#888"}
                   />
                 </Pressable>
               </View>
-              
+
               <Pressable style={({ pressed }) => [styles.loginButton, { transform: [{scale: pressed ? 0.98 : 1}] }]} onPress={handleLogin} disabled={isLoggingIn}>
                 {isLoggingIn ? (<ActivityIndicator color="#fff" />) : (<Text style={styles.loginButtonText}>Login</Text>)}
               </Pressable>
 
             </Animated.View>
-            
+
             <Text style={styles.footerText}>© 2025 Vivekananda Public School</Text>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -166,14 +166,13 @@ export default function LoginScreen({ route }: LoginScreenProps) {
   );
 }
 
-// --- YOUR ORIGINAL STYLES WITH DYNAMIC ENHANCEMENTS & NEW ADDITION ---
 const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'space-between', 
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 30,
   },
@@ -234,9 +233,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  // --- NEW STYLE for the eye icon ---
   eyeIconContainer: {
-    padding: 5, // Increases the touchable area for the icon
+    padding: 5,
   },
   loginButton: {
     backgroundColor: "#007BFF",

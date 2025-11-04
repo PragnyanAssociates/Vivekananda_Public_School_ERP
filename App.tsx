@@ -33,6 +33,7 @@ import ReportNavigator, { StudentReportNavigator } from './src/screens/report/Re
 import AdminDashboard from './src/components/AdminDashboard';
 import TeacherDashboard from './src/components/TeacherDashboard';
 import StudentDashboard from './src/components/StudentDashboard';
+import OthersDashboard from './src/components/OthersDashboard';
 
 
 // Shared Authenticated Sub-screens
@@ -191,7 +192,7 @@ const AuthenticatedStack = () => {
     switch (user?.role) {
       case 'admin':   return 'AdminDashboard';
       case 'teacher': return 'TeacherDashboard';
-      // case 'driver':   return 'driverDashboard';
+      case 'others':   return 'OthersDashboard';
       case 'student': return 'StudentDashboard';
       default:        return 'StudentDashboard';
     }
@@ -202,6 +203,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} />
       <Stack.Screen name="StudentDashboard" component={StudentDashboard} />
+      <Stack.Screen name="OthersDashboard" component={OthersDashboard} />
       
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="AcademicCalendar" component={AcademicCalendar} />
