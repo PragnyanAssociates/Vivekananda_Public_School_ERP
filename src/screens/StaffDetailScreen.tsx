@@ -107,7 +107,7 @@ const StaffDetailScreen = ({ route }) => {
                     <DetailRow label="Address" value={staffDetails.address} />
                 </View>
 
-                {/* MODIFIED: Professional Details Section */}
+                {/* Professional Details Section */}
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>Professional Details</Text>
                     <DetailRow label="Aadhar No." value={staffDetails.aadhar_no} />
@@ -162,7 +162,6 @@ const styles = StyleSheet.create({
         paddingVertical: 3,
         borderRadius: 15,
     },
-    // MODIFIED: Added Card styles for better section separation
     card: {
         backgroundColor: '#ffffff',
         borderRadius: 8,

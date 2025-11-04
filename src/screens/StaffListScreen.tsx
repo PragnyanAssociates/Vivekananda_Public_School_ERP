@@ -10,7 +10,6 @@ import { SERVER_URL } from '../../apiConfig';
 const StaffListScreen = ({ navigation }) => {
     const [admins, setAdmins] = useState([]);
     const [teachers, setTeachers] = useState([]);
-    // MODIFIED: Added state for 'others'
     const [others, setOthers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -20,7 +19,6 @@ const StaffListScreen = ({ navigation }) => {
             const response = await apiClient.get('/staff/all');
             setAdmins(response.data.admins || []);
             setTeachers(response.data.teachers || []);
-            // MODIFIED: Set state for 'others' from API response
             setOthers(response.data.others || []);
         } catch (error) {
             console.error('Error fetching staff list:', error);
@@ -32,7 +30,6 @@ const StaffListScreen = ({ navigation }) => {
 
     useFocusEffect(
       useCallback(() => {
-        // MODIFIED: Check all three arrays before setting loading to true
         if (admins.length === 0 && teachers.length === 0 && others.length === 0) {
             setLoading(true);
         }
@@ -70,20 +67,23 @@ const StaffListScreen = ({ navigation }) => {
         );
     };
 
-    const StaffSection = ({ title, data }) => (
-        <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            {data.length > 0 ? (
+    const StaffSection = ({ title, data }) => {
+        // This check ensures that a section is only rendered if it has data.
+        if (!data || data.length === 0) {
+            return null;
+        }
+
+        return (
+            <View style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>{title}</Text>
                 <View style={styles.staffGrid}>
                     {data.map(item => (
                         <StaffMember key={item.id} item={item} />
                     ))}
                 </View>
-            ) : (
-                <Text style={styles.noDataText}>No staff found in this category.</Text>
-            )}
-        </View>
-    );
+            </View>
+        );
+    };
 
     if (loading) {
         return <View style={styles.loaderContainer}><ActivityIndicator size="large" color="#34495e" /></View>;
@@ -96,7 +96,6 @@ const StaffListScreen = ({ navigation }) => {
         >
             <StaffSection title="Admin" data={admins} />
             <StaffSection title="Teachers" data={teachers} />
-            {/* MODIFIED: Added the new "Others" section */}
             <StaffSection title="Others" data={others} />
         </ScrollView>
     );
