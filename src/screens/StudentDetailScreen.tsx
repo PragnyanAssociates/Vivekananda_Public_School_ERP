@@ -25,14 +25,14 @@ const subjectColorMap = new Map<string, string>();
 let colorIndex = 0;
 const getSubjectColor = (subject?: string): string => { if (!subject) return '#FFFFFF'; if (subjectColorMap.has(subject)) { return subjectColorMap.get(subject)!; } const color = subjectColorPalette[colorIndex % subjectColorPalette.length]; subjectColorMap.set(subject, color); colorIndex++; return color; };
 
-// --- ★★★ CORRECT Progress Report Constants ★★★ ---
+// --- Progress Report Constants ---
 const CLASS_SUBJECTS = { 'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'] };
 const EXAM_MAPPING = { 'AT1': 'Assignment-1', 'UT1': 'Unitest-1', 'AT2': 'Assignment-2', 'UT2': 'Unitest-2', 'AT3': 'Assignment-3', 'UT3': 'Unitest-3', 'AT4': 'Assignment-4', 'UT4': 'Unitest-4', 'SA1': 'SA1', 'SA2': 'SA2', 'Total': 'Overall' };
-const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'SA2', 'Total']; // Simplified for mobile view
+const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4','SA1', 'SA2', 'Total'];
 const MONTHS = ['June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May'];
 
 
-// --- Reusable Timetable Component ---
+// --- Reusable Component for Timetable Grid ---
 const StudentTimetable = ({ classGroup }) => {
     const [timetableData, setTimetableData] = useState<TimetableSlotFromAPI[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -45,10 +45,18 @@ const StudentTimetable = ({ classGroup }) => {
 // --- ★★★ NEW: Reusable Component for Embedded Report Card ★★★ ---
 const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceData }) => {
     const subjects = CLASS_SUBJECTS[studentInfo.class_group] || [];
-    const formatMonth = (month) => month.substring(0, 3);
+    const formatMonthForDisplay = (month) => { if (month === 'September') return 'Sept'; return month.substring(0, 3); };
 
     return (
         <View style={rcStyles.card}>
+            {/* School header is removed as requested */}
+            <View style={rcStyles.studentInfoContainer}>
+                <View style={rcStyles.infoRow}><Text style={rcStyles.infoLabel}>Name:</Text><Text style={rcStyles.infoValue}>{studentInfo.full_name}</Text></View>
+                <View style={rcStyles.infoRow}><Text style={rcStyles.infoLabel}>Roll No:</Text><Text style={rcStyles.infoValue}>{studentInfo.roll_no}</Text></View>
+                <View style={rcStyles.infoRow}><Text style={rcStyles.infoLabel}>Class:</Text><Text style={rcStyles.infoValue}>{studentInfo.class_group}</Text></View>
+                <View style={rcStyles.infoRow}><Text style={rcStyles.infoLabel}>Year:</Text><Text style={rcStyles.infoValue}>{academicYear}</Text></View>
+            </View>
+
             <Text style={rcStyles.sectionTitle}>PROGRESS CARD</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={rcStyles.table}>
@@ -58,10 +66,10 @@ const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceDa
                 </View>
             </ScrollView>
 
-            <Text style={rcStyles.sectionTitle}>ATTENDANCE</Text>
+            <Text style={rcStyles.sectionTitle}>ATTENDANCE PARTICULARS</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={rcStyles.table}>
-                    <View style={rcStyles.tableRow}><Text style={[rcStyles.tableHeader, rcStyles.attendanceHeaderCol]}>Month</Text>{MONTHS.map(month => <Text key={month} style={[rcStyles.tableHeader, rcStyles.attendanceDataCol]}>{formatMonth(month)}</Text>)}</View>
+                    <View style={rcStyles.tableRow}><Text style={[rcStyles.tableHeader, rcStyles.attendanceHeaderCol]}>Month</Text>{MONTHS.map(month => <Text key={month} style={[rcStyles.tableHeader, rcStyles.attendanceDataCol]}>{formatMonthForDisplay(month)}</Text>)}</View>
                     <View style={rcStyles.tableRow}><Text style={[rcStyles.tableCell, rcStyles.attendanceHeaderCol]}>Working Days</Text>{MONTHS.map(month => <Text key={month} style={[rcStyles.tableCell, rcStyles.attendanceDataCol]}>{attendanceData[month]?.workingDays ?? '-'}</Text>)}</View>
                     <View style={rcStyles.tableRow}><Text style={[rcStyles.tableCell, rcStyles.attendanceHeaderCol]}>Present Days</Text>{MONTHS.map(month => <Text key={month} style={[rcStyles.tableCell, rcStyles.attendanceDataCol]}>{attendanceData[month]?.presentDays ?? '-'}</Text>)}</View>
                 </View>
@@ -78,8 +86,6 @@ const StudentDetailScreen = ({ route }) => {
     const [isViewerVisible, setViewerVisible] = useState(false);
     const [isAcademicExpanded, setIsAcademicExpanded] = useState(false);
     const [isTimetableExpanded, setIsTimetableExpanded] = useState(false);
-    
-    // ★★★ NEW STATE FOR REPORT CARD ★★★
     const [isReportCardExpanded, setIsReportCardExpanded] = useState(false);
     const [reportCardData, setReportCardData] = useState(null);
     const [reportCardLoading, setReportCardLoading] = useState(false);
@@ -92,7 +98,7 @@ const StudentDetailScreen = ({ route }) => {
     const handleAcademicToggle = () => { if (!isAcademicExpanded) scrollToBottom(); setIsAcademicExpanded(prevState => !prevState); };
     const handleTimetableToggle = () => { if (!isTimetableExpanded) scrollToBottom(); setIsTimetableExpanded(prevState => !prevState); };
 
-    // ★★★ NEW HANDLER FOR REPORT CARD ★★★
+    // Handler for Consolidated Report Card
     const handleReportCardToggle = async () => {
         if (!isReportCardExpanded) {
             if (!reportCardData) {
@@ -107,8 +113,12 @@ const StudentDetailScreen = ({ route }) => {
                     const attendanceMap = {};
                     attendance.forEach(att => { if (att.month) { attendanceMap[att.month] = { workingDays: att.working_days ?? '-', presentDays: att.present_days ?? '-' }; } });
                     setReportCardData({ studentInfo, academicYear, marksData: marksMap, attendanceData: attendanceMap });
-                } catch (err) { console.error('Error fetching report card:', err); } 
-                finally { setReportCardLoading(false); }
+                } catch (err) {
+                    console.error('Error fetching report card:', err);
+                    setReportCardData(null);
+                } finally {
+                    setReportCardLoading(false);
+                }
             }
             scrollToBottom();
         }
@@ -130,7 +140,7 @@ const StudentDetailScreen = ({ route }) => {
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleAcademicToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Academic Details</Text><Text style={styles.arrowIcon}>{isAcademicExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isAcademicExpanded && (<View style={styles.cardContent}><DetailRow label="Class" value={studentDetails.class_group} /><DetailRow label="Roll No." value={studentDetails.roll_no} /><DetailRow label="Admission No." value={studentDetails.admission_no} /><DetailRow label="Parent Name" value={studentDetails.parent_name} /><DetailRow label="Aadhar No." value={studentDetails.aadhar_no} /><DetailRow label="PEN No." value={studentDetails.pen_no} /><DetailRow label="Admission Date" value={studentDetails.admission_date} /></View>)}</View>
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleTimetableToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Timetable</Text><Text style={styles.arrowIcon}>{isTimetableExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isTimetableExpanded && <StudentTimetable classGroup={studentDetails.class_group} />}</View>
 
-                {/* ★★★ NEW PROGRESS REPORT SECTION ★★★ */}
+                {/* ★★★ CORRECTED PROGRESS REPORT SECTION ★★★ */}
                 <View style={styles.collapsibleCard}>
                     <TouchableOpacity style={styles.collapsibleHeader} onPress={handleReportCardToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Progress Report</Text><Text style={styles.arrowIcon}>{isReportCardExpanded ? '▲' : '▼'}</Text></TouchableOpacity>
                     {isReportCardExpanded && ( reportCardLoading ? <ActivityIndicator size="large" color="#008080" style={{ marginVertical: 20 }} /> : reportCardData ? <EmbeddedReportCard {...reportCardData} /> : <Text style={styles.errorText}>No report data available.</Text> )}
@@ -140,6 +150,7 @@ const StudentDetailScreen = ({ route }) => {
     );
 };
 
+// --- General Styles ---
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f4f6f8' }, scrollContentContainer: { paddingBottom: 20 }, loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }, errorText: { fontSize: 16, color: '#d32f2f', textAlign: 'center', padding: 20 }, profileHeader: { alignItems: 'center', paddingVertical: 30, paddingHorizontal: 15, backgroundColor: '#008080' }, avatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, borderColor: '#ffffff', marginBottom: 15, backgroundColor: '#bdc3c7' }, fullName: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', textAlign: 'center' }, role: { fontSize: 16, color: '#ecf0f1', marginTop: 5, backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 15 }, card: { backgroundColor: '#ffffff', borderRadius: 8, marginHorizontal: 15, marginTop: 15, paddingHorizontal: 15, paddingBottom: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 }, cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', marginBottom: 5 }, cardContent: { paddingHorizontal: 15, paddingBottom: 5 }, detailRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', alignItems: 'center' }, detailLabel: { fontSize: 15, color: '#7f8c8d', flex: 2 }, detailValue: { fontSize: 15, color: '#2c3e50', flex: 3, fontWeight: '500', textAlign: 'right' }, collapsibleCard: { backgroundColor: '#ffffff', borderRadius: 8, marginHorizontal: 15, marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, overflow: 'hidden' }, collapsibleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 }, collapsibleTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080' }, arrowIcon: { fontSize: 20, color: '#008080' }, modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center' }, modalContent: { width: '90%', height: '70%', justifyContent: 'center', alignItems: 'center' }, enlargedAvatar: { width: '100%', height: '100%', borderRadius: 10 }, closeButton: { position: 'absolute', bottom: 20, backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 35, borderRadius: 25 }, closeButtonText: { color: '#2c3e50', fontSize: 16, fontWeight: 'bold' },
     ttContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' }, ttHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#CFD8DC' }, ttHeaderCell: { paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#ECEFF1' }, ttHeaderText: { fontSize: 12, fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase' }, ttRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F1F3F4' }, ttCell: { paddingVertical: 12, paddingHorizontal: 4, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#F1F3F4', minHeight: 70 }, ttTimeCell: { alignItems: 'center', backgroundColor: '#F8F9FA' }, ttTimeText: { fontSize: 11, color: '#495057', fontWeight: '600' }, ttSubjectText: { fontSize: 13, fontWeight: '800', color: '#37474F', marginBottom: 3, textAlign: 'center' }, ttTeacherText: { fontSize: 10, color: '#78909C', textAlign: 'center', marginTop: 2, fontWeight: '500' }, ttBreakCell: { alignItems: 'center', backgroundColor: '#EAECEE' }, ttBreakTextSubject: { fontSize: 12, fontWeight: '600', color: '#546E7A' },
@@ -148,6 +159,10 @@ const styles = StyleSheet.create({
 // --- ★★★ NEW: Styles for the embedded Report Card ★★★ ---
 const rcStyles = StyleSheet.create({
     card: { backgroundColor: '#ffffff', paddingVertical: 10, paddingHorizontal: 5 },
+    studentInfoContainer: { backgroundColor: '#f8f9fa', borderRadius: 8, padding: 15, margin: 5, marginBottom: 20, borderWidth: 1, borderColor: '#e9ecef' },
+    infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
+    infoLabel: { fontSize: 14, fontWeight: '600', color: '#495057', width: 80 },
+    infoValue: { fontSize: 14, color: '#212529', flex: 1 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#343a40', textAlign: 'center', marginVertical: 15, marginTop: 10 },
     table: { borderWidth: 1, borderColor: '#dfe4ea', borderRadius: 8, overflow: 'hidden', marginHorizontal: 5 },
     tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#dfe4ea' },

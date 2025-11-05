@@ -3607,207 +3607,6 @@ app.get('/api/study-materials/student/:classGroup', async (req, res) => {
 
 
 
-// ==========================================================
-// --- PROGRESS REPORTS (RESULTS) API ROUTES ---
-// ==========================================================
-
-// --- TEACHER / ADMIN ROUTES ---
-
-// GET all students in a specific class
-app.get('/api/reports/class/:classGroup/students', async (req, res) => {
-    try {
-        const { classGroup } = req.params;
-        const query = "SELECT id, full_name FROM users WHERE role = 'student' AND class_group = ?";
-        const [students] = await db.query(query, [classGroup]);
-        res.json(students);
-    } catch (error) {
-        console.error("Error fetching students for class:", error);
-        res.status(500).json({ message: 'Failed to fetch students.' });
-    }
-});
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// CREATE a new progress report
-app.post('/api/reports', async (req, res) => {
-    const { reportDetails, subjectsData, uploaded_by } = req.body;
-    const { student_id, class_group, report_title, issue_date, overall_grade, teacher_comments, sgpa, cgpa, total_backlog, result_status } = reportDetails;
-    
-    if (!student_id || !report_title || !issue_date) {
-        return res.status(400).json({ message: "Student, Report Title, and Issue Date are required." });
-    }
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // Step 1: Create the report and subject entries (no change here)
-        const reportQuery = `INSERT INTO progress_reports (student_id, class_group, report_title, issue_date, overall_grade, teacher_comments, sgpa, cgpa, total_backlog, result_status, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const reportValues = [student_id, class_group, report_title, issue_date, overall_grade, teacher_comments, sgpa || null, cgpa || null, total_backlog || 0, result_status, uploaded_by];
-        const [reportResult] = await connection.query(reportQuery, reportValues);
-        const report_id = reportResult.insertId;
-
-        if (subjectsData && subjectsData.length > 0) {
-            const subjectsQuery = `INSERT INTO report_subjects (report_id, subject_code, subject_name, credit, grade, grade_point, credit_point) VALUES ?`;
-            const subjectValues = subjectsData.map(s => [ report_id, s.subject_code || null, s.subject_name, s.credit === '' ? null : s.credit, s.grade || null, s.grade_point === '' ? null : s.grade_point, s.credit_point === '' ? null : s.credit_point ]).filter(s => s[2] && s[2].trim() !== '');
-            if (subjectValues.length > 0) {
-                await connection.query(subjectsQuery, [subjectValues]);
-            }
-        }
-        
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR CREATION ★★★★★
-        
-        // 1. Get the name of the teacher/admin who uploaded the report
-        const [[uploader]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [uploaded_by]);
-        const senderName = uploader.full_name || "School Administration";
-
-        // 2. Prepare notification details for the student
-        const notificationTitle = `New Report Published: ${report_title}`;
-        const notificationMessage = `Your progress report for "${report_title}" has been published. You can view or download it now.`;
-
-        // 3. Send a single notification to the specific student
-        await createNotification(
-            connection,
-            student_id,
-            senderName,
-            notificationTitle,
-            notificationMessage,
-            `/reports/${report_id}` // Link to the specific report
-        );
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC FOR CREATION ★★★★★
-
-        await connection.commit();
-        res.status(201).json({ message: 'Progress report created successfully and student notified.', report_id });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error creating progress report:", error);
-        res.status(500).json({ message: 'Failed to create report.' });
-    } finally {
-        connection.release();
-    }
-});
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// UPDATE an existing progress report
-app.put('/api/reports/:reportId', async (req, res) => {
-    const { reportId } = req.params;
-    const { reportDetails, subjectsData, uploaded_by } = req.body; // Ensure 'uploaded_by' is sent from the form on update
-    const { report_title, issue_date, overall_grade, teacher_comments, sgpa, cgpa, total_backlog, result_status } = reportDetails;
-
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // --- Step 1 & 2: Update report and subjects (no change here) ---
-        const reportQuery = `UPDATE progress_reports SET report_title = ?, issue_date = ?, overall_grade = ?, teacher_comments = ?, sgpa = ?, cgpa = ?, total_backlog = ?, result_status = ? WHERE report_id = ?`;
-        const sanitized_issue_date = issue_date === '' ? null : issue_date;
-        await connection.query(reportQuery, [report_title, sanitized_issue_date, overall_grade, teacher_comments, sgpa || null, cgpa || null, total_backlog || 0, result_status, reportId]);
-
-        await connection.query('DELETE FROM report_subjects WHERE report_id = ?', [reportId]);
-        
-        if (subjectsData && subjectsData.length > 0) {
-            const subjectsQuery = `INSERT INTO report_subjects (report_id, subject_code, subject_name, credit, grade, grade_point, credit_point) VALUES ?`;
-            const subjectValues = subjectsData.map(s => [
-                reportId, s.subject_code || null, s.subject_name,
-                s.credit === '' ? null : s.credit, s.grade || null,
-                s.grade_point === '' ? null : s.grade_point,
-                s.credit_point === '' ? null : s.credit_point
-            ]).filter(s => s[2] && s[2].trim() !== '');
-            
-            if (subjectValues.length > 0) {
-                await connection.query(subjectsQuery, [subjectValues]);
-            }
-        }
-        
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
-
-        // 1. Get the student's ID from the report we just updated
-        const [[report]] = await connection.query("SELECT student_id FROM progress_reports WHERE report_id = ?", [reportId]);
-
-        if (report) {
-            // 2. Get the name of the teacher/admin who updated the report
-            const [[uploader]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [uploaded_by]);
-            const senderName = uploader.full_name || "School Administration";
-
-            // 3. Prepare notification details
-            const notificationTitle = `Report Updated: ${report_title}`;
-            const notificationMessage = `Your progress report for "${report_title}" has been updated. Please review the changes.`;
-
-            // 4. Send the notification to the student
-            await createNotification(
-                connection,
-                report.student_id,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                `/reports/${reportId}`
-            );
-        }
-        
-        // ★★★★★ END: NEW NOTIFICATION LOGIC FOR UPDATE ★★★★★
-
-        await connection.commit();
-        res.status(200).json({ message: 'Progress report updated and student notified successfully.' });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error updating progress report:", error);
-        res.status(500).json({ message: 'Failed to update report.' });
-    } finally {
-        connection.release();
-    }
-});
-
-// DELETE a progress report
-app.delete('/api/reports/:reportId', async (req, res) => {
-    try {
-        const { reportId } = req.params;
-        const [result] = await db.query('DELETE FROM progress_reports WHERE report_id = ?', [reportId]);
-        if (result.affectedRows === 0) return res.status(404).json({ message: "Report not found." });
-        res.status(200).json({ message: "Report deleted successfully." });
-    } catch (error) {
-        console.error("Error deleting report:", error);
-        res.status(500).json({ message: "Failed to delete report." });
-    }
-});
-
-
-// --- STUDENT ROUTES ---
-
-// GET all reports for a specific student
-app.get('/api/reports/student/:studentId', async (req, res) => {
-    try {
-        const { studentId } = req.params;
-        const query = `SELECT * FROM progress_reports WHERE student_id = ? ORDER BY issue_date DESC`;
-        const [reports] = await db.query(query, [studentId]);
-        res.json(reports);
-    } catch (error) {
-        console.error("Error fetching student reports:", error);
-        res.status(500).json({ message: "Failed to fetch reports." });
-    }
-});
-
-// GET full details of a single report
-app.get('/api/reports/:reportId/details', async (req, res) => {
-    try {
-        const { reportId } = req.params;
-        const reportQuery = `SELECT pr.*, u.full_name, u.username, up.roll_no FROM progress_reports pr JOIN users u ON pr.student_id = u.id LEFT JOIN user_profiles up ON u.id = up.user_id WHERE pr.report_id = ?`;
-        const subjectsQuery = `SELECT * FROM report_subjects WHERE report_id = ?`;
-        
-        const [[reportDetails]] = await db.query(reportQuery, [reportId]);
-        if (!reportDetails) return res.status(404).json({ message: "Report not found." });
-        
-        const [subjects] = await db.query(subjectsQuery, [reportId]);
-        res.json({ reportDetails, subjects });
-    } catch (error) {
-        console.error("Error fetching report details:", error);
-        res.status(500).json({ message: "Failed to fetch report details." });
-    }
-});
-
-
 
 
 // ===============================================================
@@ -7665,6 +7464,50 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
     } catch (error) {
         console.error("Error fetching class summaries:", error);
         res.status(500).json({ message: "Failed to fetch class summaries" });
+    }
+});
+// GET: A specific student's consolidated report card by their ID
+app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
+    const { studentId } = req.params;
+    const academicYear = getCurrentAcademicYear(); // This helper function should already be in your file
+
+    try {
+        // Step 1: Fetch basic student info
+        const [studentRows] = await db.query(
+            `SELECT
+                u.id,
+                u.full_name,
+                u.class_group,
+                COALESCE(p.roll_no, u.username) as roll_no
+            FROM users u
+            LEFT JOIN user_profiles p ON u.id = p.user_id
+            WHERE u.id = ?`,
+            [studentId]
+        );
+
+        if (studentRows.length === 0) {
+            return res.status(404).json({ message: "Student not found" });
+        }
+        const studentInfo = studentRows[0];
+
+        // Step 2: Fetch all marks for the student for the current academic year
+        const [marks] = await db.query(
+            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
+            [studentId, academicYear]
+        );
+
+        // Step 3: Fetch all attendance for the student for the current academic year
+        const [attendance] = await db.query(
+            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
+            [studentId, academicYear]
+        );
+
+        // Step 4: Send the combined data
+        res.json({ studentInfo, marks, attendance, academicYear });
+
+    } catch (error) {
+        console.error(`Error fetching consolidated report card for student ${studentId}:`, error);
+        res.status(500).json({ message: "Failed to fetch report card data" });
     }
 });
 
