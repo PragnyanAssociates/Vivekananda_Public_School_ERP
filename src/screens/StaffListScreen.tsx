@@ -8,7 +8,7 @@ import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
 
 const StaffListScreen = ({ navigation }) => {
-    // MODIFIED: State to hold the two different admin types
+    // State is already set up to hold both admin types
     const [managementAdmins, setManagementAdmins] = useState([]);
     const [generalAdmins, setGeneralAdmins] = useState([]);
     const [teachers, setTeachers] = useState([]);
@@ -21,7 +21,7 @@ const StaffListScreen = ({ navigation }) => {
             const response = await apiClient.get('/staff/all');
             const allAdmins = response.data.admins || [];
             
-            // MODIFIED: Filter the incoming admins into two separate groups based on class_group
+            // This logic correctly filters admins into their respective groups
             setManagementAdmins(allAdmins.filter(admin => admin.class_group === 'Management Admin'));
             setGeneralAdmins(allAdmins.filter(admin => admin.class_group === 'General Admin'));
 
@@ -37,7 +37,6 @@ const StaffListScreen = ({ navigation }) => {
 
     useFocusEffect(
       useCallback(() => {
-        // Reset state on focus to ensure fresh data
         setLoading(true);
         loadStaffData();
       }, [])
@@ -74,6 +73,7 @@ const StaffListScreen = ({ navigation }) => {
     };
 
     const StaffSection = ({ title, data }) => {
+        // This check correctly hides the section if there are no users in it.
         if (!data || data.length === 0) {
             return null;
         }
@@ -99,7 +99,7 @@ const StaffListScreen = ({ navigation }) => {
             style={styles.container}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-            {/* MODIFIED: Render two separate sections for admins */}
+            {/* The sections are already in the correct order. This one will appear when data exists. */}
             <StaffSection title="Management Admins" data={managementAdmins} />
             <StaffSection title="General Admins" data={generalAdmins} />
             <StaffSection title="Teachers" data={teachers} />

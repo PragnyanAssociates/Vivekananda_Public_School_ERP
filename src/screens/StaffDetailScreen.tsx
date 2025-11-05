@@ -57,7 +57,7 @@ const StaffDetailScreen = ({ route }) => {
 
     const imageUrl = staffDetails.profile_image_url ? `${SERVER_URL}${staffDetails.profile_image_url.startsWith('/') ? '' : '/'}${staffDetails.profile_image_url}` : null;
 
-    // MODIFIED: Logic to determine what role to display in the header
+    // This logic correctly determines the role to display in the header
     const displayRole = staffDetails.role === 'admin'
         ? staffDetails.class_group // Shows "Management Admin" or "General Admin"
         : staffDetails.role;      // Shows "teacher" or "others"
@@ -72,7 +72,7 @@ const StaffDetailScreen = ({ route }) => {
                 <View style={styles.profileHeader}>
                     <TouchableOpacity onPress={() => setViewerVisible(true)}><Image source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} style={styles.avatar} /></TouchableOpacity>
                     <Text style={styles.fullName}>{staffDetails.full_name}</Text>
-                    {/* MODIFIED: Use the displayRole variable here */}
+                    {/* This correctly shows the specific admin type */}
                     <Text style={styles.role}>{displayRole}</Text>
                 </View>
 

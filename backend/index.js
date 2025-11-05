@@ -7674,7 +7674,6 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
 // --- STAFF MODULE API ROUTES ---
 // ===============================================================
 
-// MODIFIED: GET all staff members, now including class_group for admin differentiation
 app.get('/api/staff/all', async (req, res) => {
     try {
         const query = `
@@ -7682,7 +7681,7 @@ app.get('/api/staff/all', async (req, res) => {
                 u.id,
                 u.full_name,
                 u.role,
-                u.class_group, -- Added this line
+                u.class_group, -- This correctly provides the admin type
                 up.profile_image_url
             FROM users AS u
             LEFT JOIN user_profiles AS up ON u.id = up.user_id
@@ -7701,7 +7700,6 @@ app.get('/api/staff/all', async (req, res) => {
             return member;
         });
 
-        // The backend still groups by primary role; the frontend will handle sub-grouping admins
         const admins = staffWithCacheBust.filter(member => member.role === 'admin');
         const teachers = staffWithCacheBust.filter(member => member.role === 'teacher');
         const others = staffWithCacheBust.filter(member => member.role === 'others');
@@ -7714,7 +7712,6 @@ app.get('/api/staff/all', async (req, res) => {
     }
 });
 
-// MODIFIED: GET detailed information, now including class_group for admin role display
 app.get('/api/staff/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -7724,7 +7721,7 @@ app.get('/api/staff/:id', async (req, res) => {
                 u.username,
                 u.full_name,
                 u.role,
-                u.class_group, -- Added this line
+                u.class_group, -- This correctly provides the admin type
                 up.email,
                 up.dob,
                 up.gender,
