@@ -12,26 +12,30 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// MODIFIED: Added 'Others' to categories and roles
 const CLASS_CATEGORIES = [ 'Admins', 'Teachers', 'Others', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10' ];
-const USER_ROLES = ['admin', 'teacher', 'student', 'others'];
 
-// MODIFIED: User interface with all possible fields and new role
+// MODIFIED: Create a new list for the UI dropdown. The actual role in the DB remains 'admin'.
+const DISPLAY_USER_ROLES = [
+  { label: 'Management Admin', value: 'Management Admin' },
+  { label: 'General Admin', value: 'General Admin' },
+  { label: 'Teacher', value: 'teacher' },
+  { label: 'Student', value: 'student' },
+  { label: 'Others', value: 'others' },
+];
+
 interface User {
   id: number;
   username: string;
   password?: string;
   full_name: string;
-  role: 'student' | 'teacher' | 'admin' | 'others';
-  class_group: string;
+  role: 'student' | 'teacher' | 'admin' | 'others'; // DB role is still 'admin'
+  class_group: string; // This will hold 'Management Admin' or 'General Admin' for admins
   subjects_taught?: string[];
-  // Student fields
   roll_no?: string;
   admission_no?: string;
   parent_name?: string;
   pen_no?: string;
   admission_date?: string;
-  // Shared / Admin / Teacher / Others fields
   aadhar_no?: string;
   joining_date?: string;
   previous_salary?: string;
@@ -68,7 +72,7 @@ const AdminLM = () => {
   const groupedUsers = useMemo(() => {
     const groups: { [key: string]: User[] } = {};
     CLASS_CATEGORIES.forEach(category => {
-        // MODIFIED: Handle Admins and Others by role, everything else by class_group
+        // This logic remains correct. It groups all users with role='admin' into the "Admins" section.
         if (category === 'Admins') {
              groups[category] = users.filter(user => user.role === 'admin');
         } else if (category === 'Others') {
@@ -83,7 +87,6 @@ const AdminLM = () => {
 
   const openAddModal = () => {
     setEditingUser(null);
-    // MODIFIED: Initialize all possible fields
     setFormData({
       username: '', password: '', full_name: '', role: 'student',
       class_group: 'LKG', subjects_taught: [],
@@ -117,12 +120,8 @@ const AdminLM = () => {
     if (payload.role !== 'teacher') {
         delete payload.subjects_taught;
     }
-    if (payload.role === 'admin') {
-        payload.class_group = 'Admins';
-    } else if (payload.role === 'others') {
-        payload.class_group = 'Others';
-    }
-
+    // No special logic needed here, formData is already correctly structured
+    // role: 'admin', class_group: 'Management Admin'
 
     const isEditing = !!editingUser;
 
@@ -197,7 +196,11 @@ const AdminLM = () => {
       />
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.full_name}</Text>
-        <Text style={styles.userUsername}>Username: {item.username} {item.roll_no ? `| Roll: ${item.roll_no}` : ''}</Text>
+        {/* MODIFIED: Display the admin subtype from class_group if the user is an admin */}
+        <Text style={styles.userUsername}>
+          Username: {item.username} {item.role === 'admin' ? `| Type: ${item.class_group}` : ''}
+        </Text>
+        {item.roll_no && (<Text style={styles.userSubjects}>Roll: {item.roll_no}</Text>)}
         {item.admission_no && (<Text style={styles.userSubjects}>Admission No: {item.admission_no}</Text>)}
         {item.role === 'teacher' && item.subjects_taught && item.subjects_taught.length > 0 && (
           <Text style={styles.userSubjects}>Subjects: {item.subjects_taught.join(', ')}</Text>
@@ -220,6 +223,10 @@ const AdminLM = () => {
   }
 
   const isEditing = !!editingUser;
+
+  // MODIFIED: Determine what value the picker should show.
+  // If the role is 'admin', show the subtype from class_group. Otherwise, show the role itself.
+  const displayRole = formData.role === 'admin' ? formData.class_group : formData.role;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -283,15 +290,21 @@ const AdminLM = () => {
 
                     <Text style={styles.inputLabel}>Role</Text>
                     <View style={styles.pickerWrapper}>
-                        <Picker selectedValue={formData.role} onValueChange={(val) => {
-                                // MODIFIED: Handle class_group assignment for all roles
-                                let newClassGroup = formData.class_group || 'LKG';
-                                if (val === 'teacher') newClassGroup = 'Teachers';
-                                else if (val === 'admin') newClassGroup = 'Admins';
-                                else if (val === 'others') newClassGroup = 'Others';
-                                setFormData({ ...formData, role: val, class_group: newClassGroup });
+                        {/* MODIFIED: This picker now handles the logic of setting role and class_group */}
+                        <Picker selectedValue={displayRole} onValueChange={(val) => {
+                                const newFormData = { ...formData };
+                                if (val === 'Management Admin' || val === 'General Admin') {
+                                    newFormData.role = 'admin';
+                                    newFormData.class_group = val;
+                                } else {
+                                    newFormData.role = val;
+                                    if (val === 'teacher') newFormData.class_group = 'Teachers';
+                                    else if (val === 'others') newFormData.class_group = 'Others';
+                                    // For student, class_group remains what it was or defaults
+                                }
+                                setFormData(newFormData);
                             }} style={styles.modalPicker}>
-                            {USER_ROLES.map((role) => (<Picker.Item key={role} label={role.charAt(0).toUpperCase() + role.slice(1)} value={role} />))}
+                            {DISPLAY_USER_ROLES.map((role) => (<Picker.Item key={role.value} label={role.label} value={role.value} />))}
                         </Picker>
                     </View>
 

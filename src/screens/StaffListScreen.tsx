@@ -8,7 +8,9 @@ import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
 
 const StaffListScreen = ({ navigation }) => {
-    const [admins, setAdmins] = useState([]);
+    // MODIFIED: State to hold the two different admin types
+    const [managementAdmins, setManagementAdmins] = useState([]);
+    const [generalAdmins, setGeneralAdmins] = useState([]);
     const [teachers, setTeachers] = useState([]);
     const [others, setOthers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -17,7 +19,12 @@ const StaffListScreen = ({ navigation }) => {
     const loadStaffData = async () => {
         try {
             const response = await apiClient.get('/staff/all');
-            setAdmins(response.data.admins || []);
+            const allAdmins = response.data.admins || [];
+            
+            // MODIFIED: Filter the incoming admins into two separate groups based on class_group
+            setManagementAdmins(allAdmins.filter(admin => admin.class_group === 'Management Admin'));
+            setGeneralAdmins(allAdmins.filter(admin => admin.class_group === 'General Admin'));
+
             setTeachers(response.data.teachers || []);
             setOthers(response.data.others || []);
         } catch (error) {
@@ -30,9 +37,8 @@ const StaffListScreen = ({ navigation }) => {
 
     useFocusEffect(
       useCallback(() => {
-        if (admins.length === 0 && teachers.length === 0 && others.length === 0) {
-            setLoading(true);
-        }
+        // Reset state on focus to ensure fresh data
+        setLoading(true);
         loadStaffData();
       }, [])
     );
@@ -68,7 +74,6 @@ const StaffListScreen = ({ navigation }) => {
     };
 
     const StaffSection = ({ title, data }) => {
-        // This check ensures that a section is only rendered if it has data.
         if (!data || data.length === 0) {
             return null;
         }
@@ -94,7 +99,9 @@ const StaffListScreen = ({ navigation }) => {
             style={styles.container}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-            <StaffSection title="Admin" data={admins} />
+            {/* MODIFIED: Render two separate sections for admins */}
+            <StaffSection title="Management Admins" data={managementAdmins} />
+            <StaffSection title="General Admins" data={generalAdmins} />
             <StaffSection title="Teachers" data={teachers} />
             <StaffSection title="Non-Teaching" data={others} />
         </ScrollView>
