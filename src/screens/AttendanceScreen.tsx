@@ -568,33 +568,59 @@ const AdminAttendanceView = () => {
 };
 
 // ==========================================================
-// --- TeacherLiveAttendanceView: MODIFIED FOR SUCCESS SCREEN ---
+// --- TeacherLiveAttendanceView: REBUILT FOR PERSISTENT STATE ---
 // ==========================================================
 const TeacherLiveAttendanceView = ({ route, teacher }) => {
   const { class_group, subject_name, date } = route?.params || {};
   const [students, setStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isAttendanceMarked, setIsAttendanceMarked] = useState(false); // New state for success screen
+  const [isAttendanceMarked, setIsAttendanceMarked] = useState(false);
   const periodInfo = PERIOD_DEFINITIONS.find(p => p.period === 1);
   const periodTime = periodInfo ? periodInfo.time : `Period 1`;
 
+  const fetchAttendanceSheet = async () => {
+    if (!class_group || !date) {
+      Alert.alert('Error', 'Missing parameters.');
+      setIsLoading(false);
+      return;
+    }
+    try {
+      const response = await apiClient.get(`/attendance/sheet?class_group=${class_group}&date=${date}&period_number=1`);
+      const studentsWithStatus = response.data.map(s => ({ ...s, status: s.status || 'Present' }));
+      setStudents(studentsWithStatus);
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to load students.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAttendanceSheet = async () => {
-      if (!class_group || !date) {
-        Alert.alert('Error', 'Missing parameters.');
-        setIsLoading(false);
-        return;
-      }
+    const checkInitialStatus = async () => {
+      setIsLoading(true);
       try {
-        const response = await apiClient.get(`/attendance/sheet?class_group=${class_group}&date=${date}&period_number=1`);
-        const studentsWithStatus = response.data.map(s => ({ ...s, status: s.status || 'Present' }));
-        setStudents(studentsWithStatus);
-      } catch (error: any) { Alert.alert('Error', 'Failed to load students.'); }
-      finally { setIsLoading(false); }
+        const statusResponse = await apiClient.get(
+          `/attendance/status?class_group=${class_group}&date=${date}&period_number=1&subject_name=${subject_name}`
+        );
+
+        if (statusResponse.data?.isMarked) {
+          setIsAttendanceMarked(true);
+          setIsLoading(false);
+        } else {
+          setIsAttendanceMarked(false);
+          await fetchAttendanceSheet();
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Could not check attendance status.');
+        setIsLoading(false);
+      }
     };
-    fetchAttendanceSheet();
-  }, [class_group, date]);
+
+    if (class_group && subject_name && date) {
+        checkInitialStatus();
+    }
+  }, [class_group, date, subject_name]);
 
   const handleMarkAttendance = (studentId, newStatus) => {
     setStudents(prev => prev.map(s => (s.id === studentId ? { ...s, status: newStatus } : s)));
@@ -606,31 +632,33 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
     setIsSaving(true);
     try {
       await apiClient.post('/attendance', { class_group, subject_name, period_number: 1, date, teacher_id: teacher.id, attendanceData });
-      // On success, show the confirmation screen instead of an alert
       setIsAttendanceMarked(true);
     } catch (error: any) {
       console.error("Failed to save attendance:", JSON.stringify(error.response?.data || error.message, null, 2));
       const errorMessage = error.response?.data?.message || 'Failed to save attendance. Please contact support.';
       Alert.alert('Error', errorMessage);
+    } finally {
+      setIsSaving(false);
     }
-    finally { setIsSaving(false); }
   };
 
-  // Fuction to return to the attendance list
-  const handleEditAttendance = () => {
+  const handleEditAttendance = async () => {
+    setIsLoading(true);
     setIsAttendanceMarked(false);
+    await fetchAttendanceSheet();
   };
 
-  if (isLoading) return <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} />;
+  if (isLoading) {
+    return <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} />;
+  }
 
-  // Conditionally render the success screen if attendance has been marked
   if (isAttendanceMarked) {
-    const formattedDate = new Date(date).toLocaleDateString('en-US');
+    const formattedDate = new Date(date).toLocaleDateString('en-GB'); // Using en-GB for DD/MM/YYYY
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.successContainer}>
                 <Animatable.View animation="bounceIn" duration={800}>
-                    <Icon name="check-circle" size={80} color={GREEN} />
+                   <Icon name="check-circle" size={80} color={GREEN} style={{ color: '#2E8B57' }} />
                 </Animatable.View>
                 <Text style={styles.successTitle}>Attendance Marked!</Text>
                 <Text style={styles.successSubtitle}>
@@ -644,7 +672,6 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
     );
   }
 
-  // Default view for taking attendance
   return (
     <SafeAreaView style={styles.container}>
       <Animatable.View animation="fadeInDown" duration={500}>
@@ -674,18 +701,20 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
         )}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={{ padding: 10 }}
+        ListEmptyComponent={<Text style={styles.noDataText}>No students found in this class.</Text>}
       />
-      <TouchableOpacity style={styles.saveButton} onPress={handleSaveAttendance} disabled={isSaving}>
+      <TouchableOpacity style={styles.saveButton} onPress={handleSaveAttendance} disabled={isSaving || students.length === 0}>
         {isSaving ? <ActivityIndicator color={WHITE} /> : <Text style={styles.saveButtonText}>SUBMIT ATTENDANCE</Text>}
       </TouchableOpacity>
     </SafeAreaView>
   );
 };
 
+
 // --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F6F8' },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  container: { flex: 1, backgroundColor: WHITE }, // Changed to WHITE for the success screen
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: WHITE },
   noDataText: { textAlign: 'center', marginTop: 20, color: TEXT_COLOR_MEDIUM, fontSize: 16 },
   header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
   centeredHeader: { paddingVertical: 15, paddingHorizontal: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center' },
@@ -706,7 +735,7 @@ const styles = StyleSheet.create({
   studentName: { fontSize: 16, color: TEXT_COLOR_DARK, fontWeight: '600' },
   studentDetailText: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 4 },
   percentageText: { fontSize: 20, fontWeight: 'bold' },
-  liveStudentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, backgroundColor: WHITE, marginHorizontal: 10, marginVertical: 5, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 3 },
+  liveStudentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, backgroundColor: '#F9F9F9', marginHorizontal: 10, marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR },
   studentInfoContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, },
   studentNameContainer: { marginLeft: 12, flex: 1 },
   rollNoText: { fontSize: 13, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
@@ -729,11 +758,11 @@ const styles = StyleSheet.create({
   historyStatus: { fontSize: 14, fontWeight: 'bold' },
   calendarButton: { padding: 8, marginLeft: 10, justifyContent: 'center', alignItems: 'center' },
   dateHeader: { textAlign: 'center', paddingVertical: 8, backgroundColor: '#F0F4F8', color: TEXT_COLOR_MEDIUM, fontSize: 14, fontWeight: '500' },
-  // Styles for the new success screen
-  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
-  successTitle: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 20 },
+  // Styles for the success screen
+  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30, backgroundColor: WHITE },
+  successTitle: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 20, fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
   successSubtitle: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center', marginTop: 10, marginBottom: 30, lineHeight: 24, },
-  editButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 8 },
+  editButton: { backgroundColor: '#008080', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 8, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, },
   editButtonText: { color: WHITE, fontSize: 16, fontWeight: 'bold' },
 });
 

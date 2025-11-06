@@ -979,6 +979,33 @@ app.get('/api/attendance/admin-summary', async (req, res) => {
     }
 });
 
+// ★★★★★ NEW ROUTE TO CHECK ATTENDANCE STATUS ★★★★★
+app.get('/api/attendance/status', async (req, res) => {
+    const { class_group, date, period_number, subject_name } = req.query;
+    try {
+        if (!class_group || !date || !period_number || !subject_name) {
+            return res.status(400).json({ message: 'Class group, date, period number, and subject name are required.' });
+        }
+
+        const query = `
+            SELECT 1
+            FROM attendance_records
+            WHERE class_group = ? AND attendance_date = ? AND period_number = ? AND subject_name = ?
+            LIMIT 1;
+        `;
+        const [records] = await db.query(query, [class_group, date, period_number, subject_name]);
+
+        if (records.length > 0) {
+            res.status(200).json({ isMarked: true });
+        } else {
+            res.status(200).json({ isMarked: false });
+        }
+    } catch (error) {
+        console.error("GET /api/attendance/status Error:", error);
+        res.status(500).json({ message: 'Error checking attendance status.' });
+    }
+});
+
 // GET attendance sheet for a specific period
 app.get('/api/attendance/sheet', async (req, res) => {
     const { class_group, date, period_number } = req.query;
@@ -1031,7 +1058,6 @@ app.post('/api/attendance', async (req, res) => {
 
         await connection.beginTransaction();
 
-        // Step 1: Save the attendance records (this is your existing, correct code)
         const query = `
             INSERT INTO attendance_records
                 (student_id, teacher_id, class_group, subject_name, attendance_date, period_number, status)
@@ -1046,28 +1072,19 @@ app.post('/api/attendance', async (req, res) => {
         ]);
         await connection.query(query, [valuesToInsert]);
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC FOR ABSENT STUDENTS ★★★★★
-
-        // 2. Find the name of the teacher who took the attendance.
         const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
         const senderName = teacher.full_name || "School Staff";
 
-        // 3. Filter the submitted data to find only the students marked 'Absent'.
         const absentStudents = attendanceData.filter(record => record.status === 'Absent');
 
         if (absentStudents.length > 0) {
-            // 4. Get the IDs of just the absent students.
             const absentStudentIds = absentStudents.map(record => record.student_id);
-
-            // 5. Prepare a clear, informative notification message.
             const notificationTitle = `Attendance Alert: ${subject_name}`;
             const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
             const notificationMessage = `You were marked absent for Period ${period_number} on ${formattedDate}.`;
-            const notificationLink = '/my-attendance'; // A link to the student's history screen.
-
-            // 6. Send notifications to all absent students in a single, efficient database call.
+            const notificationLink = '/my-attendance';
             await createBulkNotifications(
-                connection, // Use the transaction connection
+                connection,
                 absentStudentIds,
                 senderName,
                 notificationTitle,
@@ -1076,10 +1093,7 @@ app.post('/api/attendance', async (req, res) => {
             );
         }
 
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
         await connection.commit();
-        // Updated success message
         res.status(201).json({ message: 'Attendance saved and notifications sent successfully!' });
 
     } catch (error) {
