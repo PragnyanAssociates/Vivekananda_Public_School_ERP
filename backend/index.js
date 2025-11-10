@@ -465,6 +465,67 @@ app.get('/api/profiles/:userId', async (req, res) => {
 // --- END OF CORRECTION ---
 // ==========================================================
 
+// ==========================================================
+// --- NEW: STUDENT PROMOTION API ROUTE ---
+// ==========================================================
+app.post('/api/users/promote', async (req, res) => {
+    const { promotionMap } = req.body;
+    if (!promotionMap || Object.keys(promotionMap).length === 0) {
+        return res.status(400).json({ message: 'Error: Promotion mapping data is missing.' });
+    }
+    const promotionOrder = [ 'Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5', 'Class 4', 'Class 3', 'Class 2', 'Class 1', 'UKG', 'LKG' ];
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        for (const fromClass of promotionOrder) {
+            const toClass = promotionMap[fromClass];
+            if (toClass) {
+                const newClassGroup = toClass === 'Graduate/Archive' ? 'Graduated' : toClass;
+                await connection.query( "UPDATE users SET class_group = ? WHERE role = 'student' AND class_group = ?", [newClassGroup, fromClass] );
+            }
+        }
+        await connection.commit();
+        res.status(200).json({ message: 'All students have been promoted successfully!' });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Student Promotion Error:", error);
+        res.status(500).json({ message: 'Error: Promotion failed. The operation was rolled back and no changes were made.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==========================================================
+// --- NEW: STUDENT DEGRADE API ROUTE (for testing/correction) ---
+// ==========================================================
+app.post('/api/users/degrade', async (req, res) => {
+    const { degradeMap } = req.body;
+    if (!degradeMap || Object.keys(degradeMap).length === 0) {
+        return res.status(400).json({ message: 'Error: Degrade mapping data is missing.' });
+    }
+    // Reverse order for degrading to prevent conflicts
+    const degradeOrder = [ 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10' ];
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        for (const fromClass of degradeOrder) {
+            const toClass = degradeMap[fromClass];
+            if (toClass && toClass !== 'No Action') {
+                 await connection.query( "UPDATE users SET class_group = ? WHERE role = 'student' AND class_group = ?", [toClass, fromClass] );
+            }
+        }
+        await connection.commit();
+        res.status(200).json({ message: 'All students have been degraded successfully.' });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Student Degrade Error:", error);
+        res.status(500).json({ message: 'Error: Degrade operation failed and was rolled back.' });
+    } finally {
+        connection.release();
+    }
+});
+
+
 app.put('/api/profiles/:userId', upload.single('profileImage'), async (req, res) => {
     const userId = parseInt(req.params.userId, 10);
     const {
