@@ -1,10 +1,9 @@
 // 📂 File: screens/syllabus/AdminSyllabusScreen.js (MODIFIED & CORRECTED)
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput } from 'react-native';
-// ★★★ 1. IMPORT apiClient AND REMOVE useAuth & API_BASE_URL (where possible) ★★★
 import apiClient from '../../api/client';
-import { useAuth } from '../../context/AuthContext'; // Still needed for creator_id
+import { useAuth } from '../../context/AuthContext'; 
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { useIsFocused } from '@react-navigation/native';
@@ -27,39 +26,109 @@ const AdminSyllabusScreen = () => {
     return null;
 };
 
-// Component to show the list of all created syllabuses
+
 const SyllabusHistoryList = ({ onEdit, onCreate, onViewProgress }) => {
     const [syllabuses, setSyllabuses] = useState([]);
+    const [allClasses, setAllClasses] = useState([]);
+    const [selectedClassFilter, setSelectedClassFilter] = useState('All');
     const [isLoading, setIsLoading] = useState(false);
     const isFocused = useIsFocused();
 
-    const fetchSyllabusHistory = useCallback(async () => {
+    const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // ★★★ 2. USE apiClient ★★★
-            const response = await apiClient.get('/syllabus/all');
-            setSyllabuses(response.data);
-        } catch (error) { Alert.alert("Error", error.response?.data?.message || "Failed to load syllabus history."); }
-        finally { setIsLoading(false); }
+            const [syllabiRes, classesRes] = await Promise.all([
+                apiClient.get('/syllabus/all'),
+                apiClient.get('/all-classes')
+            ]);
+            setSyllabuses(syllabiRes.data);
+            
+            const filteredClasses = classesRes.data.filter(c => 
+                c && (c.startsWith('Class') || c === 'LKG' || c === 'UKG')
+            );
+            setAllClasses(filteredClasses);
+
+        } catch (error) { 
+            Alert.alert("Error", error.response?.data?.message || "Failed to load syllabus history."); 
+        } finally { 
+            setIsLoading(false); 
+        }
     }, []);
 
     useEffect(() => {
-        if (isFocused) fetchSyllabusHistory();
-    }, [isFocused, fetchSyllabusHistory]);
+        if (isFocused) fetchData();
+    }, [isFocused, fetchData]);
+
+    // ★★★★★ START: NEW DELETE SYLLABUS HANDLER ★★★★★
+    const handleDeleteSyllabus = (syllabusToDelete) => {
+        Alert.alert(
+            "Confirm Delete",
+            `Are you sure you want to delete the syllabus for ${syllabusToDelete.class_group} - ${syllabusToDelete.subject_name}? This action cannot be undone.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await apiClient.delete(`/syllabus/${syllabusToDelete.id}`);
+                            Alert.alert("Success", "Syllabus has been deleted.");
+                            fetchData(); // Refresh the list after deletion
+                        } catch (error) {
+                            Alert.alert("Error", error.response?.data?.message || "Could not delete the syllabus.");
+                        }
+                    },
+                },
+            ]
+        );
+    };
+    // ★★★★★ END: NEW DELETE SYLLABUS HANDLER ★★★★★
+
+    const filteredSyllabuses = useMemo(() => {
+        if (selectedClassFilter === 'All') {
+            return syllabuses;
+        }
+        return syllabuses.filter(s => s.class_group === selectedClassFilter);
+    }, [selectedClassFilter, syllabuses]);
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}><Text style={styles.headerTitle}>Syllabus Management</Text></View>
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Syllabus Management</Text>
+            </View>
+            
+            <View style={styles.filterContainer}>
+                <Text style={styles.filterLabel}>Filter by Class:</Text>
+                <View style={styles.pickerWrapper}>
+                    <Picker
+                        selectedValue={selectedClassFilter}
+                        onValueChange={(itemValue) => setSelectedClassFilter(itemValue)}
+                        style={styles.picker}
+                    >
+                        <Picker.Item label="All Classes" value="All" />
+                        {allClasses.map((className, index) => (
+                            <Picker.Item key={index} label={className} value={className} />
+                        ))}
+                    </Picker>
+                </View>
+            </View>
+
             <FlatList
-                data={syllabuses}
+                data={filteredSyllabuses}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
                            <Text style={styles.cardTitle}>{item.class_group} - {item.subject_name}</Text>
-                           <TouchableOpacity onPress={() => onEdit(item)} style={styles.editIcon}>
-                                <MaterialIcons name="edit" size={24} color="#007bff" />
-                           </TouchableOpacity>
+                           {/* ★★★ MODIFIED: Added View for Edit and Delete Icons ★★★ */}
+                           <View style={styles.cardActions}>
+                                <TouchableOpacity onPress={() => onEdit(item)} style={styles.actionIcon}>
+                                    <MaterialIcons name="edit" size={24} color="#007bff" />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleDeleteSyllabus(item)} style={styles.actionIcon}>
+                                    <MaterialIcons name="delete" size={24} color="#d9534f" />
+                                </TouchableOpacity>
+                           </View>
                         </View>
                         <Text style={styles.cardSubtitle}>{item.lesson_count} lessons</Text>
                         <Text style={styles.cardCreator}>Created by: {item.creator_name}</Text>
@@ -70,16 +139,21 @@ const SyllabusHistoryList = ({ onEdit, onCreate, onViewProgress }) => {
                         </TouchableOpacity>
                     </View>
                 )}
-                ListFooterComponent={<TouchableOpacity style={styles.createButton} onPress={onCreate}><MaterialIcons name="add" size={24} color="#fff" /><Text style={styles.buttonText}>Create New Syllabus</Text></TouchableOpacity>}
-                onRefresh={fetchSyllabusHistory}
+                ListFooterComponent={
+                    <TouchableOpacity style={styles.createButton} onPress={onCreate}>
+                        <MaterialIcons name="add" size={24} color="#fff" />
+                        <Text style={styles.buttonText}>Create New Syllabus</Text>
+                    </TouchableOpacity>
+                }
+                onRefresh={fetchData}
                 refreshing={isLoading}
-                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No syllabuses created yet.</Text>}
+                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No syllabuses found for the selected class.</Text>}
+                contentContainerStyle={{ paddingBottom: 20 }}
             />
         </View>
     );
 };
 
-// Component for the "Create or Edit Syllabus" form
 const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
     const isEditMode = !!initialSyllabus;
     const { user } = useAuth();
@@ -100,9 +174,12 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
         const bootstrapForm = async () => {
             setIsLoading(true);
             try {
-                // ★★★ 3. USE apiClient FOR ALL FETCH CALLS ★★★
                 const classRes = await apiClient.get('/student-classes');
-                setAllClasses(classRes.data);
+                
+                const filteredClasses = classRes.data.filter(c => 
+                    c && (c.startsWith('Class') || c === 'LKG' || c === 'UKG')
+                );
+                setAllClasses(filteredClasses);
 
                 if (isEditMode) {
                     await handleClassChange(initialSyllabus.class_group, true);
@@ -268,7 +345,6 @@ const AdminProgressView = ({ syllabus, onBack }) => {
             if (!syllabus?.id) return;
             setIsLoading(true);
             try {
-                // ★★★ 4. USE apiClient ★★★
                 const response = await apiClient.get(`/syllabus/class-progress/${syllabus.id}`);
                 setAuditLog(response.data);
             } catch (error) {
@@ -324,25 +400,41 @@ const AdminProgressView = ({ syllabus, onBack }) => {
     );
 };
 
-// Styles remain the same
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f0f4f7' },
     containerDark: { flex: 1, backgroundColor: '#e8eaf6', padding: 5,},
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { padding: 20, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#eee' },
-    headerTitle: { fontSize: 24, fontWeight: 'bold', paddingHorizontal: 15, paddingTop: 10,},
+    header: {
+        paddingTop: 20,
+        paddingBottom: 5,
+        paddingHorizontal: 15,
+        backgroundColor: '#f0f4f7',
+    },
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: '#1A202C',
+    },
     formHeaderTitle: { fontSize: 24, fontWeight: 'bold', paddingHorizontal: 15, paddingBottom: 10, textAlign: 'center'},
     headerTitleSecondary: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, color: '#3f51b5' },
     card: { backgroundColor: '#fff', padding: 20, marginHorizontal: 15, marginVertical: 8, borderRadius: 12, elevation: 3 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#263238' },
-    editIcon: { padding: 5 },
+    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#263238', flex: 1 }, // Added flex: 1
+    // ★★★ NEW STYLES for Edit/Delete icons ★★★
+    cardActions: {
+        flexDirection: 'row',
+    },
+    actionIcon: {
+        padding: 5,
+        marginLeft: 10,
+    },
+    // ★★★ END NEW STYLES ★★★
     cardSubtitle: { fontSize: 14, color: '#546e7a', marginTop: 4 },
     cardCreator: { fontSize: 12, color: '#90a4ae', marginTop: 4 },
     cardDate: { fontSize: 12, color: '#90a4ae', marginTop: 2, marginBottom: 15 },
     viewProgressButton: { flexDirection: 'row', backgroundColor: '#00838f', paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
     buttonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10, fontSize: 16 },
-    createButton: { flexDirection: 'row', backgroundColor: '#2e7d32', padding: 15, margin: 15, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 2 },
+    createButton: { flexDirection: 'row', backgroundColor: '#2e7d32', padding: 15, marginHorizontal: 15, marginTop: 10, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 2 },
     emptyText: { textAlign: 'center', marginTop: 50, color: '#666', fontSize: 16 },
     backButton: { flexDirection: 'row', alignItems: 'center', padding: 15 },
     backButtonText: { fontSize: 16, fontWeight: '500', marginLeft: 5 },
@@ -364,6 +456,33 @@ const styles = StyleSheet.create({
     updaterName: { fontWeight: 'bold', color: '#1e3a8a' },
     statusBanner: { paddingVertical: 6, alignItems: 'center' },
     statusBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+    filterContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        backgroundColor: '#f0f4f7',
+        marginBottom: 5,
+    },
+    filterLabel: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#4A5568',
+        marginRight: 10,
+    },
+    pickerWrapper: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 8,
+        height: 50,
+        justifyContent: 'center',
+    },
+    picker: {
+        width: '100%',
+        color: '#1A202C',
+    },
 });
 
 export default AdminSyllabusScreen;

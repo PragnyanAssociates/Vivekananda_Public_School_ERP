@@ -3729,7 +3729,7 @@ app.get('/api/performance/teacher/:teacherId/:academicYear', async (req, res) =>
 
 
 // ==========================================================
-// --- UTILITY & SYLLABUS API ROUTES ---
+// --- SYLLABUS Tracking API ROUTES ---
 // ==========================================================
 
 // GET a unique list of all subjects from the 'users' table
@@ -3791,19 +3791,14 @@ app.post('/api/syllabus/create', async (req, res) => {
             }
             await connection.query("INSERT INTO syllabus_progress (student_id, lesson_id) VALUES ?", [progressRecords]);
         }
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-
-        // 1. Find the assigned teacher and all students in the class
+        
         const teacherId = creator_id;
         const studentIds = students.map(s => s.id);
         const allRecipientIds = [teacherId, ...studentIds];
-
-        // 2. Prepare notification details
         const notificationTitle = `New Syllabus: ${subject_name}`;
         const notificationMessage = `A new syllabus for ${subject_name} has been assigned to ${class_group}.`;
         const senderName = "School Administration";
 
-        // 3. Send notifications to the teacher and all students
         if (allRecipientIds.length > 0) {
             await createBulkNotifications(
                 connection,
@@ -3811,11 +3806,10 @@ app.post('/api/syllabus/create', async (req, res) => {
                 senderName,
                 notificationTitle,
                 notificationMessage,
-                '/syllabus' // A generic link to the syllabus section
+                '/syllabus'
             );
         }
         
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
         await connection.commit();
         res.status(201).json({ message: 'Syllabus created successfully!', syllabusId: newSyllabusId });
     } catch (error) {
@@ -3828,12 +3822,10 @@ app.post('/api/syllabus/create', async (req, res) => {
     }
 });
 
-// 📂 File: backend/server.js (ADD THIS NEW ROUTE)
-
 // ADMIN: UPDATE an existing syllabus (replaces lessons)
 app.put('/api/syllabus/:syllabusId', async (req, res) => {
     const { syllabusId } = req.params;
-    const { lessons, creator_id } = req.body; // creator_id is the teacher_id
+    const { lessons, creator_id } = req.body;
 
     if (!lessons || !creator_id) {
         return res.status(400).json({ message: "Lessons and creator ID are required." });
@@ -3842,22 +3834,17 @@ app.put('/api/syllabus/:syllabusId', async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-
-        // Step 1: Get existing syllabus details for notifications and validation
         const [[syllabus]] = await connection.query("SELECT class_group, subject_name FROM syllabuses WHERE id = ?", [syllabusId]);
         if (!syllabus) {
             await connection.rollback();
             return res.status(404).json({ message: "Syllabus not found." });
         }
-
-        // Step 2: Delete all old lessons and their progress records (cascading delete)
+        
         await connection.query("DELETE FROM syllabus_lessons WHERE syllabus_id = ?", [syllabusId]);
-
-        // Step 3: Insert the new set of lessons
+        
         const lessonValues = lessons.map(lesson => [syllabusId, lesson.lessonName, lesson.dueDate]);
         await connection.query('INSERT INTO syllabus_lessons (syllabus_id, lesson_name, due_date) VALUES ?', [lessonValues]);
 
-        // Step 4: Re-create progress records for all students for the new lessons
         const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [syllabus.class_group]);
         const [newlyCreatedLessons] = await connection.query('SELECT id FROM syllabus_lessons WHERE syllabus_id = ?', [syllabusId]);
 
@@ -3871,18 +3858,12 @@ app.put('/api/syllabus/:syllabusId', async (req, res) => {
             await connection.query("INSERT INTO syllabus_progress (student_id, lesson_id) VALUES ?", [progressRecords]);
         }
         
-        // ★★★★★ START: NOTIFICATION LOGIC FOR UPDATE ★★★★★
-        
-        // 1. Find the assigned teacher and all students in the class
         const studentIds = students.map(s => s.id);
         const allRecipientIds = [creator_id, ...studentIds]; 
-
-        // 2. Prepare notification details
         const notificationTitle = `Syllabus Updated: ${syllabus.subject_name}`;
         const notificationMessage = `The syllabus for ${syllabus.subject_name} (${syllabus.class_group}) has been updated by the administration.`;
         const senderName = "School Administration";
 
-        // 3. Send notifications
         if (allRecipientIds.length > 0) {
             await createBulkNotifications(
                 connection,
@@ -3894,8 +3875,6 @@ app.put('/api/syllabus/:syllabusId', async (req, res) => {
             );
         }
         
-        // ★★★★★ END: NOTIFICATION LOGIC FOR UPDATE ★★★★★
-
         await connection.commit();
         res.status(200).json({ message: 'Syllabus updated successfully and users notified!' });
 
@@ -3907,6 +3886,34 @@ app.put('/api/syllabus/:syllabusId', async (req, res) => {
         connection.release();
     }
 });
+
+// ★★★★★ START: NEW DELETE SYLLABUS ROUTE ★★★★★
+// ADMIN: DELETE an existing syllabus
+app.delete('/api/syllabus/:syllabusId', async (req, res) => {
+    const { syllabusId } = req.params;
+
+    try {
+        // With 'ON DELETE CASCADE' in the database schema, this single query
+        // will also remove all related lessons and progress records.
+        const [result] = await db.query("DELETE FROM syllabuses WHERE id = ?", [syllabusId]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Syllabus not found or already deleted." });
+        }
+
+        res.status(200).json({ message: 'Syllabus deleted successfully.' });
+
+    } catch (error) {
+        console.error("Error deleting syllabus:", error);
+        // Check for foreign key constraint errors if cascade is not set up properly
+        if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+             return res.status(500).json({ message: 'Cannot delete syllabus because it has related data. Contact support.' });
+        }
+        res.status(500).json({ message: 'An error occurred while deleting the syllabus.' });
+    }
+});
+// ★★★★★ END: NEW DELETE SYLLABUS ROUTE ★★★★★
+
 
 // ADMIN: Get all syllabuses for the history view
 app.get('/api/syllabus/all', async (req, res) => {
@@ -3987,11 +3994,10 @@ app.patch('/api/syllabus/lesson-status', async (req, res) => {
         return res.status(400).json({ message: "Invalid data provided." });
     }
     
-    const connection = await db.getConnection(); // Use a transaction
+    const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // Step 1: Update the syllabus progress for all students in the class (No change here)
         const query = `
             UPDATE syllabus_progress sp
             JOIN users u ON sp.student_id = u.id
@@ -3999,24 +4005,14 @@ app.patch('/api/syllabus/lesson-status', async (req, res) => {
             WHERE sp.lesson_id = ? AND u.class_group = ?`;
         const [result] = await connection.query(query, [status, teacher_id, lesson_id, class_group]);
 
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-
-        // Only send a notification if the status is NOT being reverted to 'Pending'
         if (status === 'Completed' || status === 'Missed') {
-            
-            // 1. Find all students in the affected class group
             const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
-
-            // 2. Get details for the notification message (teacher's name, lesson name)
             const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
             const [[lesson]] = await connection.query("SELECT lesson_name FROM syllabus_lessons WHERE id = ?", [lesson_id]);
-            
-            // 3. Prepare notification details
             const notificationTitle = `Syllabus Update: ${lesson.lesson_name}`;
             const notificationMessage = `${teacher.full_name} has marked the lesson "${lesson.lesson_name}" as ${status}.`;
             const senderName = teacher.full_name;
 
-            // 4. Send notifications to all students in that class
             if (students.length > 0) {
                 const studentIds = students.map(s => s.id);
                 await createBulkNotifications(
@@ -4029,8 +4025,7 @@ app.patch('/api/syllabus/lesson-status', async (req, res) => {
                 );
             }
         }
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
+        
         await connection.commit();
         res.status(200).json({ message: `Lesson marked as ${status} for ${result.affectedRows} students.` });
 
@@ -4063,6 +4058,7 @@ app.get('/api/syllabus/student/subject-details/:syllabusId/:studentId', async (r
         res.json({ ...syllabus, lessons: lessonsWithStatus });
     } catch (error) { console.error("Error fetching subject details:", error); res.status(500).json({ message: 'Failed to fetch subject details.' }); }
 });
+
 
 
 
