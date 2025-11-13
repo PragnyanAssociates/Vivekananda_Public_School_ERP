@@ -101,6 +101,7 @@ import StaffNavigator from './src/screens/StaffNavigator';
 import StudentStackNavigator from './src/screens/StudentStackNavigator';
 
 import AccountsScreen from './src/screens/Accounts/AccountsScreen';
+import VouchersScreen from './src/screens/Accounts/VouchersScreen';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -258,7 +259,12 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="StaffNavigator" component={StaffNavigator}  />
       <Stack.Screen name="StudentStackNavigator" component={StudentStackNavigator}  />
 
-      <Stack.Screen name="AccountsScreen" component={AccountsScreen}  />  
+      <Stack.Screen name="AccountsScreen" component={AccountsScreen}  />
+      <Stack.Screen name="VouchersScreen" component={VouchersScreen} options={{ headerShown: true, 
+          title: 'Vouchers',
+          headerStyle: { backgroundColor: '#e0f2f7' },
+          headerTintColor: '#008080',
+          headerTitleStyle: { fontWeight: 'bold' } }} />  
 
       {/* <Stack.Screen name="MarksEntryScreen" component={MarksEntryScreen} /> */}
 

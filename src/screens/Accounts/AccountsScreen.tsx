@@ -7,15 +7,17 @@ import {
     SafeAreaView,
     FlatList,
     Image,
-    Alert
+    Alert // Keep Alert for now in case of undefined routes
 } from 'react-native';
+// ★★★ 1. IMPORT THE useNavigation HOOK ★★★
+import { useNavigation } from '@react-navigation/native';
 
 // Define the structure for each item in our accounts dashboard
 interface AccountModule {
     id: string;
     title: string;
     imageSource: string;
-    navigateTo: string; // Placeholder for navigation route name
+    navigateTo: string; // This MUST match the screen name in your Navigator
 }
 
 // Data for the grid items with high-quality icons
@@ -24,45 +26,43 @@ const accountModules: AccountModule[] = [
         id: 'acc1',
         title: 'Transactions',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/9405/9405698.png',
-        navigateTo: 'TransactionsScreen',
+        navigateTo: 'TransactionsScreen', // Screen name for Transactions
     },
     {
         id: 'acc2',
         title: 'Vouchers',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/4306/4306892.png',
-        navigateTo: 'VouchersScreen',
+        navigateTo: 'VouchersScreen', // Screen name for Vouchers
     },
     {
         id: 'acc3',
         title: 'Registers',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/9875/9875512.png',
-        navigateTo: 'RegistersScreen',
+        navigateTo: 'RegistersScreen', // Screen name for Registers
     },
     {
         id: 'acc4',
         title: 'Reports',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/4149/4149706.png',
-        navigateTo: 'ReportsScreen',
+        navigateTo: 'ReportsScreen', // Screen name for Reports
     },
     {
         id: 'acc5',
         title: 'Calendar',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/16090/16090543.png',
-        navigateTo: 'CalendarScreen',
+        navigateTo: 'CalendarScreen', // Screen name for Calendar
     },
 ];
 
 // Main Accounts Screen Component
 const AccountsScreen = () => {
+    // ★★★ 2. INITIALIZE THE NAVIGATION OBJECT ★★★
+    const navigation = useNavigation();
 
-    // Function to handle navigation when a card is pressed
+    // ★★★ 3. UPDATE THE NAVIGATION HANDLER ★★★
     const handleNavigation = (navigateTo: string) => {
-        // You can replace this alert with your actual navigation logic
-        // For example: navigation.navigate(navigateTo);
-        Alert.alert(
-            "Navigation",
-            `Would navigate to the ${navigateTo} screen.`
-        );
+        // This now uses the navigation object to move to the specified screen
+        navigation.navigate(navigateTo as never);
     };
 
     // This function renders each card in the grid
@@ -90,7 +90,6 @@ const AccountsScreen = () => {
                 data={accountModules}
                 renderItem={renderModuleCard}
                 keyExtractor={(item) => item.id}
-                // ★★★ MODIFIED: Changed number of columns to 2 ★★★
                 numColumns={2}
                 contentContainerStyle={styles.gridContainer}
             />
@@ -98,7 +97,6 @@ const AccountsScreen = () => {
     );
 };
 
-// ★★★ MODIFIED: Updated styles for a 2-column layout ★★★
 const styles = StyleSheet.create({
     container: {
         flex: 1,

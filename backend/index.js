@@ -7678,33 +7678,57 @@ app.get('/api/students/:id', async (req, res) => {
 // ==========================================================
 
 // 1. Multer Storage Configuration for Voucher Attachments
-// This keeps voucher proofs separate and organized.
 const voucherStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // We use the same central uploads directory for consistency
         const uploadPath = '/data/uploads'; 
-        
-        // Ensure the directory exists
         if (!fs.existsSync(uploadPath)) {
             fs.mkdirSync(uploadPath, { recursive: true });
         }
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        // Create a unique filename for the proof
         cb(null, `voucher-proof-${Date.now()}${path.extname(file.originalname)}`);
     }
 });
 
 const voucherUpload = multer({ 
     storage: voucherStorage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB file size limit
+    limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
 
+// ★★★★★ START: NEW VOUCHER NUMBER ENDPOINT ★★★★★
+// GET the next available voucher number
+app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) => {
+    try {
+        // Find the voucher with the highest ID, as this was the last one inserted.
+        const query = "SELECT voucher_no FROM vouchers ORDER BY id DESC LIMIT 1";
+        const [rows] = await db.query(query);
+
+        let nextVoucherNumber = 1; // Default if no vouchers exist yet
+        if (rows.length > 0) {
+            const lastVoucherNo = rows[0].voucher_no;
+            // Extract the numeric part of the last voucher number and increment it
+            const lastNumber = parseInt(lastVoucherNo.split('-')[1]);
+            if (!isNaN(lastNumber)) {
+                nextVoucherNumber = lastNumber + 1;
+            }
+        }
+        
+        // Format the number with leading zeros (e.g., VCH-00001)
+        const formattedVoucherNo = `VCH-${nextVoucherNumber.toString().padStart(5, '0')}`;
+        
+        res.status(200).json({ nextVoucherNo: formattedVoucherNo });
+
+    } catch (error) {
+        console.error("Error fetching next voucher number:", error);
+        res.status(500).json({ message: 'Failed to fetch the next voucher number.' });
+    }
+});
+// ★★★★★ END: NEW VOUCHER NUMBER ENDPOINT ★★★★★
+
+
 // 2. API Endpoint to Create a New Voucher
-// This route is protected and requires an admin user.
-// It uses multer to handle a single file upload with the field name 'attachment'.
 app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     
     const {
@@ -7716,16 +7740,13 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
         accountType,
         totalAmount,
         amountInWords,
-        particulars // This will be a JSON string from the frontend
+        particulars
     } = req.body;
 
-    // --- Validation ---
     if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || !totalAmount || !particulars) {
         return res.status(400).json({ message: 'Missing required fields to create a voucher.' });
     }
 
-    // --- Prepare Data ---
-    // The URL stored in the DB must use the public virtual path '/uploads/'
     const attachment_url = req.file ? `/uploads/${req.file.filename}` : null;
     let parsedParticulars;
     try {
@@ -7736,10 +7757,8 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
 
     const connection = await db.getConnection();
     try {
-        // Start a transaction to ensure data integrity
         await connection.beginTransaction();
 
-        // Step 1: Insert the main voucher data into the 'vouchers' table
         const voucherQuery = `
             INSERT INTO vouchers (
                 voucher_type, voucher_no, voucher_date, head_of_account, sub_head, 
@@ -7752,7 +7771,6 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
         ]);
         const newVoucherId = voucherResult.insertId;
 
-        // Step 2: Insert the line items from the particulars table
         if (parsedParticulars && parsedParticulars.length > 0) {
             const itemsQuery = 'INSERT INTO voucher_items (voucher_id, description, amount) VALUES ?';
             const itemValues = parsedParticulars.map(item => [
@@ -7763,7 +7781,6 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
             await connection.query(itemsQuery, [itemValues]);
         }
 
-        // If everything is successful, commit the transaction
         await connection.commit();
         res.status(201).json({ 
             message: 'Voucher created successfully!', 
@@ -7771,7 +7788,6 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
         });
 
     } catch (error) {
-        // If any step fails, roll back the entire transaction
         await connection.rollback();
         console.error("Error creating voucher:", error);
         
@@ -7781,7 +7797,6 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
         
         res.status(500).json({ message: 'An internal server error occurred while creating the voucher.' });
     } finally {
-        // Always release the connection back to the pool
         connection.release();
     }
 });
