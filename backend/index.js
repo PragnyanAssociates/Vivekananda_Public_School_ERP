@@ -7677,10 +7677,10 @@ app.get('/api/students/:id', async (req, res) => {
 // ---  VOUCHER SYSTEM API ROUTES ---
 // ==========================================================
 
-// 1. Multer Storage Configuration for Voucher Attachments
+// This is the CORRECT code that matches the rest of your application
 const voucherStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadPath = '/data/uploads'; 
+        const uploadPath = '/data/uploads'; // This is CORRECT for your setup
         if (!fs.existsSync(uploadPath)) {
             fs.mkdirSync(uploadPath, { recursive: true });
         }
@@ -7697,13 +7697,13 @@ const voucherUpload = multer({
 });
 
 
-// ★★★★★ START: GET NEXT VOUCHER NUMBER ENDPOINT (No Changes) ★★★★★
+// GET the next available voucher number
 app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) => {
     try {
         const query = "SELECT voucher_no FROM vouchers ORDER BY id DESC LIMIT 1";
         const [rows] = await db.query(query);
         let nextVoucherNumber = 1;
-        if (rows.length > 0) {
+        if (rows.length > 0 && rows[0].voucher_no) {
             const lastNumber = parseInt(rows[0].voucher_no.split('-')[1]);
             if (!isNaN(lastNumber)) {
                 nextVoucherNumber = lastNumber + 1;
@@ -7716,21 +7716,13 @@ app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) =>
         res.status(500).json({ message: 'Failed to fetch the next voucher number.' });
     }
 });
-// ★★★★★ END: GET NEXT VOUCHER NUMBER ENDPOINT ★★★★★
 
-
-// ★★★ MODIFIED: CREATE a New Voucher (Now logs creator) ★★★
+// CREATE a New Voucher
 app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
-    
-    const {
-        voucherType, voucherNo, voucherDate, headOfAccount, subHead,
-        accountType, totalAmount, amountInWords, particulars
-    } = req.body;
-    
-    // The user ID from your authentication middleware (e.g., verifyToken)
+    const { voucherType, voucherNo, voucherDate, headOfAccount, subHead, accountType, totalAmount, amountInWords, particulars } = req.body;
     const { userId } = req;
 
-    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || !totalAmount || !particulars || !userId) {
+    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
         return res.status(400).json({ message: 'Missing required fields or user authentication.' });
     }
 
@@ -7745,17 +7737,8 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-
-        const voucherQuery = `
-            INSERT INTO vouchers (
-                voucher_type, voucher_no, voucher_date, head_of_account, sub_head, 
-                account_type, total_amount, amount_in_words, attachment_url, created_by_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        const [voucherResult] = await connection.query(voucherQuery, [
-            voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, 
-            accountType, totalAmount, amountInWords, attachment_url, userId // Added creator ID
-        ]);
+        const voucherQuery = `INSERT INTO vouchers (voucher_type, voucher_no, voucher_date, head_of_account, sub_head, account_type, total_amount, amount_in_words, attachment_url, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const [voucherResult] = await connection.query(voucherQuery, [voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, attachment_url, userId]);
         const newVoucherId = voucherResult.insertId;
 
         if (parsedParticulars && parsedParticulars.length > 0) {
@@ -7765,11 +7748,7 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
         }
 
         await connection.commit();
-        res.status(201).json({ 
-            message: 'Voucher saved & moved to the register successfully!', 
-            voucherId: newVoucherId 
-        });
-
+        res.status(201).json({ message: 'Voucher saved & moved to the register successfully!', voucherId: newVoucherId });
     } catch (error) {
         await connection.rollback();
         console.error("Error creating voucher:", error);
@@ -7782,17 +7761,13 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
     }
 });
 
-// ★★★ NEW: UPDATE an Existing Voucher ★★★
+// UPDATE an Existing Voucher
 app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { id } = req.params;
-    const { userId } = req; // User performing the update
-
-    const {
-        voucherType, voucherDate, headOfAccount, subHead, accountType,
-        totalAmount, amountInWords, particulars
-    } = req.body;
+    const { userId } = req;
+    const { voucherType, voucherDate, headOfAccount, subHead, accountType, totalAmount, amountInWords, particulars } = req.body;
     
-    if (!voucherType || !voucherDate || !headOfAccount || !accountType || !totalAmount || !particulars || !userId) {
+    if (!voucherType || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
     
@@ -7800,27 +7775,16 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
     try {
         await connection.beginTransaction();
 
-        // If a new file is uploaded, update its URL.
         if (req.file) {
             const attachment_url = `/uploads/${req.file.filename}`;
             await connection.query('UPDATE vouchers SET attachment_url = ? WHERE id = ?', [attachment_url, id]);
         }
 
-        const voucherQuery = `
-            UPDATE vouchers SET
-                voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?,
-                account_type = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ?
-            WHERE id = ?
-        `;
-        await connection.query(voucherQuery, [
-            voucherType, voucherDate, headOfAccount, subHead || null, accountType,
-            totalAmount, amountInWords, userId, id
-        ]);
+        const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ? WHERE id = ?`;
+        await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, userId, id]);
 
-        // Delete old particulars to replace them
         await connection.query('DELETE FROM voucher_items WHERE voucher_id = ?', [id]);
 
-        // Insert the updated particulars
         const parsedParticulars = JSON.parse(particulars);
         if (parsedParticulars && parsedParticulars.length > 0) {
             const itemsQuery = 'INSERT INTO voucher_items (voucher_id, description, amount) VALUES ?';
@@ -7830,7 +7794,6 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
 
         await connection.commit();
         res.status(200).json({ message: 'Voucher updated successfully!' });
-
     } catch (error) {
         await connection.rollback();
         console.error("Error updating voucher:", error);
@@ -7840,20 +7803,16 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
     }
 });
 
-
-// ★★★★★ START: NEW! FETCH VOUCHERS LIST FOR REGISTERS ★★★★★
+// FETCH VOUCHERS LIST
 app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
     try {
         let query = 'SELECT id, voucher_no, head_of_account, sub_head, account_type, total_amount, voucher_date FROM vouchers WHERE 1=1';
         const queryParams = [];
 
-        // Filter by voucher type (Debit, Credit, Deposit)
         if (req.query.voucher_type) {
             query += ' AND voucher_type = ?';
             queryParams.push(req.query.voucher_type);
         }
-
-        // Filter by period
         const period = req.query.period;
         if (period === 'daily') {
             query += ' AND voucher_date = CURDATE()';
@@ -7861,10 +7820,9 @@ app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
             query += ' AND MONTH(voucher_date) = MONTH(CURDATE()) AND YEAR(voucher_date) = YEAR(CURDATE())';
         }
         
-        // Filter by specific date or date range
         if (req.query.date) {
-             query += ' AND voucher_date = ?';
-             queryParams.push(req.query.date);
+            query += ' AND voucher_date = ?';
+            queryParams.push(req.query.date);
         } else if (req.query.startDate && req.query.endDate) {
             query += ' AND voucher_date BETWEEN ? AND ?';
             queryParams.push(req.query.startDate, req.query.endDate);
@@ -7872,7 +7830,6 @@ app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
         
         query += ' ORDER BY id DESC';
 
-        // Limit for the VouchersScreen preview
         if (req.query.limit) {
             query += ' LIMIT ?';
             queryParams.push(parseInt(req.query.limit, 10));
@@ -7880,20 +7837,16 @@ app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
 
         const [vouchers] = await db.query(query, queryParams);
         res.status(200).json(vouchers);
-
     } catch (error) {
         console.error('Error fetching vouchers list:', error);
         res.status(500).json({ message: 'Failed to fetch voucher records.' });
     }
 });
-// ★★★★★ END: NEW! FETCH VOUCHERS LIST FOR REGISTERS ★★★★★
 
-
-// ★★★ MODIFIED: GET Full Voucher Details (Now includes user names) ★★★
+// FETCH Full Voucher Details
 app.get('/api/vouchers/details/:id', [verifyToken, isAdmin], async (req, res) => {
     try {
         const { id } = req.params;
-
         const voucherQuery = `
             SELECT
                 v.*,
@@ -7912,14 +7865,11 @@ app.get('/api/vouchers/details/:id', [verifyToken, isAdmin], async (req, res) =>
 
         const itemsQuery = 'SELECT description, amount FROM voucher_items WHERE voucher_id = ?';
         const [itemRows] = await db.query(itemsQuery, [id]);
-
         const voucherDetails = {
             ...voucherRows[0],
             particulars: itemRows
         };
-
         res.status(200).json(voucherDetails);
-
     } catch (error) {
         console.error('Error fetching voucher details:', error);
         res.status(500).json({ message: 'Failed to fetch voucher details.' });

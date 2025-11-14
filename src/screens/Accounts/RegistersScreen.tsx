@@ -11,13 +11,11 @@ import apiClient from '../../api/client';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import RNFS from 'react-native-fs';
-import FileViewer from 'react-native-file-viewer';
 
 const RegistersScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
 
-    // State
     const [vouchers, setVouchers] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeVoucherType, setActiveVoucherType] = useState('Debit');
@@ -57,7 +55,6 @@ const RegistersScreen = () => {
         }
     }, [isFocused, fetchVouchers]);
 
-    // Handlers
     const handlePeriodChange = (period) => {
         setActivePeriod(period);
         if (period !== 'custom') {
@@ -80,9 +77,9 @@ const RegistersScreen = () => {
     const handleConfirmDate = (date) => {
         const formattedDate = date.toISOString().split('T')[0];
         if (datePickerMode === 'start') {
-            setDateRange(prev => ({ ...prev, start: formattedDate, end: prev.end }));
+            setDateRange(prev => ({ ...prev, start: formattedDate }));
         } else {
-            setDateRange(prev => ({ ...prev, start: prev.start, end: formattedDate }));
+            setDateRange(prev => ({ ...prev, end: formattedDate }));
         }
         hideDatePicker();
     };
@@ -147,10 +144,8 @@ const RegistersScreen = () => {
                         .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
                         .invoice-box table td { padding: 5px; vertical-align: top; }
                         .invoice-box table tr.top table td { padding-bottom: 20px; }
-                        .invoice-box table tr.top table td.title { font-size: 45px; line-height: 45px; color: #333; }
                         .invoice-box table tr.information table td { padding-bottom: 40px; }
                         .invoice-box table tr.heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
-                        .invoice-box table tr.details td { padding-bottom: 20px; }
                         .invoice-box table tr.item td { border-bottom: 1px solid #eee; }
                         .invoice-box table tr.item.last td { border-bottom: none; }
                         .invoice-box table tr.total td:nth-child(2) { border-top: 2px solid #eee; font-weight: bold; }
@@ -164,7 +159,7 @@ const RegistersScreen = () => {
                         <div class="school-title">Vivekananda Public School</div>
                         <div class="managed-by">Managed By Vivekananda Education Center</div>
                         <div class="voucher-title">${details.voucher_type} Voucher</div>
-                        <table cellpadding="0" cellspacing="0">
+                        <table>
                             <tr class="top">
                                 <td colspan="2">
                                     <table>
@@ -222,11 +217,7 @@ const RegistersScreen = () => {
             
             Alert.alert(
                 "Success",
-                `PDF saved to your Downloads folder as ${fileName}`,
-                [
-                    { text: "OK" },
-                    { text: "Open File", onPress: () => FileViewer.open(destinationPath).catch(err => Alert.alert("Error", "Could not open file.")) }
-                ]
+                `PDF saved to your Downloads folder as ${fileName}`
             );
 
         } catch (error) {

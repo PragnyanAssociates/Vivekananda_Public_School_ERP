@@ -25,7 +25,6 @@ interface RecentVoucher {
     total_amount: number;
 }
 
-// --- Data for the dropdowns ---
 const headOfAccountOptions = [
     'Fee', 'Salaries', 'Donations', 'Utilities/Bills', 'Transport', 'Assets',
     'Government Grants/Aids', 'Investments', 'Staff Welfare', 'Student Welfare',
@@ -35,7 +34,6 @@ const headOfAccountOptions = [
 
 const accountTypeOptions = ['UPI', 'Bank', 'Cheque', 'Cash', 'Kind', 'Others'];
 
-// Helper function to convert number to words
 const numberToWords = (num: number): string => {
     if (num === 0) return 'Zero';
     const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -57,9 +55,8 @@ const VouchersScreen = () => {
     const route = useRoute();
     const voucherId = route.params?.voucherId;
 
-    // State Management
     const [mode, setMode] = useState(voucherId ? 'edit' : 'create');
-    const [isLoading, setIsLoading] = useState(mode === 'edit');
+    const [isLoading, setIsLoading] = useState(!!voucherId);
     const [voucherType, setVoucherType] = useState<VoucherType>('Debit');
     const [voucherNo, setVoucherNo] = useState<string>('Loading...');
     const [voucherDate, setVoucherDate] = useState<string>(new Date().toLocaleDateString('en-GB'));
@@ -119,28 +116,30 @@ const VouchersScreen = () => {
 
     const resetForm = useCallback(() => {
         setVoucherType('Debit');
+        setVoucherDate(new Date().toLocaleDateString('en-GB'));
         setHeadOfAccount('');
         setSubHead('');
         setAccountType('UPI');
         setParticulars([{ description: '', amount: '' }]);
         setAttachment(null);
-        if (mode === 'create') {
+        if (mode === 'create' || !voucherId) {
             fetchNextVoucherNumber();
         }
         fetchRecentVouchers();
-    }, [mode, fetchNextVoucherNumber, fetchRecentVouchers]);
+    }, [mode, voucherId, fetchNextVoucherNumber, fetchRecentVouchers]);
 
     useEffect(() => {
+        const currentVoucherId = route.params?.voucherId;
         if (isFocused) {
-            if (mode === 'edit' && voucherId) {
-                fetchVoucherDetails(voucherId);
+            if (currentVoucherId) {
+                setMode('edit');
+                fetchVoucherDetails(currentVoucherId);
             } else {
                 setMode('create');
-                fetchNextVoucherNumber();
-                fetchRecentVouchers();
+                resetForm(); // Resets and fetches new voucher number
             }
         }
-    }, [isFocused, mode, voucherId, fetchVoucherDetails, fetchNextVoucherNumber, fetchRecentVouchers]);
+    }, [isFocused, route.params?.voucherId]);
 
     useEffect(() => {
         const total = particulars.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -171,19 +170,25 @@ const VouchersScreen = () => {
     const handleSave = async () => {
         const validParticulars = particulars.filter(p => p.description.trim() !== '' && !isNaN(parseFloat(p.amount)) && parseFloat(p.amount) > 0);
         if (!headOfAccount) return Alert.alert('Validation Error', 'Please select a "Head of A/C".');
-        if (validParticulars.length === 0) return Alert.alert('Validation Error', 'Please add at least one valid particular.');
+        if (validParticulars.length === 0 && totalAmount !== 0) return Alert.alert('Validation Error', 'Please add at least one valid particular if the amount is not zero.');
 
         setIsSaving(true);
         const formData = new FormData();
         formData.append('voucherType', voucherType);
-        formData.append('voucherNo', voucherNo);
-        formData.append('voucherDate', new Date().toISOString().split('T')[0]);
         formData.append('headOfAccount', headOfAccount);
         formData.append('subHead', subHead);
         formData.append('accountType', accountType);
         formData.append('totalAmount', totalAmount.toFixed(2));
         formData.append('amountInWords', amountInWords);
         formData.append('particulars', JSON.stringify(validParticulars));
+
+        const dateParts = voucherDate.split('/');
+        const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+        formData.append('voucherDate', isoDate);
+        
+        if (mode === 'create') {
+            formData.append('voucherNo', voucherNo);
+        }
 
         if (attachment?.assets?.[0]) {
             formData.append('attachment', { uri: Platform.OS === 'android' ? attachment.assets[0].uri : attachment.assets[0].uri!.replace('file://', ''), type: attachment.assets[0].type, name: attachment.assets[0].fileName });
@@ -199,7 +204,7 @@ const VouchersScreen = () => {
                 Alert.alert('Success', response.data.message, [{ text: 'OK', onPress: resetForm }]);
             }
         } catch (error: any) {
-            console.error(error);
+            console.error("Save error response:", error.response?.data);
             const errorMessage = error.response?.data?.message || 'An error occurred while saving.';
             Alert.alert('Error', errorMessage);
         } finally {
