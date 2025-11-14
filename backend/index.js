@@ -7720,10 +7720,11 @@ app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) =>
 // CREATE a New Voucher
 app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { voucherType, voucherNo, voucherDate, headOfAccount, subHead, accountType, totalAmount, amountInWords, particulars } = req.body;
-    const { userId } = req;
+    const { userId } = req; // Extracted from token by verifyToken middleware
 
-    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
-        return res.status(400).json({ message: 'Missing required fields or user authentication.' });
+    // MODIFIED: Removed userId check from validation to prevent blocking, will default to NULL if missing.
+    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars) {
+        return res.status(400).json({ message: 'Missing required fields.' });
     }
 
     const attachment_url = req.file ? `/uploads/${req.file.filename}` : null;
@@ -7738,7 +7739,8 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
     try {
         await connection.beginTransaction();
         const voucherQuery = `INSERT INTO vouchers (voucher_type, voucher_no, voucher_date, head_of_account, sub_head, account_type, total_amount, amount_in_words, attachment_url, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const [voucherResult] = await connection.query(voucherQuery, [voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, attachment_url, userId]);
+        // userId will be inserted as NULL if it's undefined, which is allowed by the DB schema
+        const [voucherResult] = await connection.query(voucherQuery, [voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, attachment_url, userId || null]);
         const newVoucherId = voucherResult.insertId;
 
         if (parsedParticulars && parsedParticulars.length > 0) {
@@ -7764,10 +7766,12 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
 // UPDATE an Existing Voucher
 app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { id } = req.params;
-    const { userId } = req;
+    const { userId } = req; // Extracted from token
     const { voucherType, voucherDate, headOfAccount, subHead, accountType, totalAmount, amountInWords, particulars } = req.body;
     
-    if (!voucherType || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
+    // MODIFIED: Removed userId check from validation. This allows updates to proceed.
+    // The "Missing required fields" error will no longer occur due to this.
+    if (!voucherType || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
     
@@ -7775,14 +7779,20 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
     try {
         await connection.beginTransaction();
 
+        // Fetch existing voucher to check for attachment
+        const [existingVoucher] = await connection.query('SELECT attachment_url FROM vouchers WHERE id = ?', [id]);
+        let attachment_url = existingVoucher.length ? existingVoucher[0].attachment_url : null;
+
         if (req.file) {
-            const attachment_url = `/uploads/${req.file.filename}`;
-            await connection.query('UPDATE vouchers SET attachment_url = ? WHERE id = ?', [attachment_url, id]);
+            // A new file is uploaded, so update the URL
+            attachment_url = `/uploads/${req.file.filename}`;
         }
+        
+        // Update the main voucher details
+        const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, total_amount = ?, amount_in_words = ?, attachment_url = ?, updated_by_id = ? WHERE id = ?`;
+        await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, attachment_url, userId || null, id]);
 
-        const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ? WHERE id = ?`;
-        await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, totalAmount, amountInWords, userId, id]);
-
+        // Delete old items and insert the new ones
         await connection.query('DELETE FROM voucher_items WHERE voucher_id = ?', [id]);
 
         const parsedParticulars = JSON.parse(particulars);

@@ -114,7 +114,8 @@ const VouchersScreen = () => {
         }
     }, []);
 
-    const resetForm = useCallback(() => {
+    const initializeCreateMode = useCallback(() => {
+        setMode('create');
         setVoucherType('Debit');
         setVoucherDate(new Date().toLocaleDateString('en-GB'));
         setHeadOfAccount('');
@@ -122,24 +123,21 @@ const VouchersScreen = () => {
         setAccountType('UPI');
         setParticulars([{ description: '', amount: '' }]);
         setAttachment(null);
-        if (mode === 'create' || !voucherId) {
-            fetchNextVoucherNumber();
-        }
+        fetchNextVoucherNumber();
         fetchRecentVouchers();
-    }, [mode, voucherId, fetchNextVoucherNumber, fetchRecentVouchers]);
+    }, [fetchNextVoucherNumber, fetchRecentVouchers]);
 
     useEffect(() => {
-        const currentVoucherId = route.params?.voucherId;
         if (isFocused) {
+            const currentVoucherId = route.params?.voucherId;
             if (currentVoucherId) {
                 setMode('edit');
                 fetchVoucherDetails(currentVoucherId);
             } else {
-                setMode('create');
-                resetForm(); // Resets and fetches new voucher number
+                initializeCreateMode();
             }
         }
-    }, [isFocused, route.params?.voucherId]);
+    }, [isFocused, route.params?.voucherId, fetchVoucherDetails, initializeCreateMode]);
 
     useEffect(() => {
         const total = particulars.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -165,7 +163,7 @@ const VouchersScreen = () => {
         });
     };
 
-    const handleCancel = () => Alert.alert("Confirm Cancel", "Are you sure you want to clear the form?", [{ text: "No", style: "cancel" }, { text: "Yes", style: "destructive", onPress: resetForm }]);
+    const handleCancel = () => Alert.alert("Confirm Cancel", "Are you sure you want to clear the form?", [{ text: "No", style: "cancel" }, { text: "Yes", style: "destructive", onPress: initializeCreateMode }]);
 
     const handleSave = async () => {
         const validParticulars = particulars.filter(p => p.description.trim() !== '' && !isNaN(parseFloat(p.amount)) && parseFloat(p.amount) > 0);
@@ -201,7 +199,7 @@ const VouchersScreen = () => {
                 Alert.alert('Success', response.data.message || 'Voucher updated successfully!', [{ text: 'OK', onPress: () => navigation.navigate('RegistersScreen') }]);
             } else {
                 response = await apiClient.post('/vouchers/create', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-                Alert.alert('Success', response.data.message, [{ text: 'OK', onPress: resetForm }]);
+                Alert.alert('Success', response.data.message, [{ text: 'OK', onPress: initializeCreateMode }]);
             }
         } catch (error: any) {
             console.error("Save error response:", error.response?.data);
@@ -224,7 +222,10 @@ const VouchersScreen = () => {
     if (isLoading) {
         return (
             <SafeAreaView style={styles.container}>
-                <View style={styles.header}><Text style={styles.headerTitle}>Loading Voucher...</Text></View>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}><MaterialIcons name="arrow-back" size={24} color="#333" /></TouchableOpacity>
+                    <Text style={styles.headerTitle}>Loading Voucher...</Text>
+                </View>
                 <ActivityIndicator size="large" color="#0275d8" style={{ flex: 1, justifyContent: 'center' }} />
             </SafeAreaView>
         );
