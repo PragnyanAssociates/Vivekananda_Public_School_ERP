@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
-    ActivityIndicator, Alert, Modal, ScrollView, Platform, PermissionsAndroid
+    ActivityIndicator, Alert, Modal, ScrollView, Platform, PermissionsAndroid,
+    Linking // --- NEW: Import Linking to open URLs ---
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -93,13 +94,12 @@ const RegistersScreen = () => {
     };
 
     const editVoucher = (voucherId) => {
-        setDetailModalVisible(false); // Close the modal before navigating
+        setDetailModalVisible(false);
         navigation.navigate('VouchersScreen', { voucherId: voucherId });
     };
     
     const requestStoragePermission = async () => {
         if (Platform.OS !== 'android') return true;
-        // For Android 13+ (API 33+), WRITE_EXTERNAL_STORAGE is not needed for non-media files.
         if (Platform.Version >= 33) return true;
         try {
             const granted = await PermissionsAndroid.request(
@@ -135,7 +135,6 @@ const RegistersScreen = () => {
                 </tr>
             `).join('');
 
-            // MODIFIED: Added Name and Phone No to the HTML template
             const htmlContent = `
                 <html>
                 <head>
@@ -209,7 +208,6 @@ const RegistersScreen = () => {
             const options = {
                 html: htmlContent,
                 fileName: `Voucher-${details.voucher_no}`,
-                directory: 'Documents', // Use a common directory
             };
 
             const file = await RNHTMLtoPDF.convert(options);
@@ -217,21 +215,32 @@ const RegistersScreen = () => {
             const fileName = `Voucher-${details.voucher_no}.pdf`;
             const destinationPath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
 
-            // Check if file exists at source path before moving
-            if (await RNFS.exists(sourcePath)) {
-                await RNFS.moveFile(sourcePath, destinationPath);
-                Alert.alert(
-                    "Success",
-                    `PDF saved to your Downloads folder as ${fileName}`
-                );
-            } else {
-                 throw new Error("Converted PDF file not found at source path.");
-            }
+            await RNFS.moveFile(sourcePath, destinationPath);
+            
+            Alert.alert(
+                "Success",
+                `PDF saved to your Downloads folder as ${fileName}`
+            );
 
         } catch (error) {
             console.error("Download error:", error);
             Alert.alert("Error", "Failed to download voucher. Please try again.");
         }
+    };
+    
+    // --- NEW: Function to open the attachment URL ---
+    const handleViewProof = (attachmentUrl) => {
+        if (!attachmentUrl) return;
+        // Construct the full URL to the image file
+        const baseUrl = apiClient.defaults.baseURL.replace('/api', ''); // Remove /api if it exists
+        const fullUrl = `${baseUrl}${attachmentUrl}`;
+        Linking.canOpenURL(fullUrl).then(supported => {
+            if (supported) {
+                Linking.openURL(fullUrl);
+            } else {
+                Alert.alert("Error", `Cannot open this URL: ${fullUrl}`);
+            }
+        });
     };
 
     const renderVoucherItem = ({ item, index }: { item: any, index: number }) => (
@@ -347,8 +356,15 @@ const RegistersScreen = () => {
                                     <Text style={styles.totalText}>Total Amount:</Text>
                                     <Text style={styles.totalAmount}>₹{selectedVoucher.total_amount}</Text>
                                 </View>
+                                
+                                {/* --- MODIFIED: Added View Proof Button --- */}
+                                {selectedVoucher.attachment_url && (
+                                    <TouchableOpacity style={styles.viewProofButton} onPress={() => handleViewProof(selectedVoucher.attachment_url)}>
+                                        <MaterialIcons name="image" size={20} color="#FFF" />
+                                        <Text style={styles.viewProofButtonText}>View Proof</Text>
+                                    </TouchableOpacity>
+                                )}
 
-                                {/* --- CORRECTED: User Info Container Updated --- */}
                                 <View style={styles.userInfoContainer}>
                                     <Text style={styles.userInfoText}>
                                         Created by: {selectedVoucher.creator_name || 'N/A'}
@@ -359,8 +375,6 @@ const RegistersScreen = () => {
                                         </Text>
                                     )}
                                 </View>
-                                {/* --- End of correction --- */}
-
                             </ScrollView>
                             <TouchableOpacity style={styles.closeButton} onPress={() => setDetailModalVisible(false)}>
                                 <Text style={styles.closeButtonText}>Close</Text>
@@ -373,6 +387,7 @@ const RegistersScreen = () => {
     );
 };
 
+// Styles updated to include the new "View Proof" button style
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F7FAFC' },
     header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#DDD', elevation: 2 },
@@ -408,19 +423,10 @@ const styles = StyleSheet.create({
     totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 10, borderTopWidth: 2, borderTopColor: '#333' },
     totalText: { fontSize: 16, fontWeight: 'bold', color: '#1A202C' },
     totalAmount: { fontSize: 16, fontWeight: 'bold', color: '#1A202C' },
-    userInfoContainer: {
-        marginTop: 15,
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: '#EEE',
-    },
-    userInfoText: {
-        fontSize: 12,
-        fontStyle: 'italic',
-        color: '#6c757d',
-        textAlign: 'center',
-        paddingBottom: 2, // Added small padding for better spacing
-    },
+    viewProofButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#5bc0de', padding: 10, borderRadius: 8, marginTop: 15, },
+    viewProofButtonText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
+    userInfoContainer: { marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#EEE', },
+    userInfoText: { fontSize: 12, fontStyle: 'italic', color: '#6c757d', textAlign: 'center', paddingBottom: 2, },
     closeButton: { backgroundColor: '#d9534f', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
     closeButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 });

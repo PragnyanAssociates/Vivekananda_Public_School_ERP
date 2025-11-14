@@ -60,7 +60,6 @@ const VouchersScreen = () => {
     const [voucherType, setVoucherType] = useState<VoucherType>('Debit');
     const [voucherNo, setVoucherNo] = useState<string>('Loading...');
     const [voucherDate, setVoucherDate] = useState<string>(new Date().toLocaleDateString('en-GB'));
-    // MODIFIED: Added state for new fields
     const [name, setName] = useState('');
     const [phoneNo, setPhoneNo] = useState('');
     const [headOfAccount, setHeadOfAccount] = useState<string>('');
@@ -73,6 +72,10 @@ const VouchersScreen = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [recentVouchers, setRecentVouchers] = useState<RecentVoucher[]>([]);
     const [isLoadingRecent, setIsLoadingRecent] = useState(false);
+    
+    // --- NEW STATE FOR HANDLING EXISTING ATTACHMENTS ---
+    const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string | null>(null);
+    const [isAttachmentRemoved, setIsAttachmentRemoved] = useState(false);
 
     const fetchVoucherDetails = useCallback(async (id) => {
         setIsLoading(true);
@@ -82,13 +85,14 @@ const VouchersScreen = () => {
             setVoucherType(data.voucher_type);
             setVoucherNo(data.voucher_no);
             setVoucherDate(new Date(data.voucher_date).toLocaleDateString('en-GB'));
-            // MODIFIED: Set state for new fields from fetched data
             setName(data.name || '');
             setPhoneNo(data.phone_no || '');
             setHeadOfAccount(data.head_of_account);
             setSubHead(data.sub_head || '');
             setAccountType(data.account_type);
             setParticulars(data.particulars.map(p => ({ description: p.description, amount: String(p.amount) })));
+            // MODIFIED: Set the existing attachment URL from the fetched data.
+            setExistingAttachmentUrl(data.attachment_url);
         } catch (error) {
             console.error("Failed to fetch voucher details:", error);
             Alert.alert("Error", "Failed to load voucher details for editing.", [{ text: "OK", onPress: () => navigation.goBack() }]);
@@ -124,7 +128,6 @@ const VouchersScreen = () => {
         setMode('create');
         setVoucherType('Debit');
         setVoucherDate(new Date().toLocaleDateString('en-GB'));
-        // MODIFIED: Reset new fields
         setName('');
         setPhoneNo('');
         setHeadOfAccount('');
@@ -132,6 +135,9 @@ const VouchersScreen = () => {
         setAccountType('UPI');
         setParticulars([{ description: '', amount: '' }]);
         setAttachment(null);
+        // MODIFIED: Reset attachment states
+        setExistingAttachmentUrl(null);
+        setIsAttachmentRemoved(false);
         fetchNextVoucherNumber();
         fetchRecentVouchers();
     }, [fetchNextVoucherNumber, fetchRecentVouchers]);
@@ -168,10 +174,19 @@ const VouchersScreen = () => {
     const handleChooseFile = () => {
         launchImageLibrary({ mediaType: 'photo' }, (response) => {
             if (response.didCancel || response.errorCode) return;
+            // When a new file is chosen, it replaces any existing one.
             setAttachment(response);
+            setExistingAttachmentUrl(null); 
+            setIsAttachmentRemoved(false);
         });
     };
 
+    // --- NEW: Function to handle removing an existing attachment ---
+    const handleRemoveExistingAttachment = () => {
+        setExistingAttachmentUrl(null);
+        setIsAttachmentRemoved(true); // Flag this for the backend
+    };
+    
     const handleCancel = () => Alert.alert("Confirm Cancel", "Are you sure you want to clear the form?", [{ text: "No", style: "cancel" }, { text: "Yes", style: "destructive", onPress: initializeCreateMode }]);
 
     const handleSave = async () => {
@@ -182,7 +197,6 @@ const VouchersScreen = () => {
         setIsSaving(true);
         const formData = new FormData();
         formData.append('voucherType', voucherType);
-        // MODIFIED: Append new fields to form data
         formData.append('name', name);
         formData.append('phoneNo', phoneNo);
         formData.append('headOfAccount', headOfAccount);
@@ -204,6 +218,11 @@ const VouchersScreen = () => {
             formData.append('attachment', { uri: Platform.OS === 'android' ? attachment.assets[0].uri : attachment.assets[0].uri!.replace('file://', ''), type: attachment.assets[0].type, name: attachment.assets[0].fileName });
         }
 
+        // MODIFIED: Tell the backend to remove the attachment if flagged
+        if (isAttachmentRemoved) {
+            formData.append('removeAttachment', 'true');
+        }
+
         try {
             let response;
             if (mode === 'edit') {
@@ -221,6 +240,13 @@ const VouchersScreen = () => {
             setIsSaving(false);
         }
     };
+    
+    // --- NEW: Helper to get just the filename from a URL path ---
+    const getFilenameFromUrl = (url: string | null) => {
+        if (!url) return 'Upload Proof';
+        return url.split('/').pop();
+    };
+
 
     const renderRecentVoucherItem = ({ item, index }: { item: RecentVoucher, index: number }) => (
         <View style={styles.recentVoucherRow}>
@@ -241,6 +267,14 @@ const VouchersScreen = () => {
                 <ActivityIndicator size="large" color="#0275d8" style={{ flex: 1, justifyContent: 'center' }} />
             </SafeAreaView>
         );
+    }
+
+    // Determine what text to show on the upload button
+    let uploadButtonText = 'Upload Proof';
+    if (attachment?.assets?.[0]?.fileName) {
+        uploadButtonText = attachment.assets[0].fileName;
+    } else if (existingAttachmentUrl) {
+        uploadButtonText = getFilenameFromUrl(existingAttachmentUrl);
     }
 
     return (
@@ -268,22 +302,9 @@ const VouchersScreen = () => {
                         <Text style={styles.infoText}>Date: {voucherDate}</Text>
                     </View>
                     
-                    {/* --- MODIFIED: Added Name and Phone No inputs --- */}
-                    <TextInput 
-                        style={styles.input} 
-                        placeholder="Name" 
-                        value={name} 
-                        onChangeText={setName} 
-                    />
-                    <TextInput 
-                        style={styles.input} 
-                        placeholder="Phone No" 
-                        value={phoneNo} 
-                        onChangeText={setPhoneNo} 
-                        keyboardType="phone-pad"
-                    />
-                    {/* --- End of modification --- */}
-
+                    <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
+                    <TextInput style={styles.input} placeholder="Phone No" value={phoneNo} onChangeText={setPhoneNo} keyboardType="phone-pad"/>
+                    
                     <View style={styles.pickerContainer}>
                         <Picker selectedValue={headOfAccount} onValueChange={(itemValue) => setHeadOfAccount(itemValue)}>
                             <Picker.Item label="Select Head of A/C*" value="" />
@@ -316,7 +337,21 @@ const VouchersScreen = () => {
                     </View>
 
                     <View style={styles.wordsContainer}><Text style={styles.wordsLabel}>Total Amount in Words:</Text><Text style={styles.wordsText}>{amountInWords}</Text></View>
-                    <TouchableOpacity style={styles.uploadButton} onPress={handleChooseFile}><MaterialIcons name="cloud-upload" size={24} color="#5bc0de" /><Text style={styles.uploadText} numberOfLines={1}>{attachment?.assets?.[0]?.fileName || 'Upload Proof'}</Text></TouchableOpacity>
+
+                    {/* --- CORRECTED: Upload Button with Logic for Existing Files --- */}
+                    <View style={styles.uploadContainer}>
+                         <TouchableOpacity style={styles.uploadButton} onPress={handleChooseFile}>
+                            <MaterialIcons name="cloud-upload" size={24} color="#5bc0de" />
+                            <Text style={styles.uploadText} numberOfLines={1}>{uploadButtonText}</Text>
+                        </TouchableOpacity>
+                        {/* Show remove icon only if there's an existing file and no new one is selected */}
+                        {existingAttachmentUrl && !attachment && (
+                            <TouchableOpacity style={styles.removeAttachmentButton} onPress={handleRemoveExistingAttachment}>
+                                <MaterialIcons name="close" size={22} color="#d9534f" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    
                 </View>
 
                 <View style={styles.buttonRow}>
@@ -356,6 +391,7 @@ const VouchersScreen = () => {
     );
 };
 
+// Styles have been updated to include styles for the new remove button
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#E9ECEF' },
     header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#DDD' },
@@ -391,79 +427,27 @@ const styles = StyleSheet.create({
     wordsContainer: { marginTop: 16, padding: 10, backgroundColor: '#F8F9FA', borderRadius: 4 },
     wordsLabel: { fontWeight: 'bold', color: '#6c757d' },
     wordsText: { fontSize: 14 },
-    uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderWidth: 1, borderColor: '#5bc0de', borderStyle: 'dashed', borderRadius: 8, marginTop: 16 },
+    uploadContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+    uploadButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderWidth: 1, borderColor: '#5bc0de', borderStyle: 'dashed', borderRadius: 8 },
     uploadText: { marginLeft: 10, color: '#5bc0de', flex: 1 },
+    removeAttachmentButton: { marginLeft: 10, padding: 5, },
     buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24 },
     actionButton: { flex: 1, padding: 15, borderRadius: 8, alignItems: 'center' },
     saveButton: { backgroundColor: '#5cb85c', marginRight: 8 },
     cancelButton: { backgroundColor: '#f0ad4e', marginLeft: 8 },
     buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-    recentVouchersContainer: {
-        marginTop: 24,
-        backgroundColor: '#FFF',
-        borderRadius: 8,
-        padding: 16,
-        elevation: 3,
-    },
-    recentVouchersTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 12,
-        color: '#333',
-    },
-    recentVouchersTable: {
-        borderWidth: 1,
-        borderColor: '#DEE2E6',
-        borderRadius: 4,
-    },
-    recentVoucherRow: {
-        flexDirection: 'row',
-        paddingVertical: 10,
-        paddingHorizontal: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#EEE',
-        alignItems: 'center',
-    },
-    recentVoucherHeader: {
-        backgroundColor: '#F8F9FA',
-        borderBottomWidth: 2,
-        borderColor: '#DEE2E6',
-    },
-    recentVoucherHeaderText: {
-        fontWeight: 'bold',
-        color: '#495057',
-    },
-    recentVoucherCellSNo: {
-        width: 40,
-    },
-    recentVoucherCell: {
-        flex: 1,
-        paddingHorizontal: 4,
-    },
-    recentVoucherCellAmount: {
-        width: 90,
-        textAlign: 'right',
-        fontWeight: 'bold',
-    },
-    noDataText: {
-        textAlign: 'center',
-        padding: 20,
-        color: '#6c757d',
-    },
-    viewMoreButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#0275d8',
-        paddingVertical: 12,
-        borderRadius: 8,
-        marginTop: 16,
-    },
-    viewMoreText: {
-        color: '#FFF',
-        fontWeight: 'bold',
-        marginRight: 8,
-    },
+    recentVouchersContainer: { marginTop: 24, backgroundColor: '#FFF', borderRadius: 8, padding: 16, elevation: 3, },
+    recentVouchersTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#333', },
+    recentVouchersTable: { borderWidth: 1, borderColor: '#DEE2E6', borderRadius: 4, },
+    recentVoucherRow: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#EEE', alignItems: 'center', },
+    recentVoucherHeader: { backgroundColor: '#F8F9FA', borderBottomWidth: 2, borderColor: '#DEE2E6', },
+    recentVoucherHeaderText: { fontWeight: 'bold', color: '#495057', },
+    recentVoucherCellSNo: { width: 40, },
+    recentVoucherCell: { flex: 1, paddingHorizontal: 4, },
+    recentVoucherCellAmount: { width: 90, textAlign: 'right', fontWeight: 'bold', },
+    noDataText: { textAlign: 'center', padding: 20, color: '#6c757d', },
+    viewMoreButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0275d8', paddingVertical: 12, borderRadius: 8, marginTop: 16, },
+    viewMoreText: { color: '#FFF', fontWeight: 'bold', marginRight: 8, },
 });
 
 export default VouchersScreen;

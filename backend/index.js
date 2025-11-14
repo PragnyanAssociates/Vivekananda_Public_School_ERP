@@ -7680,7 +7680,6 @@ app.get('/api/students/:id', async (req, res) => {
 // 1. Multer Configuration for Voucher Proofs
 const voucherStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Use the same destination as your other uploads for consistency
         const uploadPath = '/data/uploads';
         if (!fs.existsSync(uploadPath)) {
             fs.mkdirSync(uploadPath, { recursive: true });
@@ -7694,7 +7693,7 @@ const voucherStorage = multer.diskStorage({
 
 const voucherUpload = multer({ 
     storage: voucherStorage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit for proof images
+    limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 // 2. API Routes
@@ -7722,9 +7721,6 @@ app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) =>
 // CREATE a New Voucher
 app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { voucherType, voucherNo, voucherDate, headOfAccount, subHead, accountType, name, phoneNo, totalAmount, amountInWords, particulars } = req.body;
-    
-    // CORRECTED: Get the user ID from req.user.id, which is set by your existing verifyToken middleware.
-    // This is the key fix for the "Created by: N/A" issue.
     const userId = req.user.id;
 
     if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
@@ -7769,10 +7765,8 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
 // UPDATE an Existing Voucher
 app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { id } = req.params;
-    
-    // CORRECTED: Get the user ID from req.user.id for tracking the updater.
     const userId = req.user.id;
-    const { voucherType, voucherDate, headOfAccount, subHead, accountType, name, phoneNo, totalAmount, amountInWords, particulars } = req.body;
+    const { voucherType, voucherDate, headOfAccount, subHead, accountType, name, phoneNo, totalAmount, amountInWords, particulars, removeAttachment } = req.body;
     
     if (!voucherType || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
@@ -7782,10 +7776,24 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
     try {
         await connection.beginTransaction();
 
-        let attachment_url = req.body.attachment_url || null;
-        if (req.file) {
-            attachment_url = `/uploads/${req.file.filename}`;
+        // --- ROBUST ATTACHMENT HANDLING LOGIC ---
+        // 1. Fetch the current attachment URL from the database.
+        const [existingVoucherRows] = await connection.query('SELECT attachment_url FROM vouchers WHERE id = ?', [id]);
+        if (existingVoucherRows.length === 0) {
+            return res.status(404).json({ message: 'Voucher to update not found.' });
         }
+        let attachment_url = existingVoucherRows[0].attachment_url;
+
+        // 2. Determine the new URL based on user actions.
+        if (req.file) {
+            // Case A: A new file was uploaded, so replace the old URL.
+            attachment_url = `/uploads/${req.file.filename}`;
+        } else if (removeAttachment === 'true') {
+            // Case B: User explicitly requested to remove the attachment.
+            attachment_url = null;
+        }
+        // Case C (Implicit): No new file, no removal request. 'attachment_url' remains unchanged.
+        // --- END OF ATTACHMENT LOGIC ---
 
         const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, name = ?, phone_no = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ?, attachment_url = ? WHERE id = ?`;
         await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, name || null, phoneNo || null, totalAmount, amountInWords, userId, attachment_url, id]);
