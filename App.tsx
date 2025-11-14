@@ -280,8 +280,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="AdminSuggestionsScreen" component={AdminSuggestionsScreen} />
       <Stack.Screen name="DonorSponsorScreen" component={DonorSponsorScreen} />
       <Stack.Screen name="DonorPaymentScreen" component={DonorPaymentScreen} />
-      <Stack.Screen name="AdminPaymentScreen" component={AdminPaymentScreen} />
-      */}
+      <Stack.Screen name="AdminPaymentScreen" component={AdminPaymentScreen} /> */}
       <Stack.Screen 
         name="Gallery" 
         component={GalleryNavigator} 

@@ -8,7 +8,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { launchImageLibrary, ImagePickerResponse } from 'react-native-image-picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
 import apiClient from '../../api/client';
 
 type VoucherType = 'Debit' | 'Credit' | 'Deposit';
@@ -51,12 +51,15 @@ const numberToWords = (num: number): string => {
     return convert(num).trim();
 };
 
-
 const VouchersScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
-    
-    // --- State Management ---
+    const route = useRoute();
+    const voucherId = route.params?.voucherId;
+
+    // State Management
+    const [mode, setMode] = useState(voucherId ? 'edit' : 'create');
+    const [isLoading, setIsLoading] = useState(mode === 'edit');
     const [voucherType, setVoucherType] = useState<VoucherType>('Debit');
     const [voucherNo, setVoucherNo] = useState<string>('Loading...');
     const [voucherDate, setVoucherDate] = useState<string>(new Date().toLocaleDateString('en-GB'));
@@ -71,6 +74,26 @@ const VouchersScreen = () => {
     const [recentVouchers, setRecentVouchers] = useState<RecentVoucher[]>([]);
     const [isLoadingRecent, setIsLoadingRecent] = useState(false);
 
+    const fetchVoucherDetails = useCallback(async (id) => {
+        setIsLoading(true);
+        try {
+            const response = await apiClient.get(`/vouchers/details/${id}`);
+            const data = response.data;
+            setVoucherType(data.voucher_type);
+            setVoucherNo(data.voucher_no);
+            setVoucherDate(new Date(data.voucher_date).toLocaleDateString('en-GB'));
+            setHeadOfAccount(data.head_of_account);
+            setSubHead(data.sub_head || '');
+            setAccountType(data.account_type);
+            setParticulars(data.particulars.map(p => ({ description: p.description, amount: String(p.amount) })));
+        } catch (error) {
+            console.error("Failed to fetch voucher details:", error);
+            Alert.alert("Error", "Failed to load voucher details for editing.", [{ text: "OK", onPress: () => navigation.goBack() }]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [navigation]);
+
     const fetchNextVoucherNumber = useCallback(async () => {
         try {
             const response = await apiClient.get('/vouchers/next-number');
@@ -81,7 +104,7 @@ const VouchersScreen = () => {
             Alert.alert('Error', 'Could not fetch the next voucher number.');
         }
     }, []);
-    
+
     const fetchRecentVouchers = useCallback(async () => {
         setIsLoadingRecent(true);
         try {
@@ -101,16 +124,23 @@ const VouchersScreen = () => {
         setAccountType('UPI');
         setParticulars([{ description: '', amount: '' }]);
         setAttachment(null);
-        fetchNextVoucherNumber();
-        fetchRecentVouchers(); 
-    }, [fetchNextVoucherNumber, fetchRecentVouchers]);
-    
+        if (mode === 'create') {
+            fetchNextVoucherNumber();
+        }
+        fetchRecentVouchers();
+    }, [mode, fetchNextVoucherNumber, fetchRecentVouchers]);
+
     useEffect(() => {
         if (isFocused) {
-            fetchNextVoucherNumber();
-            fetchRecentVouchers();
+            if (mode === 'edit' && voucherId) {
+                fetchVoucherDetails(voucherId);
+            } else {
+                setMode('create');
+                fetchNextVoucherNumber();
+                fetchRecentVouchers();
+            }
         }
-    }, [isFocused, fetchNextVoucherNumber, fetchRecentVouchers]);
+    }, [isFocused, mode, voucherId, fetchVoucherDetails, fetchNextVoucherNumber, fetchRecentVouchers]);
 
     useEffect(() => {
         const total = particulars.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -135,7 +165,7 @@ const VouchersScreen = () => {
             setAttachment(response);
         });
     };
-    
+
     const handleCancel = () => Alert.alert("Confirm Cancel", "Are you sure you want to clear the form?", [{ text: "No", style: "cancel" }, { text: "Yes", style: "destructive", onPress: resetForm }]);
 
     const handleSave = async () => {
@@ -158,14 +188,16 @@ const VouchersScreen = () => {
         if (attachment?.assets?.[0]) {
             formData.append('attachment', { uri: Platform.OS === 'android' ? attachment.assets[0].uri : attachment.assets[0].uri!.replace('file://', ''), type: attachment.assets[0].type, name: attachment.assets[0].fileName });
         }
-        
+
         try {
-            const response = await apiClient.post('/vouchers/create', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-            Alert.alert(
-                'Success', 
-                response.data.message || 'Voucher saved & moved to the register successfully!',
-                [{ text: 'OK', onPress: () => resetForm() }]
-            );
+            let response;
+            if (mode === 'edit') {
+                response = await apiClient.put(`/vouchers/update/${voucherId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', response.data.message || 'Voucher updated successfully!', [{ text: 'OK', onPress: () => navigation.navigate('RegistersScreen') }]);
+            } else {
+                response = await apiClient.post('/vouchers/create', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', response.data.message, [{ text: 'OK', onPress: resetForm }]);
+            }
         } catch (error: any) {
             console.error(error);
             const errorMessage = error.response?.data?.message || 'An error occurred while saving.';
@@ -174,7 +206,7 @@ const VouchersScreen = () => {
             setIsSaving(false);
         }
     };
-    
+
     const renderRecentVoucherItem = ({ item, index }: { item: RecentVoucher, index: number }) => (
         <View style={styles.recentVoucherRow}>
             <Text style={styles.recentVoucherCellSNo}>{index + 1}</Text>
@@ -184,11 +216,20 @@ const VouchersScreen = () => {
         </View>
     );
 
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}><Text style={styles.headerTitle}>Loading Voucher...</Text></View>
+                <ActivityIndicator size="large" color="#0275d8" style={{ flex: 1, justifyContent: 'center' }} />
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}><MaterialIcons name="arrow-back" size={24} color="#333" /></TouchableOpacity>
-                <Text style={styles.headerTitle}>Vouchers</Text>
+                <Text style={styles.headerTitle}>{mode === 'edit' ? `Edit Voucher (${voucherNo})` : 'Create Voucher'}</Text>
             </View>
             <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
                 <View style={styles.tabContainer}>
@@ -217,7 +258,7 @@ const VouchersScreen = () => {
                     </View>
 
                     <TextInput style={styles.input} placeholder="Sub Head" value={subHead} onChangeText={setSubHead} />
-                    
+
                     <View style={styles.pickerContainer}>
                         <Picker selectedValue={accountType} onValueChange={(itemValue) => setAccountType(itemValue)}>
                             {accountTypeOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
@@ -236,7 +277,7 @@ const VouchersScreen = () => {
                                 {particulars.length > 1 && (<TouchableOpacity onPress={() => handleRemoveRow(index)} style={styles.removeButton}><MaterialIcons name="remove-circle-outline" size={22} color="#d9534f" /></TouchableOpacity>)}
                             </View>
                         ))}
-                         <TouchableOpacity style={styles.addRowButton} onPress={handleAddRow}><MaterialIcons name="add-circle-outline" size={22} color="#0275d8" /><Text style={styles.addRowText}>Add Row</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.addRowButton} onPress={handleAddRow}><MaterialIcons name="add-circle-outline" size={22} color="#0275d8" /><Text style={styles.addRowText}>Add Row</Text></TouchableOpacity>
                         <View style={styles.totalRow}><Text style={styles.totalText}>Total:</Text><Text style={styles.totalAmount}>{totalAmount.toFixed(2)}</Text></View>
                     </View>
 
@@ -248,32 +289,34 @@ const VouchersScreen = () => {
                     <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save</Text>}</TouchableOpacity>
                     <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={handleCancel}><Text style={styles.buttonText}>Cancel</Text></TouchableOpacity>
                 </View>
-
-                <View style={styles.recentVouchersContainer}>
-                    <Text style={styles.recentVouchersTitle}>Recent Vouchers</Text>
-                    <View style={styles.recentVouchersTable}>
-                        <View style={[styles.recentVoucherRow, styles.recentVoucherHeader]}>
-                            <Text style={[styles.recentVoucherCellSNo, styles.recentVoucherHeaderText]}>S.No</Text>
-                            <Text style={[styles.recentVoucherCell, styles.recentVoucherHeaderText]}>VCH No</Text>
-                            <Text style={[styles.recentVoucherCell, styles.recentVoucherHeaderText]}>Head</Text>
-                            <Text style={[styles.recentVoucherCellAmount, styles.recentVoucherHeaderText]}>Amount</Text>
+                
+                {mode === 'create' && (
+                    <View style={styles.recentVouchersContainer}>
+                        <Text style={styles.recentVouchersTitle}>Recent Vouchers</Text>
+                        <View style={styles.recentVouchersTable}>
+                            <View style={[styles.recentVoucherRow, styles.recentVoucherHeader]}>
+                                <Text style={[styles.recentVoucherCellSNo, styles.recentVoucherHeaderText]}>S.No</Text>
+                                <Text style={[styles.recentVoucherCell, styles.recentVoucherHeaderText]}>VCH No</Text>
+                                <Text style={[styles.recentVoucherCell, styles.recentVoucherHeaderText]}>Head</Text>
+                                <Text style={[styles.recentVoucherCellAmount, styles.recentVoucherHeaderText]}>Amount</Text>
+                            </View>
+                            {isLoadingRecent ? (
+                                <ActivityIndicator size="large" color="#0275d8" style={{ marginVertical: 20 }} />
+                            ) : (
+                                <FlatList
+                                    data={recentVouchers}
+                                    renderItem={renderRecentVoucherItem}
+                                    keyExtractor={(item) => item.id.toString()}
+                                    ListEmptyComponent={<Text style={styles.noDataText}>No recent vouchers found.</Text>}
+                                />
+                            )}
                         </View>
-                        {isLoadingRecent ? (
-                            <ActivityIndicator size="large" color="#0275d8" style={{ marginVertical: 20 }} />
-                        ) : (
-                            <FlatList
-                                data={recentVouchers}
-                                renderItem={renderRecentVoucherItem}
-                                keyExtractor={(item) => item.id.toString()}
-                                ListEmptyComponent={<Text style={styles.noDataText}>No recent vouchers found.</Text>}
-                            />
-                        )}
+                        <TouchableOpacity style={styles.viewMoreButton} onPress={() => navigation.navigate('RegistersScreen')}>
+                            <Text style={styles.viewMoreText}>View Full Register</Text>
+                            <MaterialIcons name="arrow-forward" size={16} color="#FFF" />
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.viewMoreButton} onPress={() => navigation.navigate('RegistersScreen')}>
-                        <Text style={styles.viewMoreText}>View Full Register</Text>
-                        <MaterialIcons name="arrow-forward" size={16} color="#FFF" />
-                    </TouchableOpacity>
-                </View>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
