@@ -7821,7 +7821,7 @@ app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single(
 // FETCH VOUCHERS LIST
 app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
     try {
-        let query = 'SELECT id, voucher_no, head_of_account, sub_head, account_type, total_amount, voucher_date FROM vouchers WHERE 1=1';
+        let query = 'SELECT id, voucher_no, head_of_account, sub_head, account_type, total_amount, voucher_date, voucher_type FROM vouchers WHERE 1=1';
         const queryParams = [];
 
         if (req.query.voucher_type) {
