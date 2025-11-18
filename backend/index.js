@@ -7673,6 +7673,7 @@ app.get('/api/students/:id', async (req, res) => {
 
 
 
+
 // ==========================================================
 // ---  VOUCHER SYSTEM API ROUTES ---
 // ==========================================================
@@ -7696,7 +7697,7 @@ const voucherUpload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// 2. API Routes
+// 2. API Routes (Voucher CRUD - Unchanged)
 
 // GET the next available voucher number
 app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) => {
@@ -7720,13 +7721,11 @@ app.get('/api/vouchers/next-number', [verifyToken, isAdmin], async (req, res) =>
 
 // CREATE a New Voucher
 app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
-    const { voucherType, voucherNo, voucherDate, headOfAccount, subHead, accountType, name, phoneNo, totalAmount, amountInWords, particulars } = req.body;
+    const { voucherType, voucherNo, voucherDate, headOfAccount, subHead, accountType, name_title, phoneNo, transaction_context_type, transaction_context_value, totalAmount, amountInWords, particulars } = req.body;
     const userId = req.user.id;
-
-    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
+    if (!voucherType || !voucherNo || !voucherDate || !headOfAccount || !accountType || !transaction_context_type || !transaction_context_value || totalAmount == null || !particulars || !userId) {
         return res.status(400).json({ message: 'Missing required fields or user authentication.' });
     }
-
     const attachment_url = req.file ? `/uploads/${req.file.filename}` : null;
     let parsedParticulars;
     try {
@@ -7734,20 +7733,17 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
     } catch (e) {
         return res.status(400).json({ message: 'Invalid format for particulars data.' });
     }
-
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        const voucherQuery = `INSERT INTO vouchers (voucher_type, voucher_no, voucher_date, head_of_account, sub_head, account_type, name, phone_no, total_amount, amount_in_words, attachment_url, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const [voucherResult] = await connection.query(voucherQuery, [voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, accountType, name || null, phoneNo || null, totalAmount, amountInWords, attachment_url, userId]);
+        const voucherQuery = `INSERT INTO vouchers (voucher_type, voucher_no, voucher_date, head_of_account, sub_head, account_type, name_title, phone_no, transaction_context_type, transaction_context_value, total_amount, amount_in_words, attachment_url, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const [voucherResult] = await connection.query(voucherQuery, [voucherType, voucherNo, voucherDate, headOfAccount, subHead || null, accountType, name_title || null, phoneNo || null, transaction_context_type, transaction_context_value, totalAmount, amountInWords, attachment_url, userId]);
         const newVoucherId = voucherResult.insertId;
-
         if (parsedParticulars && parsedParticulars.length > 0) {
             const itemsQuery = 'INSERT INTO voucher_items (voucher_id, description, amount) VALUES ?';
             const itemValues = parsedParticulars.map(item => [newVoucherId, item.description, item.amount]);
             await connection.query(itemsQuery, [itemValues]);
         }
-
         await connection.commit();
         res.status(201).json({ message: 'Voucher saved & moved to the register successfully!', voucherId: newVoucherId });
     } catch (error) {
@@ -7766,47 +7762,26 @@ app.post('/api/vouchers/create', [verifyToken, isAdmin, voucherUpload.single('at
 app.put('/api/vouchers/update/:id', [verifyToken, isAdmin, voucherUpload.single('attachment')], async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
-    const { voucherType, voucherDate, headOfAccount, subHead, accountType, name, phoneNo, totalAmount, amountInWords, particulars, removeAttachment } = req.body;
-    
-    if (!voucherType || !voucherDate || !headOfAccount || !accountType || totalAmount == null || !particulars || !userId) {
+    const { voucherType, voucherDate, headOfAccount, subHead, accountType, name_title, phoneNo, transaction_context_type, transaction_context_value, totalAmount, amountInWords, particulars, removeAttachment } = req.body;
+    if (!voucherType || !voucherDate || !headOfAccount || !accountType || !transaction_context_type || !transaction_context_value || totalAmount == null || !particulars || !userId) {
         return res.status(400).json({ message: 'Missing required fields for update.' });
     }
-    
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-
-        // --- ROBUST ATTACHMENT HANDLING LOGIC ---
-        // 1. Fetch the current attachment URL from the database.
         const [existingVoucherRows] = await connection.query('SELECT attachment_url FROM vouchers WHERE id = ?', [id]);
-        if (existingVoucherRows.length === 0) {
-            return res.status(404).json({ message: 'Voucher to update not found.' });
-        }
+        if (existingVoucherRows.length === 0) { return res.status(404).json({ message: 'Voucher to update not found.' }); }
         let attachment_url = existingVoucherRows[0].attachment_url;
-
-        // 2. Determine the new URL based on user actions.
-        if (req.file) {
-            // Case A: A new file was uploaded, so replace the old URL.
-            attachment_url = `/uploads/${req.file.filename}`;
-        } else if (removeAttachment === 'true') {
-            // Case B: User explicitly requested to remove the attachment.
-            attachment_url = null;
-        }
-        // Case C (Implicit): No new file, no removal request. 'attachment_url' remains unchanged.
-        // --- END OF ATTACHMENT LOGIC ---
-
-        const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, name = ?, phone_no = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ?, attachment_url = ? WHERE id = ?`;
-        await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, name || null, phoneNo || null, totalAmount, amountInWords, userId, attachment_url, id]);
-
+        if (req.file) { attachment_url = `/uploads/${req.file.filename}`; } else if (removeAttachment === 'true') { attachment_url = null; }
+        const voucherQuery = `UPDATE vouchers SET voucher_type = ?, voucher_date = ?, head_of_account = ?, sub_head = ?, account_type = ?, name_title = ?, phone_no = ?, transaction_context_type = ?, transaction_context_value = ?, total_amount = ?, amount_in_words = ?, updated_by_id = ?, attachment_url = ? WHERE id = ?`;
+        await connection.query(voucherQuery, [voucherType, voucherDate, headOfAccount, subHead || null, accountType, name_title || null, phoneNo || null, transaction_context_type, transaction_context_value, totalAmount, amountInWords, userId, attachment_url, id]);
         await connection.query('DELETE FROM voucher_items WHERE voucher_id = ?', [id]);
-
         const parsedParticulars = JSON.parse(particulars);
         if (parsedParticulars && parsedParticulars.length > 0) {
             const itemsQuery = 'INSERT INTO voucher_items (voucher_id, description, amount) VALUES ?';
             const itemValues = parsedParticulars.map(item => [id, item.description, item.amount]);
             await connection.query(itemsQuery, [itemValues]);
         }
-
         await connection.commit();
         res.status(200).json({ message: 'Voucher updated successfully!' });
     } catch (error) {
@@ -7823,33 +7798,12 @@ app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
     try {
         let query = 'SELECT id, voucher_no, head_of_account, sub_head, account_type, total_amount, voucher_date, voucher_type FROM vouchers WHERE 1=1';
         const queryParams = [];
-
-        if (req.query.voucher_type) {
-            query += ' AND voucher_type = ?';
-            queryParams.push(req.query.voucher_type);
-        }
+        if (req.query.voucher_type) { query += ' AND voucher_type = ?'; queryParams.push(req.query.voucher_type); }
         const period = req.query.period;
-        if (period === 'daily') {
-            query += ' AND voucher_date = CURDATE()';
-        } else if (period === 'monthly') {
-            query += ' AND MONTH(voucher_date) = MONTH(CURDATE()) AND YEAR(voucher_date) = YEAR(CURDATE())';
-        }
-        
-        if (req.query.date) {
-            query += ' AND voucher_date = ?';
-            queryParams.push(req.query.date);
-        } else if (req.query.startDate && req.query.endDate) {
-            query += ' AND voucher_date BETWEEN ? AND ?';
-            queryParams.push(req.query.startDate, req.query.endDate);
-        }
-        
+        if (period === 'daily') { query += ' AND voucher_date = CURDATE()'; } else if (period === 'monthly') { query += ' AND MONTH(voucher_date) = MONTH(CURDATE()) AND YEAR(voucher_date) = YEAR(CURDATE())'; }
+        if (req.query.startDate && req.query.endDate) { query += ' AND voucher_date BETWEEN ? AND ?'; queryParams.push(req.query.startDate, req.query.endDate); }
         query += ' ORDER BY id DESC';
-
-        if (req.query.limit) {
-            query += ' LIMIT ?';
-            queryParams.push(parseInt(req.query.limit, 10));
-        }
-
+        if (req.query.limit) { query += ' LIMIT ?'; queryParams.push(parseInt(req.query.limit, 10)); }
         const [vouchers] = await db.query(query, queryParams);
         res.status(200).json(vouchers);
     } catch (error) {
@@ -7862,28 +7816,12 @@ app.get('/api/vouchers/list', [verifyToken, isAdmin], async (req, res) => {
 app.get('/api/vouchers/details/:id', [verifyToken, isAdmin], async (req, res) => {
     try {
         const { id } = req.params;
-        const voucherQuery = `
-            SELECT
-                v.*,
-                creator.full_name AS creator_name,
-                updater.full_name AS updater_name
-            FROM vouchers v
-            LEFT JOIN users creator ON v.created_by_id = creator.id
-            LEFT JOIN users updater ON v.updated_by_id = updater.id
-            WHERE v.id = ?
-        `;
+        const voucherQuery = `SELECT v.*, creator.full_name AS creator_name, updater.full_name AS updater_name FROM vouchers v LEFT JOIN users creator ON v.created_by_id = creator.id LEFT JOIN users updater ON v.updated_by_id = updater.id WHERE v.id = ?`;
         const [voucherRows] = await db.query(voucherQuery, [id]);
-
-        if (voucherRows.length === 0) {
-            return res.status(404).json({ message: 'Voucher not found.' });
-        }
-
+        if (voucherRows.length === 0) { return res.status(404).json({ message: 'Voucher not found.' }); }
         const itemsQuery = 'SELECT description, amount FROM voucher_items WHERE voucher_id = ?';
         const [itemRows] = await db.query(itemsQuery, [id]);
-        const voucherDetails = {
-            ...voucherRows[0],
-            particulars: itemRows
-        };
+        const voucherDetails = { ...voucherRows[0], particulars: itemRows };
         res.status(200).json(voucherDetails);
     } catch (error) {
         console.error('Error fetching voucher details:', error);
@@ -7892,65 +7830,70 @@ app.get('/api/vouchers/details/:id', [verifyToken, isAdmin], async (req, res) =>
 });
 
 // ==========================================================
-// --- TRANSACTION SCREEN API ROUTE ---
+// --- TRANSACTION SCREEN API ROUTE (★ ★ ★ CORRECTED ★ ★ ★) ---
 // ==========================================================
-
-// FETCH TRANSACTION SUMMARY AND HISTORY
 app.get('/api/transactions/summary', [verifyToken, isAdmin], async (req, res) => {
     const { period, startDate, endDate } = req.query;
     const connection = await db.getConnection();
     try {
-        // --- 1. Calculate Overall Account Balance (not affected by period filters) ---
+        // --- 1. Calculate Overall Balances (Opening, Cash, Total) ---
         const balanceQuery = `
             SELECT 
-                SUM(CASE 
-                    WHEN voucher_type = 'Debit' THEN -total_amount 
-                    ELSE total_amount 
-                END) AS account_balance
+                COALESCE(SUM(CASE 
+                    WHEN transaction_context_value = 'Opening Balance' THEN (CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE -total_amount END)
+                    ELSE 0 
+                END), 0) AS opening_balance,
+                COALESCE(SUM(CASE 
+                    WHEN transaction_context_value = 'Cash' THEN (CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE -total_amount END)
+                    ELSE 0 
+                END), 0) AS cash_balance
             FROM vouchers;
         `;
         const [balanceResult] = await connection.query(balanceQuery);
-        const account_balance = balanceResult[0].account_balance || 0;
+        const opening_balance = parseFloat(balanceResult[0].opening_balance);
+        const cash_balance = parseFloat(balanceResult[0].cash_balance);
+        const total_balance = opening_balance + cash_balance;
 
-        // --- 2. Calculate Period-based Summaries (Deposit, Credit, Debit) ---
-        let summaryWhereClause = '';
-        const summaryParams = [];
+        // --- 2. Build Period Filter ---
+        let periodWhereClause = '';
+        const queryParams = [];
         if (period === 'daily') {
-            summaryWhereClause = 'WHERE voucher_date = CURDATE()';
+            periodWhereClause = 'WHERE voucher_date = CURDATE()';
         } else if (period === 'monthly') {
-            summaryWhereClause = 'WHERE MONTH(voucher_date) = MONTH(CURDATE()) AND YEAR(voucher_date) = YEAR(CURDATE())';
+            periodWhereClause = 'WHERE MONTH(voucher_date) = MONTH(CURDATE()) AND YEAR(voucher_date) = YEAR(CURDATE())';
         } else if (startDate && endDate) {
-            summaryWhereClause = 'WHERE voucher_date BETWEEN ? AND ?';
-            summaryParams.push(startDate, endDate);
+            periodWhereClause = 'WHERE voucher_date BETWEEN ? AND ?';
+            queryParams.push(startDate, endDate);
         }
 
+        // --- 3. Calculate Period-based Summaries (Credit, Debit) ---
         const summaryQuery = `
             SELECT
-                SUM(CASE WHEN voucher_type = 'Deposit' THEN total_amount ELSE 0 END) AS total_deposit,
-                SUM(CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE 0 END) AS total_credit,
-                SUM(CASE WHEN voucher_type = 'Debit' THEN total_amount ELSE 0 END) AS total_debit
+                COALESCE(SUM(CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE 0 END), 0) AS total_credit,
+                COALESCE(SUM(CASE WHEN voucher_type = 'Debit' THEN total_amount ELSE 0 END), 0) AS total_debit
             FROM vouchers
-            ${summaryWhereClause};
+            ${periodWhereClause};
         `;
-        const [summaryResult] = await connection.query(summaryQuery, summaryParams);
+        const [summaryResult] = await connection.query(summaryQuery, queryParams);
         const period_summary = {
-            deposit: summaryResult[0].total_deposit || 0,
-            credit: summaryResult[0].total_credit || 0,
-            debit: summaryResult[0].total_debit || 0,
+            credit: parseFloat(summaryResult[0].total_credit),
+            debit: parseFloat(summaryResult[0].total_debit),
         };
 
-        // --- 3. Fetch Transaction History for the period ---
+        // --- 4. Fetch Transaction History for the period ---
         const transactionsQuery = `
             SELECT id, voucher_no, voucher_type, head_of_account, total_amount, voucher_date 
             FROM vouchers
-            ${summaryWhereClause}
+            ${periodWhereClause}
             ORDER BY voucher_date DESC, id DESC;
         `;
-        const [transactions] = await connection.query(transactionsQuery, summaryParams);
+        const [transactions] = await connection.query(transactionsQuery, queryParams);
 
-        // --- 4. Combine and send the response ---
+        // --- 5. Combine and send the response ---
         res.status(200).json({
-            account_balance,
+            total_balance,
+            opening_balance,
+            cash_balance,
             period_summary,
             transactions
         });

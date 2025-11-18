@@ -11,7 +11,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
 import apiClient from '../../api/client';
 
-type VoucherType = 'Debit' | 'Credit' | 'Deposit';
+type VoucherType = 'Debit' | 'Credit';
 interface ParticularRow {
     description: string;
     amount: string;
@@ -33,6 +33,7 @@ const headOfAccountOptions = [
 ];
 
 const accountTypeOptions = ['UPI', 'Bank', 'Cheque', 'Cash', 'Kind', 'Others'];
+const transactionContextOptions = ['Opening Balance', 'Cash'];
 
 const numberToWords = (num: number): string => {
     if (num === 0) return 'Zero';
@@ -60,11 +61,12 @@ const VouchersScreen = () => {
     const [voucherType, setVoucherType] = useState<VoucherType>('Debit');
     const [voucherNo, setVoucherNo] = useState<string>('Loading...');
     const [voucherDate, setVoucherDate] = useState<string>(new Date().toLocaleDateString('en-GB'));
-    const [name, setName] = useState('');
+    const [nameTitle, setNameTitle] = useState('');
     const [phoneNo, setPhoneNo] = useState('');
     const [headOfAccount, setHeadOfAccount] = useState<string>('');
     const [subHead, setSubHead] = useState('');
     const [accountType, setAccountType] = useState<string>('UPI');
+    const [transactionContextValue, setTransactionContextValue] = useState<string>('Opening Balance');
     const [particulars, setParticulars] = useState<ParticularRow[]>([{ description: '', amount: '' }]);
     const [totalAmount, setTotalAmount] = useState(0);
     const [amountInWords, setAmountInWords] = useState('Zero Rupees Only');
@@ -73,7 +75,6 @@ const VouchersScreen = () => {
     const [recentVouchers, setRecentVouchers] = useState<RecentVoucher[]>([]);
     const [isLoadingRecent, setIsLoadingRecent] = useState(false);
     
-    // --- NEW STATE FOR HANDLING EXISTING ATTACHMENTS ---
     const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string | null>(null);
     const [isAttachmentRemoved, setIsAttachmentRemoved] = useState(false);
 
@@ -85,13 +86,13 @@ const VouchersScreen = () => {
             setVoucherType(data.voucher_type);
             setVoucherNo(data.voucher_no);
             setVoucherDate(new Date(data.voucher_date).toLocaleDateString('en-GB'));
-            setName(data.name || '');
+            setNameTitle(data.name_title || '');
             setPhoneNo(data.phone_no || '');
             setHeadOfAccount(data.head_of_account);
             setSubHead(data.sub_head || '');
             setAccountType(data.account_type);
+            setTransactionContextValue(data.transaction_context_value);
             setParticulars(data.particulars.map(p => ({ description: p.description, amount: String(p.amount) })));
-            // MODIFIED: Set the existing attachment URL from the fetched data.
             setExistingAttachmentUrl(data.attachment_url);
         } catch (error) {
             console.error("Failed to fetch voucher details:", error);
@@ -128,14 +129,14 @@ const VouchersScreen = () => {
         setMode('create');
         setVoucherType('Debit');
         setVoucherDate(new Date().toLocaleDateString('en-GB'));
-        setName('');
+        setNameTitle('');
         setPhoneNo('');
         setHeadOfAccount('');
         setSubHead('');
         setAccountType('UPI');
+        setTransactionContextValue('Opening Balance');
         setParticulars([{ description: '', amount: '' }]);
         setAttachment(null);
-        // MODIFIED: Reset attachment states
         setExistingAttachmentUrl(null);
         setIsAttachmentRemoved(false);
         fetchNextVoucherNumber();
@@ -174,17 +175,15 @@ const VouchersScreen = () => {
     const handleChooseFile = () => {
         launchImageLibrary({ mediaType: 'photo' }, (response) => {
             if (response.didCancel || response.errorCode) return;
-            // When a new file is chosen, it replaces any existing one.
             setAttachment(response);
             setExistingAttachmentUrl(null); 
             setIsAttachmentRemoved(false);
         });
     };
 
-    // --- NEW: Function to handle removing an existing attachment ---
     const handleRemoveExistingAttachment = () => {
         setExistingAttachmentUrl(null);
-        setIsAttachmentRemoved(true); // Flag this for the backend
+        setIsAttachmentRemoved(true);
     };
     
     const handleCancel = () => Alert.alert("Confirm Cancel", "Are you sure you want to clear the form?", [{ text: "No", style: "cancel" }, { text: "Yes", style: "destructive", onPress: initializeCreateMode }]);
@@ -192,16 +191,19 @@ const VouchersScreen = () => {
     const handleSave = async () => {
         const validParticulars = particulars.filter(p => p.description.trim() !== '' && !isNaN(parseFloat(p.amount)) && parseFloat(p.amount) > 0);
         if (!headOfAccount) return Alert.alert('Validation Error', 'Please select a "Head of A/C".');
+        if (!transactionContextValue) return Alert.alert('Validation Error', 'Please select a source/destination for the transaction.');
         if (validParticulars.length === 0 && totalAmount !== 0) return Alert.alert('Validation Error', 'Please add at least one valid particular if the amount is not zero.');
 
         setIsSaving(true);
         const formData = new FormData();
         formData.append('voucherType', voucherType);
-        formData.append('name', name);
+        formData.append('name_title', nameTitle);
         formData.append('phoneNo', phoneNo);
         formData.append('headOfAccount', headOfAccount);
         formData.append('subHead', subHead);
         formData.append('accountType', accountType);
+        formData.append('transaction_context_type', voucherType === 'Debit' ? 'Deduction From' : 'Adding to');
+        formData.append('transaction_context_value', transactionContextValue);
         formData.append('totalAmount', totalAmount.toFixed(2));
         formData.append('amountInWords', amountInWords);
         formData.append('particulars', JSON.stringify(validParticulars));
@@ -218,7 +220,6 @@ const VouchersScreen = () => {
             formData.append('attachment', { uri: Platform.OS === 'android' ? attachment.assets[0].uri : attachment.assets[0].uri!.replace('file://', ''), type: attachment.assets[0].type, name: attachment.assets[0].fileName });
         }
 
-        // MODIFIED: Tell the backend to remove the attachment if flagged
         if (isAttachmentRemoved) {
             formData.append('removeAttachment', 'true');
         }
@@ -241,12 +242,10 @@ const VouchersScreen = () => {
         }
     };
     
-    // --- NEW: Helper to get just the filename from a URL path ---
     const getFilenameFromUrl = (url: string | null) => {
         if (!url) return 'Upload Proof';
         return url.split('/').pop();
     };
-
 
     const renderRecentVoucherItem = ({ item, index }: { item: RecentVoucher, index: number }) => (
         <View style={styles.recentVoucherRow}>
@@ -269,13 +268,14 @@ const VouchersScreen = () => {
         );
     }
 
-    // Determine what text to show on the upload button
     let uploadButtonText = 'Upload Proof';
     if (attachment?.assets?.[0]?.fileName) {
         uploadButtonText = attachment.assets[0].fileName;
     } else if (existingAttachmentUrl) {
         uploadButtonText = getFilenameFromUrl(existingAttachmentUrl);
     }
+
+    const transactionContextLabel = voucherType === 'Debit' ? 'Deduction From*:' : 'Adding to*:';
 
     return (
         <SafeAreaView style={styles.container}>
@@ -285,9 +285,10 @@ const VouchersScreen = () => {
             </View>
             <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
                 <View style={styles.tabContainer}>
-                    {(['Debit', 'Credit', 'Deposit'] as VoucherType[]).map(type => (
-                        <TouchableOpacity key={type} style={[styles.tab, voucherType === type && styles.activeTab]} onPress={() => setVoucherType(type)}>
+                    {(['Debit', 'Credit'] as VoucherType[]).map(type => (
+                        <TouchableOpacity key={type} style={styles.tab} onPress={() => setVoucherType(type)}>
                             <Text style={[styles.tabText, voucherType === type && styles.activeTabText]}>{type}</Text>
+                            {voucherType === type && <View style={styles.activeTabIndicator} />}
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -301,23 +302,48 @@ const VouchersScreen = () => {
                         <Text style={styles.infoText}>No: {voucherNo}</Text>
                         <Text style={styles.infoText}>Date: {voucherDate}</Text>
                     </View>
+
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>{transactionContextLabel}</Text>
+                        <View style={styles.pickerWrapper}>
+                            <Picker selectedValue={transactionContextValue} onValueChange={(itemValue) => setTransactionContextValue(itemValue)}>
+                                {transactionContextOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
+                            </Picker>
+                        </View>
+                    </View>
                     
-                    <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
-                    <TextInput style={styles.input} placeholder="Phone No" value={phoneNo} onChangeText={setPhoneNo} keyboardType="phone-pad"/>
-                    
-                    <View style={styles.pickerContainer}>
-                        <Picker selectedValue={headOfAccount} onValueChange={(itemValue) => setHeadOfAccount(itemValue)}>
-                            <Picker.Item label="Select Head of A/C*" value="" />
-                            {headOfAccountOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
-                        </Picker>
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>Name/Title:</Text>
+                        <TextInput style={styles.input} value={nameTitle} onChangeText={setNameTitle} />
                     </View>
 
-                    <TextInput style={styles.input} placeholder="Sub Head" value={subHead} onChangeText={setSubHead} />
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>Phone No:</Text>
+                        <TextInput style={styles.input} value={phoneNo} onChangeText={setPhoneNo} keyboardType="phone-pad"/>
+                    </View>
+                    
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>Head of A/C*:</Text>
+                        <View style={styles.pickerWrapper}>
+                            <Picker selectedValue={headOfAccount} onValueChange={(itemValue) => setHeadOfAccount(itemValue)}>
+                                <Picker.Item label="Select Head of A/C" value="" />
+                                {headOfAccountOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
+                            </Picker>
+                        </View>
+                    </View>
 
-                    <View style={styles.pickerContainer}>
-                        <Picker selectedValue={accountType} onValueChange={(itemValue) => setAccountType(itemValue)}>
-                            {accountTypeOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
-                        </Picker>
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>Sub Head:</Text>
+                        <TextInput style={styles.input} value={subHead} onChangeText={setSubHead} />
+                    </View>
+                    
+                    <View style={styles.formRow}>
+                        <Text style={styles.label}>Account Type:</Text>
+                         <View style={styles.pickerWrapper}>
+                            <Picker selectedValue={accountType} onValueChange={(itemValue) => setAccountType(itemValue)}>
+                                {accountTypeOptions.map(opt => <Picker.Item key={opt} label={opt} value={opt} />)}
+                            </Picker>
+                        </View>
                     </View>
 
                     <View style={styles.table}>
@@ -337,21 +363,18 @@ const VouchersScreen = () => {
                     </View>
 
                     <View style={styles.wordsContainer}><Text style={styles.wordsLabel}>Total Amount in Words:</Text><Text style={styles.wordsText}>{amountInWords}</Text></View>
-
-                    {/* --- CORRECTED: Upload Button with Logic for Existing Files --- */}
+                    
                     <View style={styles.uploadContainer}>
                          <TouchableOpacity style={styles.uploadButton} onPress={handleChooseFile}>
                             <MaterialIcons name="cloud-upload" size={24} color="#5bc0de" />
                             <Text style={styles.uploadText} numberOfLines={1}>{uploadButtonText}</Text>
                         </TouchableOpacity>
-                        {/* Show remove icon only if there's an existing file and no new one is selected */}
                         {existingAttachmentUrl && !attachment && (
                             <TouchableOpacity style={styles.removeAttachmentButton} onPress={handleRemoveExistingAttachment}>
                                 <MaterialIcons name="close" size={22} color="#d9534f" />
                             </TouchableOpacity>
                         )}
                     </View>
-                    
                 </View>
 
                 <View style={styles.buttonRow}>
@@ -391,26 +414,27 @@ const VouchersScreen = () => {
     );
 };
 
-// Styles have been updated to include styles for the new remove button
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#E9ECEF' },
     header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#DDD' },
     backButton: { padding: 5 },
     headerTitle: { fontSize: 20, fontWeight: 'bold', marginLeft: 10 },
     scrollContainer: { padding: 16 },
-    tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
-    tab: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#0275d8' },
-    activeTab: { backgroundColor: '#0275d8' },
-    tabText: { fontWeight: 'bold', color: '#0275d8' },
-    activeTabText: { color: '#FFF' },
-    voucherCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 8, elevation: 3 },
+    tabContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#DDD' },
+    tab: { paddingVertical: 12, alignItems: 'center', flex: 1 },
+    tabText: { fontWeight: 'bold', color: '#6c757d', fontSize: 16 },
+    activeTabText: { color: '#0275d8' },
+    activeTabIndicator: { height: 3, backgroundColor: '#0275d8', position: 'absolute', bottom: -1, left: 0, right: 0 },
+    voucherCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 8, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.22, shadowRadius: 2.22 },
     schoolTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
     managedBy: { fontSize: 12, color: '#6c757d', textAlign: 'center', marginBottom: 10 },
-    voucherTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginVertical: 8, textTransform: 'uppercase' },
+    voucherTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginVertical: 8, textTransform: 'uppercase', color: '#333' },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, paddingHorizontal: 5 },
     infoText: { fontSize: 14, color: '#495057' },
-    input: { borderWidth: 1, borderColor: '#CED4DA', padding: 10, borderRadius: 4, marginBottom: 12, backgroundColor: '#F8F9FA' },
-    pickerContainer: { borderWidth: 1, borderColor: '#CED4DA', borderRadius: 4, marginBottom: 12, justifyContent: 'center' },
+    formRow: { marginBottom: 12 },
+    label: { fontSize: 14, fontWeight: 'bold', color: '#495057', marginBottom: 6 },
+    input: { borderWidth: 1, borderColor: '#CED4DA', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 4, backgroundColor: '#F8F9FA', fontSize: 15 },
+    pickerWrapper: { borderWidth: 1, borderColor: '#CED4DA', borderRadius: 4, backgroundColor: '#F8F9FA' },
     table: { borderWidth: 1, borderColor: '#DEE2E6', borderRadius: 4, marginTop: 10 },
     tableHeader: { flexDirection: 'row', backgroundColor: '#F8F9FA', padding: 10, borderBottomWidth: 1, borderColor: '#DEE2E6' },
     tableHeaderText: { fontWeight: 'bold', flex: 1 },

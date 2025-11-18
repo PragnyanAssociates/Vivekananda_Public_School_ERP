@@ -15,7 +15,12 @@ const TransactionsScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
 
-    const [summaryData, setSummaryData] = useState({ account_balance: 0, period_summary: { deposit: 0, credit: 0, debit: 0 } });
+    const [summaryData, setSummaryData] = useState({
+        total_balance: 0,
+        opening_balance: 0,
+        cash_balance: 0,
+        period_summary: { credit: 0, debit: 0 }
+    });
     const [transactions, setTransactions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activePeriod, setActivePeriod] = useState('overall');
@@ -31,14 +36,17 @@ const TransactionsScreen = () => {
 
         if (activePeriod === 'custom' && dateRange.start && dateRange.end) {
             queryString += `startDate=${dateRange.start}&endDate=${dateRange.end}`;
-        } else {
+        } else if (activePeriod !== 'overall') {
             queryString += `period=${activePeriod}`;
         }
+        // No params for 'overall'
 
         try {
             const response = await apiClient.get(queryString);
             setSummaryData({
-                account_balance: response.data.account_balance,
+                total_balance: response.data.total_balance,
+                opening_balance: response.data.opening_balance,
+                cash_balance: response.data.cash_balance,
                 period_summary: response.data.period_summary
             });
             setTransactions(response.data.transactions);
@@ -121,12 +129,11 @@ const TransactionsScreen = () => {
             }
             const particularsHtml = details.particulars.map(p => `<tr><td>${p.description}</td><td class="align-right">₹${parseFloat(p.amount).toFixed(2)}</td></tr>`).join('');
             const htmlContent = `<!DOCTYPE html><html><head><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#333}.voucher-box{max-width:800px;margin:auto;padding:25px;border:1px solid #eee;box-shadow:0 0 10px rgba(0,0,0,.15)}.header{text-align:center;margin-bottom:15px}.school-name{font-size:22px;font-weight:700}.voucher-title{font-size:18px;font-weight:700;text-transform:uppercase;margin:15px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;padding:8px 0}.details-table{width:100%;margin-bottom:20px}.details-table .label{font-weight:700;width:110px}.particulars-table{width:100%;border-collapse:collapse;margin-bottom:15px}.particulars-table th,.particulars-table td{border-bottom:1px solid #eee;padding:6px}.total-row td{border-top:2px solid #333;font-weight:700}.align-right{text-align:right}.footer{margin-top:20px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#777;text-align:center}</style></head><body><div class="voucher-box"><div class="header"><div class="school-name">Vivekananda Public School</div><div class="voucher-title">${details.voucher_type} Voucher</div></div><table class="details-table"><tr><td class="label">Voucher #:</td><td>${details.voucher_no}</td></tr><tr><td class="label">Date:</td><td>${new Date(details.voucher_date).toLocaleDateString('en-GB')}</td></tr><tr><td class="label">Head of A/C:</td><td>${details.head_of_account}</td></tr></table><table class="particulars-table"><thead><tr><th>Description</th><th class="align-right">Amount</th></tr></thead><tbody>${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${parseFloat(details.total_amount).toFixed(2)}</strong></td></tr></tbody></table><div class="in-words"><strong>In Words:</strong> ${details.amount_in_words}</div>${imageHtml}<div class="footer">Created by: ${details.creator_name||'N/A'}</div></div></body></html>`;
-            const options = { html: htmlContent, fileName: `Voucher-${details.voucher_no}`, directory: 'Documents' };
+            const options = { html: htmlContent, fileName: `Voucher-${details.voucher_no}`, directory: 'Download' };
             const file = await RNHTMLtoPDF.convert(options);
-            const destinationPath = `${RNFS.DownloadDirectoryPath}/${file.fileName}.pdf`;
-            await RNFS.moveFile(file.filePath, destinationPath);
-            Alert.alert("Success", `PDF saved to your Downloads folder.`);
+            Alert.alert("Success", `PDF saved to your Downloads folder: ${file.filePath}`);
         } catch (error) {
+            console.log(error);
             Alert.alert("Error", "Failed to download voucher.");
         }
     };
@@ -136,7 +143,6 @@ const TransactionsScreen = () => {
         switch (item.voucher_type) {
             case 'Debit': amountStyle = styles.amountDebit; amountPrefix = '- '; break;
             case 'Credit': amountStyle = styles.amountCredit; amountPrefix = '+ '; break;
-            case 'Deposit': amountStyle = styles.amountDeposit; amountPrefix = '+ '; break;
             default: amountStyle = styles.amountDefault; amountPrefix = ''; break;
         }
         return (
@@ -156,8 +162,19 @@ const TransactionsScreen = () => {
     const ListHeader = () => (
         <>
             <View style={styles.balanceCard}>
-                <Text style={styles.balanceLabel}>ACCOUNT BALANCE</Text>
-                <Text style={styles.balanceAmount}>₹{Number(summaryData.account_balance).toFixed(2)}</Text>
+                <Text style={styles.balanceLabel}>TOTAL ACCOUNT BALANCE</Text>
+                <Text style={styles.balanceAmount}>₹{Number(summaryData.total_balance).toFixed(2)}</Text>
+            </View>
+
+            <View style={styles.subBalanceContainer}>
+                <View style={styles.subBalanceBox}>
+                    <Text style={styles.subBalanceLabel}>Opening Balance</Text>
+                    <Text style={styles.subBalanceAmount}>₹{Number(summaryData.opening_balance).toFixed(2)}</Text>
+                </View>
+                <View style={styles.subBalanceBox}>
+                    <Text style={styles.subBalanceLabel}>Cash Balance</Text>
+                    <Text style={styles.subBalanceAmount}>₹{Number(summaryData.cash_balance).toFixed(2)}</Text>
+                </View>
             </View>
 
             <View style={styles.filterCard}>
@@ -185,10 +202,6 @@ const TransactionsScreen = () => {
 
             {isLoading ? <ActivityIndicator size="large" color="#007AFF" style={{marginVertical: 20}} /> : (
                 <View style={styles.summaryContainer}>
-                    <View style={[styles.summaryBox, { borderColor: '#0275d8' }]}>
-                        <Text style={styles.summaryLabel}>Deposit</Text>
-                        <Text style={[styles.summaryAmount, styles.amountDeposit]}>+ ₹{Number(summaryData.period_summary.deposit).toFixed(2)}</Text>
-                    </View>
                     <View style={[styles.summaryBox, { borderColor: '#5cb85c' }]}>
                         <Text style={styles.summaryLabel}>Credit</Text>
                         <Text style={[styles.summaryAmount, styles.amountCredit]}>+ ₹{Number(summaryData.period_summary.credit).toFixed(2)}</Text>
@@ -222,7 +235,7 @@ const TransactionsScreen = () => {
 
             <View style={styles.listContainer}>
                 {isLoading && transactions.length === 0 ? (
-                    <ActivityIndicator size="large" color="#007AFF" style={{flex: 1}}/>
+                    <ActivityIndicator size="large" color="#007AFF" style={{flex: 1, justifyContent: 'center'}}/>
                 ) : (
                     <FlatList
                         ListHeaderComponent={ListHeader}
@@ -245,7 +258,7 @@ const TransactionsScreen = () => {
                             <Text style={styles.modalVoucherNo}>{selectedVoucher.voucher_no}</Text>
                             <ScrollView>
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>Date:</Text> {new Date(selectedVoucher.voucher_date).toLocaleDateString('en-GB')}</Text>
-                                {selectedVoucher.name && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Name:</Text> {selectedVoucher.name}</Text>}
+                                {selectedVoucher.name_title && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Name/Title:</Text> {selectedVoucher.name_title}</Text>}
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>Head of A/C:</Text> {selectedVoucher.head_of_account}</Text>
                                 {selectedVoucher.sub_head && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Sub Head:</Text> {selectedVoucher.sub_head}</Text>}
                                 <Text style={styles.modalSectionTitle}>Particulars</Text>
@@ -278,9 +291,13 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#263238' },
     listContainer: { flex: 1 },
     scrollContent: { padding: 10, paddingBottom: 20 },
-    balanceCard: { backgroundColor: '#263238', borderRadius: 12, padding: 20, alignItems: 'center', elevation: 4, marginBottom: 10 },
-    balanceLabel: { color: '#B0BEC5', fontSize: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
+    balanceCard: { backgroundColor: '#50b9f6ff', borderRadius: 12, padding: 20, alignItems: 'center', elevation: 4, marginBottom: 10 },
+    balanceLabel: { color: '#0e0e0fff', fontSize: 15, textTransform: 'uppercase', letterSpacing: 0.5 },
     balanceAmount: { color: '#FFFFFF', fontSize: 32, fontWeight: '700', marginTop: 5 },
+    subBalanceContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, gap: 10 },
+    subBalanceBox: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 10, padding: 15, alignItems: 'center', elevation: 2 },
+    subBalanceLabel: { color: '#546E7A', fontSize: 14, fontWeight: '600' },
+    subBalanceAmount: { color: '#263238', fontSize: 18, fontWeight: 'bold', marginTop: 5 },
     filterCard: { backgroundColor: '#FFFFFF', marginVertical: 5, borderRadius: 12, padding: 15, elevation: 3 },
     segmentControl: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 8, marginBottom: 12 },
     segmentButton: { flex: 1, paddingVertical: 10, borderRadius: 7 },
@@ -292,8 +309,8 @@ const styles = StyleSheet.create({
     dateText: { marginLeft: 8, color: '#37474F' },
     goButton: { backgroundColor: '#27ae60', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
     goButtonText: { color: '#FFF', fontWeight: 'bold' },
-    summaryContainer: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 15 },
-    summaryBox: { flex: 1, backgroundColor: '#FFF', borderRadius: 10, padding: 12, alignItems: 'center', marginHorizontal: 5, elevation: 2, borderLeftWidth: 4 },
+    summaryContainer: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 15, gap: 10 },
+    summaryBox: { flex: 1, backgroundColor: '#FFF', borderRadius: 10, padding: 12, alignItems: 'center', elevation: 2, borderLeftWidth: 4 },
     summaryLabel: { fontSize: 13, color: '#546E7A', fontWeight: '500' },
     summaryAmount: { fontSize: 16, fontWeight: 'bold', marginTop: 4 },
     historyContainer: { marginTop: 10 },
@@ -308,7 +325,6 @@ const styles = StyleSheet.create({
     actionCell: { width: 70, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 10 },
     amountDebit: { color: '#d9534f' },
     amountCredit: { color: '#5cb85c' },
-    amountDeposit: { color: '#0275d8' },
     amountDefault: { color: '#37474F' },
     emptyContainer: { alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
     emptyText: { color: '#78909C' },

@@ -33,7 +33,7 @@ const RegistersScreen = () => {
             if (dateRange.start && dateRange.end) {
                  queryString += `&startDate=${dateRange.start}&endDate=${dateRange.end}`;
             }
-        } else {
+        } else if (activePeriod !== 'overall') { // Add condition to not send 'overall'
              queryString += `&period=${activePeriod}`;
         }
 
@@ -100,6 +100,7 @@ const RegistersScreen = () => {
     
     const requestStoragePermission = async () => {
         if (Platform.OS !== 'android') return true;
+        // For Android 13+ (API 33+), WRITE_EXTERNAL_STORAGE is not needed for non-media files.
         if (Platform.Version >= 33) return true;
         try {
             const granted = await PermissionsAndroid.request(
@@ -138,7 +139,7 @@ const RegistersScreen = () => {
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #333; } .voucher-box { max-width: 800px; margin: auto; padding: 25px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); } .header { text-align: center; margin-bottom: 15px; } .school-name { font-size: 22px; font-weight: bold; } .managed-by { font-size: 9px; color: #666; } .voucher-title { font-size: 18px; font-weight: bold; text-transform: uppercase; margin: 15px 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 8px 0; } .details-table { width: 100%; margin-bottom: 20px; } .details-table td { padding: 4px 0; } .details-table .label { font-weight: bold; width: 110px; } .particulars-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; } .particulars-table th, .particulars-table td { border-bottom: 1px solid #eee; padding: 6px; } .particulars-table th { background-color: #f8f8f8; text-align: left; } .total-row td { border-top: 2px solid #333; font-weight: bold; } .align-right { text-align: right; } .in-words { margin-bottom: 20px; } .section-title { font-size: 13px; font-weight: bold; margin-top: 15px; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; } .image-container { text-align: center; margin-bottom: 15px; } .image-container img { max-width: 100%; max-height: 280px; height: auto; border: 1px solid #ddd; } .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #eee; font-size: 9px; color: #777; text-align: center; }
                 </style></head><body><div class="voucher-box"><div class="header"><div class="school-name">Vivekananda Public School</div><div class="managed-by">Managed By Vivekananda Education Center</div><div class="voucher-title">${details.voucher_type} Voucher</div></div><table class="details-table">
                 <tr><td class="label">Voucher #:</td><td>${details.voucher_no}</td></tr><tr><td class="label">Date:</td><td>${new Date(details.voucher_date).toLocaleDateString('en-GB')}</td></tr>
-                ${details.name ? `<tr><td class="label">Name:</td><td>${details.name}</td></tr>` : ''} ${details.phone_no ? `<tr><td class="label">Phone No:</td><td>${details.phone_no}</td></tr>` : ''}
+                ${details.name_title ? `<tr><td class="label">Name/Title:</td><td>${details.name_title}</td></tr>` : ''} ${details.phone_no ? `<tr><td class="label">Phone No:</td><td>${details.phone_no}</td></tr>` : ''}
                 <tr><td class="label">Head of A/C:</td><td>${details.head_of_account}</td></tr> ${details.sub_head ? `<tr><td class="label">Sub Head:</td><td>${details.sub_head}</td></tr>` : ''}
                 <tr><td class="label">Account Type:</td><td>${details.account_type}</td></tr></table><table class="particulars-table"><thead><tr><th>Description</th><th class="align-right">Amount</th></tr></thead><tbody>
                 ${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${parseFloat(details.total_amount).toFixed(2)}</strong></td></tr></tbody></table>
@@ -148,9 +149,9 @@ const RegistersScreen = () => {
             `;
             const options = { html: htmlContent, fileName: `Voucher-${details.voucher_no}`, directory: 'Documents', width: 595, height: 842 };
             const file = await RNHTMLtoPDF.convert(options);
-            const destinationPath = `${RNFS.DownloadDirectoryPath}/${file.fileName}.pdf`;
+            const destinationPath = `${RNFS.DownloadDirectoryPath}/Voucher-${details.voucher_no}.pdf`;
             await RNFS.moveFile(file.filePath, destinationPath);
-            Alert.alert("Success", `PDF saved to your Downloads folder as ${file.fileName}.pdf`);
+            Alert.alert("Success", `PDF saved to your Downloads folder as Voucher-${details.voucher_no}.pdf`);
         } catch (error) {
             console.error("Download error:", error);
             Alert.alert("Error", "Failed to download voucher. Please try again.");
@@ -173,9 +174,6 @@ const RegistersScreen = () => {
             amountPrefix = '- ';
         } else if (activeVoucherType === 'Credit') {
             amountStyle = styles.amountCredit;
-            amountPrefix = '+ ';
-        } else if (activeVoucherType === 'Deposit') {
-            amountStyle = styles.amountDeposit;
             amountPrefix = '+ ';
         }
 
@@ -213,7 +211,7 @@ const RegistersScreen = () => {
 
             <View style={styles.filterCard}>
                 <View style={styles.segmentControl}>
-                    {['Debit', 'Credit', 'Deposit'].map(type => (
+                    {['Debit', 'Credit'].map(type => (
                         <TouchableOpacity key={type} style={[styles.segmentButton, activeVoucherType === type && styles.segmentActive]} onPress={() => handleVoucherTypeChange(type)}>
                             <Text style={[styles.segmentText, activeVoucherType === type && styles.segmentTextActive]}>{type}</Text>
                         </TouchableOpacity>
@@ -272,11 +270,12 @@ const RegistersScreen = () => {
                             <Text style={styles.modalVoucherNo}>{selectedVoucher.voucher_no}</Text>
                             <ScrollView>
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>Date:</Text> {new Date(selectedVoucher.voucher_date).toLocaleDateString('en-GB')}</Text>
-                                {selectedVoucher.name && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Name:</Text> {selectedVoucher.name}</Text>}
+                                {selectedVoucher.name_title && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Name/Title:</Text> {selectedVoucher.name_title}</Text>}
                                 {selectedVoucher.phone_no && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Phone No:</Text> {selectedVoucher.phone_no}</Text>}
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>Head of A/C:</Text> {selectedVoucher.head_of_account}</Text>
                                 {selectedVoucher.sub_head && <Text style={styles.detailRow}><Text style={styles.detailLabel}>Sub Head:</Text> {selectedVoucher.sub_head}</Text>}
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>Account Type:</Text> {selectedVoucher.account_type}</Text>
+                                <Text style={styles.detailRow}><Text style={styles.detailLabel}>{selectedVoucher.transaction_context_type}:</Text> {selectedVoucher.transaction_context_value}</Text>
                                 <Text style={styles.modalSectionTitle}>Particulars</Text>
                                 {selectedVoucher.particulars.map((p, i) => (
                                     <View key={i} style={styles.particularRow}><Text style={styles.particularDesc}>{p.description}</Text><Text style={styles.particularAmt}>₹{p.amount}</Text></View>
@@ -297,14 +296,12 @@ const RegistersScreen = () => {
     );
 };
 
-// --- ★★★ REFINED STYLESHEET FOR DYNAMIC FILTERS & SCROLLABLE GRID ★★★ ---
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F0F4F8' },
     header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#CFD8DC' },
     backButton: { padding: 5, marginRight: 15 },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#263238' },
     
-    // Dynamic Filter Card Styles
     filterCard: { backgroundColor: '#FFFFFF', margin: 10, borderRadius: 12, padding: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
     segmentControl: { flexDirection: 'row', backgroundColor: '#ECEFF1', borderRadius: 8, marginBottom: 12 },
     segmentButton: { flex: 1, paddingVertical: 10, borderRadius: 7 },
@@ -317,29 +314,24 @@ const styles = StyleSheet.create({
     goButton: { backgroundColor: '#27ae60', paddingVertical: 10, paddingHorizontal: 25, borderRadius: 8, justifyContent: 'center' },
     goButtonText: { color: '#FFF', fontWeight: 'bold' },
 
-    // --- SCROLLABLE GRID TABLE STYLES ---
     tableContainer: { flex: 1, marginHorizontal: 10, marginBottom: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8 },
     tableHeader: { flexDirection: 'row', backgroundColor: '#F5F5F5', borderBottomWidth: 2, borderBottomColor: '#B0BEC5' },
     headerText: { fontSize: 11, fontWeight: 'bold', color: '#546E7A', textTransform: 'uppercase', paddingVertical: 12, paddingHorizontal: 8 },
     tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#ECEFF1', alignItems: 'center' },
     
-    // Cell Styles with fixed widths for horizontal scroll
     snoCell: { width: 50, padding: 10, textAlign: 'center', borderRightWidth: 1, borderRightColor: '#ECEFF1', color: '#546E7A' },
     vchCell: { width: 110, padding: 10, borderRightWidth: 1, borderRightColor: '#ECEFF1', color: '#37474F', fontWeight: '500' },
-    headCell: { width: 150, padding: 10, borderRightWidth: 1, borderRightColor: '#ECEFF1', color: '#37474F' }, // Width reduced
+    headCell: { width: 150, padding: 10, borderRightWidth: 1, borderRightColor: '#ECEFF1', color: '#37474F' },
     amountCell: { width: 120, padding: 10, borderRightWidth: 1, borderRightColor: '#ECEFF1', fontWeight: 'bold', fontSize: 14, textAlign: 'right' },
     actionCell: { width: 110, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 10 },
     iconButton: { padding: 4 },
 
-    // Amount Color Styles
     amountDebit: { color: '#d9534f' },
     amountCredit: { color: '#5cb85c' },
-    amountDeposit: { color: '#0275d8' },
     amountDefault: { color: '#37474F' },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     emptyText: { fontSize: 16, color: '#78909C' },
 
-    // Modal Styles
     modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
     modalContent: { width: '90%', maxHeight: '80%', backgroundColor: 'white', borderRadius: 10, padding: 20, elevation: 10 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5, textAlign: 'center', color: '#1A202C' },
