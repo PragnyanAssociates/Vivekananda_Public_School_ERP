@@ -7929,8 +7929,7 @@ app.get('/api/reports/summary', [verifyToken, isAdmin], async (req, res) => {
     const summaryQuery = `
         SELECT
             SUM(CASE WHEN voucher_type = 'Debit' THEN total_amount ELSE 0 END) AS debit,
-            SUM(CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE 0 END) AS credit,
-            SUM(CASE WHEN voucher_type = 'Deposit' THEN total_amount ELSE 0 END) AS deposit
+            SUM(CASE WHEN voucher_type = 'Credit' THEN total_amount ELSE 0 END) AS credit
         FROM vouchers
         ${whereClause};
     `;
@@ -7940,7 +7939,6 @@ app.get('/api/reports/summary', [verifyToken, isAdmin], async (req, res) => {
         const reportData = {
             debit: summaryResult[0].debit || 0,
             credit: summaryResult[0].credit || 0,
-            deposit: summaryResult[0].deposit || 0,
         };
         res.status(200).json(reportData);
     } catch (error) {
@@ -7949,6 +7947,29 @@ app.get('/api/reports/summary', [verifyToken, isAdmin], async (req, res) => {
     }
 });
 
+// ==========================================================
+// --- SCREENSHOTS SCREEN API ROUTE ---
+// ==========================================================
+
+// FETCH ALL VOUCHER ATTACHMENTS (SCREENSHOTS)
+app.get('/api/vouchers/screenshots', [verifyToken, isAdmin], async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                id, 
+                voucher_date, 
+                attachment_url 
+            FROM vouchers 
+            WHERE attachment_url IS NOT NULL AND attachment_url != '' 
+            ORDER BY voucher_date DESC, id DESC;
+        `;
+        const [screenshots] = await db.query(query);
+        res.status(200).json(screenshots);
+    } catch (error) {
+        console.error('Error fetching voucher screenshots:', error);
+        res.status(500).json({ message: 'Failed to fetch screenshots.' });
+    }
+});
 
 
 

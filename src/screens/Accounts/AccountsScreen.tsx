@@ -48,6 +48,12 @@ const accountModules: AccountModule[] = [
     },
     {
         id: 'acc5',
+        title: 'Screenshots',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/16090/16090543.png',
+        navigateTo: 'Screenshots', // Screen name for Calendar
+    },
+    {
+        id: 'acc6',
         title: 'Calendar',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/16090/16090543.png',
         navigateTo: 'CalendarScreen', // Screen name for Calendar

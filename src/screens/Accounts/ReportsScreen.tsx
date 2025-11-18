@@ -18,7 +18,7 @@ const ReportsScreen = () => {
     const isFocused = useIsFocused();
     const viewShotRef = useRef(null);
 
-    const [reportData, setReportData] = useState({ debit: 0, credit: 0, deposit: 0 });
+    const [reportData, setReportData] = useState({ debit: 0, credit: 0 }); // Removed deposit
     const [isLoading, setIsLoading] = useState(true);
     const [activePeriod, setActivePeriod] = useState('daily');
     const [displayDate, setDisplayDate] = useState('');
@@ -29,12 +29,12 @@ const ReportsScreen = () => {
     const reportColors = {
         debit: '#e7400d',
         credit: '#00ff00',
-        deposit: '#1f10ec'
+        // Removed deposit color
     };
 
     const fetchReportData = useCallback(async () => {
         if (activePeriod === 'custom' && (!dateRange.start || !dateRange.end)) {
-            setReportData({ debit: 0, credit: 0, deposit: 0 });
+            setReportData({ debit: 0, credit: 0 }); // Removed deposit
             return;
         }
 
@@ -117,8 +117,8 @@ const ReportsScreen = () => {
         }
     };
     
-    const grossTotal = Number(reportData.debit) + Number(reportData.credit) + Number(reportData.deposit);
-    const netTotal = (Number(reportData.credit) + Number(reportData.deposit)) - Number(reportData.debit);
+    const grossTotal = Number(reportData.debit) + Number(reportData.credit); // Removed deposit
+    const netTotal = Number(reportData.credit) - Number(reportData.debit); // Removed deposit
 
     const downloadReport = async () => {
         if (!(await requestStoragePermission())) {
@@ -160,7 +160,6 @@ const ReportsScreen = () => {
                         <table class="summary-table">
                             <tr><td class="label">Debit</td><td class="amount">- ₹${Number(reportData.debit).toFixed(2)}</td></tr>
                             <tr><td class="label">Credit</td><td class="amount">+ ₹${Number(reportData.credit).toFixed(2)}</td></tr>
-                            <tr><td class="label">Deposit</td><td class="amount">+ ₹${Number(reportData.deposit).toFixed(2)}</td></tr>
                             <tr class="total-row"><td class="label">Total Amount</td><td class="amount">₹${netTotal.toFixed(2)}</td></tr>
                         </table>
                     </div>
@@ -186,7 +185,6 @@ const ReportsScreen = () => {
     const pieData = [
         { key: 'debit', value: Number(reportData.debit), svg: { fill: reportColors.debit } },
         { key: 'credit', value: Number(reportData.credit), svg: { fill: reportColors.credit } },
-        { key: 'deposit', value: Number(reportData.deposit), svg: { fill: reportColors.deposit } },
     ].filter(item => item.value > 0);
 
     const Labels = ({ slices }) => {
@@ -271,7 +269,7 @@ const ReportsScreen = () => {
                             <View style={styles.legendContainer}>
                                 {Object.keys(reportColors).map(key => {
                                     const isDebit = key === 'debit';
-                                    const isIncome = key === 'credit' || key === 'deposit';
+                                    const isIncome = key === 'credit'; // Removed deposit
                                     const hasValue = Number(reportData[key]) > 0;
                                     return (
                                         <View key={key} style={styles.legendItem}>

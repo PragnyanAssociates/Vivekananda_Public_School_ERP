@@ -106,6 +106,7 @@ import RegistersScreen from './src/screens/Accounts/RegistersScreen';
 import TransactionsScreen from './src/screens/Accounts/TransactionsScreen';
 import ReportsScreen from './src/screens/Accounts/ReportsScreen';
 import CalendarScreen from './src/screens/Accounts/CalendarScreen';
+import Screenshots from './src/screens/Accounts/Screenshots';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -268,7 +269,8 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="RegistersScreen" component={RegistersScreen} /> 
       <Stack.Screen name="TransactionsScreen" component={TransactionsScreen} />
       <Stack.Screen name="ReportsScreen" component={ReportsScreen} />
-      <Stack.Screen name="CalendarScreen" component={CalendarScreen} /> 
+      <Stack.Screen name="CalendarScreen" component={CalendarScreen} />
+      <Stack.Screen name="Screenshots" component={Screenshots} /> 
 
       {/* <Stack.Screen name="MarksEntryScreen" component={MarksEntryScreen} /> */}
 
