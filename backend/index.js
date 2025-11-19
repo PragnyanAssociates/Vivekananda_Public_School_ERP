@@ -6888,27 +6888,27 @@ app.get('/api/all-classes', async (req, res) => {
 // --- TEACHER ATTENDANCE MODULE API ROUTES (FINAL FOR EDITING) ---
 // ==========================================================
 
-// Helper function
+// Helper function (Calculates stats including Working Days)
 const calculateTeacherAttendanceStats = (records) => {
-    const totalDays = records.length;
+    const totalDays = records.length; // Total records found (Working Days)
     const daysPresent = records.filter(r => r.status === 'P').length;
     const daysAbsent = records.filter(r => r.status === 'A').length;
-    // Note: totalCountedDays is essentially "Working Days" (Present + Absent)
-    // assuming 'L' (Late) counts as Present or is ignored based on logic. 
-    // Here we sum P + A. If L should be counted, adjust accordingly.
-    // Based on your request: Working Days = Days Present + Days Absent.
-    const totalCountedDays = daysPresent + daysAbsent; 
+    // Working Days = Present + Absent (Total records found in the period)
+    // If you want to exclude 'Late' from working days, adjust here. Assuming L is part of working days:
+    const totalCountedDays = daysPresent + daysAbsent + records.filter(r => r.status === 'L').length; 
+    
+    // Calculate percentage based on Present vs Total
     const overallPercentage = totalCountedDays > 0 ? ((daysPresent / totalCountedDays) * 100).toFixed(1) : '0.0';
     
     return {
         overallPercentage, 
         daysPresent, 
         daysAbsent, 
-        totalDays: totalCountedDays // This matches your "Working Days" requirement
+        totalDays: totalCountedDays 
     };
 };
 
-// 1. ADMIN: Get list of teachers for marking/reporting
+// 1. ADMIN: Get list of teachers
 app.get('/api/teacher-attendance/teachers', verifyToken, isAdmin, async (req, res) => {
     try {
         const [teachers] = await db.query(
@@ -6932,7 +6932,7 @@ app.get('/api/teacher-attendance/teachers', verifyToken, isAdmin, async (req, re
     }
 });
 
-// 2. ADMIN: Mark attendance for teachers
+// 2. ADMIN: Mark attendance
 app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) => {
     const { date, attendanceData } = req.body;
     const adminId = req.user.id; 
@@ -6944,7 +6944,6 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-
         await connection.query('DELETE FROM teacher_attendance WHERE date = ?', [date]);
 
         const values = attendanceData.map(item => [
@@ -6958,10 +6957,8 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
 
         const insertQuery = 'INSERT INTO teacher_attendance (teacher_id, date, status, marked_by_admin_id) VALUES ?';
         await connection.query(insertQuery, [values]);
-        
         await connection.commit();
         res.status(200).send('Attendance marked successfully.');
-
     } catch (err) {
         await connection.rollback();
         console.error('Error marking teacher attendance:', err);
@@ -6971,82 +6968,67 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
     }
 });
 
-
-// 3. ADMIN: Get Attendance Sheet for a specific date
+// 3. ADMIN: Get Attendance Sheet
 app.get('/api/teacher-attendance/sheet', verifyToken, isAdmin, async (req, res) => {
     const { date } = req.query;
-
-    if (!date) {
-        return res.status(400).send('Date is required to fetch the attendance sheet.');
-    }
+    if (!date) return res.status(400).send('Date is required.');
 
     try {
         const query = `
-            SELECT 
-                u.id AS teacher_id, 
-                u.full_name, 
-                u.subjects_taught,
-                COALESCE(ta.status, 'P') AS status 
+            SELECT u.id AS teacher_id, u.full_name, u.subjects_taught, COALESCE(ta.status, 'P') AS status 
             FROM users u
-            LEFT JOIN teacher_attendance ta 
-                ON u.id = ta.teacher_id AND ta.date = ?
-            WHERE u.role = 'teacher'
-            ORDER BY u.full_name;
+            LEFT JOIN teacher_attendance ta ON u.id = ta.teacher_id AND ta.date = ?
+            WHERE u.role = 'teacher' ORDER BY u.full_name;
         `;
         const [sheet] = await db.query(query, [date]);
         
         const formattedSheet = sheet.map(row => {
             let subjects = [];
-            if (row.subjects_taught && typeof row.subjects_taught === 'string') {
-                try { subjects = JSON.parse(row.subjects_taught); } catch (e) { subjects = []; }
-            } else if (Array.isArray(row.subjects_taught)) { subjects = row.subjects_taught; }
-            
+            if (row.subjects_taught) {
+                try { subjects = typeof row.subjects_taught === 'string' ? JSON.parse(row.subjects_taught) : row.subjects_taught; } catch (e) { subjects = []; }
+            }
             return {
-                id: row.teacher_id,
-                full_name: row.full_name,
-                subjects_taught: subjects,
-                status: row.status 
+                id: row.teacher_id, full_name: row.full_name, subjects_taught: subjects, status: row.status 
             };
         });
-
         res.json(formattedSheet);
-
     } catch (err) {
-        console.error('Error fetching teacher attendance sheet:', err);
-        res.status(500).send('Server error fetching attendance sheet');
+        console.error('Error fetching sheet:', err);
+        res.status(500).send('Server error');
     }
 });
 
-
-// 4. TEACHER/ADMIN: Get Attendance Report (MODIFIED FOR CUSTOM DATE RANGE)
+// 4. REPORT ENDPOINT (UPDATED FOR YEARLY)
 app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, res) => {
     const { teacherId } = req.params;
-    const { period, targetDate, targetMonth, startDate, endDate } = req.query;
-    const loggedInUser = req.user; 
-
-    if (loggedInUser.role === 'teacher' && String(loggedInUser.id) !== teacherId) {
-        return res.status(403).json({ message: 'Access denied. You can only view your own report.' });
+    const { period, targetDate, targetMonth, targetYear, startDate, endDate } = req.query;
+    
+    // Security check
+    if (req.user.role === 'teacher' && String(req.user.id) !== teacherId) {
+        return res.status(403).json({ message: 'Access denied.' });
     }
 
     let query = 'SELECT DATE_FORMAT(date, "%Y-%m-%d") as date, status FROM teacher_attendance WHERE teacher_id = ?';
     let params = [teacherId];
 
     try {
-        // Handle various filtering modes
+        // --- Filter Logic ---
         if (period === 'daily' && targetDate) {
             query += ' AND date = ?';
             params.push(targetDate);
         } else if (period === 'monthly' && targetMonth) {
             query += ' AND DATE_FORMAT(date, "%Y-%m") = ?';
             params.push(targetMonth);
+        } else if (period === 'yearly' && targetYear) {
+            // NEW: Filter by Year
+            query += ' AND DATE_FORMAT(date, "%Y") = ?';
+            params.push(targetYear);
         } else if (startDate && endDate) {
-            // NEW: Handle Custom Date Range
             query += ' AND date >= ? AND date <= ?';
             params.push(startDate, endDate);
         }
 
         const [records] = await db.query(query + ' ORDER BY date DESC', params);
-        
         const stats = calculateTeacherAttendanceStats(records);
         
         res.json({
@@ -7054,14 +7036,14 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
                 overallPercentage: stats.overallPercentage,
                 daysPresent: stats.daysPresent,
                 daysAbsent: stats.daysAbsent,
-                totalDays: stats.totalDays // Included "Working Days"
+                totalDays: stats.totalDays // Working Days
             },
             detailedHistory: records
         });
 
     } catch (err) {
-        console.error('Error fetching teacher attendance report:', err);
-        res.status(500).send('Server error fetching report');
+        console.error('Error fetching report:', err);
+        res.status(500).send('Server error');
     }
 });
 

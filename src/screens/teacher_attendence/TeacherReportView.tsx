@@ -14,6 +14,7 @@ const GREEN = '#43A047';
 const RED = '#E53935';
 const BLUE = '#1E88E5';
 const ORANGE = '#F57C00';
+const GREY = '#9E9E9E';
 const WHITE = '#FFFFFF';
 
 // --- Local Interfaces ---
@@ -27,13 +28,14 @@ interface AttendanceReport {
     overallPercentage: string;
     daysPresent: number;
     daysAbsent: number;
-    totalDays: number; // This is "Working Days" (Present + Absent)
+    totalDays: number; // Working Days
   };
   detailedHistory: AttendanceRecord[];
 }
-// --- End Local Interfaces ---
 
 // --- Reusable Sub-components ---
+
+// 1. Summary Card (For Monthly/Yearly/Range Views)
 const SummaryCard = ({ label, value, color, delay, width = '23%' }) => ( 
     <Animatable.View animation="zoomIn" duration={500} delay={delay} style={[styles.summaryBox, { width: width }]}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
@@ -41,6 +43,7 @@ const SummaryCard = ({ label, value, color, delay, width = '23%' }) => (
     </Animatable.View>
 );
 
+// 2. History Record List Item
 const HistoryRecordCard = ({ item, index }) => {
     const isPresent = item.status === 'P';
     const statusText = item.status === 'P' ? 'Present' : (item.status === 'A' ? 'Absent' : 'Leave/Late');
@@ -56,7 +59,41 @@ const HistoryRecordCard = ({ item, index }) => {
     );
 };
 
-const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+// 3. Daily Specific Status Card
+const DailyStatusCard = ({ record, date }) => {
+    const hasRecord = !!record;
+    const status = hasRecord ? record.status : null;
+    
+    let bgColor = GREY;
+    let iconName = "help-circle-outline";
+    let statusText = "No Record";
+
+    if (status === 'P') {
+        bgColor = GREEN;
+        iconName = "check-circle-outline";
+        statusText = "Present";
+    } else if (status === 'A') {
+        bgColor = RED;
+        iconName = "close-circle-outline";
+        statusText = "Absent";
+    } else if (status === 'L') {
+        bgColor = ORANGE;
+        iconName = "clock-alert-outline";
+        statusText = "Late / Leave";
+    }
+
+    return (
+        <Animatable.View animation="flipInX" duration={600} style={[styles.dailyCard, { backgroundColor: hasRecord ? bgColor : WHITE, borderColor: bgColor }]}>
+            <Icon name={iconName} size={50} color={hasRecord ? WHITE : bgColor} />
+            <Text style={[styles.dailyStatusText, { color: hasRecord ? WHITE : bgColor }]}>
+                {statusText.toUpperCase()}
+            </Text>
+            <Text style={[styles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : TEXT_COLOR_MEDIUM }]}>
+                {date.toDateString()}
+            </Text>
+        </Animatable.View>
+    );
+};
 
 // --- Main Component ---
 interface TeacherReportViewProps {
@@ -70,12 +107,12 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
     const [report, setReport] = useState<AttendanceReport | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     
-    // viewMode: 'custom' is used for the Date Range view (formerly overall)
-    const [viewMode, setViewMode] = useState<'daily' | 'monthly' | 'custom'>('custom');
+    // Updated View Mode to include 'yearly'
+    const [viewMode, setViewMode] = useState<'daily' | 'monthly' | 'yearly' | 'custom'>('daily'); 
     
     // Date States
-    const [selectedDate, setSelectedDate] = useState(new Date()); // For Daily/Monthly
-    const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30))); // Default 30 days back
+    const [selectedDate, setSelectedDate] = useState(new Date()); 
+    const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30))); 
     const [toDate, setToDate] = useState(new Date());
     
     // Picker Visibility
@@ -95,6 +132,9 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
             params.targetDate = selectedDate.toISOString().slice(0, 10);
         } else if (viewMode === 'monthly') {
             params.targetMonth = selectedDate.toISOString().slice(0, 7);
+        } else if (viewMode === 'yearly') {
+            // NEW: Send the Year
+            params.targetYear = selectedDate.getFullYear().toString();
         } else if (viewMode === 'custom') {
             params.startDate = fromDate.toISOString().slice(0, 10);
             params.endDate = toDate.toISOString().slice(0, 10);
@@ -115,11 +155,13 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
     // Initial load
     useEffect(() => {
         fetchReport();
-    }, [teacherId]); 
+    }, [fetchReport]); 
 
     const onMainDateChange = (event: any, date?: Date) => {
         setShowMainPicker(Platform.OS === 'ios'); 
-        if (date) setSelectedDate(date);
+        if (date) {
+            setSelectedDate(date);
+        }
     };
 
     const onFromDateChange = (event: any, date?: Date) => {
@@ -133,6 +175,10 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
     };
     
     const summary = report?.stats || { overallPercentage: '0.0', daysPresent: 0, daysAbsent: 0, totalDays: 0 };
+    
+    const dailyRecord = (viewMode === 'daily' && report?.detailedHistory?.length) 
+        ? report.detailedHistory.find(r => r.date === selectedDate.toISOString().slice(0, 10)) || report.detailedHistory[0] 
+        : null;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -145,49 +191,58 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     )}
                     <View style={{flex: 1, alignItems: 'center', paddingRight: onBack ? 30 : 0 }}>
                         <Text style={styles.headerTitle}>{headerTitle}</Text>
-                        {viewMode === 'daily' && <Text style={styles.headerSubtitleSmall}>Date: {selectedDate.toDateString()}</Text>}
-                        {viewMode === 'monthly' && <Text style={styles.headerSubtitleSmall}>Month: {selectedDate.toISOString().slice(0, 7)}</Text>}
-                        {viewMode === 'custom' && <Text style={styles.headerSubtitleSmall}>Custom Range</Text>}
+                        
+                        {/* Dynamic Subtitle */}
+                        {viewMode === 'daily' && <Text style={styles.headerSubtitleSmall}>{selectedDate.toDateString()}</Text>}
+                        {viewMode === 'monthly' && <Text style={styles.headerSubtitleSmall}>{selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
+                        {viewMode === 'yearly' && <Text style={styles.headerSubtitleSmall}>Year: {selectedDate.getFullYear()}</Text>}
+                        {viewMode === 'custom' && <Text style={styles.headerSubtitleSmall}>Custom Date Range</Text>}
                     </View>
                 </View>
             </Animatable.View>
 
-            {/* TABS: Daily | Monthly | Custom (Implicit via Range inputs) */}
+            {/* TABS - UPDATED to include YEARLY */}
             <View style={styles.toggleContainer}>
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'daily' && styles.toggleButtonActive]} onPress={() => setViewMode('daily')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'daily' && styles.toggleButtonTextActive]}>Daily</Text>
                 </TouchableOpacity>
+                
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'monthly' && styles.toggleButtonActive]} onPress={() => setViewMode('monthly')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'monthly' && styles.toggleButtonTextActive]}>Monthly</Text>
                 </TouchableOpacity>
-                {/* Formerly Overall, now triggers Range View */}
+                
+                {/* NEW YEARLY BUTTON */}
+                <TouchableOpacity style={[styles.toggleButton, viewMode === 'yearly' && styles.toggleButtonActive]} onPress={() => setViewMode('yearly')}>
+                    <Text style={[styles.toggleButtonText, viewMode === 'yearly' && styles.toggleButtonTextActive]}>Yearly</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'custom' && styles.toggleButtonActive]} onPress={() => setViewMode('custom')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'custom' && styles.toggleButtonTextActive]}>Range</Text>
                 </TouchableOpacity>
                 
-                {(viewMode === 'daily' || viewMode === 'monthly') && (
+                {/* Calendar Icon - Visible for Daily/Monthly/Yearly to change the anchor date */}
+                {viewMode !== 'custom' && (
                     <TouchableOpacity style={styles.calendarButton} onPress={() => setShowMainPicker(true)}>
                         <Icon name="calendar" size={22} color={PRIMARY_COLOR} />
                     </TouchableOpacity>
                 )}
             </View>
 
-            {/* Date Range Inputs - Visible only when Custom/Range is active */}
+            {/* Date Range Inputs (Visible ONLY in Custom Range Mode) */}
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={styles.rangeContainer}>
-                     {/* From Date */}
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowFromPicker(true)}>
                         <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
                         <Text style={styles.dateInputText}>{fromDate.toLocaleDateString()}</Text>
                     </TouchableOpacity>
                     
-                    {/* To Date */}
+                    <Icon name="arrow-right" size={20} color={TEXT_COLOR_MEDIUM} />
+
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowToPicker(true)}>
                         <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
                         <Text style={styles.dateInputText}>{toDate.toLocaleDateString()}</Text>
                     </TouchableOpacity>
 
-                    {/* GO Button */}
                     <TouchableOpacity style={styles.goButton} onPress={fetchReport}>
                         <Text style={styles.goButtonText}>Go</Text>
                     </TouchableOpacity>
@@ -201,21 +256,31 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
 
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} /> : (
                 <>
-                    {/* Stats Summary */}
-                    <View style={styles.summaryContainer}>
-                        <SummaryCard label="Overall %" value={`${summary.overallPercentage}%`} color={BLUE} delay={100} />
-                        {/* Added Working Days Here */}
-                        <SummaryCard label="Working Days" value={summary.totalDays || 0} color={ORANGE} delay={150} />
-                        <SummaryCard label="Days Present" value={summary.daysPresent || 0} color={GREEN} delay={200} />
-                        <SummaryCard label="Days Absent" value={summary.daysAbsent || 0} color={RED} delay={300} />
-                    </View>
-
+                    {viewMode === 'daily' ? (
+                        /* DAILY VIEW: Single Card */
+                        <View style={styles.dailyContainer}>
+                            <DailyStatusCard record={dailyRecord} date={selectedDate} />
+                        </View>
+                    ) : (
+                        /* MONTHLY/YEARLY/RANGE VIEW: Aggregates */
+                        <View style={styles.summaryContainer}>
+                            <SummaryCard label="Overall %" value={`${summary.overallPercentage}%`} color={BLUE} delay={100} />
+                            <SummaryCard label="Working Days" value={summary.totalDays || 0} color={ORANGE} delay={150} />
+                            <SummaryCard label="Days Present" value={summary.daysPresent || 0} color={GREEN} delay={200} />
+                            <SummaryCard label="Days Absent" value={summary.daysAbsent || 0} color={RED} delay={300} />
+                        </View>
+                    )}
+                    
                     <FlatList
                         data={report?.detailedHistory || []}
                         keyExtractor={(item) => item.date}
                         renderItem={({ item, index }) => <HistoryRecordCard item={item} index={index} />}
-                        ListHeaderComponent={<Text style={styles.historyTitle}>Detailed History</Text>}
-                        ListEmptyComponent={<Text style={styles.noDataText}>No records found for this period.</Text>}
+                        ListHeaderComponent={
+                            <Text style={styles.historyTitle}>
+                                {viewMode === 'daily' ? 'Log Entry' : 'Detailed History'}
+                            </Text>
+                        }
+                        ListEmptyComponent={<Text style={styles.noDataText}>No records found.</Text>}
                         contentContainerStyle={{ paddingBottom: 20 }}
                     />
                 </>
@@ -234,27 +299,30 @@ const styles = StyleSheet.create({
     headerSubtitleSmall: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2, textAlign: 'center' },
     backButton: { position: 'absolute', left: 15, zIndex: 1, padding: 5 },
     
-    // Tab Styling
-    toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 5, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center' },
-    toggleButton: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, marginHorizontal: 5, backgroundColor: '#E0E0E0' },
+    // Tab Styling - Adjusted padding to fit 4 buttons
+    toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 2, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center', flexWrap: 'wrap' },
+    toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, backgroundColor: '#E0E0E0', marginBottom: 5 },
     toggleButtonActive: { backgroundColor: PRIMARY_COLOR },
-    toggleButtonText: { color: TEXT_COLOR_DARK, fontWeight: '600' },
+    toggleButtonText: { color: TEXT_COLOR_DARK, fontWeight: '600', fontSize: 13 },
     toggleButtonTextActive: { color: WHITE },
-    calendarButton: { padding: 8, marginLeft: 10, justifyContent: 'center', alignItems: 'center' },
+    calendarButton: { padding: 8, marginLeft: 5, justifyContent: 'center', alignItems: 'center' },
 
-    // Range Selector Styling
     rangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: '#f9f9f9', borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
-    dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', padding: 10, borderRadius: 6, marginRight: 10, justifyContent: 'center' },
+    dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', padding: 10, borderRadius: 6, marginHorizontal: 5, justifyContent: 'center' },
     dateInputText: { color: TEXT_COLOR_DARK, fontSize: 14, fontWeight: '500' },
-    goButton: { backgroundColor: GREEN, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6 },
+    goButton: { backgroundColor: GREEN, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
     goButtonText: { color: WHITE, fontWeight: 'bold' },
 
-    // Stats Styling
     summaryContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', paddingVertical: 15, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
     summaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2 },
     summaryValue: { fontSize: 22, fontWeight: 'bold' },
     summaryLabel: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 5, fontWeight: '500', textAlign: 'center' },
     
+    dailyContainer: { padding: 20, alignItems: 'center', backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
+    dailyCard: { width: '90%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+    dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+    dailyDateText: { fontSize: 16, marginTop: 5 },
+
     historyTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 20, marginTop: 15, marginBottom: 10, color: TEXT_COLOR_DARK },
     historyRecordCard: { backgroundColor: WHITE, marginHorizontal: 15, marginVertical: 8, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 5 },
     historyRecordHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
