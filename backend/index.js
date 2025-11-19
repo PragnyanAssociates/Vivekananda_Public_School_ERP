@@ -6966,33 +6966,51 @@ app.post('/api/teacher-attendance/mark', verifyToken, isAdmin, async (req, res) 
     }
 });
 
-// 3. ADMIN: Get Attendance Sheet
 app.get('/api/teacher-attendance/sheet', verifyToken, isAdmin, async (req, res) => {
     const { date } = req.query;
-    if (!date) return res.status(400).send('Date is required.');
+
+    if (!date) {
+        return res.status(400).send('Date is required to fetch the attendance sheet.');
+    }
 
     try {
+        // MODIFIED QUERY: Added ta.id to check if record exists
         const query = `
-            SELECT u.id AS teacher_id, u.full_name, u.subjects_taught, COALESCE(ta.status, 'P') AS status 
+            SELECT 
+                u.id AS teacher_id, 
+                u.full_name, 
+                u.subjects_taught,
+                ta.id AS attendance_record_id, 
+                COALESCE(ta.status, 'P') AS status 
             FROM users u
-            LEFT JOIN teacher_attendance ta ON u.id = ta.teacher_id AND ta.date = ?
-            WHERE u.role = 'teacher' ORDER BY u.full_name;
+            LEFT JOIN teacher_attendance ta 
+                ON u.id = ta.teacher_id AND ta.date = ?
+            WHERE u.role = 'teacher'
+            ORDER BY u.full_name;
         `;
         const [sheet] = await db.query(query, [date]);
         
         const formattedSheet = sheet.map(row => {
             let subjects = [];
-            if (row.subjects_taught) {
-                try { subjects = typeof row.subjects_taught === 'string' ? JSON.parse(row.subjects_taught) : row.subjects_taught; } catch (e) { subjects = []; }
-            }
+            if (row.subjects_taught && typeof row.subjects_taught === 'string') {
+                try { subjects = JSON.parse(row.subjects_taught); } catch (e) { subjects = []; }
+            } else if (Array.isArray(row.subjects_taught)) { subjects = row.subjects_taught; }
+            
             return {
-                id: row.teacher_id, full_name: row.full_name, subjects_taught: subjects, status: row.status 
+                id: row.teacher_id,
+                full_name: row.full_name,
+                subjects_taught: subjects,
+                status: row.status,
+                // NEW FLAG: If attendance_record_id is not null, it means attendance was saved in DB
+                isMarked: !!row.attendance_record_id 
             };
         });
+
         res.json(formattedSheet);
+
     } catch (err) {
-        console.error('Error fetching sheet:', err);
-        res.status(500).send('Server error');
+        console.error('Error fetching teacher attendance sheet:', err);
+        res.status(500).send('Server error fetching attendance sheet');
     }
 });
 

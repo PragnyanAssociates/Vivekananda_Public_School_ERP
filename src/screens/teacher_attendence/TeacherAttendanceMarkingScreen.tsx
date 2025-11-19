@@ -17,6 +17,7 @@ interface Teacher {
 
 interface TeacherMarking extends Teacher {
   status: 'P' | 'A' | 'L'; 
+  isMarked?: boolean; // NEW FIELD
 }
 
 // --- Theme Constants ---
@@ -65,10 +66,12 @@ const TeacherAttendanceMarkingScreen = () => {
         setTeachers(teachersData);
         setAllTeachersForReport(teachersData); 
 
-        // 2. Check if *any* teacher was marked Absent or Late
-        const attendanceExists = teachersData.some(t => t.status === 'A' || t.status === 'L');
+        // 2. Check if attendance is already marked in DB
+        // We now check the 'isMarked' flag from backend (which relies on DB ID existence)
+        // If even one teacher has isMarked=true, the whole day is considered marked.
+        const isAlreadyMarked = teachersData.length > 0 && teachersData.some(t => t.isMarked);
         
-        if (attendanceExists) {
+        if (isAlreadyMarked) {
             setMarkingState('SUCCESS_SUMMARY'); 
         } else {
             setMarkingState('MARKING'); 
@@ -126,8 +129,12 @@ const TeacherAttendanceMarkingScreen = () => {
         attendanceData,
       });
 
+      // SUCCESS: Switch to Summary View immediately
       setMarkingState('SUCCESS_SUMMARY');
       
+      // Optional: Reload data to ensure 'isMarked' is set in local state (though UI is already handled)
+      loadMarkingDataForDate(attendanceDate);
+
     } catch (error: any) {
       Alert.alert("Submission Error", error.response?.data?.message || 'Failed to submit attendance.');
     } finally {
@@ -196,22 +203,27 @@ const TeacherAttendanceMarkingScreen = () => {
 
   // --- Render Success Summary View ---
   const renderSuccessSummary = () => (
-      <View style={styles.summaryContainer}>
-          <Icon name="check-circle-outline" size={80} color={GREEN} />
+      <Animatable.View animation="fadeIn" duration={500} style={styles.summaryContainer}>
+          <View style={styles.successIconContainer}>
+            <Icon name="check" size={50} color={WHITE} />
+          </View>
+          
           <Text style={styles.summaryTitle}>Attendance Marked!</Text>
           <Text style={styles.summaryMessage}>
               Attendance for {formatDate(attendanceDate)} has been saved successfully.
               You can click "Edit Attendance" to make any changes.
           </Text>
+          
           <TouchableOpacity 
               style={styles.editButton}
               onPress={() => {
+                  // Switch back to MARKING state to allow edits
                   setMarkingState('MARKING');
               }}
           >
               <Text style={styles.editButtonText}>Edit Attendance</Text>
           </TouchableOpacity>
-      </View>
+      </Animatable.View>
   );
 
 
@@ -267,9 +279,10 @@ const TeacherAttendanceMarkingScreen = () => {
                 
                 {/* LOADING/SUMMARY/MARKING Views */}
                 {isLoading && <View style={styles.center}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>}
-                {markingState === 'SUCCESS_SUMMARY' && renderSuccessSummary()}
                 
-                {markingState === 'MARKING' && !isLoading && (
+                {!isLoading && markingState === 'SUCCESS_SUMMARY' && renderSuccessSummary()}
+                
+                {!isLoading && markingState === 'MARKING' && (
                     <>
                         <Text style={styles.listTitle}>Teacher List ({teachers.length})</Text>
 
@@ -364,10 +377,12 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 8 },
   reportSelectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 20, marginHorizontal: 10, marginVertical: 4, backgroundColor: WHITE, borderRadius: 8, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
 
+  // --- Success Summary View Styles (Updated to match your image) ---
   summaryContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, backgroundColor: WHITE },
-  summaryTitle: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 15, marginBottom: 10 },
-  summaryMessage: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center', marginBottom: 30 },
-  editButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 8 },
+  successIconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: GREEN, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  summaryTitle: { fontSize: 24, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginBottom: 10 },
+  summaryMessage: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center', marginBottom: 30, paddingHorizontal: 20 },
+  editButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 8 },
   editButtonText: { color: WHITE, fontSize: 16, fontWeight: 'bold' },
 });
 
