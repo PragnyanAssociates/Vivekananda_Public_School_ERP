@@ -27,7 +27,7 @@ const EXAM_MAPPING = {
     'AT3': 'Assignment-3', 'UT3': 'Unitest-3', 'AT4': 'Assignment-4', 'UT4': 'Unitest-4',
     'SA1': 'SA1', 'SA2': 'SA2', 'Total': 'Overall'
 };
-const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4','SA1', 'SA2', 'Total'];
+const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4', 'SA1', 'SA2', 'Total'];
 const MONTHS = ['June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May'];
 
 /**
@@ -62,10 +62,21 @@ const ReportCardContent = ({ studentInfo, academicYear, marksData, attendanceDat
             <Text style={s.sectionTitle}>PROGRESS CARD</Text>
             <ScrollView horizontal={!isForCapture} showsHorizontalScrollIndicator={false}>
                 <View style={s.table}>
+                    {/* UPDATED HEADER ROW WITH TOTAL MARKS DISPLAY */}
                     <View style={s.tableRow}>
                         <Text style={[s.tableHeader, s.subjectCol]}>Subjects</Text>
-                        {DISPLAY_EXAM_ORDER.map(exam => <Text key={exam} style={[s.tableHeader, s.markCol]}>{exam}</Text>)}
+                        {DISPLAY_EXAM_ORDER.map(exam => {
+                            let label = exam;
+                            // Append max marks based on exam type
+                            if (exam.startsWith('AT') || exam.startsWith('UT')) {
+                                label = `${exam}\n(25)`;
+                            } else if (exam.startsWith('SA')) {
+                                label = `${exam}\n(100)`;
+                            }
+                            return <Text key={exam} style={[s.tableHeader, s.markCol]}>{label}</Text>;
+                        })}
                     </View>
+                    
                     {subjects.map(subject => (
                         <View key={subject} style={s.tableRow}>
                             <Text style={[s.tableCell, s.subjectCol]}>{subject}</Text>

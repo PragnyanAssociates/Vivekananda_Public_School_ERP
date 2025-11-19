@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator, Image,
     TouchableOpacity, Modal, Pressable, Dimensions, FlatList, Platform, SafeAreaView
@@ -32,17 +32,29 @@ const getSubjectColor = (subject?: string): string => { if (!subject) return '#F
 const CLASS_SUBJECTS = { 'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'] };
 const EXAM_MAPPING = { 'AT1': 'Assignment-1', 'UT1': 'Unitest-1', 'AT2': 'Assignment-2', 'UT2': 'Unitest-2', 'AT3': 'Assignment-3', 'UT3': 'Unitest-3', 'AT4': 'Assignment-4', 'UT4': 'Unitest-4', 'SA1': 'SA1', 'SA2': 'SA2', 'Total': 'Overall' };
 const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4','SA1', 'SA2', 'Total'];
-const MONTHS = ['June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May'];
 
-// --- ★★★ NEW: Attendance Constants ★★★ ---
-const PRIMARY_COLOR = '#008080'; // Using the existing primary color
+// --- Helper: Date Formatter (DD/MM/YYYY) ---
+const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+};
+
+const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+// --- ★★★ NEW: Attendance Constants & Components ★★★ ---
+const PRIMARY_COLOR = '#008080'; 
 const GREEN = '#43A047';
 const RED = '#E53935';
 const BLUE = '#1E88E5';
+const ORANGE = '#F57C00';
+const GREY = '#9E9E9E';
 const WHITE = '#FFFFFF';
-const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
-// --- Reusable Component for Timetable Grid ---
+// Reusable Component for Timetable Grid
 const StudentTimetable = ({ classGroup }) => {
     const [timetableData, setTimetableData] = useState<TimetableSlotFromAPI[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -52,115 +64,233 @@ const StudentTimetable = ({ classGroup }) => {
     return (<View style={styles.ttContainer}><View style={styles.ttHeaderRow}>{tableHeaders.map(h => (<View key={h.name} style={[styles.ttHeaderCell, { backgroundColor: h.color, width: h.width }]}><Text style={[styles.ttHeaderText, { color: h.textColor }]}>{h.name}</Text></View>))}</View>{scheduleData.map((row, rowIndex) => (<View key={rowIndex} style={styles.ttRow}><View style={[styles.ttCell, styles.ttTimeCell, { width: tableHeaders[0].width }]}><Text style={styles.ttTimeText}>{row.time}</Text></View>{row.periods.map((period, periodIndex) => (<View key={periodIndex} style={[styles.ttCell, period.isBreak ? styles.ttBreakCell : { backgroundColor: getSubjectColor(period.subject) }, { width: tableHeaders[periodIndex + 1].width },]}>{period.isBreak ? (<Text style={styles.ttBreakTextSubject}>{period.subject}</Text>) : (<><Text style={styles.ttSubjectText} numberOfLines={2}>{period.subject || ''}</Text>{period.teacher && <Text style={styles.ttTeacherText} numberOfLines={1}>{period.teacher}</Text>}</>)}</View>))}</View>))}</View>);
 };
 
-// --- Embedded Report Card Component ---
+// Embedded Report Card Component - UPDATED WITH MAX MARKS
 const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceData }) => {
     const subjects = CLASS_SUBJECTS[studentInfo.class_group] || [];
     return (
         <View style={rcStyles.card}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={rcStyles.table}>
-                    <View style={rcStyles.tableRow}><Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Subjects</Text>{DISPLAY_EXAM_ORDER.map(exam => <Text key={exam} style={[rcStyles.tableHeader, rcStyles.markCol]}>{exam}</Text>)}</View>
-                    {subjects.map(subject => (<View key={subject} style={rcStyles.tableRow}><Text style={[rcStyles.tableCell, rcStyles.subjectCol]}>{subject}</Text>{DISPLAY_EXAM_ORDER.map(exam => <Text key={exam} style={[rcStyles.tableCell, rcStyles.markCol]}>{marksData[subject]?.[EXAM_MAPPING[exam]] ?? '-'}</Text>)}</View>))}
-                    <View style={[rcStyles.tableRow, rcStyles.totalRow]}><Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Total</Text>{DISPLAY_EXAM_ORDER.map(exam => { const total = subjects.reduce((sum, subject) => { const mark = parseFloat(marksData[subject]?.[EXAM_MAPPING[exam]]); return sum + (isNaN(mark) ? 0 : mark); }, 0); return <Text key={exam} style={[rcStyles.tableHeader, rcStyles.markCol]}>{total > 0 ? total : '-'}</Text>; })}</View>
+                    {/* Header Row with Max Marks Calculation */}
+                    <View style={rcStyles.tableRow}>
+                        <Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Subjects</Text>
+                        {DISPLAY_EXAM_ORDER.map(exam => {
+                            let label = exam;
+                            if (exam.startsWith('AT') || exam.startsWith('UT')) {
+                                label = `${exam}\n(25)`;
+                            } else if (exam.startsWith('SA')) {
+                                label = `${exam}\n(100)`;
+                            }
+                            return <Text key={exam} style={[rcStyles.tableHeader, rcStyles.markCol]}>{label}</Text>;
+                        })}
+                    </View>
+                    
+                    {/* Data Rows */}
+                    {subjects.map(subject => (
+                        <View key={subject} style={rcStyles.tableRow}>
+                            <Text style={[rcStyles.tableCell, rcStyles.subjectCol]}>{subject}</Text>
+                            {DISPLAY_EXAM_ORDER.map(exam => <Text key={exam} style={[rcStyles.tableCell, rcStyles.markCol]}>{marksData[subject]?.[EXAM_MAPPING[exam]] ?? '-'}</Text>)}
+                        </View>
+                    ))}
+                    
+                    {/* Total Row */}
+                    <View style={[rcStyles.tableRow, rcStyles.totalRow]}>
+                        <Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Total</Text>
+                        {DISPLAY_EXAM_ORDER.map(exam => {
+                            const total = subjects.reduce((sum, subject) => {
+                                const mark = parseFloat(marksData[subject]?.[EXAM_MAPPING[exam]]);
+                                return sum + (isNaN(mark) ? 0 : mark);
+                            }, 0);
+                            return <Text key={exam} style={[rcStyles.tableHeader, rcStyles.markCol]}>{total > 0 ? total : '-'}</Text>;
+                        })}
+                    </View>
                 </View>
             </ScrollView>
         </View>
     );
 };
 
-// --- ★★★ NEW: Embedded Attendance Component ★★★ ---
-const SummaryCard = ({ label, value, color, delay }) => (
-    <Animatable.View animation="zoomIn" duration={500} delay={delay} style={attStyles.summaryBox}>
+// --- ATTENDANCE SUB-COMPONENTS ---
+
+const SummaryCard = ({ label, value, color, width = '23%' }) => (
+    <Animatable.View animation="zoomIn" duration={500} style={[attStyles.summaryBox, { width: width }]}>
         <Text style={[attStyles.summaryValue, { color }]}>{value}</Text>
         <Text style={attStyles.summaryLabel}>{label}</Text>
     </Animatable.View>
 );
 
-const HistoryDayCard = ({ item, index }) => {
-    const isPresent = item.status === 'Present';
-    const dayStatus = isPresent ? 'Present' : 'Absent';
-    const statusColor = isPresent ? GREEN : RED;
+const DailyStatusCard = ({ record, date }) => {
+    const hasRecord = !!record;
+    const status = hasRecord ? record.status : null;
+    
+    let bgColor = GREY;
+    let iconName = "help-circle-outline";
+    let statusText = "No Record";
+
+    if (status === 'Present') {
+        bgColor = GREEN;
+        iconName = "check-circle-outline";
+        statusText = "Present";
+    } else if (status === 'Absent') {
+        bgColor = RED;
+        iconName = "close-circle-outline";
+        statusText = "Absent";
+    }
+
     return (
-        <Animatable.View animation="fadeInUp" duration={400} delay={index * 100} style={attStyles.historyDayCard}>
-            <View style={attStyles.historyDayHeader}>
-                <Text style={attStyles.historyDate}>{new Date(item.attendance_date).toDateString()}</Text>
-                <Text style={[attStyles.historyStatus, { color: statusColor }]}>{dayStatus}</Text>
-            </View>
+        <Animatable.View animation="flipInX" duration={600} style={[attStyles.dailyCard, { backgroundColor: hasRecord ? bgColor : WHITE, borderColor: bgColor }]}>
+            <Icon name={iconName} size={50} color={hasRecord ? WHITE : bgColor} />
+            <Text style={[attStyles.dailyStatusText, { color: hasRecord ? WHITE : bgColor }]}>
+                {statusText.toUpperCase()}
+            </Text>
+            <Text style={[attStyles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : '#566573' }]}>
+                {formatDate(date)}
+            </Text>
         </Animatable.View>
     );
 };
 
+// --- EMBEDDED ATTENDANCE VIEW (UPDATED) ---
 const EmbeddedAttendanceView = ({ studentId }) => {
-    const [viewMode, setViewMode] = useState('overall');
-    const [data, setData] = useState({ summary: {}, history: [] });
-    const [isLoading, setIsLoading] = useState(true);
+    const [viewMode, setViewMode] = useState('daily'); // Default to Daily
+    const [data, setData] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // Dates
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
+    const [toDate, setToDate] = useState(new Date());
+    
+    // Pickers
+    const [showMainPicker, setShowMainPicker] = useState(false);
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
 
-    useEffect(() => {
-        const fetchHistory = async () => {
-            if (!studentId) return;
-            setIsLoading(true);
-            try {
-                // Assuming an admin/teacher is viewing this, we use the admin history endpoint
-                let url = `/attendance/student-history-admin/${studentId}?viewMode=${viewMode}`;
-                if (viewMode === 'daily') {
-                    url += `&date=${selectedDate.toISOString().split('T')[0]}`;
-                }
-                const response = await apiClient.get(url);
-                setData(response.data);
-            } catch (error: any) {
-                console.error("Failed to fetch student attendance:", error.response?.data?.message || error.message);
-                setData({ summary: {}, history: [] }); // Reset data on error
-            } finally {
-                setIsLoading(false);
+    const fetchHistory = useCallback(async () => {
+        if (!studentId) return;
+        setIsLoading(true);
+        try {
+            let url = `/attendance/student-history-admin/${studentId}?viewMode=${viewMode}`;
+            
+            if (viewMode === 'daily') {
+                url += `&date=${selectedDate.toISOString().split('T')[0]}`;
+            } else if (viewMode === 'monthly') {
+                url += `&date=${selectedDate.toISOString().slice(0, 7)}`;
+            } else if (viewMode === 'yearly') {
+                url += `&targetYear=${selectedDate.getFullYear()}`;
+            } else if (viewMode === 'custom') {
+                url += `&startDate=${fromDate.toISOString().split('T')[0]}&endDate=${toDate.toISOString().split('T')[0]}`;
             }
-        };
-        fetchHistory();
-    }, [studentId, viewMode, selectedDate]);
 
-    const onDateChange = (event: any, date?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios');
-        if (date) {
-            setSelectedDate(date);
-            if (viewMode !== 'daily') {
-                setViewMode('daily');
-            }
+            const response = await apiClient.get(url);
+            setData(response.data);
+        } catch (error: any) {
+            console.error("Failed to fetch student attendance:", error.response?.data?.message || error.message);
+            setData(null);
+        } finally {
+            setIsLoading(false);
         }
+    }, [studentId, viewMode, selectedDate, fromDate, toDate]);
+
+    // Auto fetch when mode or date changes (except custom range)
+    useEffect(() => {
+        if (viewMode !== 'custom') fetchHistory();
+    }, [fetchHistory, viewMode, selectedDate]);
+
+    const onMainDateChange = (event, date) => {
+        setShowMainPicker(Platform.OS === 'ios');
+        if (date) setSelectedDate(date);
     };
 
-    const percentage = useMemo(() => {
-        if (!data.summary?.total_days || data.summary.total_days === 0) return '0.0';
-        return ((data.summary.present_days / data.summary.total_days) * 100).toFixed(1);
-    }, [data.summary]);
+    const onFromDateChange = (event, date) => {
+        setShowFromPicker(Platform.OS === 'ios');
+        if (date) setFromDate(date);
+    };
+
+    const onToDateChange = (event, date) => {
+        setShowToPicker(Platform.OS === 'ios');
+        if (date) setToDate(date);
+    };
+
+    // Stats Calculation
+    const summary = data?.summary || { total_days: 0, present_days: 0, absent_days: 0 };
+    const percentage = summary.total_days > 0 ? ((summary.present_days / summary.total_days) * 100).toFixed(1) : '0.0';
+    
+    // Daily Record logic (find the record matching selected date)
+    const dailyRecord = (viewMode === 'daily' && data?.history?.length) 
+        ? data.history.find(r => r.attendance_date.startsWith(selectedDate.toISOString().split('T')[0])) || data.history[0]
+        : null;
 
     return (
         <SafeAreaView style={attStyles.container}>
+            {/* TABS */}
             <View style={attStyles.toggleContainer}>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'daily' && attStyles.toggleButtonActive]} onPress={() => setViewMode('daily')}><Text style={[attStyles.toggleButtonText, viewMode === 'daily' && attStyles.toggleButtonTextActive]}>Daily</Text></TouchableOpacity>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'monthly' && attStyles.toggleButtonActive]} onPress={() => setViewMode('monthly')}><Text style={[attStyles.toggleButtonText, viewMode === 'monthly' && attStyles.toggleButtonTextActive]}>Monthly</Text></TouchableOpacity>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'overall' && attStyles.toggleButtonActive]} onPress={() => setViewMode('overall')}><Text style={[attStyles.toggleButtonText, viewMode === 'overall' && attStyles.toggleButtonTextActive]}>Overall</Text></TouchableOpacity>
-                <TouchableOpacity style={attStyles.calendarButton} onPress={() => setShowDatePicker(true)}><Icon name="calendar" size={22} color={PRIMARY_COLOR} /></TouchableOpacity>
+                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'daily' && attStyles.toggleButtonActive]} onPress={() => setViewMode('daily')}>
+                    <Text style={[attStyles.toggleButtonText, viewMode === 'daily' && attStyles.toggleButtonTextActive]}>Daily</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'monthly' && attStyles.toggleButtonActive]} onPress={() => setViewMode('monthly')}>
+                    <Text style={[attStyles.toggleButtonText, viewMode === 'monthly' && attStyles.toggleButtonTextActive]}>Monthly</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'yearly' && attStyles.toggleButtonActive]} onPress={() => setViewMode('yearly')}>
+                    <Text style={[attStyles.toggleButtonText, viewMode === 'yearly' && attStyles.toggleButtonTextActive]}>Yearly</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'custom' && attStyles.toggleButtonActive]} onPress={() => setViewMode('custom')}>
+                    <Text style={[attStyles.toggleButtonText, viewMode === 'custom' && attStyles.toggleButtonTextActive]}>Range</Text>
+                </TouchableOpacity>
+                
+                {viewMode !== 'custom' && (
+                    <TouchableOpacity style={attStyles.calendarButton} onPress={() => setShowMainPicker(true)}>
+                        <Icon name="calendar" size={22} color={PRIMARY_COLOR} />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {showDatePicker && (<DateTimePicker value={selectedDate} mode="date" display="default" onChange={onDateChange} />)}
+            {/* Subtitle */}
+            <View style={attStyles.subtitleContainer}>
+                 {viewMode === 'daily' && <Text style={attStyles.subtitle}>Date: {formatDate(selectedDate)}</Text>}
+                 {viewMode === 'monthly' && <Text style={attStyles.subtitle}>Month: {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
+                 {viewMode === 'yearly' && <Text style={attStyles.subtitle}>Year: {selectedDate.getFullYear()}</Text>}
+                 {viewMode === 'custom' && <Text style={attStyles.subtitle}>Custom Range</Text>}
+            </View>
+
+            {/* Range Inputs */}
+            {viewMode === 'custom' && (
+                <Animatable.View animation="fadeIn" duration={300} style={attStyles.rangeContainer}>
+                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowFromPicker(true)}>
+                        <Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/>
+                        <Text style={attStyles.dateInputText}>{formatDate(fromDate)}</Text>
+                    </TouchableOpacity>
+                    <Icon name="arrow-right" size={20} color="#566573" />
+                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowToPicker(true)}>
+                        <Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/>
+                        <Text style={attStyles.dateInputText}>{formatDate(toDate)}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={attStyles.goButton} onPress={fetchHistory}>
+                        <Text style={attStyles.goButtonText}>Go</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            )}
+
+            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
+            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={onFromDateChange} />}
+            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={onToDateChange} />}
 
             {isLoading ? <ActivityIndicator style={{ marginVertical: 30 }} size="large" color={PRIMARY_COLOR} /> : (
                 <>
-                    <View style={attStyles.summaryContainer}>
-                        <SummaryCard label="Overall %" value={`${percentage}%`} color={BLUE} delay={100} />
-                        <SummaryCard label="Days Present" value={data.summary.present_days || 0} color={GREEN} delay={200} />
-                        <SummaryCard label="Days Absent" value={data.summary.absent_days || 0} color={RED} delay={300} />
-                    </View>
-                    <FlatList
-                        data={data.history}
-                        keyExtractor={(item) => item.attendance_date}
-                        renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} />}
-                        ListHeaderComponent={<Text style={attStyles.historyTitle}>Detailed History ({capitalize(viewMode)})</Text>}
-                        ListEmptyComponent={<Text style={attStyles.noDataText}>No records found for this period.</Text>}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                        nestedScrollEnabled // Important for FlatList inside ScrollView
-                    />
+                    {viewMode === 'daily' ? (
+                         <View style={{ padding: 20, alignItems: 'center' }}>
+                            <DailyStatusCard record={dailyRecord} date={selectedDate} />
+                        </View>
+                    ) : (
+                        <View style={attStyles.summaryContainer}>
+                            <SummaryCard label="Overall %" value={`${percentage}%`} color={BLUE} delay={100} />
+                            <SummaryCard label="Working Days" value={summary.total_days || 0} color={ORANGE} delay={150} />
+                            <SummaryCard label="Days Present" value={summary.present_days || 0} color={GREEN} delay={200} />
+                            <SummaryCard label="Days Absent" value={summary.absent_days || 0} color={RED} delay={300} />
+                        </View>
+                    )}
+                    
+                    {/* No Detailed History List here, as requested */}
                 </>
             )}
         </SafeAreaView>
@@ -176,7 +306,7 @@ const StudentDetailScreen = ({ route }) => {
     const [isAcademicExpanded, setIsAcademicExpanded] = useState(false);
     const [isTimetableExpanded, setIsTimetableExpanded] = useState(false);
     const [isReportCardExpanded, setIsReportCardExpanded] = useState(false);
-    const [isAttendanceExpanded, setIsAttendanceExpanded] = useState(false); // New state
+    const [isAttendanceExpanded, setIsAttendanceExpanded] = useState(false); 
     const [reportCardData, setReportCardData] = useState(null);
     const [reportCardLoading, setReportCardLoading] = useState(false);
     
@@ -202,7 +332,11 @@ const StudentDetailScreen = ({ route }) => {
     const scrollToBottom = () => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
     const handleAcademicToggle = () => { if (!isAcademicExpanded) scrollToBottom(); setIsAcademicExpanded(prevState => !prevState); };
     const handleTimetableToggle = () => { if (!isTimetableExpanded) scrollToBottom(); setIsTimetableExpanded(prevState => !prevState); };
-    const handleAttendanceToggle = () => { if (!isAttendanceExpanded) scrollToBottom(); setIsAttendanceExpanded(prevState => !prevState); }; // New handler
+    
+    const handleAttendanceToggle = () => {
+        if (!isAttendanceExpanded) scrollToBottom(); 
+        setIsAttendanceExpanded(prevState => !prevState); 
+    }; 
 
     const handleReportCardToggle = async () => {
         if (!studentDetails || !studentDetails.id) return;
@@ -245,7 +379,7 @@ const StudentDetailScreen = ({ route }) => {
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleAcademicToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Academic Details</Text><Text style={styles.arrowIcon}>{isAcademicExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isAcademicExpanded && (<View style={styles.cardContent}><DetailRow label="Class" value={studentDetails.class_group} /><DetailRow label="Roll No." value={studentDetails.roll_no} /><DetailRow label="Admission No." value={studentDetails.admission_no} /><DetailRow label="Parent Name" value={studentDetails.parent_name} /><DetailRow label="Aadhar No." value={studentDetails.aadhar_no} /><DetailRow label="PEN No." value={studentDetails.pen_no} /><DetailRow label="Admission Date" value={studentDetails.admission_date} /></View>)}</View>
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleTimetableToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Timetable</Text><Text style={styles.arrowIcon}>{isTimetableExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isTimetableExpanded && <StudentTimetable classGroup={studentDetails.class_group} />}</View>
 
-                {/* ★★★ NEW ATTENDANCE SECTION ★★★ */}
+                {/* ATTENDANCE SECTION */}
                 <View style={styles.collapsibleCard}>
                     <TouchableOpacity style={styles.collapsibleHeader} onPress={handleAttendanceToggle} activeOpacity={0.8}>
                         <Text style={styles.collapsibleTitle}>Attendance</Text>
@@ -285,21 +419,37 @@ const rcStyles = StyleSheet.create({
 const attStyles = StyleSheet.create({
     container: { flex: 1, backgroundColor: WHITE },
     noDataText: { textAlign: 'center', marginTop: 20, color: '#566573', fontSize: 16 },
-    toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 5, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: '#E0E0E0', alignItems: 'center' },
-    toggleButton: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, marginHorizontal: 5, backgroundColor: '#E0E0E0' },
+    
+    toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 5, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: '#E0E0E0', alignItems: 'center', flexWrap: 'wrap' },
+    toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, backgroundColor: '#E0E0E0', marginBottom: 5 },
     toggleButtonActive: { backgroundColor: PRIMARY_COLOR },
-    toggleButtonText: { color: '#37474F', fontWeight: '600' },
+    toggleButtonText: { color: '#37474F', fontWeight: '600', fontSize: 13 },
     toggleButtonTextActive: { color: WHITE },
-    calendarButton: { padding: 8, marginLeft: 10, justifyContent: 'center', alignItems: 'center' },
-    summaryContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 15, backgroundColor: WHITE },
-    summaryBox: { alignItems: 'center', flex: 1, paddingVertical: 10, paddingHorizontal: 5 },
-    summaryValue: { fontSize: 24, fontWeight: 'bold' },
-    summaryLabel: { fontSize: 13, color: '#566573', marginTop: 5, fontWeight: '500', textAlign: 'center' },
-    historyTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 15, marginTop: 15, marginBottom: 10, color: '#37474F' },
+    calendarButton: { padding: 8, marginLeft: 5 },
+    
+    subtitleContainer: { alignItems: 'center', paddingVertical: 5 },
+    subtitle: { fontSize: 14, color: '#566573' },
+    
+    rangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: '#f9f9f9', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
+    dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', padding: 10, borderRadius: 6, marginHorizontal: 5, justifyContent: 'center' },
+    dateInputText: { color: '#37474F', fontSize: 13, fontWeight: '500' },
+    goButton: { backgroundColor: GREEN, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
+    goButtonText: { color: WHITE, fontWeight: 'bold' },
+
+    summaryContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', paddingVertical: 15, backgroundColor: WHITE },
+    summaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2 },
+    summaryValue: { fontSize: 20, fontWeight: 'bold' },
+    summaryLabel: { fontSize: 12, color: '#566573', marginTop: 5, textAlign: 'center' },
+    
+    // History Styles (Only used for Card now if needed, or kept for future ref)
     historyDayCard: { backgroundColor: WHITE, marginHorizontal: 15, marginVertical: 8, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 5 },
     historyDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
     historyDate: { fontSize: 16, fontWeight: '600', color: '#37474F' },
     historyStatus: { fontSize: 14, fontWeight: 'bold' },
+
+    dailyCard: { width: '100%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, elevation: 2 },
+    dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+    dailyDateText: { fontSize: 16, marginTop: 5 },
 });
 
 export default StudentDetailScreen;

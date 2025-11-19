@@ -1,13 +1,19 @@
+/**
+ * File: src/screens/report/TeacherPerformanceScreen.js
+ * Purpose: Analyze teacher performance with accurate percentage calculations
+ * derived from backend, consistent rank-based coloring, and detailed breakdowns.
+ */
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, ActivityIndicator,
-    TouchableOpacity, RefreshControl, FlatList
+    View, Text, StyleSheet, ActivityIndicator,
+    FlatList, Alert, RefreshControl
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
-// Helper to generate academic years
+// --- Helper: Generate Years ---
 const generateAcademicYears = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
@@ -28,25 +34,26 @@ const TeacherPerformanceScreen = () => {
     const [performanceData, setPerformanceData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
     
-    // ★★★ NEW ★★★: State for sorting, default is 'high-low'
-    const [sortOrder, setSortOrder] = useState('high-low');
+    // Filters
+    const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
+    const [sortBy, setSortBy] = useState('high-low'); // 'high-low', 'low-high'
 
+    // --- Fetch Data ---
     const fetchData = async () => {
         if (!userId || !selectedYear) return;
         setLoading(true);
         try {
             let response;
+            // The backend now returns accurate weighted percentages
             if (userRole === 'admin') {
                 response = await apiClient.get(`/performance/admin/all-teachers/${selectedYear}`);
             } else {
                 response = await apiClient.get(`/performance/teacher/${userId}/${selectedYear}`);
             }
-            setPerformanceData(response.data);
+            setPerformanceData(response.data || []);
         } catch (error) {
             console.error('Error fetching performance data:', error);
-            // Alert.alert('Error', 'Failed to load performance data.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -62,143 +69,227 @@ const TeacherPerformanceScreen = () => {
         fetchData();
     };
 
-    // ★★★ NEW ★★★: Memoized sorting logic for admin data
-    const sortedAdminData = useMemo(() => {
-        if (userRole !== 'admin' || !performanceData || performanceData.length === 0) {
-            return performanceData;
+    // --- Logic: Sort & Rank ---
+    const processedData = useMemo(() => {
+        if (!performanceData || performanceData.length === 0) return [];
+
+        let mappedData = [];
+
+        if (userRole === 'admin') {
+            // Admin View: List of Teachers
+            mappedData = performanceData.map((teacher) => {
+                // The backend already calculates the weighted overall average
+                const percentage = parseFloat(teacher.overall_average) || 0;
+                const totalObtained = teacher.overall_total || 0;
+
+                return {
+                    id: teacher.teacher_id,
+                    name: teacher.teacher_name,
+                    totalManaged: totalObtained,
+                    percentage: percentage,
+                    details: teacher.detailed_performance || [],
+                    performanceRank: 0 // Placeholder
+                };
+            });
+        } else {
+            // Teacher View: List of Classes
+            // Treat each class as an item to be ranked
+            mappedData = performanceData.map((item, index) => {
+                // Backend sends 'average_marks' which is now the correct percentage
+                const percentage = parseFloat(item.average_marks) || 0;
+                return {
+                    id: index,
+                    name: `${item.class_group}`,
+                    subName: item.subject,
+                    totalManaged: item.total_marks,
+                    maxPossible: item.max_possible_marks, // Use this if you want to show "280/300"
+                    percentage: percentage,
+                    details: [], 
+                    performanceRank: 0
+                };
+            });
         }
+
+        // 1. Assign Ranks based on Percentage (High to Low always for Ranking)
+        mappedData.sort((a, b) => b.percentage - a.percentage);
+        mappedData = mappedData.map((item, index) => ({
+            ...item,
+            performanceRank: index + 1
+        }));
+
+        // 2. Apply Display Sort
+        if (sortBy === 'low-high') {
+            mappedData.sort((a, b) => a.percentage - b.percentage);
+        } else {
+            // Default High-Low
+            mappedData.sort((a, b) => b.percentage - a.percentage);
+        }
+
+        return mappedData;
+    }, [performanceData, sortBy, userRole]);
+
+
+    // --- Helper: Get Color based on Rank ---
+    const getColorForRank = (rank, totalItems) => {
+        const RED = '#d32f2f';      // Rank 1
+        const GREEN = '#2e7d32';    // Rank 2
+        const BLUE = '#1565c0';     // Rank 3
+        const BLACK = '#000000';    // Bottom 3
+        const BROWN = '#795548';    // Others
+
+        if (rank === 1) return RED;
+        if (rank === 2) return GREEN;
+        if (rank === 3) return BLUE;
         
-        // Create a copy to avoid mutating the original state array
-        const dataToSort = [...performanceData];
-        
-        return dataToSort.sort((a, b) => {
-            const avgA = parseFloat(a.overall_average);
-            const avgB = parseFloat(b.overall_average);
+        // If rank is one of the last 3 (and there are at least 3 items)
+        if (rank > totalItems - 3 && totalItems >= 3) return BLACK;
 
-            if (sortOrder === 'high-low') {
-                return avgB - avgA; // For descending order
-            } else {
-                return avgA - avgB; // For ascending order
-            }
-        });
-    }, [performanceData, sortOrder, userRole]);
+        return BROWN;
+    };
 
+    // --- Render Item ---
+    const renderItem = ({ item }) => {
+        const totalItems = processedData.length;
+        const itemColor = getColorForRank(item.performanceRank, totalItems);
 
-    const renderAdminView = () => (
-        <FlatList
-            // ★★★ MODIFIED ★★★: Use the sorted data
-            data={sortedAdminData} 
-            keyExtractor={item => item.teacher_id.toString()}
-            renderItem={({ item }) => (
-                <View style={styles.teacherCard}>
-                    <View style={styles.teacherHeader}>
-                        <Text style={styles.teacherName}>{item.teacher_name}</Text>
-                         <View style={styles.teacherStatsContainer}>
-                            <Text style={styles.overallStat}>
-                                Total: <Text style={styles.overallValue}>{item.overall_total}</Text>
-                            </Text>
-                            <Text style={styles.overallStat}>
-                                Avg: <Text style={styles.overallValue}>{item.overall_average}%</Text>
-                            </Text>
-                        </View>
+        return (
+            <View style={styles.cardContainer}>
+                {/* MAIN CARD HEADER */}
+                <View style={[styles.cardHeader, { borderLeftColor: itemColor }]}>
+                    {/* Rank Badge */}
+                    <View style={styles.rankContainer}>
+                        <Text style={styles.rankText}>#{item.performanceRank}</Text>
                     </View>
 
-                    {item.detailed_performance.length > 0 ? (
-                        <>
-                            <View style={styles.detailHeaderRow}>
-                                <Text style={[styles.detailHeaderText, styles.detailClassSubject]}>Class / Subject</Text>
-                                <Text style={[styles.detailHeaderText, styles.detailTotal]}>Total Marks</Text>
-                                <Text style={[styles.detailHeaderText, styles.detailAverage]}>Average</Text>
-                            </View>
-                            {item.detailed_performance.map((detail, index) => (
-                                <View key={index} style={styles.detailRow}>
-                                    <Text style={styles.detailClassSubject}>{`${detail.class_group} - ${detail.subject}`}</Text>
-                                    <Text style={styles.detailTotal}>{detail.total_marks}</Text>
-                                    <Text style={styles.detailAverage}>{parseFloat(detail.average_marks).toFixed(2)}%</Text>
-                                </View>
-                            ))}
-                        </>
-                    ) : (
-                        <View style={styles.detailRow}>
-                            <Text style={styles.noDataText}>No performance data available for this year.</Text>
+                    {/* Info Section */}
+                    <View style={styles.infoContainer}>
+                        <Text style={styles.titleText}>{item.name}</Text>
+                        {item.subName && <Text style={styles.subSubjectText}>{item.subName}</Text>}
+                        
+                        <View style={styles.statsRow}>
+                            <Text style={styles.subText}>
+                                Marks: <Text style={{ color: '#2c3e50', fontWeight: '600' }}>
+                                    {Math.round(item.totalManaged)} 
+                                    {/* Optional: Show Denominator for Teacher View */}
+                                    {userRole !== 'admin' && item.maxPossible ? ` / ${item.maxPossible}` : ''}
+                                </Text>
+                            </Text>
                         </View>
-                    )}
-                </View>
-            )}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            contentContainerStyle={{ paddingBottom: 20 }}
-        />
-    );
+                        
+                        <View style={styles.progressBarContainer}>
+                            <View 
+                                style={[
+                                    styles.progressBarFill, 
+                                    { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: itemColor }
+                                ]} 
+                            />
+                        </View>
+                        <Text style={styles.avgText}>
+                           Performance: {item.percentage.toFixed(2)}%
+                        </Text>
+                    </View>
 
-    const renderTeacherView = () => (
-        <FlatList
-            data={performanceData}
-            keyExtractor={(item, index) => `${item.class_group}-${item.subject}-${index}`}
-            ListHeaderComponent={() => (
-                <View style={[styles.tableRow, styles.headerRow]}>
-                    <Text style={[styles.headerText, { flex: 2.5 }]}>Class Group</Text>
-                    <Text style={[styles.headerText, { flex: 2.5 }]}>Subject</Text>
-                    <Text style={[styles.headerText, { flex: 2, textAlign: 'right' }]}>Total Marks</Text>
-                    <Text style={[styles.headerText, { flex: 2, textAlign: 'right' }]}>Average</Text>
+                    {/* Percentage Circle */}
+                    <View style={[styles.percentBadge, { borderColor: itemColor }]}>
+                        <Text style={[styles.percentText, { color: itemColor }]}>
+                            {Math.round(item.percentage)}%
+                        </Text>
+                    </View>
                 </View>
-            )}
-            renderItem={({ item }) => (
-                <View style={styles.tableRow}>
-                    <Text style={[styles.cellText, { flex: 2.5 }]}>{item.class_group}</Text>
-                    <Text style={[styles.cellText, { flex: 2.5 }]}>{item.subject}</Text>
-                    <Text style={[styles.cellText, { flex: 2, textAlign: 'right' }]}>{item.total_marks}</Text>
-                    <Text style={[styles.cellText, { flex: 2, textAlign: 'right', fontWeight: 'bold' }]}>
-                        {parseFloat(item.average_marks).toFixed(2)}%
-                    </Text>
-                </View>
-            )}
-            ListEmptyComponent={() => (
-                <View style={styles.noDataContainer}>
-                    <Text style={styles.noDataText}>No performance data found for the selected year.</Text>
-                </View>
-            )}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        />
-    );
+
+                {/* DETAILED CLASS BREAKDOWN (Admin Only) */}
+                {userRole === 'admin' && item.details && item.details.length > 0 && (
+                    <View style={styles.detailsContainer}>
+                        <View style={styles.detailHeaderRow}>
+                            <Text style={[styles.detailHeaderLabel, { flex: 3 }]}>Class / Subject</Text>
+                            <Text style={[styles.detailHeaderLabel, { flex: 2, textAlign: 'center' }]}>Score</Text>
+                            <Text style={[styles.detailHeaderLabel, { flex: 2, textAlign: 'right' }]}>Perf %</Text>
+                        </View>
+                        
+                        {item.details.map((detail, idx) => (
+                            <View key={idx} style={styles.detailRow}>
+                                <Text style={[styles.detailText, { flex: 3, color: '#546E7A' }]}>
+                                    {detail.class_group} - {detail.subject}
+                                </Text>
+                                <Text style={[styles.detailText, { flex: 2, textAlign: 'center' }]}>
+                                    {/* Show Obtained / Max */}
+                                    {detail.total_marks}/{detail.max_possible_marks}
+                                </Text>
+                                <Text style={[styles.detailText, { flex: 2, textAlign: 'right', fontWeight: 'bold', color: '#2c3e50' }]}>
+                                    {parseFloat(detail.average_marks).toFixed(2)}%
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+            </View>
+        );
+    };
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Teacher Performance</Text>
-                {/* ★★★ MODIFIED ★★★: New layout for filters */}
-                <View style={styles.filtersRow}>
-                    <View style={[styles.pickerContainer, { flex: 1 }]}>
-                        <Picker
-                            selectedValue={selectedYear}
-                            onValueChange={(itemValue) => setSelectedYear(itemValue)}
-                        >
-                            {ACADEMIC_YEARS.map(year => (
-                                <Picker.Item key={year} label={`${year}`} value={year} />
-                            ))}
-                        </Picker>
-                    </View>
-
-                    {/* Show sort picker only for admin */}
-                    {userRole === 'admin' && (
-                        <View style={[styles.pickerContainer, { flex: 1, marginLeft: 10 }]}>
+            {/* Screen Header */}
+            <View style={styles.screenHeader}>
+                <Text style={styles.screenTitle}>
+                    {userRole === 'admin' ? 'Teacher Performance' : 'My Class Performance'}
+                </Text>
+                
+                <View style={styles.controlsRow}>
+                    {/* Year Selector */}
+                    <View style={styles.pickerWrapper}>
+                        <Text style={styles.pickerLabel}>Academic Year</Text>
+                        <View style={styles.pickerBox}>
                             <Picker
-                                selectedValue={sortOrder}
-                                onValueChange={(itemValue) => setSortOrder(itemValue)}
+                                selectedValue={selectedYear}
+                                onValueChange={(val) => setSelectedYear(val)}
+                                style={styles.picker}
+                                dropdownIconColor="#34495e"
                             >
-                                <Picker.Item label="Sort: High to Low" value="high-low" />
-                                <Picker.Item label="Sort: Low to High" value="low-high" />
+                                {ACADEMIC_YEARS.map(year => (
+                                    <Picker.Item key={year} label={year} value={year} />
+                                ))}
                             </Picker>
                         </View>
-                    )}
+                    </View>
+
+                    {/* Sort Selector */}
+                    <View style={styles.pickerWrapper}>
+                        <Text style={styles.pickerLabel}>Sort By</Text>
+                        <View style={styles.pickerBox}>
+                            <Picker
+                                selectedValue={sortBy}
+                                onValueChange={(val) => setSortBy(val)}
+                                style={styles.picker}
+                                dropdownIconColor="#34495e"
+                            >
+                                <Picker.Item label="High to Low" value="high-low" />
+                                <Picker.Item label="Low to High" value="low-high" />
+                            </Picker>
+                        </View>
+                    </View>
                 </View>
             </View>
 
+            {/* Content */}
             {loading ? (
-                <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 50 }} />
-            ) : userRole === 'admin' ? (
-                renderAdminView()
+                <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color="#008080" />
+                    <Text style={styles.loadingText}>Calculating Performance...</Text>
+                </View>
             ) : (
-                renderTeacherView()
+                <FlatList
+                    data={processedData}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.listContent}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    ListEmptyComponent={
+                        <View style={styles.centerContainer}>
+                            <Icon name="chart-bar-stacked" size={50} color="#bdc3c7" />
+                            <Text style={styles.emptyText}>No performance records found.</Text>
+                        </View>
+                    }
+                />
             )}
         </View>
     );
@@ -207,148 +298,189 @@ const TeacherPerformanceScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f4f6f8',
+        backgroundColor: '#f0f2f5',
     },
-    header: {
-        backgroundColor: '#ffffff',
-        paddingHorizontal: 15,
-        paddingTop: 15,
-        paddingBottom: 10,
+    screenHeader: {
+        backgroundColor: '#fff',
+        padding: 15,
         borderBottomWidth: 1,
-        borderBottomColor: '#dfe4ea',
+        borderBottomColor: '#e0e0e0',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
     },
-    title: {
-        fontSize: 24,
+    screenTitle: {
+        fontSize: 22,
         fontWeight: 'bold',
-        color: '#2c3e50',
+        color: '#008080',
         marginBottom: 15,
     },
-    // ★★★ NEW ★★★
-    filtersRow: {
+    controlsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        gap: 10,
     },
-    pickerContainer: {
+    pickerWrapper: {
+        flex: 1,
+    },
+    pickerLabel: {
+        fontSize: 12,
+        color: '#7f8c8d',
+        marginBottom: 4,
+        fontWeight: '600',
+    },
+    pickerBox: {
         borderWidth: 1,
-        borderColor: '#ced4da',
+        borderColor: '#bdc3c7',
         borderRadius: 8,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#f8f9fa',
+        height: 45,
         justifyContent: 'center',
     },
-    // Admin View Styles
-    teacherCard: {
+    picker: {
+        width: '100%',
+        color: '#2c3e50',
+    },
+    listContent: {
+        padding: 15,
+        paddingBottom: 30,
+    },
+    
+    // --- Main Card Styles ---
+    cardContainer: {
         backgroundColor: '#fff',
-        marginHorizontal: 15,
-        marginTop: 15,
-        borderRadius: 8,
-        elevation: 2,
+        borderRadius: 12,
+        marginBottom: 15,
+        elevation: 3,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 2,
+        shadowRadius: 4,
         overflow: 'hidden',
     },
-    teacherHeader: {
+    cardHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         padding: 15,
-        backgroundColor: '#34495e',
+        alignItems: 'center',
+        borderLeftWidth: 5, // Color indicator on left
     },
-    teacherName: {
-        fontSize: 18,
+    rankContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f0f2f5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    rankText: {
         fontWeight: 'bold',
-        color: '#ffffff',
-        flexShrink: 1,
-    },
-    teacherStatsContainer: {
-       alignItems: 'flex-end',
-    },
-    overallStat: {
+        color: '#546E7A',
         fontSize: 14,
-        color: '#ecf0f1',
     },
-    overallValue: {
+    infoContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    titleText: {
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#2ecc71',
+        color: '#2c3e50',
+        textTransform: 'uppercase',
+    },
+    subSubjectText: {
+        fontSize: 14,
+        color: '#34495e',
+        fontWeight: '500',
+    },
+    subText: {
+        fontSize: 12,
+        color: '#7f8c8d',
+        marginTop: 2,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    progressBarContainer: {
+        height: 6,
+        backgroundColor: '#ecf0f1',
+        borderRadius: 3,
+        marginTop: 6,
+        width: '95%',
+        overflow: 'hidden',
+    },
+    progressBarFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    avgText: {
+        fontSize: 11,
+        color: '#34495e',
+        marginTop: 3,
+        fontWeight: '600',
+    },
+    percentBadge: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        borderWidth: 3,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 10,
+    },
+    percentText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+
+    // --- Detailed Table Styles ---
+    detailsContainer: {
+        backgroundColor: '#f8f9fa',
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
     },
     detailHeaderRow: {
         flexDirection: 'row',
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        backgroundColor: '#ecf0f1',
+        marginBottom: 8,
+        paddingBottom: 5,
         borderBottomWidth: 1,
-        borderBottomColor: '#dfe4ea',
+        borderBottomColor: '#e0e0e0',
     },
-    detailHeaderText: {
-        fontSize: 13,
+    detailHeaderLabel: {
+        fontSize: 12,
         fontWeight: 'bold',
-        color: '#34495e',
+        color: '#546E7A',
     },
     detailRow: {
         flexDirection: 'row',
-        paddingVertical: 12,
-        paddingHorizontal: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f2f5',
+        paddingVertical: 4,
     },
-    detailClassSubject: {
-        flex: 3,
-        fontSize: 15,
-        color: '#34495e',
+    detailText: {
+        fontSize: 13,
+        color: '#37474F',
     },
-    detailTotal: {
-        flex: 2,
-        fontSize: 15,
-        color: '#2c3e50',
-        textAlign: 'right',
-    },
-    detailAverage: {
-        flex: 2,
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: '#2c3e50',
-        textAlign: 'right',
-    },
-    // Teacher View & Shared Styles
-    tableRow: {
-        flexDirection: 'row',
-        padding: 15,
-        marginHorizontal: 15,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#dfe4ea',
-        alignItems: 'center',
-    },
-    headerRow: {
-        backgroundColor: '#e9ecef',
-        borderTopLeftRadius: 8,
-        borderTopRightRadius: 8,
-        marginTop: 15,
-        borderBottomWidth: 2,
-        borderBottomColor: '#d1d8e0',
-    },
-    headerText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#495057',
-    },
-    cellText: {
-        fontSize: 15,
-        color: '#2c3e50',
-    },
-    noDataContainer: {
+
+    // --- States ---
+    centerContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 50,
     },
-    noDataText: {
+    loadingText: {
+        marginTop: 10,
+        color: '#008080',
+        fontWeight: '500',
+    },
+    emptyText: {
+        marginTop: 10,
+        color: '#95a5a6',
         fontSize: 16,
-        color: '#7f8c8d',
-        textAlign: 'center',
-        padding: 20,
     },
 });
 
