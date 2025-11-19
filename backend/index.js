@@ -6885,19 +6885,17 @@ app.get('/api/all-classes', async (req, res) => {
 
 
 // ==========================================================
-// --- TEACHER ATTENDANCE MODULE API ROUTES (FINAL FOR EDITING) ---
+// --- TEACHER ATTENDANCE MODULE API ROUTES ---
 // ==========================================================
 
-// Helper function (Calculates stats including Working Days)
+// Helper function
 const calculateTeacherAttendanceStats = (records) => {
-    const totalDays = records.length; // Total records found (Working Days)
+    const totalDays = records.length; 
     const daysPresent = records.filter(r => r.status === 'P').length;
     const daysAbsent = records.filter(r => r.status === 'A').length;
-    // Working Days = Present + Absent (Total records found in the period)
-    // If you want to exclude 'Late' from working days, adjust here. Assuming L is part of working days:
+    // Working Days = Present + Absent + Late
     const totalCountedDays = daysPresent + daysAbsent + records.filter(r => r.status === 'L').length; 
     
-    // Calculate percentage based on Present vs Total
     const overallPercentage = totalCountedDays > 0 ? ((daysPresent / totalCountedDays) * 100).toFixed(1) : '0.0';
     
     return {
@@ -6998,12 +6996,11 @@ app.get('/api/teacher-attendance/sheet', verifyToken, isAdmin, async (req, res) 
     }
 });
 
-// 4. REPORT ENDPOINT (UPDATED FOR YEARLY)
+// 4. REPORT ENDPOINT
 app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, res) => {
     const { teacherId } = req.params;
     const { period, targetDate, targetMonth, targetYear, startDate, endDate } = req.query;
     
-    // Security check
     if (req.user.role === 'teacher' && String(req.user.id) !== teacherId) {
         return res.status(403).json({ message: 'Access denied.' });
     }
@@ -7012,7 +7009,6 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
     let params = [teacherId];
 
     try {
-        // --- Filter Logic ---
         if (period === 'daily' && targetDate) {
             query += ' AND date = ?';
             params.push(targetDate);
@@ -7020,7 +7016,6 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
             query += ' AND DATE_FORMAT(date, "%Y-%m") = ?';
             params.push(targetMonth);
         } else if (period === 'yearly' && targetYear) {
-            // NEW: Filter by Year
             query += ' AND DATE_FORMAT(date, "%Y") = ?';
             params.push(targetYear);
         } else if (startDate && endDate) {
@@ -7036,7 +7031,7 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
                 overallPercentage: stats.overallPercentage,
                 daysPresent: stats.daysPresent,
                 daysAbsent: stats.daysAbsent,
-                totalDays: stats.totalDays // Working Days
+                totalDays: stats.totalDays 
             },
             detailedHistory: records
         });

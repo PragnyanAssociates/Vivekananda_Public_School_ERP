@@ -18,6 +18,7 @@ interface Teacher {
 interface TeacherMarking extends Teacher {
   status: 'P' | 'A' | 'L'; 
 }
+
 // --- Theme Constants ---
 const PRIMARY_COLOR = '#008080';
 const TEXT_COLOR_DARK = '#37474F';
@@ -28,6 +29,14 @@ const RED = '#E53935';
 const WHITE = '#FFFFFF';
 
 const API_BASE_URL = '/teacher-attendance';
+
+// --- DATE FORMATTER HELPER (DD/MM/YYYY) ---
+const formatDate = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+};
 
 const TeacherAttendanceMarkingScreen = () => {
   const { user } = useAuth();
@@ -45,6 +54,7 @@ const TeacherAttendanceMarkingScreen = () => {
   
   // --- CORE FUNCTION TO FETCH LIST AND CHECK STATUS ---
   const loadMarkingDataForDate = useCallback(async (dateToCheck: Date) => {
+    // API expects YYYY-MM-DD
     const dateString = dateToCheck.toISOString().slice(0, 10);
     
     try {
@@ -52,11 +62,10 @@ const TeacherAttendanceMarkingScreen = () => {
         const response = await apiClient.get<TeacherMarking[]>(`${API_BASE_URL}/sheet?date=${dateString}`);
         const teachersData = response.data; 
 
-        // Set both the mutable marking list and the static report list
         setTeachers(teachersData);
         setAllTeachersForReport(teachersData); 
 
-        // 2. Check if *any* teacher was marked Absent or Late (meaning attendance was saved)
+        // 2. Check if *any* teacher was marked Absent or Late
         const attendanceExists = teachersData.some(t => t.status === 'A' || t.status === 'L');
         
         if (attendanceExists) {
@@ -73,7 +82,6 @@ const TeacherAttendanceMarkingScreen = () => {
         setIsLoading(false);
     }
   }, []);
-  
   
   // Load data when component mounts or attendanceDate changes
   useEffect(() => {
@@ -118,7 +126,6 @@ const TeacherAttendanceMarkingScreen = () => {
         attendanceData,
       });
 
-      // SUCCESS: Switch to Summary View immediately
       setMarkingState('SUCCESS_SUMMARY');
       
     } catch (error: any) {
@@ -193,7 +200,7 @@ const TeacherAttendanceMarkingScreen = () => {
           <Icon name="check-circle-outline" size={80} color={GREEN} />
           <Text style={styles.summaryTitle}>Attendance Marked!</Text>
           <Text style={styles.summaryMessage}>
-              Attendance for {attendanceDate.toLocaleDateString()} has been saved successfully.
+              Attendance for {formatDate(attendanceDate)} has been saved successfully.
               You can click "Edit Attendance" to make any changes.
           </Text>
           <TouchableOpacity 
@@ -245,7 +252,7 @@ const TeacherAttendanceMarkingScreen = () => {
                     <View style={styles.dateSelector}>
                         <Text style={styles.label}>Date:</Text>
                         <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateInput}>
-                            <Text>{attendanceDate.toLocaleDateString()}</Text>
+                            <Text>{formatDate(attendanceDate)}</Text>
                         </TouchableOpacity>
                     </View>
                     {showDatePicker && (

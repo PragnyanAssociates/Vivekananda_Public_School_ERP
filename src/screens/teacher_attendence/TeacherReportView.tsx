@@ -28,14 +28,24 @@ interface AttendanceReport {
     overallPercentage: string;
     daysPresent: number;
     daysAbsent: number;
-    totalDays: number; // Working Days
+    totalDays: number; 
   };
   detailedHistory: AttendanceRecord[];
 }
 
+// --- DATE FORMATTER HELPER (DD/MM/YYYY) ---
+const formatDate = (date: Date | string) => {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+};
+
 // --- Reusable Sub-components ---
 
-// 1. Summary Card (For Monthly/Yearly/Range Views)
+// 1. Summary Card
 const SummaryCard = ({ label, value, color, delay, width = '23%' }) => ( 
     <Animatable.View animation="zoomIn" duration={500} delay={delay} style={[styles.summaryBox, { width: width }]}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
@@ -52,7 +62,7 @@ const HistoryRecordCard = ({ item, index }) => {
     return (
         <Animatable.View animation="fadeInUp" duration={400} delay={index * 100} style={styles.historyRecordCard}>
             <View style={styles.historyRecordHeader}>
-                <Text style={styles.historyDate}>{new Date(item.date).toDateString()}</Text>
+                <Text style={styles.historyDate}>{formatDate(item.date)}</Text>
                 <Text style={[styles.historyStatus, { color: statusColor }]}>{statusText}</Text>
             </View>
         </Animatable.View>
@@ -89,7 +99,7 @@ const DailyStatusCard = ({ record, date }) => {
                 {statusText.toUpperCase()}
             </Text>
             <Text style={[styles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : TEXT_COLOR_MEDIUM }]}>
-                {date.toDateString()}
+                {formatDate(date)}
             </Text>
         </Animatable.View>
     );
@@ -107,7 +117,6 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
     const [report, setReport] = useState<AttendanceReport | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     
-    // Updated View Mode to include 'yearly'
     const [viewMode, setViewMode] = useState<'daily' | 'monthly' | 'yearly' | 'custom'>('daily'); 
     
     // Date States
@@ -128,12 +137,12 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
         
         const params: any = { period: viewMode };
         
+        // Backend expects YYYY-MM-DD
         if (viewMode === 'daily') {
             params.targetDate = selectedDate.toISOString().slice(0, 10);
         } else if (viewMode === 'monthly') {
             params.targetMonth = selectedDate.toISOString().slice(0, 7);
         } else if (viewMode === 'yearly') {
-            // NEW: Send the Year
             params.targetYear = selectedDate.getFullYear().toString();
         } else if (viewMode === 'custom') {
             params.startDate = fromDate.toISOString().slice(0, 10);
@@ -152,16 +161,13 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
         }
     }, [teacherId, viewMode, selectedDate, fromDate, toDate]);
 
-    // Initial load
     useEffect(() => {
         fetchReport();
     }, [fetchReport]); 
 
     const onMainDateChange = (event: any, date?: Date) => {
         setShowMainPicker(Platform.OS === 'ios'); 
-        if (date) {
-            setSelectedDate(date);
-        }
+        if (date) setSelectedDate(date);
     };
 
     const onFromDateChange = (event: any, date?: Date) => {
@@ -192,16 +198,15 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     <View style={{flex: 1, alignItems: 'center', paddingRight: onBack ? 30 : 0 }}>
                         <Text style={styles.headerTitle}>{headerTitle}</Text>
                         
-                        {/* Dynamic Subtitle */}
-                        {viewMode === 'daily' && <Text style={styles.headerSubtitleSmall}>{selectedDate.toDateString()}</Text>}
+                        {/* Dynamic Subtitle with formatted dates */}
+                        {viewMode === 'daily' && <Text style={styles.headerSubtitleSmall}>Date: {formatDate(selectedDate)}</Text>}
                         {viewMode === 'monthly' && <Text style={styles.headerSubtitleSmall}>{selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
                         {viewMode === 'yearly' && <Text style={styles.headerSubtitleSmall}>Year: {selectedDate.getFullYear()}</Text>}
-                        {viewMode === 'custom' && <Text style={styles.headerSubtitleSmall}>Custom Date Range</Text>}
+                        {viewMode === 'custom' && <Text style={styles.headerSubtitleSmall}>Custom Range</Text>}
                     </View>
                 </View>
             </Animatable.View>
 
-            {/* TABS - UPDATED to include YEARLY */}
             <View style={styles.toggleContainer}>
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'daily' && styles.toggleButtonActive]} onPress={() => setViewMode('daily')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'daily' && styles.toggleButtonTextActive]}>Daily</Text>
@@ -211,7 +216,6 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     <Text style={[styles.toggleButtonText, viewMode === 'monthly' && styles.toggleButtonTextActive]}>Monthly</Text>
                 </TouchableOpacity>
                 
-                {/* NEW YEARLY BUTTON */}
                 <TouchableOpacity style={[styles.toggleButton, viewMode === 'yearly' && styles.toggleButtonActive]} onPress={() => setViewMode('yearly')}>
                     <Text style={[styles.toggleButtonText, viewMode === 'yearly' && styles.toggleButtonTextActive]}>Yearly</Text>
                 </TouchableOpacity>
@@ -220,7 +224,6 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     <Text style={[styles.toggleButtonText, viewMode === 'custom' && styles.toggleButtonTextActive]}>Range</Text>
                 </TouchableOpacity>
                 
-                {/* Calendar Icon - Visible for Daily/Monthly/Yearly to change the anchor date */}
                 {viewMode !== 'custom' && (
                     <TouchableOpacity style={styles.calendarButton} onPress={() => setShowMainPicker(true)}>
                         <Icon name="calendar" size={22} color={PRIMARY_COLOR} />
@@ -228,19 +231,18 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                 )}
             </View>
 
-            {/* Date Range Inputs (Visible ONLY in Custom Range Mode) */}
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={styles.rangeContainer}>
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowFromPicker(true)}>
                         <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
-                        <Text style={styles.dateInputText}>{fromDate.toLocaleDateString()}</Text>
+                        <Text style={styles.dateInputText}>{formatDate(fromDate)}</Text>
                     </TouchableOpacity>
                     
                     <Icon name="arrow-right" size={20} color={TEXT_COLOR_MEDIUM} />
 
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowToPicker(true)}>
                         <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
-                        <Text style={styles.dateInputText}>{toDate.toLocaleDateString()}</Text>
+                        <Text style={styles.dateInputText}>{formatDate(toDate)}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.goButton} onPress={fetchReport}>
@@ -249,7 +251,6 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                 </Animatable.View>
             )}
 
-            {/* Date Pickers */}
             {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
             {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={onFromDateChange} />}
             {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={onToDateChange} />}
@@ -257,12 +258,10 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} /> : (
                 <>
                     {viewMode === 'daily' ? (
-                        /* DAILY VIEW: Single Card */
                         <View style={styles.dailyContainer}>
                             <DailyStatusCard record={dailyRecord} date={selectedDate} />
                         </View>
                     ) : (
-                        /* MONTHLY/YEARLY/RANGE VIEW: Aggregates */
                         <View style={styles.summaryContainer}>
                             <SummaryCard label="Overall %" value={`${summary.overallPercentage}%`} color={BLUE} delay={100} />
                             <SummaryCard label="Working Days" value={summary.totalDays || 0} color={ORANGE} delay={150} />
@@ -299,7 +298,6 @@ const styles = StyleSheet.create({
     headerSubtitleSmall: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2, textAlign: 'center' },
     backButton: { position: 'absolute', left: 15, zIndex: 1, padding: 5 },
     
-    // Tab Styling - Adjusted padding to fit 4 buttons
     toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 2, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center', flexWrap: 'wrap' },
     toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, backgroundColor: '#E0E0E0', marginBottom: 5 },
     toggleButtonActive: { backgroundColor: PRIMARY_COLOR },
