@@ -13,12 +13,21 @@ import RNFS from 'react-native-fs';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import apiClient from '../../api/client';
 
+// --- Helper: Format Currency ---
+const formatCurrency = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
+};
+
 const ReportsScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
     const viewShotRef = useRef(null);
 
-    const [reportData, setReportData] = useState({ debit: 0, credit: 0 }); // Removed deposit
+    const [reportData, setReportData] = useState({ debit: 0, credit: 0 });
     const [isLoading, setIsLoading] = useState(true);
     const [activePeriod, setActivePeriod] = useState('daily');
     const [displayDate, setDisplayDate] = useState('');
@@ -29,12 +38,11 @@ const ReportsScreen = () => {
     const reportColors = {
         debit: '#e7400d',
         credit: '#00ff00',
-        // Removed deposit color
     };
 
     const fetchReportData = useCallback(async () => {
         if (activePeriod === 'custom' && (!dateRange.start || !dateRange.end)) {
-            setReportData({ debit: 0, credit: 0 }); // Removed deposit
+            setReportData({ debit: 0, credit: 0 });
             return;
         }
 
@@ -117,8 +125,8 @@ const ReportsScreen = () => {
         }
     };
     
-    const grossTotal = Number(reportData.debit) + Number(reportData.credit); // Removed deposit
-    const netTotal = Number(reportData.credit) - Number(reportData.debit); // Removed deposit
+    const grossTotal = Number(reportData.debit) + Number(reportData.credit);
+    const netTotal = Number(reportData.credit) - Number(reportData.debit);
 
     const downloadReport = async () => {
         if (!(await requestStoragePermission())) {
@@ -158,9 +166,9 @@ const ReportsScreen = () => {
                             <img src="${imageUri}" alt="Financial Report Chart"/>
                         </div>
                         <table class="summary-table">
-                            <tr><td class="label">Debit</td><td class="amount">- ₹${Number(reportData.debit).toFixed(2)}</td></tr>
-                            <tr><td class="label">Credit</td><td class="amount">+ ₹${Number(reportData.credit).toFixed(2)}</td></tr>
-                            <tr class="total-row"><td class="label">Total Amount</td><td class="amount">₹${netTotal.toFixed(2)}</td></tr>
+                            <tr><td class="label">Debit</td><td class="amount">- ₹${formatCurrency(reportData.debit)}</td></tr>
+                            <tr><td class="label">Credit</td><td class="amount">+ ₹${formatCurrency(reportData.credit)}</td></tr>
+                            <tr class="total-row"><td class="label">Total Amount</td><td class="amount">₹${formatCurrency(netTotal)}</td></tr>
                         </table>
                     </div>
                 </body>
@@ -248,7 +256,6 @@ const ReportsScreen = () => {
 
                             <Text style={styles.reportDateDisplay}>{displayDate}</Text>
 
-                            {/* *** THIS IS THE FIX: ViewShot now only wraps the chart *** */}
                             <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9, result: 'data-uri' }}>
                                 <View style={styles.chartContainer}>
                                     {grossTotal > 0 && pieData.length > 0 ? (
@@ -269,7 +276,7 @@ const ReportsScreen = () => {
                             <View style={styles.legendContainer}>
                                 {Object.keys(reportColors).map(key => {
                                     const isDebit = key === 'debit';
-                                    const isIncome = key === 'credit'; // Removed deposit
+                                    const isIncome = key === 'credit';
                                     const hasValue = Number(reportData[key]) > 0;
                                     return (
                                         <View key={key} style={styles.legendItem}>
@@ -280,7 +287,7 @@ const ReportsScreen = () => {
                                             <View style={styles.legendAmountContainer}>
                                                 {isDebit && hasValue && <Text style={styles.debitSymbol}>- </Text>}
                                                 {isIncome && hasValue && <Text style={styles.creditSymbol}>+ </Text>}
-                                                <Text style={styles.legendAmount}>₹{Number(reportData[key]).toFixed(2)}</Text>
+                                                <Text style={styles.legendAmount}>₹{formatCurrency(reportData[key])}</Text>
                                             </View>
                                         </View>
                                     );
@@ -289,7 +296,7 @@ const ReportsScreen = () => {
 
                             <View style={styles.totalRow}>
                                 <Text style={styles.totalLabel}>Total Amount</Text>
-                                <Text style={styles.totalAmount}>₹{netTotal.toFixed(2)}</Text>
+                                <Text style={styles.totalAmount}>₹{formatCurrency(netTotal)}</Text>
                             </View>
                         </View>
                         <TouchableOpacity style={styles.downloadButton} onPress={downloadReport}>

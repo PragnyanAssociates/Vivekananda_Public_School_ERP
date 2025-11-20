@@ -1,5 +1,3 @@
-// Filename: screens/VouchersScreen.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, FlatList,
@@ -35,19 +33,34 @@ const headOfAccountOptions = [
 const accountTypeOptions = ['UPI', 'Bank', 'Cheque', 'Cash', 'Kind', 'Others'];
 const transactionContextOptions = ['Opening Balance', 'Cash'];
 
+// --- Helper: Format Currency (Indian System with Commas) ---
+const formatCurrency = (amount: number | string) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
+};
+
+// --- Helper: Number to Words (Indian System up to Crores) ---
 const numberToWords = (num: number): string => {
     if (num === 0) return 'Zero';
-    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    
+    const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
     const convert = (n: number): string => {
-        if (n < 0) return '';
-        if (n < 20) return a[n];
-        if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
-        if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + convert(n % 100) : '');
+        if (n === 0) return '';
+        if (n < 20) return units[n];
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + units[n % 10] : '');
+        if (n < 1000) return units[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + convert(n % 100) : '');
         if (n < 100000) return convert(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + convert(n % 1000) : '');
-        return 'Number too large';
+        if (n < 10000000) return convert(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + convert(n % 100000) : '');
+        // Crores
+        return convert(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + convert(n % 10000000) : '');
     };
-    return convert(num).trim();
+
+    return convert(Math.floor(num)).trim();
 };
 
 const VouchersScreen = () => {
@@ -161,7 +174,7 @@ const VouchersScreen = () => {
     }, [particulars]);
 
     useEffect(() => {
-        setAmountInWords(`${numberToWords(Math.floor(totalAmount))} Rupees Only`);
+        setAmountInWords(`${numberToWords(totalAmount)} Rupees Only`);
     }, [totalAmount]);
 
     const handleAddRow = () => setParticulars([...particulars, { description: '', amount: '' }]);
@@ -252,7 +265,7 @@ const VouchersScreen = () => {
             <Text style={styles.recentVoucherCellSNo}>{index + 1}</Text>
             <Text style={styles.recentVoucherCell}>{item.voucher_no}</Text>
             <Text style={styles.recentVoucherCell} numberOfLines={1}>{item.head_of_account}</Text>
-            <Text style={styles.recentVoucherCellAmount}>₹{item.total_amount}</Text>
+            <Text style={styles.recentVoucherCellAmount}>₹{formatCurrency(item.total_amount)}</Text>
         </View>
     );
 
@@ -359,7 +372,10 @@ const VouchersScreen = () => {
                             </View>
                         ))}
                         <TouchableOpacity style={styles.addRowButton} onPress={handleAddRow}><MaterialIcons name="add-circle-outline" size={22} color="#0275d8" /><Text style={styles.addRowText}>Add Row</Text></TouchableOpacity>
-                        <View style={styles.totalRow}><Text style={styles.totalText}>Total:</Text><Text style={styles.totalAmount}>{totalAmount.toFixed(2)}</Text></View>
+                        <View style={styles.totalRow}>
+                            <Text style={styles.totalText}>Total:</Text>
+                            <Text style={styles.totalAmount}>{formatCurrency(totalAmount)}</Text>
+                        </View>
                     </View>
 
                     <View style={styles.wordsContainer}><Text style={styles.wordsLabel}>Total Amount in Words:</Text><Text style={styles.wordsText}>{amountInWords}</Text></View>

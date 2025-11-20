@@ -11,6 +11,15 @@ import DateTimePickerModal from "react-native-modal-datetime-picker";
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import RNFS from 'react-native-fs';
 
+// --- Helper: Format Currency ---
+const formatCurrency = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
+};
+
 const RegistersScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
@@ -33,7 +42,7 @@ const RegistersScreen = () => {
             if (dateRange.start && dateRange.end) {
                  queryString += `&startDate=${dateRange.start}&endDate=${dateRange.end}`;
             }
-        } else if (activePeriod !== 'overall') { // Add condition to not send 'overall'
+        } else if (activePeriod !== 'overall') {
              queryString += `&period=${activePeriod}`;
         }
 
@@ -100,7 +109,6 @@ const RegistersScreen = () => {
     
     const requestStoragePermission = async () => {
         if (Platform.OS !== 'android') return true;
-        // For Android 13+ (API 33+), WRITE_EXTERNAL_STORAGE is not needed for non-media files.
         if (Platform.Version >= 33) return true;
         try {
             const granted = await PermissionsAndroid.request(
@@ -133,7 +141,8 @@ const RegistersScreen = () => {
                     imageHtml = `<div class="section-title">Proof Attachment</div><div class="image-container"><img src="file://${tempImagePath}" alt="Proof Attachment" /></div>`;
                 }
             }
-            const particularsHtml = details.particulars.map(p => `<tr class="item-row"><td>${p.description}</td><td class="align-right">₹${parseFloat(p.amount).toFixed(2)}</td></tr>`).join('');
+            // Use formatCurrency for amounts in PDF
+            const particularsHtml = details.particulars.map(p => `<tr class="item-row"><td>${p.description}</td><td class="align-right">₹${formatCurrency(p.amount)}</td></tr>`).join('');
             const htmlContent = `
                 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Voucher</title><style>
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #333; } .voucher-box { max-width: 800px; margin: auto; padding: 25px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); } .header { text-align: center; margin-bottom: 15px; } .school-name { font-size: 22px; font-weight: bold; } .managed-by { font-size: 9px; color: #666; } .voucher-title { font-size: 18px; font-weight: bold; text-transform: uppercase; margin: 15px 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 8px 0; } .details-table { width: 100%; margin-bottom: 20px; } .details-table td { padding: 4px 0; } .details-table .label { font-weight: bold; width: 110px; } .particulars-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; } .particulars-table th, .particulars-table td { border-bottom: 1px solid #eee; padding: 6px; } .particulars-table th { background-color: #f8f8f8; text-align: left; } .total-row td { border-top: 2px solid #333; font-weight: bold; } .align-right { text-align: right; } .in-words { margin-bottom: 20px; } .section-title { font-size: 13px; font-weight: bold; margin-top: 15px; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; } .image-container { text-align: center; margin-bottom: 15px; } .image-container img { max-width: 100%; max-height: 280px; height: auto; border: 1px solid #ddd; } .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #eee; font-size: 9px; color: #777; text-align: center; }
@@ -142,7 +151,7 @@ const RegistersScreen = () => {
                 ${details.name_title ? `<tr><td class="label">Name/Title:</td><td>${details.name_title}</td></tr>` : ''} ${details.phone_no ? `<tr><td class="label">Phone No:</td><td>${details.phone_no}</td></tr>` : ''}
                 <tr><td class="label">Head of A/C:</td><td>${details.head_of_account}</td></tr> ${details.sub_head ? `<tr><td class="label">Sub Head:</td><td>${details.sub_head}</td></tr>` : ''}
                 <tr><td class="label">Account Type:</td><td>${details.account_type}</td></tr></table><table class="particulars-table"><thead><tr><th>Description</th><th class="align-right">Amount</th></tr></thead><tbody>
-                ${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${parseFloat(details.total_amount).toFixed(2)}</strong></td></tr></tbody></table>
+                ${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${formatCurrency(details.total_amount)}</strong></td></tr></tbody></table>
                 <div class="in-words"><strong>In Words:</strong> ${details.amount_in_words}</div> ${imageHtml}
                 <div class="footer"><div>Created by: ${details.creator_name || 'N/A'} on ${new Date(details.created_at).toLocaleString('en-GB')}</div>
                 ${details.updater_name ? `<div>Last updated by: ${details.updater_name} on ${new Date(details.updated_at).toLocaleString('en-GB')}</div>` : ''}</div></div></body></html>
@@ -182,7 +191,7 @@ const RegistersScreen = () => {
                 <Text style={styles.snoCell}>{index + 1}</Text>
                 <Text style={styles.vchCell}>{item.voucher_no}</Text>
                 <Text style={styles.headCell}>{item.head_of_account}</Text>
-                <Text style={[styles.amountCell, amountStyle]}>{`${amountPrefix}₹${parseFloat(item.total_amount).toFixed(2)}`}</Text>
+                <Text style={[styles.amountCell, amountStyle]}>{`${amountPrefix}₹${formatCurrency(item.total_amount)}`}</Text>
                 <View style={styles.actionCell}>
                     <TouchableOpacity style={styles.iconButton} onPress={() => viewVoucherDetails(item.id)}><MaterialIcons name="visibility" size={22} color="#3498db" /></TouchableOpacity>
                     <TouchableOpacity style={styles.iconButton} onPress={() => editVoucher(item.id)}><MaterialIcons name="edit" size={20} color="#f1c40f" /></TouchableOpacity>
@@ -278,9 +287,9 @@ const RegistersScreen = () => {
                                 <Text style={styles.detailRow}><Text style={styles.detailLabel}>{selectedVoucher.transaction_context_type}:</Text> {selectedVoucher.transaction_context_value}</Text>
                                 <Text style={styles.modalSectionTitle}>Particulars</Text>
                                 {selectedVoucher.particulars.map((p, i) => (
-                                    <View key={i} style={styles.particularRow}><Text style={styles.particularDesc}>{p.description}</Text><Text style={styles.particularAmt}>₹{p.amount}</Text></View>
+                                    <View key={i} style={styles.particularRow}><Text style={styles.particularDesc}>{p.description}</Text><Text style={styles.particularAmt}>₹{formatCurrency(p.amount)}</Text></View>
                                 ))}
-                                <View style={styles.totalRow}><Text style={styles.totalText}>Total Amount:</Text><Text style={styles.totalAmount}>₹{selectedVoucher.total_amount}</Text></View>
+                                <View style={styles.totalRow}><Text style={styles.totalText}>Total Amount:</Text><Text style={styles.totalAmount}>₹{formatCurrency(selectedVoucher.total_amount)}</Text></View>
                                 {selectedVoucher.attachment_url && <TouchableOpacity style={styles.viewProofButton} onPress={() => handleViewProof(selectedVoucher.attachment_url)}><MaterialIcons name="image" size={20} color="#FFF" /><Text style={styles.viewProofButtonText}>View Proof</Text></TouchableOpacity>}
                                 <View style={styles.userInfoContainer}>
                                     <Text style={styles.userInfoText}>Created by: {selectedVoucher.creator_name || 'N/A'}</Text>

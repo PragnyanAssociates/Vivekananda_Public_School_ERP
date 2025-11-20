@@ -146,17 +146,17 @@ const StaffDetailScreen = ({ route }) => {
 
     const handlePerformanceToggle = async () => {
         if (!isPerformanceExpanded) {
-            if (performanceDetails.length === 0) {
-                setPerformanceLoading(true);
-                try {
-                    const academicYear = getCurrentAcademicYear();
-                    const response = await apiClient.get(`/performance/teacher/${staffId}/${academicYear}`);
-                    setPerformanceDetails(response.data);
-                } catch (error) {
-                    console.error("Failed to fetch performance data:", error);
-                } finally {
-                    setPerformanceLoading(false);
-                }
+            // Fetch every time toggle is opened or just once if empty
+            setPerformanceLoading(true);
+            try {
+                const academicYear = getCurrentAcademicYear();
+                // Uses the NEW Logic endpoint returning max_possible_marks
+                const response = await apiClient.get(`/performance/teacher/${staffId}/${academicYear}`);
+                setPerformanceDetails(response.data);
+            } catch (error) {
+                console.error("Failed to fetch performance data:", error);
+            } finally {
+                setPerformanceLoading(false);
             }
             scrollToBottom();
         }
@@ -227,13 +227,21 @@ const StaffDetailScreen = ({ route }) => {
         if (date) setAttToDate(date);
     };
 
-    // Stats Calculation
+    // --- UPDATED STATS CALCULATION (Matches TeacherPerformanceScreen logic) ---
     const overallStats = useMemo(() => {
-        if (!performanceDetails || performanceDetails.length === 0) return { total: 0, average: 0 };
-        const total = performanceDetails.reduce((sum, item) => sum + parseInt(item.total_marks || 0), 0);
-        const validItems = performanceDetails.filter(item => item.average_marks > 0);
-        const average = validItems.length > 0 ? validItems.reduce((sum, item) => sum + parseFloat(item.average_marks), 0) / validItems.length : 0;
-        return { total, average };
+        if (!performanceDetails || performanceDetails.length === 0) return { totalObtained: 0, totalPossible: 0, percentage: 0 };
+
+        let totalObtained = 0;
+        let totalPossible = 0;
+
+        performanceDetails.forEach(item => {
+            totalObtained += parseFloat(item.total_marks) || 0;
+            totalPossible += parseFloat(item.max_possible_marks) || 0;
+        });
+
+        const percentage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
+
+        return { totalObtained, totalPossible, percentage };
     }, [performanceDetails]);
 
     const attendanceSummary = useMemo(() => attendanceReport?.stats || { overallPercentage: '0.0', daysPresent: 0, daysAbsent: 0, totalDays: 0 }, [attendanceReport]);
@@ -288,10 +296,56 @@ const StaffDetailScreen = ({ route }) => {
                     <>
                         <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleTimetableToggle} activeOpacity={0.8} ><Text style={styles.collapsibleTitle}>Timetable</Text><Text style={styles.arrowIcon}>{isTimetableExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isTimetableExpanded && <TimetableScreen teacherId={staffId} isEmbedded={true} />}</View>
                         
-                        {/* Performance Card */}
-                        <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handlePerformanceToggle} activeOpacity={0.8} ><Text style={styles.collapsibleTitle}>Performance</Text><Text style={styles.arrowIcon}>{isPerformanceExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isPerformanceExpanded && (performanceLoading ? <ActivityIndicator size="large" color="#008080" style={{ padding: 20 }} /> : <View><View style={styles.teacherHeader}><Text style={styles.teacherName}>{staffDetails.full_name}</Text><View style={styles.teacherStatsContainer}><Text style={styles.overallStat}>Total: <Text style={styles.overallValue}>{overallStats.total}</Text></Text><Text style={styles.overallStat}>Avg: <Text style={styles.averageValue}>{overallStats.average.toFixed(2)}%</Text></Text></View></View>{performanceDetails.length > 0 ? <><View style={styles.detailHeaderRow}><Text style={[styles.detailHeaderText, { flex: 2.5 }]}>Class / Subject</Text><Text style={[styles.detailHeaderText, { flex: 1.5, textAlign: 'center' }]}>Total</Text><Text style={[styles.detailHeaderText, { flex: 1.5, textAlign: 'right' }]}>Average</Text></View>{performanceDetails.map((detail, index) => (<View key={index} style={[styles.detailRowPerformance, index === performanceDetails.length - 1 && styles.lastDetailRow]}><Text style={styles.detailColumnSubject}>{`${detail.class_group} - ${detail.subject}`}</Text><Text style={styles.detailColumnTotal}>{detail.total_marks}</Text><Text style={styles.detailColumnAverage}>{parseFloat(detail.average_marks).toFixed(2)}%</Text></View>))}</> : <View style={styles.noDataContainer}><Text style={styles.noDataText}>No performance data available.</Text></View>}</View>)}</View>
+                        {/* Performance Card - UPDATED LOGIC */}
+                        <View style={styles.collapsibleCard}>
+                            <TouchableOpacity style={styles.collapsibleHeader} onPress={handlePerformanceToggle} activeOpacity={0.8} >
+                                <Text style={styles.collapsibleTitle}>Performance</Text>
+                                <Text style={styles.arrowIcon}>{isPerformanceExpanded ? '▲' : '▼'}</Text>
+                            </TouchableOpacity>
+                            
+                            {isPerformanceExpanded && (
+                                performanceLoading ? (
+                                    <ActivityIndicator size="large" color="#008080" style={{ padding: 20 }} />
+                                ) : (
+                                    <View>
+                                        <View style={styles.teacherHeader}>
+                                            <Text style={styles.teacherName}>{staffDetails.full_name}</Text>
+                                            <View style={styles.teacherStatsContainer}>
+                                                {/* Updated Header Stats */}
+                                                <Text style={styles.overallStat}>
+                                                    Marks: <Text style={styles.overallValue}>{Math.round(overallStats.totalObtained)}</Text>
+                                                </Text>
+                                                <Text style={styles.overallStat}>
+                                                    Perf: <Text style={styles.averageValue}>{overallStats.percentage.toFixed(2)}%</Text>
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        
+                                        {performanceDetails.length > 0 ? (
+                                            <>
+                                                <View style={styles.detailHeaderRow}>
+                                                    <Text style={[styles.detailHeaderText, { flex: 3 }]}>Class / Subject</Text>
+                                                    <Text style={[styles.detailHeaderText, { flex: 2, textAlign: 'center' }]}>Score</Text>
+                                                    <Text style={[styles.detailHeaderText, { flex: 1.5, textAlign: 'right' }]}>Avg %</Text>
+                                                </View>
+                                                {performanceDetails.map((detail, index) => (
+                                                    <View key={index} style={[styles.detailRowPerformance, index === performanceDetails.length - 1 && styles.lastDetailRow]}>
+                                                        <Text style={styles.detailColumnSubject}>{`${detail.class_group} - ${detail.subject}`}</Text>
+                                                        {/* Updated Row Data to show Obtained/Max */}
+                                                        <Text style={styles.detailColumnTotal}>{detail.total_marks}/{detail.max_possible_marks}</Text>
+                                                        <Text style={styles.detailColumnAverage}>{parseFloat(detail.average_marks).toFixed(2)}%</Text>
+                                                    </View>
+                                                ))}
+                                            </>
+                                        ) : (
+                                            <View style={styles.noDataContainer}><Text style={styles.noDataText}>No performance data available.</Text></View>
+                                        )}
+                                    </View>
+                                )
+                            )}
+                        </View>
                         
-                        {/* ATTENDANCE CARD (UPDATED: HISTORY LIST REMOVED) */}
+                        {/* ATTENDANCE CARD */}
                         <View style={styles.collapsibleCard}>
                             <TouchableOpacity style={styles.collapsibleHeader} onPress={handleAttendanceToggle} activeOpacity={0.8}>
                                 <Text style={styles.collapsibleTitle}>Attendance</Text>
@@ -371,8 +425,6 @@ const StaffDetailScreen = ({ route }) => {
                                                     <SummaryCard label="Days Absent" value={attendanceSummary.daysAbsent || 0} color="#E53935" />
                                                 </View>
                                             )}
-                                            
-                                            {/* History List block was here - now removed */}
                                         </>
                                     )}
                                 </View>
@@ -420,8 +472,8 @@ const styles = StyleSheet.create({
     detailHeaderText: { fontSize: 12, fontWeight: 'bold', color: '#6c757d', textTransform: 'uppercase', letterSpacing: 0.5 },
     detailRowPerformance: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
     lastDetailRow: { borderBottomWidth: 0 },
-    detailColumnSubject: { flex: 2.5, fontSize: 15, color: '#34495e' },
-    detailColumnTotal: { flex: 1.5, fontSize: 15, color: '#2c3e50', textAlign: 'center' },
+    detailColumnSubject: { flex: 3, fontSize: 15, color: '#34495e' },
+    detailColumnTotal: { flex: 2, fontSize: 15, color: '#2c3e50', textAlign: 'center' },
     detailColumnAverage: { flex: 1.5, fontSize: 15, fontWeight: 'bold', color: '#008080', textAlign: 'right' },
     
     // --- ATTENDANCE STYLES ---
@@ -443,8 +495,6 @@ const styles = StyleSheet.create({
     attSummaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2 },
     attSummaryValue: { fontSize: 20, fontWeight: 'bold' },
     attSummaryLabel: { fontSize: 12, color: '#566573', marginTop: 5, textAlign: 'center' },
-    
-    // Unused history styles removed
     
     dailyCard: { width: '100%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, elevation: 2 },
     dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },

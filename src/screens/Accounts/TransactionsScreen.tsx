@@ -11,6 +11,15 @@ import DateTimePickerModal from "react-native-modal-datetime-picker";
 import RNHTMLtoPDF from 'react-native-html-to-pdf';
 import RNFS from 'react-native-fs';
 
+// --- Helper: Format Currency ---
+const formatCurrency = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(num);
+};
+
 const TransactionsScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
@@ -39,8 +48,7 @@ const TransactionsScreen = () => {
         } else if (activePeriod !== 'overall') {
             queryString += `period=${activePeriod}`;
         }
-        // No params for 'overall'
-
+        
         try {
             const response = await apiClient.get(queryString);
             setSummaryData({
@@ -127,8 +135,9 @@ const TransactionsScreen = () => {
                     imageHtml = `<div class="section-title">Proof Attachment</div><div class="image-container"><img src="file://${tempImagePath}" alt="Proof Attachment" /></div>`;
                 }
             }
-            const particularsHtml = details.particulars.map(p => `<tr><td>${p.description}</td><td class="align-right">₹${parseFloat(p.amount).toFixed(2)}</td></tr>`).join('');
-            const htmlContent = `<!DOCTYPE html><html><head><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#333}.voucher-box{max-width:800px;margin:auto;padding:25px;border:1px solid #eee;box-shadow:0 0 10px rgba(0,0,0,.15)}.header{text-align:center;margin-bottom:15px}.school-name{font-size:22px;font-weight:700}.voucher-title{font-size:18px;font-weight:700;text-transform:uppercase;margin:15px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;padding:8px 0}.details-table{width:100%;margin-bottom:20px}.details-table .label{font-weight:700;width:110px}.particulars-table{width:100%;border-collapse:collapse;margin-bottom:15px}.particulars-table th,.particulars-table td{border-bottom:1px solid #eee;padding:6px}.total-row td{border-top:2px solid #333;font-weight:700}.align-right{text-align:right}.footer{margin-top:20px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#777;text-align:center}</style></head><body><div class="voucher-box"><div class="header"><div class="school-name">Vivekananda Public School</div><div class="voucher-title">${details.voucher_type} Voucher</div></div><table class="details-table"><tr><td class="label">Voucher #:</td><td>${details.voucher_no}</td></tr><tr><td class="label">Date:</td><td>${new Date(details.voucher_date).toLocaleDateString('en-GB')}</td></tr><tr><td class="label">Head of A/C:</td><td>${details.head_of_account}</td></tr></table><table class="particulars-table"><thead><tr><th>Description</th><th class="align-right">Amount</th></tr></thead><tbody>${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${parseFloat(details.total_amount).toFixed(2)}</strong></td></tr></tbody></table><div class="in-words"><strong>In Words:</strong> ${details.amount_in_words}</div>${imageHtml}<div class="footer">Created by: ${details.creator_name||'N/A'}</div></div></body></html>`;
+            // Format amounts in PDF
+            const particularsHtml = details.particulars.map(p => `<tr><td>${p.description}</td><td class="align-right">₹${formatCurrency(p.amount)}</td></tr>`).join('');
+            const htmlContent = `<!DOCTYPE html><html><head><style>body{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#333}.voucher-box{max-width:800px;margin:auto;padding:25px;border:1px solid #eee;box-shadow:0 0 10px rgba(0,0,0,.15)}.header{text-align:center;margin-bottom:15px}.school-name{font-size:22px;font-weight:700}.voucher-title{font-size:18px;font-weight:700;text-transform:uppercase;margin:15px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;padding:8px 0}.details-table{width:100%;margin-bottom:20px}.details-table .label{font-weight:700;width:110px}.particulars-table{width:100%;border-collapse:collapse;margin-bottom:15px}.particulars-table th,.particulars-table td{border-bottom:1px solid #eee;padding:6px}.total-row td{border-top:2px solid #333;font-weight:700}.align-right{text-align:right}.footer{margin-top:20px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#777;text-align:center}</style></head><body><div class="voucher-box"><div class="header"><div class="school-name">Vivekananda Public School</div><div class="voucher-title">${details.voucher_type} Voucher</div></div><table class="details-table"><tr><td class="label">Voucher #:</td><td>${details.voucher_no}</td></tr><tr><td class="label">Date:</td><td>${new Date(details.voucher_date).toLocaleDateString('en-GB')}</td></tr><tr><td class="label">Head of A/C:</td><td>${details.head_of_account}</td></tr></table><table class="particulars-table"><thead><tr><th>Description</th><th class="align-right">Amount</th></tr></thead><tbody>${particularsHtml}<tr class="total-row"><td><strong>Total:</strong></td><td class="align-right"><strong>₹${formatCurrency(details.total_amount)}</strong></td></tr></tbody></table><div class="in-words"><strong>In Words:</strong> ${details.amount_in_words}</div>${imageHtml}<div class="footer">Created by: ${details.creator_name||'N/A'}</div></div></body></html>`;
             const options = { html: htmlContent, fileName: `Voucher-${details.voucher_no}`, directory: 'Download' };
             const file = await RNHTMLtoPDF.convert(options);
             Alert.alert("Success", `PDF saved to your Downloads folder: ${file.filePath}`);
@@ -150,7 +159,7 @@ const TransactionsScreen = () => {
                 <Text style={styles.snoCell}>{index + 1}</Text>
                 <Text style={styles.vchCell}>{item.voucher_no}</Text>
                 <Text style={styles.headCell} numberOfLines={1}>{item.head_of_account}</Text>
-                <Text style={[styles.amountCell, amountStyle]}>{`${amountPrefix}₹${parseFloat(item.total_amount).toFixed(2)}`}</Text>
+                <Text style={[styles.amountCell, amountStyle]}>{`${amountPrefix}₹${formatCurrency(item.total_amount)}`}</Text>
                 <View style={styles.actionCell}>
                     <TouchableOpacity onPress={() => viewVoucherDetails(item.id)}><MaterialIcons name="visibility" size={22} color="#3498db" /></TouchableOpacity>
                     <TouchableOpacity onPress={() => downloadVoucher(item.id)}><MaterialIcons name="download" size={22} color="#27ae60" /></TouchableOpacity>
@@ -163,17 +172,17 @@ const TransactionsScreen = () => {
         <>
             <View style={styles.balanceCard}>
                 <Text style={styles.balanceLabel}>TOTAL ACCOUNT BALANCE</Text>
-                <Text style={styles.balanceAmount}>₹{Number(summaryData.total_balance).toFixed(2)}</Text>
+                <Text style={styles.balanceAmount}>₹{formatCurrency(summaryData.total_balance)}</Text>
             </View>
 
             <View style={styles.subBalanceContainer}>
                 <View style={styles.subBalanceBox}>
                     <Text style={styles.subBalanceLabel}>Opening Balance</Text>
-                    <Text style={styles.subBalanceAmount}>₹{Number(summaryData.opening_balance).toFixed(2)}</Text>
+                    <Text style={styles.subBalanceAmount}>₹{formatCurrency(summaryData.opening_balance)}</Text>
                 </View>
                 <View style={styles.subBalanceBox}>
                     <Text style={styles.subBalanceLabel}>Cash Balance</Text>
-                    <Text style={styles.subBalanceAmount}>₹{Number(summaryData.cash_balance).toFixed(2)}</Text>
+                    <Text style={styles.subBalanceAmount}>₹{formatCurrency(summaryData.cash_balance)}</Text>
                 </View>
             </View>
 
@@ -204,11 +213,11 @@ const TransactionsScreen = () => {
                 <View style={styles.summaryContainer}>
                     <View style={[styles.summaryBox, { borderColor: '#5cb85c' }]}>
                         <Text style={styles.summaryLabel}>Credit</Text>
-                        <Text style={[styles.summaryAmount, styles.amountCredit]}>+ ₹{Number(summaryData.period_summary.credit).toFixed(2)}</Text>
+                        <Text style={[styles.summaryAmount, styles.amountCredit]}>+ ₹{formatCurrency(summaryData.period_summary.credit)}</Text>
                     </View>
                     <View style={[styles.summaryBox, { borderColor: '#d9534f' }]}>
                         <Text style={styles.summaryLabel}>Debit</Text>
-                        <Text style={[styles.summaryAmount, styles.amountDebit]}>- ₹{Number(summaryData.period_summary.debit).toFixed(2)}</Text>
+                        <Text style={[styles.summaryAmount, styles.amountDebit]}>- ₹{formatCurrency(summaryData.period_summary.debit)}</Text>
                     </View>
                 </View>
             )}
@@ -265,12 +274,12 @@ const TransactionsScreen = () => {
                                 {selectedVoucher.particulars.map((p, i) => (
                                     <View key={i} style={styles.particularRow}>
                                         <Text style={styles.particularDesc}>{p.description}</Text>
-                                        <Text style={styles.particularAmt}>₹{Number(p.amount).toFixed(2)}</Text>
+                                        <Text style={styles.particularAmt}>₹{formatCurrency(p.amount)}</Text>
                                     </View>
                                 ))}
                                 <View style={styles.totalRow}>
                                     <Text style={styles.totalText}>Total Amount:</Text>
-                                    <Text style={styles.totalAmount}>₹{Number(selectedVoucher.total_amount).toFixed(2)}</Text>
+                                    <Text style={styles.totalAmount}>₹{formatCurrency(selectedVoucher.total_amount)}</Text>
                                 </View>
                             </ScrollView>
                             <TouchableOpacity style={styles.closeButton} onPress={() => setDetailModalVisible(false)}>
