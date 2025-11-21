@@ -1,20 +1,29 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
- * Logic: Calculates ranks internally so colors (Red/Green/Blue/Brown/Black) 
- * persist regardless of the selected sort order (Roll No vs Rank).
+ * Logic: Calculates percentage based ONLY on completed exams (exams with entered marks).
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    Alert
+    Alert, TouchableOpacity, Modal, ScrollView, Animated, Easing, Dimensions,
+    Platform, UIManager, LayoutAnimation, RefreshControl
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+}
+
 // --- Constants ---
-const CLASS_SUBJECTS: { [key: string]: string[] } = {
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+const CLASS_SUBJECTS = {
     'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 
     'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
     'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
@@ -28,151 +37,225 @@ const CLASS_SUBJECTS: { [key: string]: string[] } = {
     'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
-// Max marks definition for a single subject
-const EXAM_MAX_SCORES: { [key: string]: number } = {
-    'AT1': 25, 'UT1': 25, 
-    'AT2': 25, 'UT2': 25,
-    'AT3': 25, 'UT3': 25, 
-    'AT4': 25, 'UT4': 25,
-    'SA1': 100, 'SA2': 100
+// Max marks per subject for each exam type
+const EXAM_MAX_SCORES = {
+    'AT1': 25, 'UT1': 25, 'AT2': 25, 'UT2': 25,
+    'AT3': 25, 'UT3': 25, 'AT4': 25, 'UT4': 25,
+    'SA1': 100, 'SA2': 100, 'Pre-Final': 100
 };
 
-// Mapping to normalize API exam types to short codes
-const EXAM_NAME_TO_CODE: { [key: string]: string } = {
+// Map API exam names to short codes
+const EXAM_NAME_TO_CODE = {
     'Assignment-1': 'AT1', 'Unitest-1': 'UT1', 
     'Assignment-2': 'AT2', 'Unitest-2': 'UT2',
     'Assignment-3': 'AT3', 'Unitest-3': 'UT3', 
     'Assignment-4': 'AT4', 'Unitest-4': 'UT4',
-    'SA1': 'SA1', 'SA2': 'SA2', 
-    'AT1': 'AT1', 'UT1': 'UT1', 
-    'AT2': 'AT2', 'UT2': 'UT2',
-    'AT3': 'AT3', 'UT3': 'UT3',
-    'AT4': 'AT4', 'UT4': 'UT4'
+    'SA1': 'SA1', 'SA2': 'SA2', 'Pre-Final': 'Pre-Final',
+    'AT1': 'AT1', 'UT1': 'UT1', 'AT2': 'AT2', 'UT2': 'UT2',
+    'AT3': 'AT3', 'UT3': 'UT3', 'AT4': 'AT4', 'UT4': 'UT4'
+};
+
+// Strict Order for display
+const EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4', 'Pre-Final', 'SA2'];
+
+// --- COLORS ---
+const COLORS = {
+    primary: '#00897B',    // Teal
+    background: '#F5F7FA', // Light Grey-Blue
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    success: '#43A047',    // Green
+    average: '#1E88E5',    // Blue
+    poor: '#E53935',       // Red
+    track: '#ECEFF1',      // Light Grey
+    border: '#CFD8DC'
+};
+
+// --- COMPONENT: ANIMATED BAR ---
+const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
+    const animatedHeight = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(animatedHeight, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: false,
+            easing: Easing.out(Easing.poly(4)),
+        }).start();
+    }, [percentage]);
+
+    const heightStyle = animatedHeight.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0%', `${percentage}%`]
+    });
+
+    return (
+        <View style={[styles.barWrapper, { height: height }]}>
+            <Text style={[styles.barLabelTop, { color: COLORS.textMain }]}>{Math.round(percentage)}%</Text>
+            <View style={styles.barBackground}>
+                <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
+                <View style={styles.barTextContainer}>
+                    <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
+                </View>
+            </View>
+            <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
+        </View>
+    );
 };
 
 const StudentPerformance = () => {
     const [loading, setLoading] = useState(false);
-    const [classList, setClassList] = useState<string[]>([]);
-    const [selectedClass, setSelectedClass] = useState<string>('');
+    const [refreshing, setRefreshing] = useState(false);
+    const [expandedId, setExpandedId] = useState(null);
+
+    const [classList, setClassList] = useState([]);
+    const [selectedClass, setSelectedClass] = useState('');
     
-    // Raw Data from API
-    const [students, setStudents] = useState<any[]>([]);
-    const [marksData, setMarksData] = useState<any[]>([]);
+    // Raw Data
+    const [students, setStudents] = useState([]);
+    const [marksData, setMarksData] = useState([]);
     
     // Filter State
-    const [sortBy, setSortBy] = useState<'roll_no' | 'desc' | 'asc'>('roll_no');
+    const [sortBy, setSortBy] = useState('roll_no');
 
-    // 1. Fetch List of Classes on Mount
+    // Modals
+    const [isGraphVisible, setIsGraphVisible] = useState(false);
+    const [graphData, setGraphData] = useState(null);
+    const [isCompareVisible, setIsCompareVisible] = useState(false);
+    const [compareExam, setCompareExam] = useState('Overall');
+
+    // --- 1. Fetch Classes ---
     useEffect(() => {
         const fetchClasses = async () => {
             try {
                 const response = await apiClient.get('/reports/classes');
                 const classes = response.data || [];
                 setClassList(classes);
-                if (classes.length > 0) {
-                    setSelectedClass(classes[0]); 
-                }
+                if (classes.length > 0) setSelectedClass(classes[0]); 
             } catch (error) {
                 console.error('Error fetching classes:', error);
-                Alert.alert('Error', 'Failed to load class list.');
             }
         };
         fetchClasses();
     }, []);
 
-    // 2. Fetch Class Data when selectedClass changes
+    // --- 2. Fetch Data ---
     useEffect(() => {
-        if (!selectedClass) return;
-        fetchClassData(selectedClass);
+        if (selectedClass) fetchClassData(selectedClass);
     }, [selectedClass]);
 
-    const fetchClassData = async (classGroup: string) => {
+    const fetchClassData = async (classGroup) => {
         setLoading(true);
         try {
             const response = await apiClient.get(`/reports/class-data/${classGroup}`);
-            const { students, marks } = response.data;
-            setStudents(students || []);
-            setMarksData(marks || []);
+            setStudents(response.data.students || []);
+            setMarksData(response.data.marks || []);
+            setExpandedId(null);
         } catch (error) {
             console.error('Error fetching class data:', error);
-            Alert.alert('Error', 'Failed to load student data.');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
-    // 3. Calculate Totals, Assign Ranks, and Sort
+    const onRefresh = () => {
+        setRefreshing(true);
+        if (selectedClass) fetchClassData(selectedClass);
+    };
+
+    const toggleExpand = (id) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpandedId(expandedId === id ? null : id);
+    };
+
+    const handleOpenGraph = (title, exams) => {
+        setGraphData({ title, exams });
+        setIsGraphVisible(true);
+    };
+
+    // --- 3. Process Data (UPDATED LOGIC) ---
     const processedData = useMemo(() => {
         if (!selectedClass || students.length === 0) return [];
 
         const subjects = CLASS_SUBJECTS[selectedClass] || [];
         const subjectCount = subjects.length;
 
-        // A. Determine active exams & Max Total
-        const activeExams = new Set<string>();
-        marksData.forEach((mark: any) => {
-            const normalizedCode = EXAM_NAME_TO_CODE[mark.exam_type];
-            if (normalizedCode && EXAM_MAX_SCORES[normalizedCode]) {
-                if (mark.marks_obtained !== null && mark.marks_obtained !== '') {
-                    activeExams.add(normalizedCode);
-                }
-            }
-        });
-
-        let dynamicMaxTotal = 0;
-        activeExams.forEach(examCode => {
-            const maxScoreForExam = EXAM_MAX_SCORES[examCode] || 0;
-            dynamicMaxTotal += (maxScoreForExam * subjectCount);
-        });
-        if (dynamicMaxTotal === 0) dynamicMaxTotal = 1; 
-
-        // B. Create Lookup Map
-        const marksMap: any = {};
-        marksData.forEach((mark: any) => {
+        // 1. Map Marks: student_id -> exam_code -> subject -> marks
+        const marksMap = {};
+        marksData.forEach(mark => {
             if (!marksMap[mark.student_id]) marksMap[mark.student_id] = {};
-            const normCode = EXAM_NAME_TO_CODE[mark.exam_type];
-            if (normCode) {
-                if (!marksMap[mark.student_id][normCode]) marksMap[mark.student_id][normCode] = {};
-                marksMap[mark.student_id][normCode][mark.subject] = mark.marks_obtained;
+            const code = EXAM_NAME_TO_CODE[mark.exam_type];
+            if (code) {
+                if (!marksMap[mark.student_id][code]) marksMap[mark.student_id][code] = {};
+                marksMap[mark.student_id][code][mark.subject] = mark.marks_obtained;
             }
         });
 
-        // C. Calculate Scores for all students
+        // 2. Build Student Objects
         let results = students.map(student => {
-            let totalObtained = 0;
-            activeExams.forEach(examCode => {
+            let studentTotalObtained = 0;
+            let studentMaxTotal = 0; // This grows only if exam exists
+            const examBreakdown = [];
+
+            // Iterate through fixed exam order (AT1, UT1...)
+            EXAM_ORDER.forEach(examCode => {
+                let examObtained = 0;
+                let hasExamData = false;
+                
                 subjects.forEach(subject => {
                     const val = marksMap[student.id]?.[examCode]?.[subject];
-                    const floatVal = parseFloat(val);
-                    if (!isNaN(floatVal)) totalObtained += floatVal;
+                    // Check if mark exists and is valid number (not null/empty)
+                    if (val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val))) {
+                        examObtained += parseFloat(val);
+                        hasExamData = true;
+                    }
                 });
+
+                // Only count this exam if there is data
+                if (hasExamData) {
+                    const examMax = (EXAM_MAX_SCORES[examCode] || 0) * subjectCount;
+                    
+                    studentTotalObtained += examObtained;
+                    studentMaxTotal += examMax;
+
+                    const examPerc = examMax > 0 ? (examObtained / examMax) * 100 : 0;
+                    
+                    examBreakdown.push({
+                        exam_type: examCode,
+                        total_obtained: examObtained,
+                        total_possible: examMax,
+                        percentage: examPerc.toFixed(2)
+                    });
+                }
             });
 
-            const percentage = ((totalObtained / dynamicMaxTotal) * 100).toFixed(2);
+            // Calculate percentage based ONLY on completed exams
+            const percentage = studentMaxTotal > 0 ? ((studentTotalObtained / studentMaxTotal) * 100).toFixed(2) : 0;
 
             return {
                 ...student,
-                totalObtained,
+                id: student.id,
+                totalObtained: studentTotalObtained,
+                maxTotal: studentMaxTotal, // Dynamic Max
                 percentage: parseFloat(percentage),
-                maxTotal: dynamicMaxTotal,
-                performanceRank: 0 // Placeholder
+                examBreakdown,
+                performanceRank: 0
             };
         });
 
-        // D. Assign Ranks (Sort by Total Descending First)
+        // 3. Assign Ranks
         results.sort((a, b) => b.totalObtained - a.totalObtained);
-        results = results.map((item, index) => ({
-            ...item,
-            performanceRank: index + 1 // 1-based rank (1 is highest score)
-        }));
+        results = results.map((item, index) => ({ ...item, performanceRank: index + 1 }));
 
-        // E. Apply Requested Display Sort
+        // 4. Final Sort
         if (sortBy === 'desc') {
-            // Already sorted descending by totals
+            // Already sorted desc
         } else if (sortBy === 'asc') {
             results.sort((a, b) => a.totalObtained - b.totalObtained);
         } else {
-            // Default: Roll No
+            // Roll No
             results.sort((a, b) => {
                 const rA = parseInt(a.roll_no, 10);
                 const rB = parseInt(b.roll_no, 10);
@@ -181,292 +264,367 @@ const StudentPerformance = () => {
             });
         }
 
-        return results;
+        // Collect active exams for dropdown (union of all students' completed exams)
+        const activeExamsSet = new Set();
+        results.forEach(s => s.examBreakdown.forEach(e => activeExamsSet.add(e.exam_type)));
+        const activeExams = EXAM_ORDER.filter(e => activeExamsSet.has(e));
+
+        return { students: results, activeExams };
 
     }, [selectedClass, students, marksData, sortBy]);
 
-    // --- Helper: Get Color based on Actual Performance Rank ---
-    const getColorForStudent = (rank: number, totalStudents: number) => {
-        const RED = '#d32f2f';      // Top 1
-        const GREEN = '#2e7d32';    // Top 2
-        const BLUE = '#1565c0';     // Top 3
-        const BLACK = '#000000';    // Bottom 3
-        const BROWN = '#795548';    // Others
+    const studentList = processedData.students || [];
+    const availableExams = ['Overall', ...(processedData.activeExams || [])];
 
-        if (rank === 1) return RED;
-        if (rank === 2) return GREEN;
-        if (rank === 3) return BLUE;
-        
-        // "Least three is in the black"
-        // If rank is one of the last 3 (e.g., total 30: 28, 29, 30)
-        if (rank > totalStudents - 3 && totalStudents >= 3) return BLACK;
+    // --- Comparison Data Logic ---
+    const getComparisonData = () => {
+        if (studentList.length === 0) return [];
 
-        return BROWN;
+        return studentList.map(student => {
+            let ob = 0; let max = 0; let perc = 0;
+
+            if (compareExam === 'Overall') {
+                ob = student.totalObtained;
+                max = student.maxTotal;
+                perc = student.percentage;
+            } else {
+                const examData = student.examBreakdown.find(e => e.exam_type === compareExam);
+                if (examData) {
+                    ob = examData.total_obtained;
+                    max = examData.total_possible;
+                    perc = parseFloat(examData.percentage);
+                }
+            }
+
+            return {
+                name: student.full_name,
+                roll: student.roll_no,
+                total_obtained: ob,
+                total_possible: max,
+                percentage: perc
+            };
+        })
+        // Filter out students who don't have data for the selected exam (e.g., absent for SA1)
+        .filter(item => item.total_possible > 0)
+        .sort((a, b) => b.percentage - a.percentage);
+    };
+
+    // --- Helpers ---
+    const getColorForRank = (rank) => {
+        if (rank === 1) return COLORS.success;
+        if (rank === 2) return COLORS.primary;
+        if (rank === 3) return COLORS.average;
+        return COLORS.textSub;
+    };
+
+    const getBarColor = (perc) => {
+        if (perc >= 75) return COLORS.success;
+        if (perc >= 50) return COLORS.average;
+        return COLORS.poor;
     };
 
     // --- Render Item ---
-    const renderStudentItem = ({ item, index }: { item: any, index: number }) => {
-        const isSortByRollNo = sortBy === 'roll_no';
-        
-        // Color is determined by the calculated 'performanceRank', NOT the visual index
-        const totalStudents = processedData.length;
-        const itemColor = getColorForStudent(item.performanceRank, totalStudents);
+    const renderStudentItem = ({ item }) => {
+        const itemColor = getColorForRank(item.performanceRank);
+        const isExpanded = expandedId === item.id;
 
-        // Rank Badge Display Logic:
-        // 1. If sorted by Roll No: Hide badge (opacity 0 or transparent).
-        // 2. If sorted by High/Low: Show badge.
-        // Note: item.performanceRank is the true rank. index + 1 is just list position.
-        // When sorted by performance, index + 1 matches performanceRank (or reverse).
-        // We'll display 'performanceRank' in the badge to be accurate.
-        
         return (
             <View style={styles.card}>
-                {/* Rank Badge */}
-                <View style={[styles.rankContainer, isSortByRollNo && styles.rankHidden]}>
-                    {!isSortByRollNo && (
+                <TouchableOpacity 
+                    style={styles.cardContent} 
+                    onPress={() => toggleExpand(item.id)}
+                    activeOpacity={0.8}
+                >
+                    {/* Rank Strip */}
+                    <View style={[styles.rankStrip, { backgroundColor: itemColor }]}>
                         <Text style={styles.rankText}>#{item.performanceRank}</Text>
-                    )}
-                </View>
-
-                {/* Info */}
-                <View style={styles.infoContainer}>
-                    <Text style={styles.studentName}>{item.full_name}</Text>
-                    <Text style={styles.rollNo}>Roll No: {item.roll_no}</Text>
-                    
-                    {/* Marks Bar */}
-                    <View style={styles.progressBarContainer}>
-                        <View 
-                            style={[
-                                styles.progressBarFill, 
-                                { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: itemColor }
-                            ]} 
-                        />
                     </View>
-                    <Text style={styles.marksText}>
-                        {item.totalObtained} / {item.maxTotal} Marks
-                    </Text>
-                </View>
 
-                {/* Percentage Circle */}
-                <View style={[styles.percentBadge, { borderColor: itemColor }]}>
-                    <Text style={[styles.percentText, { color: itemColor }]}>
-                        {item.percentage}%
-                    </Text>
-                </View>
+                    <View style={styles.cardBody}>
+                        <View style={styles.cardTopRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.studentName}>{item.full_name}</Text>
+                                <Text style={styles.rollNo}>Roll No: {item.roll_no}</Text>
+                            </View>
+                            <View style={[styles.circleBadge, { borderColor: itemColor }]}>
+                                <Text style={[styles.circleText, { color: itemColor }]}>{Math.round(item.percentage)}%</Text>
+                            </View>
+                        </View>
+
+                        <Text style={styles.marksLabel}>
+                            Total Marks: <Text style={styles.marksValue}>{Math.round(item.totalObtained)} / {Math.round(item.maxTotal)}</Text>
+                        </Text>
+
+                        <View style={styles.progressTrack}>
+                            <View style={[styles.progressFill, { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: itemColor }]} />
+                        </View>
+
+                        <View style={styles.expandRow}>
+                            <Text style={styles.perfLabel}>{item.examBreakdown.length} Exams Recorded</Text>
+                            <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={COLORS.textSub} />
+                        </View>
+                    </View>
+                </TouchableOpacity>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                    <View style={styles.expandedSection}>
+                        <View style={styles.detailHeader}>
+                            <Text style={styles.detailTitle}>Exam Breakdown</Text>
+                            <TouchableOpacity 
+                                style={styles.iconButton} 
+                                onPress={() => handleOpenGraph(item.full_name, item.examBreakdown)}
+                            >
+                                <Icon name="chart-bar" size={16} color="#fff" />
+                                <Text style={styles.btnText}>GRAPH</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Breakdown Table */}
+                        <View style={styles.breakdownContainer}>
+                            <View style={styles.bdHeader}>
+                                <Text style={[styles.bdHeaderTxt, { flex: 1.5 }]}>Exam</Text>
+                                <Text style={[styles.bdHeaderTxt, { flex: 2, textAlign: 'center' }]}>Marks</Text>
+                                <Text style={[styles.bdHeaderTxt, { flex: 1.5, textAlign: 'right' }]}>%</Text>
+                            </View>
+                            {item.examBreakdown.length > 0 ? (
+                                item.examBreakdown.map((exam, idx) => (
+                                    <View key={idx} style={styles.bdRow}>
+                                        <Text style={[styles.bdTxt, { flex: 1.5, fontWeight: '600' }]}>{exam.exam_type}</Text>
+                                        <Text style={[styles.bdTxt, { flex: 2, textAlign: 'center' }]}>
+                                            {Math.round(exam.total_obtained)} / {Math.round(exam.total_possible)}
+                                        </Text>
+                                        <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
+                                            <View style={[styles.percentagePill, { backgroundColor: getBarColor(parseFloat(exam.percentage)) }]}>
+                                                <Text style={styles.pillText}>{Math.round(exam.percentage)}%</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))
+                            ) : (
+                                <Text style={styles.emptyText}>No exams recorded yet.</Text>
+                            )}
+                        </View>
+                    </View>
+                )}
             </View>
         );
     };
 
     return (
         <View style={styles.container}>
-            {/* Header & Controls */}
+            {/* Header */}
             <View style={styles.headerContainer}>
-                <Text style={styles.title}>Class Performance</Text>
-                
-                <View style={styles.controlsRow}>
-                    {/* Class Selector */}
-                    <View style={styles.pickerWrapper}>
-                        <Text style={styles.pickerLabel}>Class</Text>
-                        <View style={styles.pickerBox}>
-                            <Picker
-                                selectedValue={selectedClass}
-                                onValueChange={(val) => setSelectedClass(val)}
-                                style={styles.picker}
-                                dropdownIconColor="#34495e"
-                            >
-                                {classList.map((cls) => (
-                                    <Picker.Item key={cls} label={cls} value={cls} />
-                                ))}
-                            </Picker>
-                        </View>
-                    </View>
+                <View style={styles.headerTitleRow}>
+                    <Text style={styles.headerTitle}>Class Performance</Text>
+                    <TouchableOpacity style={styles.compareBtn} onPress={() => setIsCompareVisible(true)}>
+                        <Icon name="scale-balance" size={16} color="#fff" />
+                        <Text style={styles.compareBtnText}>COMPARE</Text>
+                    </TouchableOpacity>
+                </View>
 
-                    {/* Sort Selector */}
-                    <View style={styles.pickerWrapper}>
-                        <Text style={styles.pickerLabel}>Sort By</Text>
-                        <View style={styles.pickerBox}>
-                            <Picker
-                                selectedValue={sortBy}
-                                onValueChange={(val) => setSortBy(val)}
-                                style={styles.picker}
-                                dropdownIconColor="#34495e"
-                            >
-                                <Picker.Item label="Roll No" value="roll_no" />
-                                <Picker.Item label="High to Low" value="desc" />
-                                <Picker.Item label="Low to High" value="asc" />
-                            </Picker>
-                        </View>
+                <View style={styles.filterContainer}>
+                    <View style={styles.filterBox}>
+                        <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
+                            {classList.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                        </Picker>
+                    </View>
+                    <View style={styles.filterBox}>
+                        <Picker selectedValue={sortBy} onValueChange={setSortBy} style={styles.picker}>
+                            <Picker.Item label="Roll No" value="roll_no" />
+                            <Picker.Item label="High to Low" value="desc" />
+                            <Picker.Item label="Low to High" value="asc" />
+                        </Picker>
                     </View>
                 </View>
             </View>
 
-            {/* List Content */}
+            {/* Content */}
             {loading ? (
-                <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color="#008080" />
-                    <Text style={styles.loadingText}>Loading Data...</Text>
-                </View>
+                <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>
             ) : (
                 <FlatList
-                    data={processedData}
+                    data={studentList}
                     keyExtractor={(item) => item.id.toString()}
                     renderItem={renderStudentItem}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={
-                        <View style={styles.centerContainer}>
-                            <Icon name="account-search" size={50} color="#bdc3c7" />
-                            <Text style={styles.emptyText}>No student data found for {selectedClass}</Text>
-                        </View>
-                    }
+                    contentContainerStyle={styles.listPadding}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+                    ListEmptyComponent={<Text style={styles.emptyText}>No student data found.</Text>}
                 />
             )}
+
+            {/* --- MODAL: INDIVIDUAL GRAPH --- */}
+            <Modal visible={isGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsGraphVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.graphModalCard}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalHeaderTitle}>Performance Stats</Text>
+                            <TouchableOpacity onPress={() => setIsGraphVisible(false)}>
+                                <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <Text style={styles.graphSubTitle}>{graphData?.title}</Text>
+
+                        <View style={styles.graphViewArea}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
+                                {graphData?.exams && graphData.exams.length > 0 ? graphData.exams.map((exam, idx) => (
+                                    <AnimatedBar 
+                                        key={idx} 
+                                        percentage={parseFloat(exam.percentage)} 
+                                        marks={`${Math.round(exam.total_obtained)}/${Math.round(exam.total_possible)}`}
+                                        label={exam.exam_type} 
+                                        color={getBarColor(parseFloat(exam.percentage))}
+                                        height={240}
+                                    />
+                                )) : <Text style={styles.noDataTxt}>No exams completed.</Text>}
+                            </ScrollView>
+                        </View>
+
+                        <View style={styles.legendRow}>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>Excellent</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>Average</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>Poor</Text></View>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* --- MODAL: COMPARISON --- */}
+            <Modal visible={isCompareVisible} animationType="slide" onRequestClose={() => setIsCompareVisible(false)}>
+                <View style={styles.fullScreenContainer}>
+                    <View style={styles.fsHeader}>
+                        <Text style={styles.fsTitle}>Student Comparison</Text>
+                        <TouchableOpacity onPress={() => setIsCompareVisible(false)} style={styles.closeFsBtn}>
+                            <Icon name="close" size={24} color="#333" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.compareControls}>
+                        <Text style={styles.controlLabel}>Select Comparison Criterion:</Text>
+                        <View style={styles.controlPicker}>
+                            <Picker selectedValue={compareExam} onValueChange={setCompareExam}>
+                                {availableExams.map(t => <Picker.Item key={t} label={t} value={t} />)}
+                            </Picker>
+                        </View>
+                    </View>
+
+                    <View style={styles.compareGraphArea}>
+                        <Text style={styles.compareGraphTitle}>Ranking by {compareExam}</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end' }}>
+                            {getComparisonData().length > 0 ? (
+                                getComparisonData().map((item, idx) => {
+                                    const firstName = item.name.split(' ')[0];
+                                    return (
+                                        <AnimatedBar 
+                                            key={idx}
+                                            percentage={item.percentage}
+                                            marks={`${Math.round(item.total_obtained)}/${Math.round(item.total_possible)}`}
+                                            label={`${item.roll ? item.roll + '.' : ''} ${firstName}`}
+                                            color={getBarColor(item.percentage)}
+                                            height={320}
+                                        />
+                                    );
+                                })
+                            ) : (
+                                <View style={styles.noDataContainer}><Text style={styles.noDataTxt}>No data available for {compareExam}.</Text></View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f0f2f5',
-    },
-    headerContainer: {
-        backgroundColor: '#fff',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-    },
-    title: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#008080',
-        marginBottom: 15,
-    },
-    controlsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: 10,
-    },
-    pickerWrapper: {
-        flex: 1,
-    },
-    pickerLabel: {
-        fontSize: 12,
-        color: '#7f8c8d',
-        marginBottom: 4,
-        fontWeight: '600',
-    },
-    pickerBox: {
-        borderWidth: 1,
-        borderColor: '#bdc3c7',
-        borderRadius: 8,
-        backgroundColor: '#f8f9fa',
-        height: 45,
-        justifyContent: 'center',
-    },
-    picker: {
-        width: '100%',
-        color: '#2c3e50',
-    },
-    listContent: {
-        padding: 15,
-        paddingBottom: 30,
-    },
-    // Card Styles
-    card: {
-        flexDirection: 'row',
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 15,
-        marginBottom: 12,
-        alignItems: 'center',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-    },
-    rankContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f0f2f5',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 15,
-    },
-    rankHidden: {
-        backgroundColor: 'transparent', 
-    },
-    rankText: {
-        fontWeight: 'bold',
-        color: '#546E7A',
-        fontSize: 14,
-    },
-    infoContainer: {
-        flex: 1,
-    },
-    studentName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#2c3e50',
-    },
-    rollNo: {
-        fontSize: 13,
-        color: '#7f8c8d',
-        marginTop: 2,
-    },
-    marksText: {
-        fontSize: 12,
-        color: '#34495e',
-        marginTop: 4,
-        fontWeight: '600',
-    },
-    progressBarContainer: {
-        height: 6,
-        backgroundColor: '#ecf0f1',
-        borderRadius: 3,
-        marginTop: 8,
-        width: '90%',
-        overflow: 'hidden',
-    },
-    progressBarFill: {
-        height: '100%',
-        borderRadius: 3,
-    },
-    percentBadge: {
-        width: 65,
-        height: 65,
-        borderRadius: 35,
-        borderWidth: 3,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 10,
-    },
-    percentText: {
-        fontSize: 13,
-        fontWeight: 'bold',
-    },
-    centerContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 50,
-    },
-    loadingText: {
-        marginTop: 10,
-        color: '#008080',
-        fontWeight: '500',
-    },
-    emptyText: {
-        marginTop: 10,
-        color: '#95a5a6',
-        fontSize: 16,
-    },
+    // Layout
+    container: { flex: 1, backgroundColor: COLORS.background },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    listPadding: { padding: 15, paddingBottom: 40 },
+    emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30 },
+
+    // Header
+    headerContainer: { backgroundColor: '#FFF', padding: 15, paddingBottom: 10, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, elevation: 4 },
+    headerTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
+    compareBtn: { flexDirection: 'row', backgroundColor: '#D81B60', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 25, alignItems: 'center', elevation: 3 },
+    compareBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, marginLeft: 6 },
+    
+    filterContainer: { flexDirection: 'row', gap: 12 },
+    filterBox: { flex: 1, backgroundColor: '#F0F2F5', borderRadius: 10, borderWidth: 1, borderColor: '#E0E0E0', height: 45, justifyContent: 'center' },
+    picker: { width: '100%', color: COLORS.textMain },
+
+    // Card
+    card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
+    cardContent: { flexDirection: 'row' },
+    rankStrip: { width: 36, justifyContent: 'center', alignItems: 'center' },
+    rankText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, transform: [{ rotate: '-90deg' }], width: 60, textAlign: 'center' },
+    cardBody: { flex: 1, padding: 15 },
+    
+    cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
+    studentName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
+    rollNo: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
+    
+    circleBadge: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
+    circleText: { fontSize: 13, fontWeight: 'bold' },
+
+    marksLabel: { fontSize: 12, color: COLORS.textSub, marginTop: 8, marginBottom: 4 },
+    marksValue: { fontWeight: 'bold', color: COLORS.textMain },
+    progressTrack: { height: 6, backgroundColor: COLORS.track, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+    progressFill: { height: '100%', borderRadius: 3 },
+    
+    expandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    perfLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
+
+    // Expanded
+    expandedSection: { backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#EEE', padding: 15 },
+    detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    detailTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
+    iconButton: { flexDirection: 'row', backgroundColor: '#FB8C00', padding: 6, borderRadius: 6, alignItems: 'center' },
+    btnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
+
+    breakdownContainer: { paddingHorizontal: 4 },
+    bdHeader: { flexDirection: 'row', marginBottom: 6, backgroundColor: '#F9FAFB', paddingVertical: 6, borderRadius: 4 },
+    bdHeaderTxt: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
+    bdRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', alignItems: 'center' },
+    bdTxt: { fontSize: 12, color: COLORS.textMain },
+    percentagePill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 },
+    pillText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+
+    // Modals
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    graphModalCard: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 10 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
+    graphSubTitle: { textAlign: 'center', color: COLORS.textSub, marginBottom: 15, fontSize: 14, fontWeight: '500' },
+    graphViewArea: { height: 250, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: 10 },
+
+    fullScreenContainer: { flex: 1, backgroundColor: COLORS.background },
+    fsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', elevation: 3 },
+    fsTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
+    closeFsBtn: { padding: 4 },
+    compareControls: { padding: 16, backgroundColor: '#FFF', marginBottom: 10 },
+    controlLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSub, marginBottom: 6 },
+    controlPicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#FAFAFA', height: 45, justifyContent: 'center' },
+    compareGraphArea: { flex: 1, paddingVertical: 20 },
+    compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginBottom: 20 },
+    noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', width: SCREEN_WIDTH },
+    noDataTxt: { marginTop: 10, color: COLORS.textSub },
+
+    // Animated Bar
+    barWrapper: { width: 55, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 8 },
+    barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
+    barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 15, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
+    barFill: { width: '100%', borderRadius: 15 },
+    barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#455A64', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
+    barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', color: COLORS.textMain, textAlign: 'center', width: '100%' },
+
+    legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
+    legendItem: { flexDirection: 'row', alignItems: 'center' },
+    dot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+    legendTxt: { fontSize: 12, color: COLORS.textSub }
 });
 
 export default StudentPerformance;
