@@ -3646,10 +3646,10 @@ app.get('/api/study-materials/student/:classGroup', async (req, res) => {
 
 
 // ===============================================================
-// --- TEACHER PERFORMANCE MODULE API ROUTES (FIXED LOGIC) ---
+// --- TEACHER PERFORMANCE MODULE API ROUTES (UPDATED) ---
 // ===============================================================
 
-// Constants for Max Marks
+// Constants for Max Marks per student per exam
 const EXAM_MAX_SCORES = {
     'AT1': 25, 'Assignment-1': 25,
     'UT1': 25, 'Unitest-1': 25,
@@ -3660,13 +3660,13 @@ const EXAM_MAX_SCORES = {
     'AT4': 25, 'Assignment-4': 25,
     'UT4': 25, 'Unitest-4': 25,
     'SA1': 100,
-    'SA2': 100
+    'SA2': 100,
+    'Pre-Final': 100
 };
 
-// Helper function to calculate accurate percentage based on weighted exams
+// Helper function to calculate accurate percentage and Exam-wise breakdown
 const calculateTeacherPerformance = async (db, teacherId, academicYear) => {
-    // 1. Fetch raw marks, EXCLUDING the 'Total'/'Overall' rows to prevent double counting.
-    // We need individual exam entries to calculate the "Max Possible" score.
+    // 1. Fetch raw marks, EXCLUDING 'Total'/'Overall'
     const query = `
         SELECT
             T.class_group,
@@ -3688,7 +3688,7 @@ const calculateTeacherPerformance = async (db, teacherId, academicYear) => {
 
     const [rawMarks] = await db.query(query, [teacherId, academicYear]);
 
-    // 2. Process in JavaScript to calculate sums and percentages
+    // 2. Process in JavaScript
     const performanceMap = {};
 
     for (const row of rawMarks) {
@@ -3700,45 +3700,68 @@ const calculateTeacherPerformance = async (db, teacherId, academicYear) => {
                 subject: row.subject,
                 total_obtained: 0,
                 total_possible: 0,
-                student_count: 0 // Rough estimate based on entries
+                exams: {} 
             };
         }
 
         const marks = parseFloat(row.marks_obtained);
-        // Determine max marks for this specific exam entry
-        // (e.g., if exam_type is AT1, max is 25)
         const maxScore = EXAM_MAX_SCORES[row.exam_type] || 0;
 
         if (!isNaN(marks) && maxScore > 0) {
             performanceMap[key].total_obtained += marks;
             performanceMap[key].total_possible += maxScore;
+
+            if (!performanceMap[key].exams[row.exam_type]) {
+                performanceMap[key].exams[row.exam_type] = {
+                    obtained: 0,
+                    possible: 0
+                };
+            }
+            performanceMap[key].exams[row.exam_type].obtained += marks;
+            performanceMap[key].exams[row.exam_type].possible += maxScore;
         }
     }
 
-    // 3. Convert map to array and calculate final percentage
+    // 3. Convert map to array
     const results = Object.values(performanceMap).map(item => {
-        let average_percentage = 0;
+        let overall_percentage = 0;
         if (item.total_possible > 0) {
-            average_percentage = (item.total_obtained / item.total_possible) * 100;
+            overall_percentage = (item.total_obtained / item.total_possible) * 100;
         }
+
+        const exam_breakdown = Object.entries(item.exams).map(([examType, stats]) => {
+            let exam_perc = 0;
+            if (stats.possible > 0) {
+                exam_perc = (stats.obtained / stats.possible) * 100;
+            }
+            return {
+                exam_type: examType,
+                total_obtained: stats.obtained,
+                total_possible: stats.possible,
+                percentage: exam_perc.toFixed(2)
+            };
+        });
+
+        const examOrder = ['AT1', 'UT1', 'SA1', 'AT2', 'UT2', 'SA2'];
+        exam_breakdown.sort((a, b) => {
+            return examOrder.indexOf(a.exam_type) - examOrder.indexOf(b.exam_type);
+        });
 
         return {
             class_group: item.class_group,
             subject: item.subject,
-            total_marks: item.total_obtained, // The actual sum of marks obtained
-            max_possible_marks: item.total_possible, // The denominator
-            average_marks: average_percentage.toFixed(2) // The accurate percentage
+            total_marks: item.total_obtained,
+            max_possible_marks: item.total_possible,
+            average_marks: overall_percentage.toFixed(2),
+            exam_breakdown: exam_breakdown
         };
     });
 
-    // Sort by Class Group
     results.sort((a, b) => a.class_group.localeCompare(b.class_group));
-
     return results;
 };
 
-// --- ADMIN ROUTE ---
-// GET performance data for all teachers
+// --- ADMIN ROUTE (UPDATED) ---
 app.get('/api/performance/admin/all-teachers/:academicYear', [verifyToken, isAdmin], async (req, res) => {
     try {
         const { academicYear } = req.params;
@@ -3751,7 +3774,6 @@ app.get('/api/performance/admin/all-teachers/:academicYear', [verifyToken, isAdm
         for (const teacher of teachers) {
             const performance = await calculateTeacherPerformance(db, teacher.id, academicYear);
             
-            // Calculate overall weighted average for the teacher across all classes
             let grandTotalObtained = 0;
             let grandTotalPossible = 0;
 
@@ -3770,6 +3792,7 @@ app.get('/api/performance/admin/all-teachers/:academicYear', [verifyToken, isAdm
                 teacher_name: teacher.full_name,
                 overall_average: overallAverage.toFixed(2),
                 overall_total: grandTotalObtained,
+                overall_possible: grandTotalPossible, // <--- ADDED THIS FIELD
                 detailed_performance: performance
             });
         }
@@ -3782,9 +3805,7 @@ app.get('/api/performance/admin/all-teachers/:academicYear', [verifyToken, isAdm
     }
 });
 
-
 // --- TEACHER ROUTE ---
-// GET performance data for the currently logged-in teacher
 app.get('/api/performance/teacher/:teacherId/:academicYear', verifyToken, async (req, res) => {
     try {
         const { teacherId, academicYear } = req.params;
