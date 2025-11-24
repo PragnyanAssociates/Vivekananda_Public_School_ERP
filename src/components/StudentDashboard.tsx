@@ -44,6 +44,8 @@ import StudentMaterialsScreen from '../screens/study-materials/StudentMaterialsS
 import StudentSyllabusScreen from '../screens/syllabus/StudentSyllabusScreen';
 import StudentResourcesScreen from '../screens/syllabus_Textbook/StudentResourcesScreen';
 
+import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
+
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
 const CONTENT_HORIZONTAL_PADDING = 15;
@@ -95,9 +97,7 @@ const StudentDashboard = ({ navigation }) => {
   const allQuickAccessItems = [
     { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-    // ★★★ THIS IS THE CRITICAL CHANGE ★★★
-    // We use `navigateTo` which triggers `navigation.navigate()`
-    // The name 'StudentHomework' MUST match the name of the navigator in your App.tsx
+    { id: 'qa28', title: 'Extracurricular Activities', imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png', navigateToTab: 'ActivitiesScreen' },
     { id: 'qa14', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateTo: 'StudentHomework' },
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa19', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
@@ -193,6 +193,8 @@ const StudentDashboard = ({ navigation }) => {
       case 'StudentMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleBack} /><StudentMaterialsScreen /></> );
       case 'StudentSyllabusNavigator': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleBack} /><StudentSyllabusScreen /></> );
       case 'StudentResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><StudentResourcesScreen /></> );
+
+      case 'ActivitiesScreen': return ( <><ContentScreenHeader title="Extracurricular Activities" onBack={handleBack} /><ActivitiesScreen /></> );
       
 
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
