@@ -8326,6 +8326,87 @@ app.put('/api/sports/entries/:id/status', [verifyToken, isTeacherOrAdmin], async
     try { await db.query("UPDATE sports_application_entries SET status = ? WHERE id = ?", [req.body.status, req.params.id]); res.json({message: "Updated"}); } catch (e) { res.status(500).json({message: "Error"}); }
 });
 
+// --- ANNOUNCEMENTS ---
+
+// GET Announcements for a Group
+app.get('/api/sports/groups/:id/announcements', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT sa.*, u.full_name as creator_name 
+            FROM sports_announcements sa
+            JOIN users u ON sa.created_by = u.id
+            WHERE sa.group_id = ?
+            ORDER BY sa.created_at DESC
+        `;
+        const [rows] = await db.query(query, [req.params.id]);
+        res.json(rows);
+    } catch (e) { res.status(500).json({message: "Error"}); }
+});
+
+// POST Announcement (Admin/Teacher Only)
+app.post('/api/sports/groups/:id/announcements', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+    const { title, message, event_date } = req.body;
+    try {
+        await db.query(
+            "INSERT INTO sports_announcements (group_id, title, message, event_date, created_by) VALUES (?, ?, ?, ?, ?)",
+            [req.params.id, title, message, event_date || null, req.user.id]
+        );
+        res.json({message: "Announcement posted"});
+    } catch (e) { res.status(500).json({message: "Error"}); }
+});
+
+// --- GROUP CHAT ---
+
+// GET Messages
+app.get('/api/sports/groups/:id/messages', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT sm.*, u.full_name as sender_name, u.role as sender_role 
+            FROM sports_group_messages sm
+            JOIN users u ON sm.sender_id = u.id
+            WHERE sm.group_id = ?
+            ORDER BY sm.created_at ASC
+        `;
+        const [rows] = await db.query(query, [req.params.id]);
+        res.json(rows);
+    } catch (e) { res.status(500).json({message: "Error"}); }
+});
+
+// POST Message (Any Member)
+app.post('/api/sports/groups/:id/messages', verifyToken, async (req, res) => {
+    const { message_text, message_type, media_url } = req.body;
+    try {
+        await db.query(
+            "INSERT INTO sports_group_messages (group_id, sender_id, message_text, message_type, media_url) VALUES (?, ?, ?, ?, ?)",
+            [req.params.id, req.user.id, message_text, message_type || 'text', media_url || null]
+        );
+        res.json({message: "Sent"});
+    } catch (e) { res.status(500).json({message: "Error"}); }
+});
+// --- CHAT MESSAGE DELETION ---
+
+// DELETE Message (Only the sender can delete their own message)
+app.delete('/api/sports/messages/:id', verifyToken, async (req, res) => {
+    try {
+        const messageId = req.params.id;
+        const userId = req.user.id;
+
+        // Check if message exists and belongs to user
+        const [check] = await db.query("SELECT * FROM sports_group_messages WHERE id = ? AND sender_id = ?", [messageId, userId]);
+        
+        if (check.length === 0) {
+            return res.status(403).json({ message: "You can only delete your own messages." });
+        }
+
+        await db.query("DELETE FROM sports_group_messages WHERE id = ?", [messageId]);
+        res.json({ message: "Message deleted" });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: "Error deleting message" });
+    }
+});
+
+
 
 
 // By using "server.listen", you enable both your API routes and the real-time chat.
