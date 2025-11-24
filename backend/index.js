@@ -8350,26 +8350,30 @@ app.post('/api/sports/apply', verifyToken, async (req, res) => {
     const { application_id } = req.body;
     const student_id = req.user.id;
 
-    // debug log to ensure data is receiving
-    console.log("Applying for:", application_id, "Student:", student_id);
+    // Debugging logs to verify data is arriving
+    console.log("Hit /api/sports/apply");
+    console.log("Payload:", req.body);
+    console.log("User ID:", student_id);
 
     if (!application_id) {
-        return res.status(400).json({ message: "Application ID is missing" });
+        return res.status(400).json({ message: "Application ID is required" });
     }
 
     try {
         // 1. Check if the student has ALREADY applied
+        // Uses table: sports_application_entries
         const [existing] = await db.query(
-            "SELECT id, status FROM sports_application_entries WHERE application_id = ? AND student_id = ?", 
+            "SELECT id FROM sports_application_entries WHERE application_id = ? AND student_id = ?", 
             [application_id, student_id]
         );
 
         if (existing.length > 0) {
-            // Already applied
-            return res.status(400).json({ message: "You have already applied for this activity." });
+            // Return 400 so the Frontend knows to show the "Already Applied" alert
+            return res.status(400).json({ message: "You have already applied." });
         }
 
-        // 2. Insert new entry with 'Pending' status
+        // 2. Insert new entry
+        // Uses table: sports_application_entries
         await db.query(
             "INSERT INTO sports_application_entries (application_id, student_id, status) VALUES (?, ?, 'Pending')", 
             [application_id, student_id]

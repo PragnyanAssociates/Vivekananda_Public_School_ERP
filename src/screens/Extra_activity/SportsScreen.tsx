@@ -24,16 +24,16 @@ import { Picker } from '@react-native-picker/picker';
 
 // --- COLORS ---
 const COLORS = {
-    primary: '#D32F2F', // Sports Red
-    secondary: '#1976D2', // Blue
+    primary: '#D32F2F', 
+    secondary: '#1976D2', 
     bg: '#F5F7FA',
     white: '#FFF',
     text: '#263238',
     grey: '#78909C',
     lightGrey: '#ECEFF1',
-    green: '#388E3C', // Approved
-    orange: '#FF9800', // Pending
-    red: '#D32F2F',    // Rejected
+    green: '#388E3C', 
+    orange: '#FF9800', 
+    red: '#D32F2F',    
     border: '#E0E0E0',
     chatBubbleUser: '#E3F2FD',
     chatBubbleOther: '#FFFFFF',
@@ -45,53 +45,46 @@ const SportsScreen = () => {
     const { user } = useAuth(); 
     const isStaff = user?.role === 'admin' || user?.role === 'teacher';
 
-    // Main Screen State
     const [activeTab, setActiveTab] = useState('groups');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [applyingId, setApplyingId] = useState(null); // Loading state for specific button
 
-    // --- BUTTON LOADING STATE ---
-    const [applyingId, setApplyingId] = useState(null);
-
-    // --- MODAL STATES ---
+    // Modals
     const [formModalVisible, setFormModalVisible] = useState(false);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [memberPickerVisible, setMemberPickerVisible] = useState(false);
     const [applicantsModalVisible, setApplicantsModalVisible] = useState(false);
 
-    // --- GROUP DETAIL SUB-TABS ---
+    // Detail Tab
     const [detailTab, setDetailTab] = useState('info'); 
 
-    // --- DATA STATES ---
+    // Data Holders
     const [selectedItem, setSelectedItem] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
-    
     const [allStudents, setAllStudents] = useState([]);
     const [allTeachers, setAllTeachers] = useState([]);
     const [allGroups, setAllGroups] = useState([]); 
     const [availableClasses, setAvailableClasses] = useState([]);
-    
     const [selectedMemberIds, setSelectedMemberIds] = useState([]);
     const [selectedTeacherId, setSelectedTeacherId] = useState(null);
     const [filterClass, setFilterClass] = useState('All');
     const [searchText, setSearchText] = useState('');
-
     const [currentGroupMembers, setCurrentGroupMembers] = useState([]);
     const [groupAnnouncements, setGroupAnnouncements] = useState([]);
     const [groupMessages, setGroupMessages] = useState([]);
     const [applicantsList, setApplicantsList] = useState([]);
 
-    // --- FORM DATA ---
+    // Form
     const [formData, setFormData] = useState({});
     const [chatInput, setChatInput] = useState('');
     const [announcementForm, setAnnouncementForm] = useState({ title: '', message: '', event_date: '' });
-    
     const [datePicker, setDatePicker] = useState({ show: false, mode: 'date', field: '', initialValue: new Date() });
     
     const chatListRef = useRef(null);
 
-    // --- FETCH MAIN DATA ---
+    // --- FETCH DATA ---
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
@@ -111,10 +104,9 @@ const SportsScreen = () => {
     }, [activeTab]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
-
     const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-    // --- UTILS ---
+    // --- HELPERS & UTILS (Keep same as before) ---
     const fetchUsersForSelection = async () => {
         try {
             const res = await apiClient.get('/users/sports/search');
@@ -146,13 +138,10 @@ const SportsScreen = () => {
         try {
             const membersRes = await apiClient.get(`/sports/groups/${groupId}/members`);
             setCurrentGroupMembers(membersRes.data);
-            
             const annRes = await apiClient.get(`/sports/groups/${groupId}/announcements`);
             setGroupAnnouncements(annRes.data);
-
             const chatRes = await apiClient.get(`/sports/groups/${groupId}/messages`);
             setGroupMessages(chatRes.data);
-            
             setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 500);
         } catch (e) { console.error(e); }
     };
@@ -193,7 +182,8 @@ const SportsScreen = () => {
         } catch (e) { Alert.alert("Error", "Failed to post"); }
     };
 
-    // --- APPLICATION HANDLERS ---
+    // --- APPLICATION LOGIC ---
+
     const handleViewApplicants = async (applicationId) => {
         try {
             setLoading(true);
@@ -218,15 +208,16 @@ const SportsScreen = () => {
         }
     };
 
-    // *** APPLY HANDLER ***
+    // *** FIX: Apply Handler ***
     const handleApply = async (applicationId) => {
-        setApplyingId(applicationId); 
+        setApplyingId(applicationId); // Start loading
         try {
-            const res = await apiClient.post('/sports/apply', { application_id: applicationId });
+            // This matches the UPDATED backend logic
+            await apiClient.post('/sports/apply', { application_id: applicationId });
             
-            Alert.alert("Success", res.data.message);
+            Alert.alert("Success", "Application Submitted!");
 
-            // Optimistic Update: Immediately disable button and show "Pending"
+            // Update local state to show 'Pending' immediately without reload
             setData(prevData => prevData.map(item => {
                 if (item.id === applicationId) {
                     return { ...item, my_status: 'Pending' }; 
@@ -235,20 +226,20 @@ const SportsScreen = () => {
             }));
 
         } catch (error) {
-            // Handle backend "Already applied" message
+            // Check for the specific 400 error from backend
             if (error.response && error.response.status === 400) {
-                Alert.alert("Notice", error.response.data.message || "You have already applied.");
-                fetchData(); // Sync data
+                Alert.alert("Notice", "You have already applied.");
+                fetchData(); // Sync if out of sync
             } else {
-                console.error(error);
-                Alert.alert("Error", "Could not submit application. Please check connection.");
+                console.error("Apply Error", error);
+                Alert.alert("Error", "Could not submit application. Check connection.");
             }
         } finally {
-            setApplyingId(null);
+            setApplyingId(null); // Stop loading
         }
     };
 
-    // --- CRUD HANDLERS ---
+    // --- CRUD ---
     const handleOpenCreate = async () => {
         setIsEditMode(false); 
         setFormData({}); 
@@ -277,7 +268,6 @@ const SportsScreen = () => {
         if (activeTab === 'schedule') {
              await fetchAllGroups();
         }
-
         setFormModalVisible(true);
     };
 
@@ -297,17 +287,8 @@ const SportsScreen = () => {
             let method = isEditMode ? 'put' : 'post';
             
             const pl = { ...formData };
-            
-            if (activeTab === 'groups') { 
-                pl.member_ids = selectedMemberIds; 
-                if (selectedTeacherId) pl.coach_id = selectedTeacherId; 
-            }
-            
-            if (activeTab === 'schedule') {
-                if(!pl.event_date || !pl.event_time) {
-                    return Alert.alert("Error", "Date and Time are required");
-                }
-            }
+            if (activeTab === 'groups') { pl.member_ids = selectedMemberIds; if (selectedTeacherId) pl.coach_id = selectedTeacherId; }
+            if (activeTab === 'schedule') { if(!pl.event_date || !pl.event_time) return Alert.alert("Error", "Date and Time are required"); }
 
             await apiClient[method](url, pl);
             setFormModalVisible(false); 
@@ -358,7 +339,7 @@ const SportsScreen = () => {
         return map[cat] || 'trophy';
     };
 
-    // --- RENDERERS ---
+    // --- CARD RENDERERS ---
     const renderGroupCard = ({ item }) => (
         <TouchableOpacity style={styles.card} onPress={() => handleGroupPress(item)} activeOpacity={0.8}>
             <View style={styles.iconBox}><Icon name={getSportIcon(item.category)} size={30} color={COLORS.white} /></View>
@@ -391,12 +372,8 @@ const SportsScreen = () => {
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     {isStaff && (
                         <View style={styles.actionIcons}>
-                            <TouchableOpacity onPress={() => handleOpenEdit(item)} style={{marginRight: 10}}>
-                                <Icon name="pencil" size={20} color={COLORS.secondary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                                <Icon name="trash-can" size={20} color={COLORS.primary} />
-                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleOpenEdit(item)} style={{marginRight: 10}}><Icon name="pencil" size={20} color={COLORS.secondary} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleDelete(item.id)}><Icon name="trash-can" size={20} color={COLORS.primary} /></TouchableOpacity>
                         </View>
                     )}
                 </View>
@@ -409,12 +386,11 @@ const SportsScreen = () => {
     const renderApplicationCard = ({ item }) => {
         const isExpired = item.deadline ? new Date(item.deadline) < new Date() : false;
         
-        // my_status comes from backend query: 'Pending', 'Approved', 'Rejected'
+        // Status from backend: 'Pending', 'Approved', 'Rejected'
         const myStatus = item.my_status;
         const isProcessing = applyingId === item.id;
 
-        // Status Badge Color
-        let statusColor = COLORS.green; // Default (Approved)
+        let statusColor = COLORS.green; 
         if (myStatus === 'Pending') statusColor = COLORS.orange;
         if (myStatus === 'Rejected') statusColor = COLORS.red;
 
@@ -430,31 +406,21 @@ const SportsScreen = () => {
                                 <TouchableOpacity onPress={() => handleDelete(item.id)}><Icon name="trash-can" size={20} color={COLORS.primary} /></TouchableOpacity>
                             </View>
                         ) : (
-                            // IF status exists, show badge top right
                             myStatus && <Text style={[styles.statusBadge, { color: statusColor }]}>{myStatus}</Text>
                         )}
                     </View>
                     <Text style={styles.cardDesc}>{item.description}</Text>
                     <Text style={styles.cardSubtitle}>Deadline: {item.deadline ? new Date(item.deadline).toLocaleDateString() : 'No Deadline'}</Text>
-                    
                     <View style={styles.actionRow}>
                         {isStaff ? (
-                            <TouchableOpacity style={styles.adminBtn} onPress={() => handleViewApplicants(item.id)}>
-                                <Text style={styles.adminBtnText}>View Applicants</Text>
-                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.adminBtn} onPress={() => handleViewApplicants(item.id)}><Text style={styles.adminBtnText}>View Applicants</Text></TouchableOpacity>
                         ) : (
                             <TouchableOpacity 
                                 style={[styles.applyBtn, (myStatus || isExpired || isProcessing) && styles.disabledBtn]} 
                                 onPress={() => handleApply(item.id)} 
                                 disabled={!!myStatus || isExpired || isProcessing}
                             >
-                                {isProcessing ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.applyBtnText}>
-                                        {myStatus ? (myStatus === 'Approved' ? 'Joined' : 'Applied') : isExpired ? 'Expired' : 'Apply Now'}
-                                    </Text>
-                                )}
+                                {isProcessing ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.applyBtnText}>{myStatus ? (myStatus === 'Approved' ? 'Joined' : 'Applied') : isExpired ? 'Expired' : 'Apply Now'}</Text>}
                             </TouchableOpacity>
                         )}
                     </View>
@@ -472,7 +438,6 @@ const SportsScreen = () => {
                 </View>
                 {isStaff && <TouchableOpacity onPress={handleOpenCreate}><Icon name="plus" size={28} color={COLORS.primary} /></TouchableOpacity>}
             </View>
-
             <View style={styles.tabContainer}>
                 {['groups', 'schedule', 'applications'].map(tab => (
                     <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.activeTab]} onPress={() => setActiveTab(tab)}>
@@ -480,7 +445,6 @@ const SportsScreen = () => {
                     </TouchableOpacity>
                 ))}
             </View>
-
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop:50}}/> : (
                 <FlatList
                     data={data}
@@ -492,8 +456,8 @@ const SportsScreen = () => {
                 />
             )}
 
-            {/* --- DETAIL MODAL --- */}
-            <Modal visible={detailModalVisible} animationType="slide" transparent={false}>
+            {/* Modals omitted for brevity, they remain unchanged from the previous correct version */}
+             <Modal visible={detailModalVisible} animationType="slide" transparent={false}>
                 <SafeAreaView style={{flex: 1, backgroundColor: COLORS.bg}}>
                     <View style={styles.modalFullHeader}>
                         <TouchableOpacity onPress={() => setDetailModalVisible(false)}><Icon name="arrow-left" size={24} color={COLORS.white} /></TouchableOpacity>
@@ -583,7 +547,6 @@ const SportsScreen = () => {
                 {datePicker.show && <DateTimePicker value={datePicker.initialValue} mode={datePicker.mode} onChange={onDateChange} is24Hour={true} />}
             </Modal>
 
-            {/* --- CREATE/EDIT MODAL --- */}
             <Modal visible={formModalVisible} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
@@ -661,7 +624,6 @@ const SportsScreen = () => {
                 {datePicker.show && <DateTimePicker value={datePicker.initialValue} mode={datePicker.mode} onChange={onDateChange} is24Hour={true} />}
             </Modal>
 
-            {/* --- MEMBER PICKER MODAL --- */}
             <Modal visible={memberPickerVisible} animationType="slide">
                 <SafeAreaView style={{flex: 1, backgroundColor: COLORS.bg}}>
                     <View style={styles.header}>
@@ -702,7 +664,6 @@ const SportsScreen = () => {
                 </SafeAreaView>
             </Modal>
 
-            {/* --- APPLICANTS MODAL --- */}
             <Modal visible={applicantsModalVisible} animationType="slide">
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
                     <View style={[styles.header, { borderBottomWidth: 1, borderBottomColor: COLORS.border }]}>
