@@ -1331,256 +1331,6 @@ app.post('/api/health/record/:userId', async (req, res) => {
 
 
 
-// ==========================================================
-// --- SPORTS API ROUTES (NEW) ---
-// ==========================================================
-
-// STUDENT: Get a list of activities a specific student is registered for.
-app.get('/api/sports/my-registrations/:userId', async (req, res) => {
-    const { userId } = req.params;
-    const query = `
-        SELECT sa.name, sa.team_name, sa.coach_name, sa.schedule_details, ar.achievements
-        FROM activity_registrations ar
-        JOIN sports_activities sa ON ar.activity_id = sa.id
-        WHERE ar.student_id = ? AND ar.status = 'Approved'`;
-    try {
-        const [registrations] = await db.query(query, [userId]);
-        res.json(registrations);
-    } catch (error) { res.status(500).json({ message: 'Error fetching registrations.' }); }
-});
-
-// STUDENT: Get a list of all available activities they haven't applied for yet.
-app.get('/api/sports/available/:userId', async (req, res) => {
-    const { userId } = req.params;
-    const query = `
-        SELECT * FROM sports_activities 
-        WHERE is_active = TRUE AND id NOT IN 
-        (SELECT activity_id FROM activity_registrations WHERE student_id = ?)`;
-    try {
-        const [activities] = await db.query(query, [userId]);
-        res.json(activities);
-    } catch (error) { res.status(500).json({ message: 'Error fetching available activities.' }); }
-});
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// STUDENT: Apply for an activity.
-app.post('/api/sports/apply', async (req, res) => {
-    const { userId, activityId } = req.body;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // Step 1: Create the registration record
-        await connection.query('INSERT INTO activity_registrations (student_id, activity_id) VALUES (?, ?)', [userId, activityId]);
-        
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-        
-        // 1. Find all admins
-        const [admins] = await connection.query("SELECT id FROM users WHERE role = 'admin'");
-        let recipientIds = admins.map(a => a.id);
-
-        // 2. Find the student and activity details for the message
-        const [[student]] = await connection.query("SELECT full_name, class_group FROM users WHERE id = ?", [userId]);
-        const [[activity]] = await connection.query("SELECT name, coach_name FROM sports_activities WHERE id = ?", [activityId]);
-
-        // 3. If there's a specific coach, find their ID and add them to the recipients
-        if (activity.coach_name) {
-            const [[coach]] = await connection.query("SELECT id FROM users WHERE full_name = ? AND role = 'teacher'", [activity.coach_name]);
-            if (coach) {
-                recipientIds.push(coach.id);
-            }
-        }
-        
-        // 4. Prepare and send notifications
-        const uniqueRecipientIds = [...new Set(recipientIds)]; // Ensure no duplicate notifications
-        if (uniqueRecipientIds.length > 0) {
-            const notificationTitle = `New Sports Application`;
-            const notificationMessage = `${student.full_name} (${student.class_group}) has applied for ${activity.name}.`;
-            
-            await createBulkNotifications(
-                connection,
-                uniqueRecipientIds,
-                student.full_name,
-                notificationTitle,
-                notificationMessage,
-                '/admin/sports' // A generic link for admins/teachers
-            );
-        }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-        
-        await connection.commit();
-        res.status(201).json({ message: 'Successfully applied!' });
-
-    } catch (error) {
-        await connection.rollback();
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'You have already applied for this activity.' });
-        }
-        console.error("Error applying for sport:", error);
-        res.status(500).json({ message: 'Error applying for activity.' });
-    } finally {
-        connection.release();
-    }
-});
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// ADMIN/TEACHER: Create a new sport/activity.
-app.post('/api/sports', async (req, res) => {
-    const { name, team_name, coach_name, schedule_details, description, created_by } = req.body;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // Step 1: Create the sports activity
-        const query = 'INSERT INTO sports_activities (name, team_name, coach_name, schedule_details, description, created_by) VALUES (?, ?, ?, ?, ?, ?)';
-        await connection.query(query, [name, team_name, coach_name, schedule_details, description, created_by]);
-
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-        
-        // 1. Find all students
-        const [students] = await connection.query("SELECT id FROM users WHERE role = 'student'");
-        
-        if (students.length > 0) {
-            // 2. Get the creator's name
-            const [[creator]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = creator.full_name || "Sports Department";
-
-            // 3. Prepare and send notifications
-            const studentIds = students.map(s => s.id);
-            const notificationTitle = `New Sport Available: ${name}`;
-            const notificationMessage = `Registrations are now open for ${name}. Visit the sports section to apply!`;
-
-            await createBulkNotifications(
-                connection,
-                studentIds,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/sports' // Generic link to the sports screen
-            );
-        }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
-        await connection.commit();
-        res.status(201).json({ message: 'Activity created and students notified successfully!' });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error creating sport activity:", error);
-        res.status(500).json({ message: 'Error creating activity.' });
-    } finally {
-        connection.release();
-    }
-});
-
-// ADMIN/TEACHER: Get all activities for management view.
-app.get('/api/sports/all', async (req, res) => {
-    const query = `
-        SELECT sa.*, COUNT(ar.id) as application_count 
-        FROM sports_activities sa 
-        LEFT JOIN activity_registrations ar ON sa.id = ar.activity_id AND ar.status = 'Applied'
-        GROUP BY sa.id ORDER BY sa.created_at DESC`;
-    try {
-        const [activities] = await db.query(query);
-        res.json(activities);
-    } catch (error) { res.status(500).json({ message: 'Error fetching all activities.' }); }
-});
-
-// ADMIN/TEACHER: Get all applications (Applied, Approved) for a specific activity.
-app.get('/api/sports/applications/:activityId', async (req, res) => {
-    const { activityId } = req.params;
-    const query = `
-        SELECT ar.id as registration_id, ar.status, ar.achievements, ar.remarks, u.id as student_id, u.full_name, ar.registration_date
-        FROM activity_registrations ar
-        JOIN users u ON ar.student_id = u.id
-        WHERE ar.activity_id = ?
-        ORDER BY ar.registration_date DESC`; // Order by most recent application first
-    try {
-        const [applications] = await db.query(query, [activityId]);
-        res.json(applications);
-    } catch (error) { res.status(500).json({ message: 'Error fetching applications.' }); }
-});
-
-// 📂 File: server.js (REPLACE THIS ROUTE)
-
-// ADMIN/TEACHER: Update an application's status (Approve/Reject).
-app.put('/api/sports/application/status', async (req, res) => {
-    const { registrationId, status, adminId } = req.body; // Assuming adminId is sent from the frontend
-    
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // Step 1: Update the application status
-        await connection.query('UPDATE activity_registrations SET status = ? WHERE id = ?', [status, registrationId]);
-        
-        // ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
-
-        // 1. Get details about the application for the message
-        const [[registration]] = await connection.query(`
-            SELECT ar.student_id, sa.name AS activity_name
-            FROM activity_registrations ar
-            JOIN sports_activities sa ON ar.activity_id = sa.id
-            WHERE ar.id = ?
-        `, [registrationId]);
-
-        if (registration) {
-            // 2. Get the admin's name
-            const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [adminId]);
-            const senderName = admin.full_name || "Sports Department";
-
-            // 3. Prepare notification details
-            const notificationTitle = `Application ${status}`;
-            const notificationMessage = `Your application for ${registration.activity_name} has been ${status}.`;
-
-            // 4. Send a single notification to the student
-            await createNotification(
-                connection,
-                registration.student_id,
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/my-registrations' // A hypothetical link to their sports page
-            );
-        }
-
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-
-        await connection.commit();
-        res.status(200).json({ message: `Application status updated to ${status}` });
-
-    } catch (error) {
-        await connection.rollback();
-        console.error("Error updating application status:", error);
-        res.status(500).json({ message: 'Error updating status.' });
-    } finally {
-        connection.release();
-    }
-});
-
-// ADMIN/TEACHER: Update a student's achievements for a registration.
-app.put('/api/sports/application/achievements', async (req, res) => {
-    const { registrationId, achievements } = req.body;
-    try {
-        await db.query('UPDATE activity_registrations SET achievements = ? WHERE id = ?', [achievements, registrationId]);
-        res.status(200).json({ message: 'Achievements updated successfully!' });
-    } catch (error) { res.status(500).json({ message: 'Error updating achievements.' }); }
-});
-// ADMIN/TEACHER: Update an application's remarks.
-app.put('/api/sports/application/remarks', async (req, res) => {
-    const { registrationId, remarks } = req.body;
-    try {
-        await db.query('UPDATE activity_registrations SET remarks = ? WHERE id = ?', [remarks, registrationId]);
-        res.status(200).json({ message: 'Remarks updated successfully!' });
-    } catch (error) { res.status(500).json({ message: 'Error updating remarks.' }); }
-});
-
-
-
 
 // ==========================================================
 // --- EVENTS API ROUTES (UPDATED) ---
@@ -8347,72 +8097,49 @@ app.delete('/api/sports/applications/:id', [verifyToken, isTeacherOrAdmin], asyn
 });
 
 // ==========================================================
-// CORRECTED STUDENT APPLY ROUTE
+// CORRECTED STUDENT APPLY ROUTE (FIXED)
 // ==========================================================
 app.post('/api/sports/apply', verifyToken, async (req, res) => {
-    // 1. Get the Application ID sent from Frontend
     const { application_id } = req.body;
-    
-    // 2. Get Student ID from the logged-in user (Token)
     const student_id = req.user ? req.user.id : null;
 
     console.log("--- APPLY DEBUG START ---");
     console.log("User ID from Token:", student_id);
     console.log("Application ID from Body:", application_id);
 
-    // 3. Validation: Ensure we have both IDs
+    // Validation
     if (!student_id) {
-        console.error("Error: Student ID is missing.");
-        return res.status(401).json({ message: "Unauthorized. Please log in again." });
+        return res.status(401).json({ message: "Unauthorized: User ID not found." });
     }
     if (!application_id) {
-        console.error("Error: Application ID is missing.");
-        return res.status(400).json({ message: "Application ID is required." });
+        return res.status(400).json({ message: "Application ID is required" });
     }
 
-    const connection = await db.getConnection();
-
     try {
-        // 4. Check if the table exists (Safety Check)
-        // This prevents the code from crashing if the DB is empty
-        await connection.beginTransaction();
-
-        // 5. Check if ALREADY applied
+        // 1. Check if ALREADY applied
         // CORRECT TABLE: sports_application_entries
-        const [existing] = await connection.query(
+        const [existing] = await db.query(
             "SELECT id FROM sports_application_entries WHERE application_id = ? AND student_id = ?", 
             [application_id, student_id]
         );
 
         if (existing.length > 0) {
-            await connection.rollback();
-            return res.status(400).json({ message: "You have already applied for this activity." });
+            return res.status(400).json({ message: "You have already applied." });
         }
 
-        // 6. Insert new entry
+        // 2. Insert new entry
         // CORRECT TABLE: sports_application_entries
-        // CORRECT COLUMNS: application_id, student_id
-        await connection.query(
+        await db.query(
             "INSERT INTO sports_application_entries (application_id, student_id, status) VALUES (?, ?, 'Pending')", 
             [application_id, student_id]
         );
         
-        await connection.commit();
-        console.log("Success: Application inserted.");
+        console.log("Application inserted successfully");
         res.json({ message: "Application submitted successfully" });
 
-    } catch (error) {
-        await connection.rollback();
-        console.error("DATABASE ERROR:", error);
-        
-        // Detailed error for debugging
-        res.status(500).json({ 
-            message: "Server error while applying.", 
-            error_details: error.sqlMessage || error.message 
-        });
-    } finally {
-        connection.release();
-        console.log("--- APPLY DEBUG END ---");
+    } catch (e) {
+        console.error("Apply Error:", e);
+        res.status(500).json({ message: "Server error while applying." });
     }
 });
 
