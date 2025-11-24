@@ -59,6 +59,8 @@ import StudentStackNavigator from '../screens/StudentStackNavigator';
 import StaffNavigator from '../screens/StaffNavigator';
 import AccountsScreen from '../screens/Accounts/AccountsScreen';
 
+import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
+
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
 const CONTENT_HORIZONTAL_PADDING = 15;
@@ -116,11 +118,12 @@ const AdminDashboard = ({ navigation }) => {
     { id: 'qa26', title: 'Students', imageSource: 'https://cdn-icons-png.flaticon.com/128/16405/16405976.png', navigateToTab: 'StudentStackNavigator' },
     { id: 'qa24', title: 'Teacher Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png', navigateToTab: 'TeacherPerformanceScreen' },
     { id: 'qa27', title: 'Student Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'StudentPerformance' },
-    { id: 'qa23', title: 'Teacher Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceMarkingScreen' },
     { id: 'qa18', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/18479/18479099.png', navigateTo: 'ReportScreen' },
     { id: 'qa1', title: 'Time Table', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa2', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
+    { id: 'qa23', title: 'Teacher Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceMarkingScreen' },
     { id: 'qa3', title: 'Homework', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
+    { id: 'qa28', title: 'Extracurricular Activities', imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png', navigateToTab: 'ActivitiesScreen' },
     { id: 'qa4', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa6', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/9913/9913475.png', navigateToTab: 'TeacherAdminExamsScreen' },
     { id: 'qa7', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/11277/11277118.png', navigateToTab: 'TeacherAdminPTMScreen' },
@@ -221,6 +224,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'StudentStackNavigator': return ( <><ContentScreenHeader title="Students" onBack={handleBack} /><StudentStackNavigator /></> );
         case 'StaffNavigator': return ( <><ContentScreenHeader title="Staff" onBack={handleBack} /><StaffNavigator /></> );
         case 'AccountsScreen': return ( <><ContentScreenHeader title="Accounts" onBack={handleBack} /><AccountsScreen /></> );
+        case 'ActivitiesScreen': return ( <><ContentScreenHeader title="Extracurricular Activities" onBack={handleBack} /><ActivitiesScreen /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
       }
