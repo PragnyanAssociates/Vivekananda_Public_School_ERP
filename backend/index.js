@@ -8346,50 +8346,73 @@ app.delete('/api/sports/applications/:id', [verifyToken, isTeacherOrAdmin], asyn
     try { await db.query("DELETE FROM sports_applications WHERE id=?", [req.params.id]); res.json({message: "Deleted"}); } catch (e) { res.status(500).json({message: "Error"}); }
 });
 
-// Student Apply Route
+// ==========================================================
+// CORRECTED STUDENT APPLY ROUTE
+// ==========================================================
 app.post('/api/sports/apply', verifyToken, async (req, res) => {
-    // 1. Extract application_id from body (Frontend sends this)
+    // 1. Get the Application ID sent from Frontend
     const { application_id } = req.body;
     
-    // 2. Extract student_id from the verified token
+    // 2. Get Student ID from the logged-in user (Token)
     const student_id = req.user ? req.user.id : null;
 
-    // Debugging logs
-    console.log("Hit /api/sports/apply");
-    console.log("Payload:", req.body);
-    console.log("User ID:", student_id);
+    console.log("--- APPLY DEBUG START ---");
+    console.log("User ID from Token:", student_id);
+    console.log("Application ID from Body:", application_id);
 
-    // 3. Validation
+    // 3. Validation: Ensure we have both IDs
     if (!student_id) {
-        return res.status(401).json({ message: "Unauthorized: User ID not found." });
+        console.error("Error: Student ID is missing.");
+        return res.status(401).json({ message: "Unauthorized. Please log in again." });
     }
     if (!application_id) {
-        return res.status(400).json({ message: "Application ID is required" });
+        console.error("Error: Application ID is missing.");
+        return res.status(400).json({ message: "Application ID is required." });
     }
 
+    const connection = await db.getConnection();
+
     try {
-        // 4. Check if ALREADY applied using the correct table: sports_application_entries
-        const [existing] = await db.query(
+        // 4. Check if the table exists (Safety Check)
+        // This prevents the code from crashing if the DB is empty
+        await connection.beginTransaction();
+
+        // 5. Check if ALREADY applied
+        // CORRECT TABLE: sports_application_entries
+        const [existing] = await connection.query(
             "SELECT id FROM sports_application_entries WHERE application_id = ? AND student_id = ?", 
             [application_id, student_id]
         );
 
         if (existing.length > 0) {
-            return res.status(400).json({ message: "You have already applied." });
+            await connection.rollback();
+            return res.status(400).json({ message: "You have already applied for this activity." });
         }
 
-        // 5. Insert new entry into the correct table: sports_application_entries
-        await db.query(
+        // 6. Insert new entry
+        // CORRECT TABLE: sports_application_entries
+        // CORRECT COLUMNS: application_id, student_id
+        await connection.query(
             "INSERT INTO sports_application_entries (application_id, student_id, status) VALUES (?, ?, 'Pending')", 
             [application_id, student_id]
         );
         
+        await connection.commit();
+        console.log("Success: Application inserted.");
         res.json({ message: "Application submitted successfully" });
 
-    } catch (e) {
-        console.error("Apply Error:", e);
-        // This log will help identify if there are other SQL issues
-        res.status(500).json({ message: "Server error while applying." });
+    } catch (error) {
+        await connection.rollback();
+        console.error("DATABASE ERROR:", error);
+        
+        // Detailed error for debugging
+        res.status(500).json({ 
+            message: "Server error while applying.", 
+            error_details: error.sqlMessage || error.message 
+        });
+    } finally {
+        connection.release();
+        console.log("--- APPLY DEBUG END ---");
     }
 });
 
