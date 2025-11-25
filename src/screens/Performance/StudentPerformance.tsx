@@ -2,6 +2,7 @@
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
  * Logic: Calculates percentage based ONLY on completed exams (exams with entered marks).
+ * Updated: Strict Color Logic (<60 Red, 60-90 Blue, >90 Green).
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -23,7 +24,7 @@ if (Platform.OS === 'android') {
 // --- Constants ---
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-const CLASS_SUBJECTS = {
+const CLASS_SUBJECTS: any = {
     'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 
     'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
     'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
@@ -38,14 +39,14 @@ const CLASS_SUBJECTS = {
 };
 
 // Max marks per subject for each exam type
-const EXAM_MAX_SCORES = {
+const EXAM_MAX_SCORES: any = {
     'AT1': 25, 'UT1': 25, 'AT2': 25, 'UT2': 25,
     'AT3': 25, 'UT3': 25, 'AT4': 25, 'UT4': 25,
     'SA1': 100, 'SA2': 100, 'Pre-Final': 100
 };
 
 // Map API exam names to short codes
-const EXAM_NAME_TO_CODE = {
+const EXAM_NAME_TO_CODE: any = {
     'Assignment-1': 'AT1', 'Unitest-1': 'UT1', 
     'Assignment-2': 'AT2', 'Unitest-2': 'UT2',
     'Assignment-3': 'AT3', 'Unitest-3': 'UT3', 
@@ -65,15 +66,18 @@ const COLORS = {
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
-    success: '#43A047',    // Green
-    average: '#1E88E5',    // Blue
-    poor: '#E53935',       // Red
+    
+    // UPDATED STATUS COLORS
+    success: '#43A047',    // Green (> 90%)
+    average: '#1E88E5',    // Blue (60% - 90%)
+    poor: '#E53935',       // Red (< 60%)
+    
     track: '#ECEFF1',      // Light Grey
     border: '#CFD8DC'
 };
 
 // --- COMPONENT: ANIMATED BAR ---
-const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
+const AnimatedBar = ({ percentage, marks, label, color, height = 200 }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -107,21 +111,21 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
 const StudentPerformance = () => {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [expandedId, setExpandedId] = useState(null);
+    const [expandedId, setExpandedId] = useState<number | null>(null);
 
-    const [classList, setClassList] = useState([]);
+    const [classList, setClassList] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     
     // Raw Data
-    const [students, setStudents] = useState([]);
-    const [marksData, setMarksData] = useState([]);
+    const [students, setStudents] = useState<any[]>([]);
+    const [marksData, setMarksData] = useState<any[]>([]);
     
     // Filter State
     const [sortBy, setSortBy] = useState('roll_no');
 
     // Modals
     const [isGraphVisible, setIsGraphVisible] = useState(false);
-    const [graphData, setGraphData] = useState(null);
+    const [graphData, setGraphData] = useState<any>(null);
     const [isCompareVisible, setIsCompareVisible] = useState(false);
     const [compareExam, setCompareExam] = useState('Overall');
 
@@ -145,7 +149,7 @@ const StudentPerformance = () => {
         if (selectedClass) fetchClassData(selectedClass);
     }, [selectedClass]);
 
-    const fetchClassData = async (classGroup) => {
+    const fetchClassData = async (classGroup: string) => {
         setLoading(true);
         try {
             const response = await apiClient.get(`/reports/class-data/${classGroup}`);
@@ -165,12 +169,12 @@ const StudentPerformance = () => {
         if (selectedClass) fetchClassData(selectedClass);
     };
 
-    const toggleExpand = (id) => {
+    const toggleExpand = (id: number) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpandedId(expandedId === id ? null : id);
     };
 
-    const handleOpenGraph = (title, exams) => {
+    const handleOpenGraph = (title: string, exams: any[]) => {
         setGraphData({ title, exams });
         setIsGraphVisible(true);
     };
@@ -183,7 +187,7 @@ const StudentPerformance = () => {
         const subjectCount = subjects.length;
 
         // 1. Map Marks: student_id -> exam_code -> subject -> marks
-        const marksMap = {};
+        const marksMap: any = {};
         marksData.forEach(mark => {
             if (!marksMap[mark.student_id]) marksMap[mark.student_id] = {};
             const code = EXAM_NAME_TO_CODE[mark.exam_type];
@@ -196,27 +200,24 @@ const StudentPerformance = () => {
         // 2. Build Student Objects
         let results = students.map(student => {
             let studentTotalObtained = 0;
-            let studentMaxTotal = 0; // This grows only if exam exists
-            const examBreakdown = [];
+            let studentMaxTotal = 0; 
+            const examBreakdown: any[] = [];
 
-            // Iterate through fixed exam order (AT1, UT1...)
+            // Iterate through fixed exam order
             EXAM_ORDER.forEach(examCode => {
                 let examObtained = 0;
                 let hasExamData = false;
                 
-                subjects.forEach(subject => {
+                subjects.forEach((subject: string) => {
                     const val = marksMap[student.id]?.[examCode]?.[subject];
-                    // Check if mark exists and is valid number (not null/empty)
                     if (val !== undefined && val !== null && val !== '' && !isNaN(parseFloat(val))) {
                         examObtained += parseFloat(val);
                         hasExamData = true;
                     }
                 });
 
-                // Only count this exam if there is data
                 if (hasExamData) {
                     const examMax = (EXAM_MAX_SCORES[examCode] || 0) * subjectCount;
-                    
                     studentTotalObtained += examObtained;
                     studentMaxTotal += examMax;
 
@@ -231,15 +232,14 @@ const StudentPerformance = () => {
                 }
             });
 
-            // Calculate percentage based ONLY on completed exams
             const percentage = studentMaxTotal > 0 ? ((studentTotalObtained / studentMaxTotal) * 100).toFixed(2) : 0;
 
             return {
                 ...student,
                 id: student.id,
                 totalObtained: studentTotalObtained,
-                maxTotal: studentMaxTotal, // Dynamic Max
-                percentage: parseFloat(percentage),
+                maxTotal: studentMaxTotal, 
+                percentage: parseFloat(percentage as string),
                 examBreakdown,
                 performanceRank: 0
             };
@@ -251,7 +251,7 @@ const StudentPerformance = () => {
 
         // 4. Final Sort
         if (sortBy === 'desc') {
-            // Already sorted desc
+            // Already sorted
         } else if (sortBy === 'asc') {
             results.sort((a, b) => a.totalObtained - b.totalObtained);
         } else {
@@ -264,9 +264,8 @@ const StudentPerformance = () => {
             });
         }
 
-        // Collect active exams for dropdown (union of all students' completed exams)
         const activeExamsSet = new Set();
-        results.forEach(s => s.examBreakdown.forEach(e => activeExamsSet.add(e.exam_type)));
+        results.forEach(s => s.examBreakdown.forEach((e: any) => activeExamsSet.add(e.exam_type)));
         const activeExams = EXAM_ORDER.filter(e => activeExamsSet.has(e));
 
         return { students: results, activeExams };
@@ -288,7 +287,7 @@ const StudentPerformance = () => {
                 max = student.maxTotal;
                 perc = student.percentage;
             } else {
-                const examData = student.examBreakdown.find(e => e.exam_type === compareExam);
+                const examData = student.examBreakdown.find((e: any) => e.exam_type === compareExam);
                 if (examData) {
                     ob = examData.total_obtained;
                     max = examData.total_possible;
@@ -304,28 +303,36 @@ const StudentPerformance = () => {
                 percentage: perc
             };
         })
-        // Filter out students who don't have data for the selected exam (e.g., absent for SA1)
         .filter(item => item.total_possible > 0)
         .sort((a, b) => b.percentage - a.percentage);
     };
 
     // --- Helpers ---
-    const getColorForRank = (rank) => {
+    
+    // For Rank Strip (Position only)
+    const getColorForRank = (rank: number) => {
         if (rank === 1) return COLORS.success;
         if (rank === 2) return COLORS.primary;
         if (rank === 3) return COLORS.average;
         return COLORS.textSub;
     };
 
-    const getBarColor = (perc) => {
-        if (perc >= 75) return COLORS.success;
-        if (perc >= 50) return COLORS.average;
-        return COLORS.poor;
+    // UPDATED: Strict Logic (<60 Red, 60-90 Blue, >90 Green)
+    const getStatusColor = (perc: number | string) => {
+        const val = parseFloat(perc as string);
+        if (val > 90) return COLORS.success; // Green
+        if (val >= 60) return COLORS.average; // Blue
+        return COLORS.poor; // Red
     };
 
     // --- Render Item ---
-    const renderStudentItem = ({ item }) => {
-        const itemColor = getColorForRank(item.performanceRank);
+    const renderStudentItem = ({ item }: any) => {
+        // Keep rank strip color based on rank #
+        const rankColor = getColorForRank(item.performanceRank);
+        
+        // Use Strict Color Logic for actual performance stats
+        const performanceColor = getStatusColor(item.percentage);
+        
         const isExpanded = expandedId === item.id;
 
         return (
@@ -335,8 +342,8 @@ const StudentPerformance = () => {
                     onPress={() => toggleExpand(item.id)}
                     activeOpacity={0.8}
                 >
-                    {/* Rank Strip */}
-                    <View style={[styles.rankStrip, { backgroundColor: itemColor }]}>
+                    {/* Rank Strip (Color by Position) */}
+                    <View style={[styles.rankStrip, { backgroundColor: rankColor }]}>
                         <Text style={styles.rankText}>#{item.performanceRank}</Text>
                     </View>
 
@@ -346,8 +353,9 @@ const StudentPerformance = () => {
                                 <Text style={styles.studentName}>{item.full_name}</Text>
                                 <Text style={styles.rollNo}>Roll No: {item.roll_no}</Text>
                             </View>
-                            <View style={[styles.circleBadge, { borderColor: itemColor }]}>
-                                <Text style={[styles.circleText, { color: itemColor }]}>{Math.round(item.percentage)}%</Text>
+                            {/* Circle Badge (Color by Performance %) */}
+                            <View style={[styles.circleBadge, { borderColor: performanceColor }]}>
+                                <Text style={[styles.circleText, { color: performanceColor }]}>{Math.round(item.percentage)}%</Text>
                             </View>
                         </View>
 
@@ -355,8 +363,9 @@ const StudentPerformance = () => {
                             Total Marks: <Text style={styles.marksValue}>{Math.round(item.totalObtained)} / {Math.round(item.maxTotal)}</Text>
                         </Text>
 
+                        {/* Progress Bar (Color by Performance %) */}
                         <View style={styles.progressTrack}>
-                            <View style={[styles.progressFill, { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: itemColor }]} />
+                            <View style={[styles.progressFill, { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: performanceColor }]} />
                         </View>
 
                         <View style={styles.expandRow}>
@@ -388,14 +397,14 @@ const StudentPerformance = () => {
                                 <Text style={[styles.bdHeaderTxt, { flex: 1.5, textAlign: 'right' }]}>%</Text>
                             </View>
                             {item.examBreakdown.length > 0 ? (
-                                item.examBreakdown.map((exam, idx) => (
+                                item.examBreakdown.map((exam: any, idx: number) => (
                                     <View key={idx} style={styles.bdRow}>
                                         <Text style={[styles.bdTxt, { flex: 1.5, fontWeight: '600' }]}>{exam.exam_type}</Text>
                                         <Text style={[styles.bdTxt, { flex: 2, textAlign: 'center' }]}>
                                             {Math.round(exam.total_obtained)} / {Math.round(exam.total_possible)}
                                         </Text>
                                         <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
-                                            <View style={[styles.percentagePill, { backgroundColor: getBarColor(parseFloat(exam.percentage)) }]}>
+                                            <View style={[styles.percentagePill, { backgroundColor: getStatusColor(parseFloat(exam.percentage)) }]}>
                                                 <Text style={styles.pillText}>{Math.round(exam.percentage)}%</Text>
                                             </View>
                                         </View>
@@ -468,23 +477,24 @@ const StudentPerformance = () => {
 
                         <View style={styles.graphViewArea}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
-                                {graphData?.exams && graphData.exams.length > 0 ? graphData.exams.map((exam, idx) => (
+                                {graphData?.exams && graphData.exams.length > 0 ? graphData.exams.map((exam: any, idx: number) => (
                                     <AnimatedBar 
                                         key={idx} 
                                         percentage={parseFloat(exam.percentage)} 
                                         marks={`${Math.round(exam.total_obtained)}/${Math.round(exam.total_possible)}`}
                                         label={exam.exam_type} 
-                                        color={getBarColor(parseFloat(exam.percentage))}
+                                        color={getStatusColor(parseFloat(exam.percentage))}
                                         height={240}
                                     />
                                 )) : <Text style={styles.noDataTxt}>No exams completed.</Text>}
                             </ScrollView>
                         </View>
 
+                        {/* UPDATED LEGEND */}
                         <View style={styles.legendRow}>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>Excellent</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>Average</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>Poor</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>{">"} 90% (Good)</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>60% - 90% (Avg)</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>{"<"} 60% (Poor)</Text></View>
                         </View>
                     </View>
                 </View>
@@ -521,7 +531,7 @@ const StudentPerformance = () => {
                                             percentage={item.percentage}
                                             marks={`${Math.round(item.total_obtained)}/${Math.round(item.total_possible)}`}
                                             label={`${item.roll ? item.roll + '.' : ''} ${firstName}`}
-                                            color={getBarColor(item.percentage)}
+                                            color={getStatusColor(item.percentage)}
                                             height={320}
                                         />
                                     );
