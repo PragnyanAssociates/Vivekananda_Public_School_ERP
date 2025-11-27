@@ -15,8 +15,8 @@ import {
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
-// ★★★ CRITICAL: Import your Auth Context ★★★
-// Adjust this path if your AuthContext is in a different folder
+// Navigation & Auth
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext'; 
 
 // Interfaces
@@ -44,11 +44,13 @@ const CLASS_GROUPS = [
 ];
 
 const PassengersScreen = () => {
-    // 1. GET USER DIRECTLY FROM CONTEXT
-    const { user } = useAuth(); // This pulls the logged-in user details
-    const userRole = user?.role; // 'admin' | 'teacher' | 'student'
+    const navigation = useNavigation();
+    
+    // Auth Context
+    const { user } = useAuth(); 
+    const userRole = user?.role; 
 
-    // Admin/Teacher State
+    // State
     const [selectedClass, setSelectedClass] = useState<string>('Class 10');
     const [passengers, setPassengers] = useState<Passenger[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -57,20 +59,18 @@ const PassengersScreen = () => {
     // Student State
     const [myStatus, setMyStatus] = useState<StudentStatus | null>(null);
 
-    // Modal State (Admin)
+    // Modals (Admin)
     const [showClassModal, setShowClassModal] = useState<boolean>(false);
     const [showAddModal, setShowAddModal] = useState<boolean>(false);
     const [availableStudents, setAvailableStudents] = useState<Passenger[]>([]);
     const [loadingAvailable, setLoadingAvailable] = useState<boolean>(false);
 
-    // 2. LOAD DATA BASED ON ROLE
+    // Load Data
     useEffect(() => {
         if (!userRole) return;
-
         if (userRole === 'student') {
             fetchMyStatus();
         } else {
-            // Admin & Teacher
             fetchPassengers();
         }
     }, [userRole, selectedClass]);
@@ -86,7 +86,6 @@ const PassengersScreen = () => {
             setPassengers(response.data || []);
         } catch (error) {
             console.error("Fetch Error:", error);
-            // Don't alert here to avoid spamming errors if permission denied
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -109,16 +108,13 @@ const PassengersScreen = () => {
     const fetchStudentsForAddModal = async () => {
         setLoadingAvailable(true);
         try {
-            // Fetch all students (endpoint logic remains same as StudentList)
             const response = await apiClient.get('/students/all');
             const allStudents: Passenger[] = response.data || [];
             
-            // Filter logic
             const classStudents = allStudents.filter(s => s.class_group === selectedClass);
             const currentIds = new Set(passengers.map(p => p.id));
             const available = classStudents.filter(s => !currentIds.has(s.id));
 
-            // Sort logic
             available.sort((a, b) => (parseInt(a.roll_no || '9999') - parseInt(b.roll_no || '9999')));
             
             setAvailableStudents(available);
@@ -183,7 +179,7 @@ const PassengersScreen = () => {
                 </View>
             </View>
             
-            {/* ★★★ ADMIN CHECK: SHOW DELETE BUTTON ★★★ */}
+            {/* Delete Button (Admin Only) */}
             {userRole === 'admin' && (
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleRemovePassenger(item.id, item.full_name)}>
                     <Text style={styles.deleteBtnText}>✕</Text>
@@ -196,16 +192,30 @@ const PassengersScreen = () => {
     return (
         <SafeAreaView style={styles.container}>
             
-            {/* HEADER */}
+            {/* --- HEADER --- */}
             <View style={styles.header}>
-                <View>
-                    <Text style={styles.headerTitle}>Passengers</Text>
-                    {userRole !== 'student' && (
-                        <Text style={styles.subHeader}>{passengers.length} Students in {selectedClass}</Text>
-                    )}
+                <View style={styles.headerLeftContainer}>
+                    {/* ★ BACK BUTTON ★ */}
+                    <TouchableOpacity 
+                        style={styles.backButton} 
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Image 
+                            source={{ uri: 'https://cdn-icons-png.flaticon.com/128/271/271220.png' }} 
+                            style={styles.backIcon} 
+                        />
+                    </TouchableOpacity>
+
+                    {/* TITLE STACK */}
+                    <View>
+                        <Text style={styles.headerTitle}>Passengers</Text>
+                        {userRole !== 'student' && (
+                            <Text style={styles.subHeader}>{passengers.length} Students in {selectedClass}</Text>
+                        )}
+                    </View>
                 </View>
                 
-                {/* ★★★ ADMIN CHECK: SHOW ADD BUTTON ★★★ */}
+                {/* ADD BUTTON (Admin Only) */}
                 {userRole === 'admin' && (
                     <TouchableOpacity 
                         style={styles.headerAddButton} 
@@ -219,9 +229,9 @@ const PassengersScreen = () => {
                 )}
             </View>
 
-            {/* CONTENT */}
+            {/* --- CONTENT --- */}
             {userRole === 'student' ? (
-                // --- STUDENT VIEW ---
+                // STUDENT VIEW
                 <View style={styles.studentViewContainer}>
                     {loading ? <ActivityIndicator size="large" color="#4A90E2" /> : (
                         <View style={[styles.statusCard, myStatus?.isPassenger ? styles.activeCard : styles.inactiveCard]}>
@@ -244,7 +254,7 @@ const PassengersScreen = () => {
                     )}
                 </View>
             ) : (
-                // --- ADMIN & TEACHER VIEW ---
+                // ADMIN & TEACHER VIEW
                 <>
                     <View style={styles.filterContainer}>
                         <Text style={styles.filterLabel}>View Class:</Text>
@@ -280,7 +290,6 @@ const PassengersScreen = () => {
 
             {/* --- MODALS --- */}
             
-            {/* Class Selection */}
             <Modal visible={showClassModal} transparent animationType="fade">
                 <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowClassModal(false)}>
                     <View style={styles.selectionModal}>
@@ -304,7 +313,6 @@ const PassengersScreen = () => {
                 </TouchableOpacity>
             </Modal>
 
-            {/* Add Student (Admin Only) */}
             <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
                 <SafeAreaView style={styles.addModalContainer}>
                     <View style={styles.addModalHeader}>
@@ -355,16 +363,46 @@ const PassengersScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F7FAFC' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+    
+    // --- Header Styles ---
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        paddingVertical: 15,
+        paddingHorizontal: 16,
+        backgroundColor: '#FFFFFF', 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#E2E8F0',
+        elevation: 2,
+    },
+    headerLeftContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    backButton: {
+        marginRight: 15,
+        padding: 5,
+    },
+    backIcon: {
+        width: 24,
+        height: 24,
+        tintColor: '#2D3748', // Dark grey arrow
+    },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#1A202C' },
     subHeader: { fontSize: 13, color: '#718096', marginTop: 2 },
+    
     headerAddButton: { backgroundColor: '#48BB78', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
     headerAddButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+    
+    // Filter
     filterContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F7FAFC' },
     filterLabel: { fontSize: 16, color: '#4A5568', marginRight: 10 },
     dropdownTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0' },
     dropdownText: { fontSize: 16, fontWeight: '600', color: '#2D3748', marginRight: 8 },
     dropdownArrow: { fontSize: 12, color: '#718096' },
+    
+    // List Item
     listContent: { padding: 16, paddingBottom: 40 },
     card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 12, marginBottom: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
     avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#EDF2F7' },
@@ -376,8 +414,12 @@ const styles = StyleSheet.create({
     classText: { fontSize: 12, color: '#718096' },
     deleteBtn: { padding: 10, backgroundColor: '#FFF5F5', borderRadius: 20 },
     deleteBtnText: { fontSize: 16, color: '#E53E3E', fontWeight: 'bold' },
+    
+    // Empty State
     emptyContainer: { padding: 40, alignItems: 'center' },
     emptyText: { color: '#718096', fontSize: 16, fontWeight: '500' },
+    
+    // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     selectionModal: { backgroundColor: '#FFF', width: '80%', maxHeight: '60%', borderRadius: 16, padding: 20 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
@@ -385,6 +427,8 @@ const styles = StyleSheet.create({
     modalItemSelected: { backgroundColor: '#F0FFF4' },
     modalItemText: { fontSize: 16, textAlign: 'center', color: '#4A5568' },
     modalItemTextSelected: { color: '#38A169', fontWeight: 'bold' },
+    
+    // Add Modal
     addModalContainer: { flex: 1, backgroundColor: '#F7FAFC' },
     addModalHeader: { padding: 20, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     addModalTitle: { fontSize: 20, fontWeight: 'bold' },
@@ -397,6 +441,8 @@ const styles = StyleSheet.create({
     modalRollText: { fontSize: 12, color: '#718096' },
     addBtn: { backgroundColor: '#3182CE', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 6 },
     addBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+    
+    // Student View
     studentViewContainer: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
     statusCard: { width: '100%', alignItems: 'center', padding: 30, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
     activeCard: { backgroundColor: '#F0FFF4', borderWidth: 1, borderColor: '#C6F6D5' },

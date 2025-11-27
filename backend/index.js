@@ -8177,6 +8177,65 @@ app.get('/api/transport/my-status', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+// ==========================================================
+// --- VEHICLE / BUS DETAILS API ROUTES ---
+// ==========================================================
+
+// 1. GET: Fetch All Vehicles (STRICT: ADMIN ONLY)
+app.get('/api/transport/vehicles', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access Denied. Admin only.' });
+        }
+        const [rows] = await db.query('SELECT * FROM transport_vehicles ORDER BY created_at DESC');
+        res.json(rows);
+    } catch (error) {
+        console.error("Fetch Vehicles Error:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 2. POST: Add New Vehicle with Album (STRICT: ADMIN ONLY)
+app.post('/api/transport/vehicles', verifyToken, upload.array('photos', 10), async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access Denied.' });
+        }
+
+        const { bus_number, bus_name } = req.body;
+        
+        // Process uploaded files into an array of URLs
+        let photoUrls = [];
+        if (req.files && req.files.length > 0) {
+            photoUrls = req.files.map(file => `/uploads/${file.filename}`);
+        }
+
+        const query = 'INSERT INTO transport_vehicles (bus_number, bus_name, bus_photos) VALUES (?, ?, ?)';
+        await db.query(query, [bus_number, bus_name, JSON.stringify(photoUrls)]);
+
+        res.status(201).json({ message: 'Vehicle added successfully' });
+    } catch (error) {
+        console.error("Add Vehicle Error:", error);
+        res.status(500).json({ message: 'Failed to add vehicle' });
+    }
+});
+
+// 3. DELETE: Remove Vehicle (STRICT: ADMIN ONLY)
+app.delete('/api/transport/vehicles/:id', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access Denied.' });
+        }
+
+        const { id } = req.params;
+        // Optional: Logic to delete actual image files from disk can be added here
+        await db.query('DELETE FROM transport_vehicles WHERE id = ?', [id]);
+
+        res.json({ message: 'Vehicle deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete vehicle' });
+    }
+});
 
 
 
