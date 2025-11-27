@@ -8379,13 +8379,41 @@ app.get('/api/transport/my-staff-status', verifyToken, async (req, res) => {
 });
 
 // ==========================================================
-// --- TRANSPORT ROUTES API ---
+// --- 🚌 TRANSPORT SOCKET LOGIC (Inside io.on) ---
+// ==========================================================
+socket.on('join_route', (routeId) => {
+    socket.join(`route_${routeId}`);
+    console.log(`📍 Socket ${socket.id} joined tracking for Route #${routeId}`);
+});
+
+socket.on('driver_location_update', async (data) => {
+    const { routeId, lat, lng, bearing } = data;
+
+    // Broadcast to everyone watching this route
+    io.to(`route_${routeId}`).emit('receive_location', {
+        lat,
+        lng,
+        bearing // Send bearing for icon rotation
+    });
+
+    // Save to DB (Ideally, don't await this if high frequency to prevent blocking)
+    try {
+        db.query(
+            'UPDATE transport_routes SET current_lat = ?, current_lng = ? WHERE id = ?', 
+            [lat, lng, routeId]
+        );
+    } catch (err) {
+        console.error("DB Update Error:", err);
+    }
+});
+
+// ==========================================================
+// --- 🚌 API ROUTES ---
 // ==========================================================
 
 // 1. GET: Fetch All Routes (Admin/Teacher view)
 app.get('/api/transport/routes', verifyToken, async (req, res) => {
     try {
-        // Fetch route details + Driver Name + Conductor Name
         const query = `
             SELECT 
                 tr.*, 
@@ -8415,7 +8443,7 @@ app.get('/api/transport/routes', verifyToken, async (req, res) => {
 
 // 2. POST: Create Route (Admin Only)
 app.post('/api/transport/routes', verifyToken, async (req, res) => {
-    const { route_name, driver_id, conductor_id, stops } = req.body; // stops is array of {name, lat, lng}
+    const { route_name, driver_id, conductor_id, stops } = req.body;
     
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied' });
 
@@ -8423,14 +8451,12 @@ app.post('/api/transport/routes', verifyToken, async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // Insert Route
         const [resRoute] = await connection.query(
             'INSERT INTO transport_routes (route_name, driver_id, conductor_id) VALUES (?, ?, ?)', 
             [route_name, driver_id, conductor_id]
         );
         const routeId = resRoute.insertId;
 
-        // Insert Stops
         if (stops && stops.length > 0) {
             const stopValues = stops.map((s, index) => [routeId, s.name, s.lat, s.lng, index + 1]);
             await connection.query(
@@ -8461,13 +8487,12 @@ app.delete('/api/transport/routes/:id', verifyToken, async (req, res) => {
     }
 });
 
-// 4. GET: Specific Route Details (For Student Map / Live Tracking)
+// 4. GET: Specific Route Details
 app.get('/api/transport/routes/:id', verifyToken, async (req, res) => {
     try {
         const [route] = await db.query('SELECT * FROM transport_routes WHERE id = ?', [req.params.id]);
         if (route.length === 0) return res.status(404).json({ message: 'Route not found' });
         
-        // Join driver/conductor info for map card
         const [details] = await db.query(`
             SELECT 
                 tr.*, 
@@ -8487,13 +8512,15 @@ app.get('/api/transport/routes/:id', verifyToken, async (req, res) => {
     }
 });
 
-// 5. GET: Conductor View (Get Students Grouped by Stop for specific Route)
+// 5. GET: Driver/Conductor View (FIXED JOINS)
 app.get('/api/transport/conductor/students', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
         
-        // Find which route this conductor is assigned to
-        const [routeCheck] = await db.query('SELECT id, route_name FROM transport_routes WHERE conductor_id = ?', [userId]);
+        const [routeCheck] = await db.query(
+            'SELECT id, route_name FROM transport_routes WHERE conductor_id = ? OR driver_id = ?', 
+            [userId, userId]
+        );
         
         if (routeCheck.length === 0) {
             return res.status(404).json({ message: 'You are not assigned to any route.' });
@@ -8501,21 +8528,19 @@ app.get('/api/transport/conductor/students', verifyToken, async (req, res) => {
         
         const routeId = routeCheck[0].id;
 
-        // Get Stops
         const [stops] = await db.query('SELECT * FROM transport_stops WHERE route_id = ? ORDER BY stop_order ASC', [routeId]);
 
-        // Get Students assigned to this route
+        // Changed to LEFT JOIN for user_profiles so users without photos still show up
         const [students] = await db.query(`
             SELECT 
                 tp.id as passenger_id, tp.user_id, tp.stop_id, tp.boarding_status,
                 u.full_name, up.profile_image_url, up.phone
             FROM transport_passengers tp
             JOIN users u ON tp.user_id = u.id
-            JOIN user_profiles up ON u.id = up.user_id
+            LEFT JOIN user_profiles up ON u.id = up.user_id
             WHERE tp.route_id = ?
         `, [routeId]);
 
-        // Group students by Stop ID
         const stopsWithStudents = stops.map(stop => {
             return {
                 ...stop,
@@ -8531,9 +8556,9 @@ app.get('/api/transport/conductor/students', verifyToken, async (req, res) => {
     }
 });
 
-// 6. PUT: Update Student Status (In/Out) - By Conductor
+// 6. PUT: Update Student Status
 app.put('/api/transport/student-status', verifyToken, async (req, res) => {
-    const { passenger_id, status } = req.body; // status: 'in' or 'out'
+    const { passenger_id, status } = req.body;
     try {
         await db.query('UPDATE transport_passengers SET boarding_status = ? WHERE id = ?', [status, passenger_id]);
         res.json({ message: 'Status updated' });
@@ -8542,11 +8567,10 @@ app.put('/api/transport/student-status', verifyToken, async (req, res) => {
     }
 });
 
-// 7. GET: Student My Route (Find route assigned to logged in student)
+// 7. GET: Student My Route
 app.get('/api/transport/student/my-route', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        // Check transport_passengers for route_id
         const [pass] = await db.query('SELECT route_id FROM transport_passengers WHERE user_id = ?', [userId]);
         
         if (pass.length === 0 || !pass[0].route_id) {
@@ -8554,19 +8578,7 @@ app.get('/api/transport/student/my-route', verifyToken, async (req, res) => {
         }
         
         const routeId = pass[0].route_id;
-        
-        // Get route details
-        const [details] = await db.query(`
-             SELECT 
-                tr.*, 
-                d.full_name as driver_name,
-                c.full_name as conductor_name
-            FROM transport_routes tr
-            LEFT JOIN users d ON tr.driver_id = d.id
-            LEFT JOIN users c ON tr.conductor_id = c.id
-            WHERE tr.id = ?
-        `, [routeId]);
-
+        const [details] = await db.query('SELECT * FROM transport_routes WHERE id = ?', [routeId]);
         const [stops] = await db.query('SELECT * FROM transport_stops WHERE route_id = ? ORDER BY stop_order ASC', [routeId]);
         
         res.json({ ...details[0], stops });

@@ -45,6 +45,7 @@
     "react-native-file-picker": "^0.0.21",
     "react-native-file-viewer": "^2.1.5",
     "react-native-fs": "^2.20.0",
+    "react-native-geolocation-service": "^5.3.1",
     "react-native-gesture-handler": "^2.25.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-html-to-pdf": "^0.12.0",
@@ -75,7 +76,6 @@
     "react-native-webview": "^13.14.0",
     "rn-emoji-keyboard": "^1.7.0",
     "rn-fetch-blob": "^0.12.0",
-    "socket.io-client": "^4.8.1",
     "uuid": "^13.0.0",
     "victory-native": "^41.20.2"
   },
