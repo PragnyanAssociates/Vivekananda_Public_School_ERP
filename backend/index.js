@@ -3905,244 +3905,6 @@ app.get('/api/syllabus/student/subject-details/:syllabusId/:studentId', async (r
 
 
 
-// ==========================================================
-// --- FULL TRANSPORT API ROUTES (WITH STOP COORDINATES) ---
-// ==========================================================
-const Openrouteservice = require('openrouteservice-js');
-const { encode } = require('@googlemaps/polyline-codec');
-
-const ors = new Openrouteservice.Directions({
-  api_key: process.env.OPENROUTESERVICE_API_KEY,
-});
-
-const geocodeService = new Openrouteservice.Geocode({
-    api_key: process.env.OPENROUTESERVICE_API_KEY,
-});
-
-async function geocodeAddress(addressText) {
-    const response = await geocodeService.geocode({ text: addressText, size: 1 });
-    if (response.features && response.features.length > 0) {
-        return response.features[0].geometry.coordinates; // [longitude, latitude]
-    }
-    throw new Error(`Could not find coordinates for address: "${addressText}"`);
-}
-
-// =========================================================================
-// ★★★ THIS IS THE NEW CODE YOU MUST ADD ★★★
-// This is the special, public endpoint for the driver's phone.
-// It does not require a login token.
-// =========================================================================
-app.put('/api/transport/routes/public/:routeId/location', async (req, res) => {
-  const { lat, lng } = req.body;
-  const { routeId } = req.params;
-
-  if (!lat || !lng) {
-    return res.status(400).json({ message: 'Latitude and Longitude are required.' });
-  }
-
-  try {
-    const [result] = await db.query(
-      'UPDATE transport_routes SET current_lat = ?, current_lng = ?, last_location_update = NOW() WHERE route_id = ?', 
-      [lat, lng, routeId]
-    );
-
-    if (result.affectedRows === 0) {
-        return res.status(404).json({ message: 'Route not found to update location.' });
-    }
-
-    res.status(200).json({ message: 'Location updated successfully.' });
-  } catch (error) {
-    console.error("Error updating public location:", error);
-    res.status(500).json({ message: 'Failed to update location.' });
-  }
-});
-
-// --- CREATE ROUTE (MODIFIED) ---
-app.post('/api/transport/routes', async (req, res) => {
-    const { route_name, driver_name, driver_phone, conductor_name, conductor_phone, stops, city, state, country, created_by } = req.body;
-    if (!process.env.OPENROUTESERVICE_API_KEY) return res.status(500).json({ message: "Server configuration error: ORS API key missing." });
-    if (!route_name || !stops || stops.length < 2) return res.status(400).json({ message: 'Route Name and at least two boarding points are required.' });
-
-    const connection = await db.getConnection();
-    try {
-        // Geocode each stop to get its coordinates and store them
-        const stopData = [];
-        for (const stop of stops) {
-            const fullAddress = `${stop.point}, ${city}, ${state}, ${country}`;
-            const coords = await geocodeAddress(fullAddress); // Gets [longitude, latitude]
-            stopData.push({ name: stop.point, coordinates: coords });
-        }
-
-        // Calculate the full route polyline using the geocoded coordinates
-        const routeResponse = await ors.calculate({ coordinates: stopData.map(s => s.coordinates), profile: 'driving-car', format: 'geojson' });
-        if (!routeResponse.features || routeResponse.features.length === 0) throw new Error("OpenRouteService did not return a valid route.");
-        const routeGeometry = routeResponse.features[0].geometry.coordinates;
-        const pointsToEncode = routeGeometry.map(p => [p[1], p[0]]); // Flip to [lat, lng] for encoding
-        const routePolyline = encode(pointsToEncode, 5);
-
-        await connection.beginTransaction();
-        
-        // Insert the main route details
-        const routeQuery = 'INSERT INTO transport_routes (route_name, driver_name, driver_phone, conductor_name, conductor_phone, city, state, country, route_path_polyline, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        const [routeResult] = await connection.query(routeQuery, [route_name, driver_name, driver_phone, conductor_name, conductor_phone, city, state, country, routePolyline, created_by]);
-        const route_id = routeResult.insertId;
-        
-        // Insert each stop with its name, order, AND coordinates
-        const stopsQuery = 'INSERT INTO transport_stops (route_id, stop_name, stop_order, stop_lat, stop_lng) VALUES ?';
-        const stopValues = stopData.map((stop, index) => [
-            route_id, 
-            stop.name, 
-            index + 1,
-            stop.coordinates[1], // Latitude is the second element
-            stop.coordinates[0]  // Longitude is the first element
-        ]);
-        await connection.query(stopsQuery, [stopValues]);
-        
-        // Notification logic (unchanged)
-        const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        if (usersToNotify.length > 0) {
-            const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = admin.full_name || "Transport Department";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = "New Transport Route Added";
-            const notificationMessage = `A new bus route, "${route_name}", has been added. Please check if it's relevant for you.`;
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/transport');
-        }
-
-        await connection.commit();
-        res.status(201).json({ message: 'Route created and users notified successfully!' });
-
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Error creating transport route:", error);
-        res.status(500).json({ message: error.message || 'Failed to create route.' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-
-// --- UPDATE ROUTE (MODIFIED) ---
-app.put('/api/transport/routes/:routeId', async (req, res) => {
-    const { routeId } = req.params;
-    const { route_name, driver_name, driver_phone, conductor_name, conductor_phone, stops, city, state, country, created_by } = req.body;
-    
-    const connection = await db.getConnection();
-    try {
-        // Geocode each stop to get its coordinates and store them
-        const stopData = [];
-        for (const stop of stops) {
-            const fullAddress = `${stop.point}, ${city}, ${state}, ${country}`;
-            const coords = await geocodeAddress(fullAddress);
-            stopData.push({ name: stop.point, coordinates: coords });
-        }
-
-        // Recalculate the full route polyline
-        const routeResponse = await ors.calculate({ coordinates: stopData.map(s => s.coordinates), profile: 'driving-car', format: 'geojson' });
-        if (!routeResponse.features || !routeResponse.features.length) throw new Error("OpenRouteService did not return a valid route.");
-        const routeGeometry = routeResponse.features[0].geometry.coordinates;
-        const pointsToEncode = routeGeometry.map(p => [p[1], p[0]]);
-        const routePolyline = encode(pointsToEncode, 5);
-
-        await connection.beginTransaction();
-        
-        // Update the main route details
-        const routeQuery = 'UPDATE transport_routes SET route_name = ?, driver_name = ?, driver_phone = ?, conductor_name = ?, conductor_phone = ?, city = ?, state = ?, country = ?, route_path_polyline = ? WHERE route_id = ?';
-        await connection.query(routeQuery, [route_name, driver_name, driver_phone, conductor_name, conductor_phone, city, state, country, routePolyline, routeId]);
-        
-        // Delete old stops and insert the new ones with coordinates
-        await connection.query('DELETE FROM transport_stops WHERE route_id = ?', [routeId]);
-        const stopsQuery = 'INSERT INTO transport_stops (route_id, stop_name, stop_order, stop_lat, stop_lng) VALUES ?';
-        const stopValues = stopData.map((stop, index) => [
-            routeId, 
-            stop.name, 
-            index + 1,
-            stop.coordinates[1], // Latitude
-            stop.coordinates[0]  // Longitude
-        ]);
-        await connection.query(stopsQuery, [stopValues]);
-
-        // Notification logic (unchanged)
-        const [usersToNotify] = await connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        if (usersToNotify.length > 0) {
-            const [[admin]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = admin.full_name || "Transport Department";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = "Transport Route Updated";
-            const notificationMessage = `The bus route "${route_name}" has been updated. Please review the changes.`;
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/transport');
-        }
-        
-        await connection.commit();
-        res.status(200).json({ message: 'Route updated and users notified successfully!' });
-
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Error updating transport route:", error);
-        res.status(500).json({ message: error.message || 'Failed to update route.' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-
-// --- GET ROUTE DETAILS (MODIFIED) ---
-app.get('/api/transport/routes/:routeId', async (req, res) => { 
-    try { 
-        const [routeResult] = await db.query('SELECT * FROM transport_routes WHERE route_id = ?', [req.params.routeId]); 
-        if (!routeResult[0]) { 
-            return res.status(404).json({ message: 'Route not found.' }); 
-        } 
-        // Modified to select the new stop_lat and stop_lng columns
-        const [stopsResult] = await db.query(
-            'SELECT stop_name as point, stop_order as sno, stop_lat, stop_lng FROM transport_stops WHERE route_id = ? ORDER BY stop_order ASC', 
-            [req.params.routeId]
-        ); 
-        
-        const route = routeResult[0]; 
-        const stops = stopsResult;
-        res.json({ ...route, stops }); 
-
-    } catch (error) { 
-        console.error("Error getting route details:", error);
-        res.status(500).json({ message: 'Failed to fetch route details.' }); 
-    }
-});
-
-
-// --- Other routes (Unchanged) ---
-app.delete('/api/transport/routes/:routeId', async (req, res) => {
-  try {
-    const [result] = await db.query('DELETE FROM transport_routes WHERE route_id = ?', [req.params.routeId]);
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Route not found.' });
-    res.status(200).json({ message: 'Route deleted successfully.' });
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to delete route.' });
-  }
-});
-
-app.put('/api/transport/routes/:routeId/location', async (req, res) => {
-  const { lat, lng } = req.body;
-  if (!lat || !lng) return res.status(400).json({ message: 'Latitude and Longitude are required.' });
-  try {
-    await db.query('UPDATE transport_routes SET current_lat = ?, current_lng = ?, last_location_update = NOW() WHERE route_id = ?', [lat, lng, req.params.routeId]);
-    res.status(200).json({ message: 'Location updated.' });
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to update location.' });
-  }
-});
-
-app.get('/api/transport/routes', async (req, res) => {
-  try {
-    const [routes] = await db.query('SELECT route_id, route_name FROM transport_routes ORDER BY route_name ASC');
-    res.json(routes);
-  } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch routes.' });
-  }
-});
-
-
-
 
 // 📂 File: server.js (FINAL & VERIFIED GALLERY MODULE)
 
@@ -8305,6 +8067,87 @@ app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) 
         connection.release();
     }
 });
+
+
+
+
+// ==========================================================
+// --- TRANSPORT API ROUTES ---
+// ==========================================================
+
+// 1. GET: Fetch active passengers by Class Group
+app.get('/api/transport/passengers', verifyToken, async (req, res) => {
+    try {
+        const { class_group } = req.query;
+        // Join users, user_profiles, and transport_passengers
+        const query = `
+            SELECT 
+                u.id, u.full_name, u.class_group, 
+                up.roll_no, up.profile_image_url,
+                tp.id as transport_id
+            FROM users u
+            JOIN user_profiles up ON u.id = up.user_id
+            JOIN transport_passengers tp ON u.id = tp.user_id
+            WHERE u.role = 'student' 
+            AND u.class_group = ?
+            ORDER BY up.roll_no ASC
+        `;
+        const [results] = await db.query(query, [class_group]);
+        res.json(results);
+    } catch (error) {
+        console.error("Error fetching passengers:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 2. GET: Fetch Students available to be added (Who are NOT passengers yet)
+app.get('/api/transport/students-available', verifyToken, async (req, res) => {
+    try {
+        const { class_group } = req.query;
+        // Find students where transport_passengers.id is NULL
+        const query = `
+            SELECT u.id, u.full_name, up.roll_no, up.profile_image_url
+            FROM users u
+            JOIN user_profiles up ON u.id = up.user_id
+            LEFT JOIN transport_passengers tp ON u.id = tp.user_id
+            WHERE u.role = 'student' 
+            AND u.class_group = ?
+            AND tp.id IS NULL
+            ORDER BY u.full_name ASC
+        `;
+        const [results] = await db.query(query, [class_group]);
+        res.json(results);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 3. POST: Add a Student to Transport
+app.post('/api/transport/passengers', verifyToken, async (req, res) => {
+    try {
+        const { user_id } = req.body;
+        await db.query('INSERT INTO transport_passengers (user_id) VALUES (?)', [user_id]);
+        res.json({ message: 'Student added to transport.' });
+    } catch (error) {
+        // Ignore duplicate entry errors silently or handle them
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ message: 'Student is already a passenger.' });
+        }
+        res.status(500).json({ message: 'Failed to add passenger.' });
+    }
+});
+
+// 4. DELETE: Remove Passenger
+app.delete('/api/transport/passengers/:userId', verifyToken, async (req, res) => {
+    try {
+        await db.query('DELETE FROM transport_passengers WHERE user_id = ?', [req.params.userId]);
+        res.json({ message: 'Passenger removed.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to remove passenger.' });
+    }
+});
+
+
 
 
 

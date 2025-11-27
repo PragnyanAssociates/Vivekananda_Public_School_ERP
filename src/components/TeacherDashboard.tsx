@@ -51,6 +51,8 @@ import TeacherAttendanceReportScreen from '../screens/teacher_attendence/Teacher
 import TeacherPerformanceScreen from '../screens/Performance/TeacherPerformanceScreen';
 
 import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
+import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
+import TransportScreen from '../screens/transport/TransportScreen';
 
 // --- Constants & Colors ---
 const { width: windowWidth } = Dimensions.get('window');
@@ -110,6 +112,7 @@ const TeacherDashboard = ({ navigation }) => {
   const allQuickAccessItems = [
     { id: 'qa23', title: 'My Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceReportScreen' },
     { id: 'qa24', title: 'My Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/939/939354.png', navigateToTab: 'TeacherPerformanceScreen' },
+    { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
     { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
     { id: 'qa4', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
@@ -117,6 +120,7 @@ const TeacherDashboard = ({ navigation }) => {
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa21', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     { id: 'qa4', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'TeacherAdminExamsScreen' },
+    { id: 'qa29', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
     { id: 'qa1', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'TeacherAdminPTMScreen' },
     { id: 'qa7', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
     { id: 'qa8', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
@@ -216,6 +220,8 @@ const TeacherDashboard = ({ navigation }) => {
       case 'TeacherAttendanceReportScreen': return ( <><ContentScreenHeader title="My Attendence" onBack={handleBack} /><TeacherAttendanceReportScreen /></> );
       case 'TeacherPerformanceScreen': return ( <><ContentScreenHeader title="My Performance" onBack={handleBack} /><TeacherPerformanceScreen /></> );
       case 'ActivitiesScreen': return ( <><ContentScreenHeader title="Extracurricular Activities" onBack={handleBack} /><ActivitiesScreen /></> );
+      case 'DictionaryScreen': return ( <><ContentScreenHeader title="Dictionary" onBack={handleBack} /><DictionaryScreen /></> );
+      case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleBack} /><TransportScreen /></> );
 
       default: return ( <><ContentScreenHeader title={capitalize(activeTab)} onBack={handleBack} /><View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content not available yet.</Text></View></> );
     }

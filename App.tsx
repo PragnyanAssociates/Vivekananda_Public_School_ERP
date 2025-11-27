@@ -113,6 +113,9 @@ import ActivitiesScreen from './src/screens/Extra_activity/ActivitiesScreen';
 import SportsScreen from './src/screens/Extra_activity/SportsScreen';
 
 import DictionaryScreen from './src/screens/dictionary/DictionaryScreen';
+
+import TransportScreen from './src/screens/transport/TransportScreen';
+import PassengersScreen from './src/screens/transport/PassengersScreen';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -282,6 +285,9 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="SportsScreen" component={SportsScreen} />
 
       <Stack.Screen name="DictionaryScreen" component={DictionaryScreen} />
+
+      <Stack.Screen name="TransportScreen" component={TransportScreen} />
+      <Stack.Screen name="PassengersScreen" component={PassengersScreen} />
 
       {/* <Stack.Screen name="MarksEntryScreen" component={MarksEntryScreen} /> */}
 

@@ -45,6 +45,8 @@ import StudentSyllabusScreen from '../screens/syllabus/StudentSyllabusScreen';
 import StudentResourcesScreen from '../screens/syllabus_Textbook/StudentResourcesScreen';
 
 import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
+import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
+import TransportScreen from '../screens/transport/TransportScreen';
 
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -97,11 +99,13 @@ const StudentDashboard = ({ navigation }) => {
   const allQuickAccessItems = [
     { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
+    { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
     { id: 'qa28', title: 'Extracurricular Activities', imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png', navigateToTab: 'ActivitiesScreen' },
     { id: 'qa14', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateTo: 'StudentHomework' },
     { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
     { id: 'qa19', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     { id: 'qa4', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'StudentExamsScreen' },
+    { id: 'qa29', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
     { id: 'qa1', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'StudentPTMScreen' },
     { id: 'qa7', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
     { id: 'qa8', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
@@ -195,6 +199,8 @@ const StudentDashboard = ({ navigation }) => {
       case 'StudentResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><StudentResourcesScreen /></> );
 
       case 'ActivitiesScreen': return ( <><ContentScreenHeader title="Extracurricular Activities" onBack={handleBack} /><ActivitiesScreen /></> );
+      case 'DictionaryScreen': return ( <><ContentScreenHeader title="Dictionary" onBack={handleBack} /><DictionaryScreen /></> );
+      case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleBack} /><TransportScreen /></> );
       
 
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
