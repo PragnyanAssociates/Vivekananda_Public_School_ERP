@@ -8147,6 +8147,39 @@ app.delete('/api/transport/passengers/:userId', verifyToken, async (req, res) =>
     }
 });
 
+// ... existing transport routes ...
+
+// 5. GET: Check specific student's transport status (For Student Login)
+app.get('/api/transport/my-status', verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id; // Got from the token
+        
+        const query = `
+            SELECT 
+                u.full_name, 
+                up.roll_no, 
+                up.profile_image_url,
+                tp.status,
+                tp.created_at
+            FROM users u
+            JOIN user_profiles up ON u.id = up.user_id
+            JOIN transport_passengers tp ON u.id = tp.user_id
+            WHERE u.id = ?
+        `;
+
+        const [rows] = await db.query(query, [userId]);
+
+        if (rows.length > 0) {
+            res.json({ isPassenger: true, data: rows[0] });
+        } else {
+            res.json({ isPassenger: false, data: null });
+        }
+    } catch (error) {
+        console.error("Error fetching my transport status:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 
 
 
