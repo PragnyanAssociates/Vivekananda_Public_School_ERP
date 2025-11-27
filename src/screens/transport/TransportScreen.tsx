@@ -32,7 +32,7 @@ const transportModules: TransportModule[] = [
         title: 'Routes',
         // Icon representing Maps/Paths
         imageSource: 'https://cdn-icons-png.flaticon.com/128/3180/3180149.png',
-        navigateTo: 'Routes', 
+        navigateTo: 'RoutesScreen', 
     },
     {
         id: 'trans3',
