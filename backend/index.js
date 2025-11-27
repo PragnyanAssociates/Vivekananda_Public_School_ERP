@@ -8075,11 +8075,12 @@ app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) 
 // --- TRANSPORT API ROUTES ---
 // ==========================================================
 
-// 1. GET: Fetch active passengers (Accessible to Admin & Teacher)
+// 1. GET: Fetch active passengers (Admin & Teacher Only)
 app.get('/api/transport/passengers', verifyToken, async (req, res) => {
     try {
         const { class_group } = req.query;
-        // Admin and Teacher can view the list
+
+        // STRICT CHECK: Only Admin & Teacher
         if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
              return res.status(403).json({ message: 'Access denied.' });
         }
@@ -8099,7 +8100,6 @@ app.get('/api/transport/passengers', verifyToken, async (req, res) => {
         const [results] = await db.query(query, [class_group]);
         res.json(results);
     } catch (error) {
-        console.error("Error fetching passengers:", error);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -8107,9 +8107,9 @@ app.get('/api/transport/passengers', verifyToken, async (req, res) => {
 // 2. GET: Fetch Students available to be added (ADMIN ONLY)
 app.get('/api/transport/students-available', verifyToken, async (req, res) => {
     try {
-        // STRICT CHECK: Only Admin can fetch students to add them
+        // STRICT CHECK: Admin Only
         if (req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Only Admin can access this data.' });
+            return res.status(403).json({ message: 'Access Denied. Admin only.' });
         }
 
         const { class_group } = req.query;
@@ -8133,41 +8133,37 @@ app.get('/api/transport/students-available', verifyToken, async (req, res) => {
 // 3. POST: Add a Student to Transport (ADMIN ONLY)
 app.post('/api/transport/passengers', verifyToken, async (req, res) => {
     try {
-        // STRICT CHECK: Only Admin can add
         if (req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Access Denied. Only Admin can add passengers.' });
+            return res.status(403).json({ message: 'Access Denied.' });
         }
 
         const { user_id } = req.body;
         await db.query('INSERT INTO transport_passengers (user_id) VALUES (?)', [user_id]);
-        res.json({ message: 'Student added to transport.' });
+        res.json({ message: 'Student added.' });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ message: 'Student is already a passenger.' });
-        }
-        res.status(500).json({ message: 'Failed to add passenger.' });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'Already a passenger.' });
+        res.status(500).json({ message: 'Failed to add.' });
     }
 });
 
 // 4. DELETE: Remove Passenger (ADMIN ONLY)
 app.delete('/api/transport/passengers/:userId', verifyToken, async (req, res) => {
     try {
-        // STRICT CHECK: Only Admin can delete
         if (req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Access Denied. Only Admin can remove passengers.' });
+            return res.status(403).json({ message: 'Access Denied.' });
         }
 
         await db.query('DELETE FROM transport_passengers WHERE user_id = ?', [req.params.userId]);
         res.json({ message: 'Passenger removed.' });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to remove passenger.' });
+        res.status(500).json({ message: 'Failed to remove.' });
     }
 });
 
-// 5. GET: Student Status (STUDENT ONLY)
+// 5. GET: Student Status (For Students)
 app.get('/api/transport/my-status', verifyToken, async (req, res) => {
     try {
-        const userId = req.user.id; 
+        const userId = req.user.id;
         const query = `
             SELECT u.full_name, up.roll_no, up.profile_image_url, tp.status
             FROM users u
@@ -8176,11 +8172,7 @@ app.get('/api/transport/my-status', verifyToken, async (req, res) => {
             WHERE u.id = ?
         `;
         const [rows] = await db.query(query, [userId]);
-        if (rows.length > 0) {
-            res.json({ isPassenger: true, data: rows[0] });
-        } else {
-            res.json({ isPassenger: false, data: null });
-        }
+        res.json({ isPassenger: rows.length > 0, data: rows[0] || null });
     } catch (error) {
         res.status(500).json({ message: 'Server error' });
     }

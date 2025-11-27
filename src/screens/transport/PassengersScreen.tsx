@@ -12,10 +12,12 @@ import {
     Alert,
     RefreshControl
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
-import { SERVER_URL } from '../../apiConfig';
+import { SERVER_URL } from '../../../apiConfig';
+
+// ★★★ CRITICAL: Import your Auth Context ★★★
+// Adjust this path if your AuthContext is in a different folder
+import { useAuth } from '../../context/AuthContext'; 
 
 // Interfaces
 interface Passenger {
@@ -42,13 +44,11 @@ const CLASS_GROUPS = [
 ];
 
 const PassengersScreen = () => {
-    const navigation = useNavigation();
-    
-    // Roles
-    const [userRole, setUserRole] = useState<string | null>(null);
-    const [loadingRole, setLoadingRole] = useState(true);
+    // 1. GET USER DIRECTLY FROM CONTEXT
+    const { user } = useAuth(); // This pulls the logged-in user details
+    const userRole = user?.role; // 'admin' | 'teacher' | 'student'
 
-    // List State (Admin/Teacher)
+    // Admin/Teacher State
     const [selectedClass, setSelectedClass] = useState<string>('Class 10');
     const [passengers, setPassengers] = useState<Passenger[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -57,28 +57,20 @@ const PassengersScreen = () => {
     // Student State
     const [myStatus, setMyStatus] = useState<StudentStatus | null>(null);
 
-    // Modals
+    // Modal State (Admin)
     const [showClassModal, setShowClassModal] = useState<boolean>(false);
     const [showAddModal, setShowAddModal] = useState<boolean>(false);
     const [availableStudents, setAvailableStudents] = useState<Passenger[]>([]);
     const [loadingAvailable, setLoadingAvailable] = useState<boolean>(false);
 
-    // 1. Get Role
-    useEffect(() => {
-        const getUserRole = async () => {
-            const role = await AsyncStorage.getItem('userRole');
-            setUserRole(role);
-            setLoadingRole(false);
-        };
-        getUserRole();
-    }, []);
-
-    // 2. Load Data based on Role
+    // 2. LOAD DATA BASED ON ROLE
     useEffect(() => {
         if (!userRole) return;
+
         if (userRole === 'student') {
             fetchMyStatus();
         } else {
+            // Admin & Teacher
             fetchPassengers();
         }
     }, [userRole, selectedClass]);
@@ -93,7 +85,8 @@ const PassengersScreen = () => {
             });
             setPassengers(response.data || []);
         } catch (error) {
-            console.error("Error fetching passengers:", error);
+            console.error("Fetch Error:", error);
+            // Don't alert here to avoid spamming errors if permission denied
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -106,37 +99,36 @@ const PassengersScreen = () => {
             const response = await apiClient.get('/transport/my-status');
             setMyStatus(response.data);
         } catch (error) {
-            console.error("Error fetching status:", error);
+            console.error("Status Error:", error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
-    // ADMIN ONLY: Fetch students to add
     const fetchStudentsForAddModal = async () => {
         setLoadingAvailable(true);
         try {
-            const response = await apiClient.get('/students/all'); // Or use the backend filtered route
+            // Fetch all students (endpoint logic remains same as StudentList)
+            const response = await apiClient.get('/students/all');
             const allStudents: Passenger[] = response.data || [];
             
-            // Filter locally
+            // Filter logic
             const classStudents = allStudents.filter(s => s.class_group === selectedClass);
             const currentIds = new Set(passengers.map(p => p.id));
             const available = classStudents.filter(s => !currentIds.has(s.id));
 
-            // Sort
+            // Sort logic
             available.sort((a, b) => (parseInt(a.roll_no || '9999') - parseInt(b.roll_no || '9999')));
             
             setAvailableStudents(available);
         } catch (error) {
-            Alert.alert("Error", "Could not fetch students.");
+            Alert.alert("Error", "Could not fetch available students.");
         } finally {
             setLoadingAvailable(false);
         }
     };
 
-    // ADMIN ONLY: Add
     const handleAddStudent = async (userId: number) => {
         try {
             await apiClient.post('/transport/passengers', { user_id: userId });
@@ -144,11 +136,10 @@ const PassengersScreen = () => {
             fetchPassengers(); 
             Alert.alert("Success", "Student added.");
         } catch (error: any) {
-            Alert.alert("Permission Denied", "Only Admin can add passengers.");
+            Alert.alert("Error", error.response?.data?.message || "Failed to add.");
         }
     };
 
-    // ADMIN ONLY: Remove
     const handleRemovePassenger = async (userId: number, name: string) => {
         Alert.alert(
             "Remove Passenger",
@@ -163,7 +154,7 @@ const PassengersScreen = () => {
                             await apiClient.delete(`/transport/passengers/${userId}`);
                             fetchPassengers(); 
                         } catch (error) {
-                            Alert.alert("Permission Denied", "Only Admin can remove passengers.");
+                            Alert.alert("Error", "Failed to remove passenger.");
                         }
                     }
                 }
@@ -192,7 +183,7 @@ const PassengersScreen = () => {
                 </View>
             </View>
             
-            {/* ★★★ CRITICAL: ONLY SHOW DELETE BUTTON FOR ADMIN ★★★ */}
+            {/* ★★★ ADMIN CHECK: SHOW DELETE BUTTON ★★★ */}
             {userRole === 'admin' && (
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleRemovePassenger(item.id, item.full_name)}>
                     <Text style={styles.deleteBtnText}>✕</Text>
@@ -202,8 +193,6 @@ const PassengersScreen = () => {
     );
 
     // --- MAIN RENDER ---
-    if (loadingRole) return <View style={styles.centerContainer}><ActivityIndicator size="large" color="#4A90E2" /></View>;
-
     return (
         <SafeAreaView style={styles.container}>
             
@@ -216,7 +205,7 @@ const PassengersScreen = () => {
                     )}
                 </View>
                 
-                {/* ★★★ CRITICAL: ONLY SHOW ADD BUTTON FOR ADMIN ★★★ */}
+                {/* ★★★ ADMIN CHECK: SHOW ADD BUTTON ★★★ */}
                 {userRole === 'admin' && (
                     <TouchableOpacity 
                         style={styles.headerAddButton} 
@@ -230,7 +219,7 @@ const PassengersScreen = () => {
                 )}
             </View>
 
-            {/* CONTENT BASED ON ROLE */}
+            {/* CONTENT */}
             {userRole === 'student' ? (
                 // --- STUDENT VIEW ---
                 <View style={styles.studentViewContainer}>
@@ -289,7 +278,9 @@ const PassengersScreen = () => {
                 </>
             )}
 
-            {/* CLASS MODAL (Admin & Teacher) */}
+            {/* --- MODALS --- */}
+            
+            {/* Class Selection */}
             <Modal visible={showClassModal} transparent animationType="fade">
                 <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowClassModal(false)}>
                     <View style={styles.selectionModal}>
@@ -313,7 +304,7 @@ const PassengersScreen = () => {
                 </TouchableOpacity>
             </Modal>
 
-            {/* ADD STUDENT MODAL (Only Admin can trigger this) */}
+            {/* Add Student (Admin Only) */}
             <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
                 <SafeAreaView style={styles.addModalContainer}>
                     <View style={styles.addModalHeader}>
@@ -325,6 +316,7 @@ const PassengersScreen = () => {
                             <Text style={styles.addModalCloseText}>Done</Text>
                         </TouchableOpacity>
                     </View>
+
                     {loadingAvailable ? (
                         <View style={styles.centerContainer}><ActivityIndicator size="large" color="#4A90E2" /></View>
                     ) : (
@@ -335,6 +327,9 @@ const PassengersScreen = () => {
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>No available students found.</Text>
+                                    <Text style={{textAlign:'center', color:'#A0AEC0', marginTop:5}}>
+                                        (Or they are already added)
+                                    </Text>
                                 </View>
                             }
                             renderItem={({ item }) => (
