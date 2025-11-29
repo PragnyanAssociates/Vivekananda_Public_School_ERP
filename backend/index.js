@@ -8598,6 +8598,87 @@ app.get('/api/transport/student/my-route', verifyToken, async (req, res) => {
     }
 });
 
+// ==========================================================
+// --- 📁 PROOFS MODULE CONFIGURATION & ROUTES ---
+// ==========================================================
+
+// 1. Multer Config for Proofs
+const proofsStorage = multer.diskStorage({
+    destination: (req, file, cb) => { 
+        // Using your existing getUploadPath logic (or hardcoded /data/uploads)
+        const uploadPath = fs.existsSync('/data/uploads') ? '/data/uploads' : 'uploads';
+        cb(null, uploadPath); 
+    },
+    filename: (req, file, cb) => {
+        cb(null, `proof-${Date.now()}${path.extname(file.originalname)}`);
+    }
+});
+const proofsUpload = multer({ storage: proofsStorage });
+
+// 2. GET: List all Proof Folders
+app.get('/api/proofs/folders', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const [folders] = await db.query('SELECT * FROM proof_folders ORDER BY created_at DESC');
+        res.json(folders);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Error fetching folders' });
+    }
+});
+
+// 3. POST: Create a New Folder (with Cover Image)
+app.post('/api/proofs/folders', verifyToken, isAdmin, proofsUpload.single('cover_image'), async (req, res) => {
+    const { folder_name, custom_id, created_date } = req.body;
+    const cover_image = req.file ? req.file.filename : null;
+    const created_by = req.user.id;
+
+    try {
+        const [result] = await db.query(
+            'INSERT INTO proof_folders (folder_name, custom_id, cover_image, created_date, created_by) VALUES (?, ?, ?, ?, ?)',
+            [folder_name, custom_id, cover_image, created_date, created_by]
+        );
+        res.json({ message: 'Folder created', id: result.insertId });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Error creating folder' });
+    }
+});
+
+// 4. GET: Get Images inside a Folder
+app.get('/api/proofs/folders/:id/images', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const [images] = await db.query('SELECT * FROM proof_images WHERE folder_id = ? ORDER BY uploaded_at DESC', [req.params.id]);
+        res.json(images);
+    } catch (e) {
+        res.status(500).json({ message: 'Error fetching images' });
+    }
+});
+
+// 5. POST: Add Images to a Folder
+app.post('/api/proofs/upload', verifyToken, isAdmin, proofsUpload.array('images', 10), async (req, res) => {
+    const { folder_id } = req.body;
+    if (!req.files || req.files.length === 0) return res.status(400).json({ message: 'No files uploaded' });
+
+    try {
+        const values = req.files.map(file => [folder_id, file.filename]);
+        await db.query('INSERT INTO proof_images (folder_id, image_url) VALUES ?', [values]);
+        res.json({ message: 'Images uploaded successfully' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Error uploading images' });
+    }
+});
+
+// 6. DELETE: Delete a Folder (Cascades to images)
+app.delete('/api/proofs/folders/:id', verifyToken, isAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM proof_folders WHERE id = ?', [req.params.id]);
+        res.json({ message: 'Folder deleted' });
+    } catch (e) {
+        res.status(500).json({ message: 'Error deleting folder' });
+    }
+});
+
 
 
 

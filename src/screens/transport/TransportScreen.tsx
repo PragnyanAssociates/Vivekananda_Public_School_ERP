@@ -46,7 +46,7 @@ const transportModules: TransportModule[] = [
         title: 'Proofs',
         // Icon representing ID Cards/Documents
         imageSource: 'https://cdn-icons-png.flaticon.com/128/17830/17830628.png',
-        navigateTo: 'Proofs', 
+        navigateTo: 'ProofsScreen', 
     },
     {
         id: 'trans5',

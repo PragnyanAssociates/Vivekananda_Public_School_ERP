@@ -123,6 +123,8 @@ android {
 }
 
 dependencies {
+
+    implementation 'org.maplibre.gl:android-sdk:10.2.0'
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
