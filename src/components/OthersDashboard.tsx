@@ -25,6 +25,7 @@ import apiClient from '../api/client';
 // --- CHANGE 2: IMPORT FastImage and the standard Image component for the card icons ---
 import FastImage from 'react-native-fast-image';
 import { Image } from 'react-native'; // Keep this for non-cached images like icons
+import TransportScreen from '../screens/transport/TransportScreen';
 
 // --- COMPONENT IMPORTS ---
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -91,6 +92,7 @@ const OthersDashboard = ({ navigation }) => {
     { id: 'qa5', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     { id: 'qa9', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
     { id: 'qa16', title: 'Kitchen', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
+    { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
 
   ];
 
@@ -148,6 +150,7 @@ const OthersDashboard = ({ navigation }) => {
         case 'AboutUs': return ( <><ContentScreenHeader title="About Us" onBack={handleBack} /><AboutUs /></> );
         case 'FoodScreen': return ( <><ContentScreenHeader title="Lunch Menu" onBack={handleBack} /><FoodScreen /></> );
         case 'KitchenScreen': return ( <><ContentScreenHeader title="Kitchen" onBack={handleBack} /><KitchenScreen /></> );
+        case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleBack} /><TransportScreen /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
       }

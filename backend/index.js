@@ -8290,10 +8290,11 @@ app.delete('/api/transport/vehicles/:id', verifyToken, async (req, res) => {
 // --- TRANSPORT STAFF API ROUTES ---
 // ==========================================================
 
-// 1. GET: Fetch All Assigned Staff (ADMIN ONLY)
+// 1. GET: Fetch All Assigned Staff (ADMIN & TEACHER)
 app.get('/api/transport/staff', verifyToken, async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
+        // ALLOW: Admin & Teacher
+        if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
             return res.status(403).json({ message: 'Access Denied.' });
         }
 
@@ -8318,7 +8319,7 @@ app.get('/api/transport/staff', verifyToken, async (req, res) => {
     }
 });
 
-// 2. GET: Fetch Available 'Others' Users (Who are NOT yet staff) (ADMIN ONLY)
+// 2. GET: Fetch Available 'Others' Users (ADMIN ONLY)
 app.get('/api/transport/staff-available', verifyToken, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
@@ -8345,14 +8346,14 @@ app.get('/api/transport/staff-available', verifyToken, async (req, res) => {
     }
 });
 
-// 3. POST: Assign Staff (Driver/Conductor) (ADMIN ONLY)
+// 3. POST: Assign Staff (ADMIN ONLY)
 app.post('/api/transport/staff', verifyToken, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'Access Denied.' });
         }
 
-        const { user_id, staff_type } = req.body; // staff_type = 'Driver' or 'Conductor'
+        const { user_id, staff_type } = req.body; 
 
         if (!user_id || !staff_type) {
             return res.status(400).json({ message: 'User and Staff Type required.' });
@@ -8374,7 +8375,6 @@ app.delete('/api/transport/staff/:id', verifyToken, async (req, res) => {
         if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'Access Denied.' });
         }
-        // Deletes from transport_staff table, DOES NOT delete the user
         await db.query('DELETE FROM transport_staff WHERE id = ?', [req.params.id]);
         res.json({ message: 'Staff removed successfully' });
     } catch (error) {

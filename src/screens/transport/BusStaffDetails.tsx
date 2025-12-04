@@ -9,8 +9,7 @@ import {
     SafeAreaView,
     Modal,
     ActivityIndicator,
-    Alert,
-    ScrollView
+    Alert
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
@@ -50,10 +49,13 @@ const BusStaffDetails = () => {
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [loading, setLoading] = useState(false);
     
+    // Tabs State
+    const [activeTab, setActiveTab] = useState<'Driver' | 'Conductor'>('Driver');
+    
     // Others State
     const [myStatus, setMyStatus] = useState<any>(null);
 
-    // Modal State
+    // Modal State (Admin Only)
     const [showAddModal, setShowAddModal] = useState(false);
     const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
     const [loadingAvailable, setLoadingAvailable] = useState(false);
@@ -61,7 +63,7 @@ const BusStaffDetails = () => {
     const [selectedRole, setSelectedRole] = useState<'Driver' | 'Conductor'>('Driver');
 
     useEffect(() => {
-        if (userRole === 'admin') {
+        if (userRole === 'admin' || userRole === 'teacher') {
             fetchStaffList();
         } else if (userRole === 'others') {
             fetchMyStatus();
@@ -151,8 +153,8 @@ const BusStaffDetails = () => {
         return `${SERVER_URL}${url}`;
     };
 
-    // 1. ACCESS DENIED (Student/Teacher)
-    if (userRole === 'student' || userRole === 'teacher') {
+    // 1. ACCESS DENIED (Student)
+    if (userRole === 'student') {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
@@ -165,7 +167,7 @@ const BusStaffDetails = () => {
                 <View style={styles.accessDeniedContainer}>
                     <Image source={{ uri: DENIED_ICON }} style={styles.deniedIcon} />
                     <Text style={styles.deniedTitle}>Access Restricted</Text>
-                    <Text style={styles.deniedText}>You do not have permission to view this module.</Text>
+                    <Text style={styles.deniedText}>Students cannot view staff details.</Text>
                     <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
                         <Text style={styles.goBackText}>Go Back</Text>
                     </TouchableOpacity>
@@ -212,7 +214,9 @@ const BusStaffDetails = () => {
         );
     }
 
-    // 3. ADMIN VIEW (List & Add)
+    // 3. ADMIN & TEACHER VIEW (List with Tabs)
+    const filteredList = staffList.filter(s => s.staff_type === activeTab);
+
     const renderStaffCard = ({ item }: { item: StaffMember }) => (
         <View style={styles.card}>
             <View style={styles.cardLeft}>
@@ -222,14 +226,13 @@ const BusStaffDetails = () => {
                     <Text style={styles.phone}>{item.phone || 'No Contact'}</Text>
                 </View>
             </View>
-            <View style={styles.cardRight}>
-                <View style={[styles.badge, item.staff_type === 'Driver' ? styles.badgeDriver : styles.badgeConductor]}>
-                    <Text style={styles.badgeText}>{item.staff_type}</Text>
-                </View>
+            
+            {/* Delete Button (Admin Only) */}
+            {userRole === 'admin' && (
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteStaff(item.id)}>
                     <Image source={{ uri: TRASH_ICON }} style={styles.trashIcon} />
                 </TouchableOpacity>
-            </View>
+            )}
         </View>
     );
 
@@ -243,14 +246,39 @@ const BusStaffDetails = () => {
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Bus Staff</Text>
                 </View>
+                
+                {/* Add Button (Admin Only) */}
+                {userRole === 'admin' && (
+                    <TouchableOpacity 
+                        style={styles.addButton} 
+                        onPress={() => {
+                            // Set role based on active tab for convenience
+                            setSelectedRole(activeTab);
+                            fetchAvailableUsers();
+                            setShowAddModal(true);
+                        }}
+                    >
+                        <Text style={styles.addButtonText}>+ Assign {activeTab}</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {/* Tabs */}
+            <View style={styles.tabContainer}>
                 <TouchableOpacity 
-                    style={styles.addButton} 
-                    onPress={() => {
-                        fetchAvailableUsers();
-                        setShowAddModal(true);
-                    }}
+                    style={[styles.tab, activeTab === 'Driver' && styles.activeTab]} 
+                    onPress={() => setActiveTab('Driver')}
                 >
-                    <Text style={styles.addButtonText}>+ Assign Staff</Text>
+                    <Image source={{ uri: DRIVER_ICON }} style={[styles.tabIcon, activeTab === 'Driver' && { tintColor: '#2B6CB0' }]} />
+                    <Text style={[styles.tabText, activeTab === 'Driver' && styles.activeTabText]}>Drivers</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.tab, activeTab === 'Conductor' && styles.activeTab]} 
+                    onPress={() => setActiveTab('Conductor')}
+                >
+                    <Image source={{ uri: CONDUCTOR_ICON }} style={[styles.tabIcon, activeTab === 'Conductor' && { tintColor: '#2B6CB0' }]} />
+                    <Text style={[styles.tabText, activeTab === 'Conductor' && styles.activeTabText]}>Conductors</Text>
                 </TouchableOpacity>
             </View>
 
@@ -259,30 +287,30 @@ const BusStaffDetails = () => {
                 <View style={styles.centered}><ActivityIndicator size="large" color="#008080" /></View>
             ) : (
                 <FlatList
-                    data={staffList}
+                    data={filteredList}
                     renderItem={renderStaffCard}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
                     ListEmptyComponent={
                         <View style={styles.centered}>
-                            <Text style={styles.emptyText}>No Staff Assigned Yet.</Text>
+                            <Text style={styles.emptyText}>No {activeTab}s Assigned Yet.</Text>
                         </View>
                     }
                 />
             )}
 
-            {/* Add Modal */}
+            {/* Add Modal (Admin Only) */}
             <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
                 <SafeAreaView style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Assign New Staff</Text>
+                        <Text style={styles.modalTitle}>Assign New {selectedRole}</Text>
                         <TouchableOpacity onPress={() => setShowAddModal(false)}>
                             <Text style={styles.closeText}>Close</Text>
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.modalBody}>
-                        {/* 1. Select Role */}
+                        {/* 1. Select Role (Allows switching inside modal too) */}
                         <Text style={styles.sectionLabel}>Select Role:</Text>
                         <View style={styles.roleSelector}>
                             <TouchableOpacity 
@@ -357,6 +385,31 @@ const styles = StyleSheet.create({
     addButton: { backgroundColor: '#3182CE', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
     addButtonText: { color: '#FFF', fontWeight: 'bold' },
 
+    // Tabs
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        marginBottom: 10,
+        elevation: 2
+    },
+    tab: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 3,
+        borderBottomColor: 'transparent',
+    },
+    activeTab: {
+        borderBottomColor: '#2B6CB0',
+    },
+    tabIcon: { width: 20, height: 20, marginRight: 8, tintColor: '#A0AEC0' },
+    tabText: { fontSize: 16, fontWeight: '600', color: '#A0AEC0' },
+    activeTabText: { color: '#2B6CB0', fontWeight: 'bold' },
+
     // List Item
     listContent: { padding: 16 },
     card: { 
@@ -369,12 +422,7 @@ const styles = StyleSheet.create({
     name: { fontSize: 16, fontWeight: 'bold', color: '#2D3748' },
     phone: { fontSize: 14, color: '#718096', marginTop: 2 },
     
-    cardRight: { alignItems: 'flex-end', justifyContent: 'space-between', height: 50 },
-    badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, marginBottom: 5 },
-    badgeDriver: { backgroundColor: '#EBF8FF' }, // Light Blue
-    badgeConductor: { backgroundColor: '#F0FFF4' }, // Light Green
-    badgeText: { fontSize: 12, fontWeight: 'bold', color: '#2D3748' },
-    deleteBtn: { padding: 5 },
+    deleteBtn: { padding: 8, backgroundColor: '#FFF5F5', borderRadius: 20 },
     trashIcon: { width: 20, height: 20, tintColor: '#E53E3E' },
     emptyText: { color: '#718096', fontSize: 16 },
 
