@@ -8691,6 +8691,31 @@ app.get('/api/transport/student/my-route', verifyToken, async (req, res) => {
     }
 });
 
+// GET: Fetch Students for Assignment (Filtered)
+app.get('/api/transport/admin/students-for-assignment', verifyToken, async (req, res) => {
+    try {
+        // We want all students who have role='student'
+        // We also return their current route_id/stop_id so frontend can show checkmarks
+        const [students] = await db.query(`
+            SELECT 
+                u.id, 
+                u.full_name, 
+                up.roll_no, 
+                tp.id as passenger_id,
+                tp.route_id, 
+                tp.stop_id
+            FROM users u
+            JOIN transport_passengers tp ON u.id = tp.user_id
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            WHERE u.role = 'student'
+            ORDER BY u.full_name ASC
+        `);
+        res.json(students);
+    } catch (e) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 
 
 // ==========================================================
