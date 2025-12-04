@@ -8074,13 +8074,15 @@ app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) 
 // --- TRANSPORT API ROUTES ---
 // ==========================================================
 
-// 1. GET: Fetch active passengers (Admin & Teacher Only)
+// 1. GET: Fetch active passengers (Admin, Teacher & Others)
 app.get('/api/transport/passengers', verifyToken, async (req, res) => {
     try {
         const { class_group } = req.query;
 
-        // STRICT CHECK: Only Admin & Teacher
-        if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
+        // ALLOW: Admin, Teacher, Others
+        // DENY: Student (Students use 'my-status')
+        const allowedRoles = ['admin', 'teacher', 'others'];
+        if (!allowedRoles.includes(req.user.role)) {
              return res.status(403).json({ message: 'Access denied.' });
         }
 
@@ -8099,6 +8101,7 @@ app.get('/api/transport/passengers', verifyToken, async (req, res) => {
         const [results] = await db.query(query, [class_group]);
         res.json(results);
     } catch (error) {
+        console.error("Fetch Passengers Error:", error);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -8112,8 +8115,10 @@ app.get('/api/transport/students-available', verifyToken, async (req, res) => {
         }
 
         const { class_group } = req.query;
+        
+        // Find students in this class who are NOT in transport_passengers
         const query = `
-            SELECT u.id, u.full_name, up.roll_no, up.profile_image_url
+            SELECT u.id, u.full_name, up.roll_no, up.profile_image_url, u.class_group
             FROM users u
             JOIN user_profiles up ON u.id = up.user_id
             LEFT JOIN transport_passengers tp ON u.id = tp.user_id
@@ -8125,6 +8130,7 @@ app.get('/api/transport/students-available', verifyToken, async (req, res) => {
         const [results] = await db.query(query, [class_group]);
         res.json(results);
     } catch (error) {
+        console.error("Fetch Available Students Error:", error);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -8137,11 +8143,16 @@ app.post('/api/transport/passengers', verifyToken, async (req, res) => {
         }
 
         const { user_id } = req.body;
+        
+        // Insert into passengers table
+        // Note: route_id stays NULL until assigned to a route/bus
         await db.query('INSERT INTO transport_passengers (user_id) VALUES (?)', [user_id]);
-        res.json({ message: 'Student added.' });
+        
+        res.json({ message: 'Student added to transport list.' });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'Already a passenger.' });
-        res.status(500).json({ message: 'Failed to add.' });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'Student is already a passenger.' });
+        console.error("Add Passenger Error:", error);
+        res.status(500).json({ message: 'Failed to add student.' });
     }
 });
 
@@ -8155,6 +8166,7 @@ app.delete('/api/transport/passengers/:userId', verifyToken, async (req, res) =>
         await db.query('DELETE FROM transport_passengers WHERE user_id = ?', [req.params.userId]);
         res.json({ message: 'Passenger removed.' });
     } catch (error) {
+        console.error("Remove Passenger Error:", error);
         res.status(500).json({ message: 'Failed to remove.' });
     }
 });
@@ -8163,16 +8175,32 @@ app.delete('/api/transport/passengers/:userId', verifyToken, async (req, res) =>
 app.get('/api/transport/my-status', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
+        
+        // Check if exists in transport_passengers table
         const query = `
-            SELECT u.full_name, up.roll_no, up.profile_image_url, tp.status
+            SELECT u.full_name, up.roll_no, up.profile_image_url
             FROM users u
             JOIN user_profiles up ON u.id = up.user_id
             JOIN transport_passengers tp ON u.id = tp.user_id
             WHERE u.id = ?
         `;
         const [rows] = await db.query(query, [userId]);
-        res.json({ isPassenger: rows.length > 0, data: rows[0] || null });
+        
+        // If row exists, they are a passenger
+        if (rows.length > 0) {
+            res.json({ isPassenger: true, data: rows[0] });
+        } else {
+            // Fetch basic profile even if not passenger, just to show name/pic
+            const [basic] = await db.query(`
+                SELECT u.full_name, up.roll_no, up.profile_image_url 
+                FROM users u 
+                JOIN user_profiles up ON u.id = up.user_id 
+                WHERE u.id = ?`, [userId]);
+                
+            res.json({ isPassenger: false, data: basic[0] || null });
+        }
     } catch (error) {
+        console.error("My Status Error:", error);
         res.status(500).json({ message: 'Server error' });
     }
 });

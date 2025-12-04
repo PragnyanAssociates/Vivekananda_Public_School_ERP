@@ -5,7 +5,7 @@ import {
     StyleSheet,
     FlatList,
     Image,
-    TouchableOpacity,
+    TouchableOpacity,   
     SafeAreaView,
     Modal,
     ActivityIndicator,
@@ -21,7 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 
 // Interfaces
 interface Passenger {
-    id: number;
+    id: number; // This is the user_id
     full_name: string;
     roll_no: string | null;
     profile_image_url: string | null;
@@ -48,7 +48,7 @@ const PassengersScreen = () => {
     
     // Auth Context
     const { user } = useAuth(); 
-    const userRole = user?.role; 
+    const userRole = user?.role; // 'admin', 'teacher', 'others', 'student'
 
     // State
     const [selectedClass, setSelectedClass] = useState<string>('Class 10');
@@ -59,18 +59,20 @@ const PassengersScreen = () => {
     // Student State
     const [myStatus, setMyStatus] = useState<StudentStatus | null>(null);
 
-    // Modals (Admin)
+    // Modals (Admin Only)
     const [showClassModal, setShowClassModal] = useState<boolean>(false);
     const [showAddModal, setShowAddModal] = useState<boolean>(false);
     const [availableStudents, setAvailableStudents] = useState<Passenger[]>([]);
     const [loadingAvailable, setLoadingAvailable] = useState<boolean>(false);
 
-    // Load Data
+    // Load Data based on Role
     useEffect(() => {
         if (!userRole) return;
+
         if (userRole === 'student') {
             fetchMyStatus();
         } else {
+            // Admin, Teacher, Others -> Fetch List
             fetchPassengers();
         }
     }, [userRole, selectedClass]);
@@ -86,6 +88,7 @@ const PassengersScreen = () => {
             setPassengers(response.data || []);
         } catch (error) {
             console.error("Fetch Error:", error);
+            // Don't alert here to avoid spamming alerts on initial load errors
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -99,25 +102,21 @@ const PassengersScreen = () => {
             setMyStatus(response.data);
         } catch (error) {
             console.error("Status Error:", error);
+            Alert.alert("Error", "Could not fetch your status");
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
+    // Admin: Fetch students NOT in transport for the selected class
     const fetchStudentsForAddModal = async () => {
         setLoadingAvailable(true);
         try {
-            const response = await apiClient.get('/students/all');
-            const allStudents: Passenger[] = response.data || [];
-            
-            const classStudents = allStudents.filter(s => s.class_group === selectedClass);
-            const currentIds = new Set(passengers.map(p => p.id));
-            const available = classStudents.filter(s => !currentIds.has(s.id));
-
-            available.sort((a, b) => (parseInt(a.roll_no || '9999') - parseInt(b.roll_no || '9999')));
-            
-            setAvailableStudents(available);
+            const response = await apiClient.get('/transport/students-available', {
+                params: { class_group: selectedClass }
+            });
+            setAvailableStudents(response.data || []);
         } catch (error) {
             Alert.alert("Error", "Could not fetch available students.");
         } finally {
@@ -128,9 +127,14 @@ const PassengersScreen = () => {
     const handleAddStudent = async (userId: number) => {
         try {
             await apiClient.post('/transport/passengers', { user_id: userId });
+            
+            // Remove from local "Available" list
             setAvailableStudents(prev => prev.filter(s => s.id !== userId));
+            
+            // Refresh main list
             fetchPassengers(); 
-            Alert.alert("Success", "Student added.");
+            
+            Alert.alert("Success", "Student added to transport.");
         } catch (error: any) {
             Alert.alert("Error", error.response?.data?.message || "Failed to add.");
         }
@@ -139,7 +143,7 @@ const PassengersScreen = () => {
     const handleRemovePassenger = async (userId: number, name: string) => {
         Alert.alert(
             "Remove Passenger",
-            `Remove ${name}?`,
+            `Are you sure you want to remove ${name} from transport?`,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
@@ -162,8 +166,8 @@ const PassengersScreen = () => {
 
     const getImageUrl = (url: string | null) => {
         if (!url) return 'https://cdn-icons-png.flaticon.com/128/3135/3135715.png';
-        if (url.startsWith('/')) return `${SERVER_URL}${url}`;
-        return url;
+        if (url.startsWith('http')) return url;
+        return `${SERVER_URL}${url}`;
     };
 
     const renderPassengerCard = ({ item }: { item: Passenger }) => (
@@ -195,7 +199,6 @@ const PassengersScreen = () => {
             {/* --- HEADER --- */}
             <View style={styles.header}>
                 <View style={styles.headerLeftContainer}>
-                    {/* ★ BACK BUTTON ★ */}
                     <TouchableOpacity 
                         style={styles.backButton} 
                         onPress={() => navigation.goBack()}
@@ -206,7 +209,6 @@ const PassengersScreen = () => {
                         />
                     </TouchableOpacity>
 
-                    {/* TITLE STACK */}
                     <View>
                         <Text style={styles.headerTitle}>Passengers</Text>
                         {userRole !== 'student' && (
@@ -231,14 +233,14 @@ const PassengersScreen = () => {
 
             {/* --- CONTENT --- */}
             {userRole === 'student' ? (
-                // STUDENT VIEW
+                // 1. STUDENT VIEW
                 <View style={styles.studentViewContainer}>
                     {loading ? <ActivityIndicator size="large" color="#4A90E2" /> : (
                         <View style={[styles.statusCard, myStatus?.isPassenger ? styles.activeCard : styles.inactiveCard]}>
                             <Image 
                                 source={{ uri: myStatus?.isPassenger 
-                                    ? 'https://cdn-icons-png.flaticon.com/128/190/190411.png' 
-                                    : 'https://cdn-icons-png.flaticon.com/128/1828/1828665.png' 
+                                    ? 'https://cdn-icons-png.flaticon.com/128/190/190411.png' // Bus Icon
+                                    : 'https://cdn-icons-png.flaticon.com/128/1828/1828665.png' // Cross/Warning Icon
                                 }} 
                                 style={styles.statusIcon} 
                             />
@@ -248,13 +250,20 @@ const PassengersScreen = () => {
                             <Text style={styles.statusDesc}>
                                 {myStatus?.isPassenger 
                                     ? "You are registered in the school transport system." 
-                                    : "You are currently not using school transport."}
+                                    : "You are currently not using school transport facilities."}
                             </Text>
+                            {/* Display student Name/Roll no just to confirm Identity */}
+                            {myStatus?.data && (
+                                <View style={{marginTop: 15, alignItems:'center'}}>
+                                    <Text style={{fontWeight:'bold', color: '#4A5568'}}>{myStatus.data.full_name}</Text>
+                                    <Text style={{color: '#718096'}}>Roll: {myStatus.data.roll_no || 'N/A'}</Text>
+                                </View>
+                            )}
                         </View>
                     )}
                 </View>
             ) : (
-                // ADMIN & TEACHER VIEW
+                // 2. ADMIN, TEACHER & OTHERS VIEW
                 <>
                     <View style={styles.filterContainer}>
                         <Text style={styles.filterLabel}>View Class:</Text>
@@ -288,8 +297,7 @@ const PassengersScreen = () => {
                 </>
             )}
 
-            {/* --- MODALS --- */}
-            
+            {/* --- CLASS SELECTION MODAL --- */}
             <Modal visible={showClassModal} transparent animationType="fade">
                 <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowClassModal(false)}>
                     <View style={styles.selectionModal}>
@@ -313,12 +321,13 @@ const PassengersScreen = () => {
                 </TouchableOpacity>
             </Modal>
 
+            {/* --- ADD STUDENT MODAL (ADMIN ONLY) --- */}
             <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
                 <SafeAreaView style={styles.addModalContainer}>
                     <View style={styles.addModalHeader}>
                         <View>
                             <Text style={styles.addModalTitle}>Add Passenger</Text>
-                            <Text style={styles.addModalSubtitle}>Select from {selectedClass}</Text>
+                            <Text style={styles.addModalSubtitle}>Select students from {selectedClass}</Text>
                         </View>
                         <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.addModalClose}>
                             <Text style={styles.addModalCloseText}>Done</Text>
@@ -336,7 +345,7 @@ const PassengersScreen = () => {
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>No available students found.</Text>
                                     <Text style={{textAlign:'center', color:'#A0AEC0', marginTop:5}}>
-                                        (Or they are already added)
+                                        (All students in this class might already be passengers)
                                     </Text>
                                 </View>
                             }
@@ -387,12 +396,12 @@ const styles = StyleSheet.create({
     backIcon: {
         width: 24,
         height: 24,
-        tintColor: '#2D3748', // Dark grey arrow
+        tintColor: '#2D3748',
     },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#1A202C' },
     subHeader: { fontSize: 13, color: '#718096', marginTop: 2 },
     
-    headerAddButton: { backgroundColor: '#48BB78', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
+    headerAddButton: { backgroundColor: '#299ad7ff', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
     headerAddButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
     
     // Filter
@@ -419,7 +428,7 @@ const styles = StyleSheet.create({
     emptyContainer: { padding: 40, alignItems: 'center' },
     emptyText: { color: '#718096', fontSize: 16, fontWeight: '500' },
     
-    // Modal
+    // Modal (Class Selection)
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     selectionModal: { backgroundColor: '#FFF', width: '80%', maxHeight: '60%', borderRadius: 16, padding: 20 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
@@ -428,7 +437,7 @@ const styles = StyleSheet.create({
     modalItemText: { fontSize: 16, textAlign: 'center', color: '#4A5568' },
     modalItemTextSelected: { color: '#38A169', fontWeight: 'bold' },
     
-    // Add Modal
+    // Add Student Modal
     addModalContainer: { flex: 1, backgroundColor: '#F7FAFC' },
     addModalHeader: { padding: 20, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     addModalTitle: { fontSize: 20, fontWeight: 'bold' },

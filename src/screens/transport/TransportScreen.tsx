@@ -22,7 +22,7 @@ interface TransportModule {
 const transportModules: TransportModule[] = [
     {
         id: 'trans1',
-        title: 'Passengers List',
+        title: 'Occupants List',
         // Icon representing Students/Commuters
         imageSource: 'https://cdn-icons-png.flaticon.com/128/2491/2491957.png', 
         navigateTo: 'PassengersScreen', 
@@ -43,10 +43,24 @@ const transportModules: TransportModule[] = [
     },
     {
         id: 'trans4',
-        title: 'Proofs',
+        title: 'Doc View',
         // Icon representing ID Cards/Documents
         imageSource: 'https://cdn-icons-png.flaticon.com/128/17830/17830628.png',
         navigateTo: 'ProofsScreen', 
+    },
+    {
+        id: 'trans6',
+        title: 'Vehical Info',
+        // Icon representing Feedback/Alerts
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/14969/14969652.png',
+        navigateTo: 'VehicalDetails', 
+    },
+    {
+        id: 'trans7',
+        title: 'Staff Info',
+        // Icon representing Feedback/Alerts
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/2798/2798177.png',
+        navigateTo: 'BusStaffDetails', 
     },
     {
         id: 'trans5',
@@ -54,20 +68,6 @@ const transportModules: TransportModule[] = [
         // Icon representing Feedback/Alerts
         imageSource: 'https://cdn-icons-png.flaticon.com/128/2016/2016314.png',
         navigateTo: 'ComplaintsScreen', 
-    },
-    {
-        id: 'trans6',
-        title: 'Vehical Details',
-        // Icon representing Feedback/Alerts
-        imageSource: 'https://cdn-icons-png.flaticon.com/128/14969/14969652.png',
-        navigateTo: 'VehicalDetails', 
-    },
-    {
-        id: 'trans7',
-        title: 'Bus Staff Details',
-        // Icon representing Feedback/Alerts
-        imageSource: 'https://cdn-icons-png.flaticon.com/128/2798/2798177.png',
-        navigateTo: 'BusStaffDetails', 
     },
 ];
 
