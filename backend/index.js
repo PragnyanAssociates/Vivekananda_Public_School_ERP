@@ -8856,113 +8856,159 @@ app.put('/api/complaints/:id/status', verifyToken, isAdmin, async (req, res) => 
 });
 
 // ==========================================================
-// --- 🚛 VEHICLE LOG MODULE ---
+// --- VEHICLE LOGS API ROUTES ---
 // ==========================================================
 
-// 1. GET: List all Vehicles (For Dropdowns)
-app.get('/api/vehicles', verifyToken, isAdmin, async (req, res) => {
-    try {
-        const [vehicles] = await db.query('SELECT * FROM vehicles ORDER BY vehicle_no ASC');
-        res.json(vehicles);
-    } catch (e) {
-        res.status(500).json({ message: 'Error fetching vehicles' });
-    }
-});
+// 1. GET: Fetch Vehicle List (Dropdown)
+// (This reuses your existing /transport/vehicles endpoint, so ensure that allows 'others' too)
 
-// 2. POST: Add a New Vehicle (Master List)
-app.post('/api/vehicles', verifyToken, isAdmin, async (req, res) => {
-    const { vehicle_no, vehicle_name } = req.body;
+// 2. POST: Add Daily Log (Admin & Others)
+app.post('/api/transport/logs/daily', verifyToken, async (req, res) => {
     try {
-        await db.query('INSERT INTO vehicles (vehicle_no, vehicle_name) VALUES (?, ?)', [vehicle_no, vehicle_name]);
-        res.json({ message: 'Vehicle added' });
-    } catch (e) {
-        res.status(500).json({ message: 'Error adding vehicle' });
-    }
-});
-
-// 3. POST: Add Daily Log
-app.post('/api/vehicles/daily', verifyToken, isAdmin, async (req, res) => {
-    const { vehicle_id, log_date, distance_km, fuel_consumed, notes } = req.body;
-    try {
-        await db.query(
-            'INSERT INTO vehicle_daily_logs (vehicle_id, log_date, distance_km, fuel_consumed, notes) VALUES (?, ?, ?, ?, ?)',
-            [vehicle_id, log_date, distance_km, fuel_consumed, notes]
-        );
-        res.json({ message: 'Daily log saved' });
-    } catch (e) {
-        res.status(500).json({ message: 'Error saving log' });
-    }
-});
-
-// 4. GET: Fetch Logs (Dynamic Type: Daily, Monthly, Overall)
-app.get('/api/vehicles/logs/:type', verifyToken, isAdmin, async (req, res) => {
-    const { type } = req.params;
-    try {
-        let query = "";
-        
-        if (type === 'daily') {
-            // Raw list of logs
-            query = `SELECT l.*, v.vehicle_no, v.vehicle_name 
-                     FROM vehicle_daily_logs l 
-                     JOIN vehicles v ON l.vehicle_id = v.id 
-                     ORDER BY l.log_date DESC`;
-        } 
-        else if (type === 'monthly') {
-            // Sum of logs grouped by Month and Vehicle
-            query = `SELECT v.vehicle_no, v.vehicle_name, 
-                            DATE_FORMAT(l.log_date, '%Y-%m') as month,
-                            SUM(l.distance_km) as total_distance,
-                            SUM(l.fuel_consumed) as total_fuel
-                     FROM vehicle_daily_logs l 
-                     JOIN vehicles v ON l.vehicle_id = v.id 
-                     GROUP BY v.id, month 
-                     ORDER BY month DESC`;
-        } 
-        else if (type === 'overall') {
-            // Sum of logs grouped by Vehicle (All time)
-            query = `SELECT v.vehicle_no, v.vehicle_name, 
-                            SUM(l.distance_km) as total_distance,
-                            SUM(l.fuel_consumed) as total_fuel,
-                            COUNT(l.id) as total_trips
-                     FROM vehicle_daily_logs l 
-                     JOIN vehicles v ON l.vehicle_id = v.id 
-                     GROUP BY v.id 
-                     ORDER BY total_distance DESC`;
+        // Allow Admin & Others (Driver/Conductor)
+        if (req.user.role !== 'admin' && req.user.role !== 'others') {
+            return res.status(403).json({ message: 'Access Denied' });
         }
 
-        const [results] = await db.query(query);
-        res.json(results);
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error fetching logs' });
-    }
-});
-
-// 5. POST: Add Service Log
-app.post('/api/vehicles/service', verifyToken, isAdmin, async (req, res) => {
-    const { vehicle_id, service_date, prev_service_date, service_details, cost } = req.body;
-    try {
+        const { vehicle_id, log_date, distance_km, fuel_consumed, notes } = req.body;
+        
         await db.query(
-            'INSERT INTO vehicle_service_logs (vehicle_id, service_date, prev_service_date, service_details, cost) VALUES (?, ?, ?, ?, ?)',
-            [vehicle_id, service_date, prev_service_date, service_details, cost]
+            'INSERT INTO transport_vehicle_logs (vehicle_id, log_date, distance_km, fuel_consumed, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [vehicle_id, log_date, distance_km, fuel_consumed, notes, req.user.id]
         );
-        res.json({ message: 'Service log saved' });
-    } catch (e) {
-        res.status(500).json({ message: 'Error saving service log' });
+
+        res.json({ message: 'Daily log added successfully' });
+    } catch (error) {
+        console.error("Add Log Error:", error);
+        res.status(500).json({ message: 'Failed to add log' });
     }
 });
 
-// 6. GET: Fetch Service Logs
-app.get('/api/vehicles/service', verifyToken, isAdmin, async (req, res) => {
+// 3. POST: Add Service Log (Admin Only - usually drivers don't handle payments)
+// *Note: If you want drivers to add this too, add 'others' to the check.
+app.post('/api/transport/logs/service', verifyToken, async (req, res) => {
     try {
-        const query = `SELECT s.*, v.vehicle_no, v.vehicle_name 
-                       FROM vehicle_service_logs s
-                       JOIN vehicles v ON s.vehicle_id = v.id 
-                       ORDER BY s.service_date DESC`;
-        const [results] = await db.query(query);
-        res.json(results);
-    } catch (e) {
-        res.status(500).json({ message: 'Error fetching service logs' });
+        if (req.user.role !== 'admin' && req.user.role !== 'others') {
+             return res.status(403).json({ message: 'Access Denied' });
+        }
+
+        const { vehicle_id, service_date, prev_service_date, service_details, cost } = req.body;
+
+        await db.query(
+            'INSERT INTO transport_service_logs (vehicle_id, service_date, prev_service_date, service_details, cost, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [vehicle_id, service_date, prev_service_date, service_details, cost, req.user.id]
+        );
+
+        res.json({ message: 'Service log added successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to add service log' });
+    }
+});
+
+// 4. GET: Fetch General Logs (Daily)
+app.get('/api/transport/logs/daily', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT l.*, v.vehicle_no 
+            FROM transport_vehicle_logs l
+            JOIN transport_vehicles v ON l.vehicle_id = v.id
+            ORDER BY l.log_date DESC
+            LIMIT 50
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ message: 'Error fetching logs' }); }
+});
+
+// 5. GET: Fetch Monthly Aggregates
+app.get('/api/transport/logs/monthly', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                DATE_FORMAT(l.log_date, '%Y-%m') as month,
+                v.bus_name as vehicle_name,
+                SUM(l.distance_km) as total_distance,
+                SUM(l.fuel_consumed) as total_fuel
+            FROM transport_vehicle_logs l
+            JOIN transport_vehicles v ON l.vehicle_id = v.id
+            GROUP BY month, v.id
+            ORDER BY month DESC
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ message: 'Error fetching monthly logs' }); }
+});
+
+// 6. GET: Fetch Overall Aggregates
+app.get('/api/transport/logs/overall', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                v.bus_name as vehicle_name,
+                COUNT(l.id) as total_trips,
+                SUM(l.distance_km) as total_distance,
+                SUM(l.fuel_consumed) as total_fuel
+            FROM transport_vehicles v
+            LEFT JOIN transport_vehicle_logs l ON v.id = l.vehicle_id
+            GROUP BY v.id
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ message: 'Error fetching overall logs' }); }
+});
+
+// 7. GET: Fetch Service Logs
+app.get('/api/transport/logs/service', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT s.*, v.bus_number as vehicle_no
+            FROM transport_service_logs s
+            JOIN transport_vehicles v ON s.vehicle_id = v.id
+            ORDER BY s.service_date DESC
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ message: 'Error fetching service logs' }); }
+});
+
+// 8. PUT: Update Daily Log
+app.put('/api/transport/logs/daily/:id', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'others') {
+            return res.status(403).json({ message: 'Access Denied' });
+        }
+
+        const { vehicle_id, log_date, distance_km, fuel_consumed, notes } = req.body;
+        
+        await db.query(
+            'UPDATE transport_vehicle_logs SET vehicle_id=?, log_date=?, distance_km=?, fuel_consumed=?, notes=? WHERE id=?',
+            [vehicle_id, log_date, distance_km, fuel_consumed, notes, req.params.id]
+        );
+
+        res.json({ message: 'Daily log updated successfully' });
+    } catch (error) {
+        console.error("Update Log Error:", error);
+        res.status(500).json({ message: 'Failed to update log' });
+    }
+});
+
+// 9. PUT: Update Service Log
+app.put('/api/transport/logs/service/:id', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'others') {
+             return res.status(403).json({ message: 'Access Denied' });
+        }
+
+        const { vehicle_id, service_date, prev_service_date, service_details, cost } = req.body;
+
+        await db.query(
+            'UPDATE transport_service_logs SET vehicle_id=?, service_date=?, prev_service_date=?, service_details=?, cost=? WHERE id=?',
+            [vehicle_id, service_date, prev_service_date, service_details, cost, req.params.id]
+        );
+
+        res.json({ message: 'Service log updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update service log' });
     }
 });
 

@@ -21,6 +21,8 @@ import { SERVER_URL } from '../../../apiConfig';
 const BACK_ICON = 'https://cdn-icons-png.flaticon.com/128/271/271220.png';
 const FOLDER_ICON = 'https://cdn-icons-png.flaticon.com/128/3767/3767084.png';
 const DENIED_ICON = 'https://cdn-icons-png.flaticon.com/128/3967/3967261.png';
+const DRIVER_ICON = 'https://cdn-icons-png.flaticon.com/128/1995/1995439.png'; 
+const CONDUCTOR_ICON = 'https://cdn-icons-png.flaticon.com/128/3305/3305929.png'; 
 
 const ProofsScreen = () => {
     const navigation = useNavigation();
@@ -36,6 +38,9 @@ const ProofsScreen = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedFolder, setSelectedFolder] = useState<any>(null); // If set, we are inside a folder
     const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
+
+    // ★ NEW: Active Tab State
+    const [activeTab, setActiveTab] = useState<'Driver' | 'Conductor'>('Driver');
 
     // --- 1. ACCESS CONTROL ---
     if (!user || user.role !== 'admin') {
@@ -103,6 +108,7 @@ const ProofsScreen = () => {
 
     const openCreateModal = () => {
         fetchCandidates(); // Get list of drivers/conductors
+        setSelectedStaffId(null);
         setModalVisible(true);
     };
 
@@ -196,9 +202,17 @@ const ProofsScreen = () => {
         return url.startsWith('http') ? url : `${SERVER_URL}${url}`;
     };
 
-    // --- 4. RENDERERS ---
+    // --- 4. DATA FILTERING ---
+    // Filter folders based on active Tab
+    const filteredFolders = folders.filter((f: any) => f.staff_type === activeTab);
+    
+    // Filter candidates based on active Tab (for Modal)
+    const filteredCandidates = staffCandidates.filter((s: any) => s.staff_type === activeTab);
 
-    // VIEW: INSIDE FOLDER
+
+    // --- 5. RENDERERS ---
+
+    // VIEW: INSIDE FOLDER (Details View)
     if (selectedFolder) {
         return (
             <SafeAreaView style={styles.container}>
@@ -214,6 +228,7 @@ const ProofsScreen = () => {
 
                 {loading ? <ActivityIndicator size="large" color="#4A5568" style={{marginTop: 50}} /> : (
                     <FlatList 
+                        key="grid"
                         data={folderImages}
                         numColumns={3}
                         keyExtractor={(item: any) => item.id.toString()}
@@ -233,7 +248,7 @@ const ProofsScreen = () => {
         );
     }
 
-    // VIEW: FOLDER LIST
+    // VIEW: FOLDER LIST (Main View)
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -241,14 +256,35 @@ const ProofsScreen = () => {
                     <Image source={{ uri: BACK_ICON }} style={styles.backIcon} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Staff Proofs</Text>
+                {/* Create button contextually shows "New Driver/Conductor Folder" */}
                 <TouchableOpacity onPress={openCreateModal} style={styles.createBtn}>
                     <Text style={{color: 'white', fontWeight: 'bold'}}>+ New Folder</Text>
                 </TouchableOpacity>
             </View>
 
+            {/* ★ TABS ★ */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity 
+                    style={[styles.tab, activeTab === 'Driver' && styles.activeTab]} 
+                    onPress={() => setActiveTab('Driver')}
+                >
+                    <Image source={{ uri: DRIVER_ICON }} style={[styles.tabIcon, activeTab === 'Driver' && { tintColor: '#2B6CB0' }]} />
+                    <Text style={[styles.tabText, activeTab === 'Driver' && styles.activeTabText]}>Drivers</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.tab, activeTab === 'Conductor' && styles.activeTab]} 
+                    onPress={() => setActiveTab('Conductor')}
+                >
+                    <Image source={{ uri: CONDUCTOR_ICON }} style={[styles.tabIcon, activeTab === 'Conductor' && { tintColor: '#2B6CB0' }]} />
+                    <Text style={[styles.tabText, activeTab === 'Conductor' && styles.activeTabText]}>Conductors</Text>
+                </TouchableOpacity>
+            </View>
+
             {loading ? <ActivityIndicator size="large" color="#4A5568" style={{marginTop: 50}} /> : (
                 <FlatList 
-                    data={folders}
+                    key="list"
+                    data={filteredFolders}
                     keyExtractor={(item: any) => item.id.toString()}
                     contentContainerStyle={{ padding: 15 }}
                     renderItem={({ item }) => (
@@ -271,7 +307,11 @@ const ProofsScreen = () => {
                             <Image source={{uri: 'https://cdn-icons-png.flaticon.com/128/2985/2985150.png'}} style={{width: 20, height: 20, tintColor: '#CBD5E0'}} />
                         </TouchableOpacity>
                     )}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No folders created yet.</Text>}
+                    ListEmptyComponent={
+                        <Text style={styles.emptyText}>
+                            No folders for {activeTab}s yet.
+                        </Text>
+                    }
                 />
             )}
 
@@ -279,16 +319,16 @@ const ProofsScreen = () => {
             <Modal visible={modalVisible} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Create Proof Folder</Text>
-                        <Text style={{marginBottom: 10, color:'#718096'}}>Select a staff member:</Text>
+                        <Text style={styles.modalTitle}>New {activeTab} Folder</Text>
+                        <Text style={{marginBottom: 10, color:'#718096'}}>Select a {activeTab.toLowerCase()}:</Text>
                         
-                        {staffCandidates.length === 0 ? (
+                        {filteredCandidates.length === 0 ? (
                             <Text style={{color: 'red', marginBottom: 20, textAlign:'center'}}>
-                                No staff available (or all already have folders).
+                                No available {activeTab}s found (or all already have folders).
                             </Text>
                         ) : (
                             <FlatList 
-                                data={staffCandidates}
+                                data={filteredCandidates}
                                 style={{maxHeight: 200, marginBottom: 20}}
                                 keyExtractor={(item: any) => item.id.toString()}
                                 renderItem={({item}) => (
@@ -298,7 +338,7 @@ const ProofsScreen = () => {
                                     >
                                         <Image source={{ uri: getImageUrl(item.profile_image_url) }} style={styles.miniAvatar} />
                                         <Text style={[styles.candidateText, selectedStaffId === item.id && {color: '#3182CE', fontWeight:'bold'}]}>
-                                            {item.full_name} ({item.staff_type})
+                                            {item.full_name}
                                         </Text>
                                     </TouchableOpacity>
                                 )}
@@ -334,6 +374,31 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#2D3748' },
     createBtn: { backgroundColor: '#3182CE', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
     addBtn: { fontSize: 16, color: '#38A169', fontWeight: 'bold' },
+
+    // Tabs
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#FFF',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        marginBottom: 5,
+        elevation: 2
+    },
+    tab: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 3,
+        borderBottomColor: 'transparent',
+    },
+    activeTab: {
+        borderBottomColor: '#2B6CB0',
+    },
+    tabIcon: { width: 20, height: 20, marginRight: 8, tintColor: '#A0AEC0' },
+    tabText: { fontSize: 16, fontWeight: '600', color: '#A0AEC0' },
+    activeTabText: { color: '#2B6CB0', fontWeight: 'bold' },
 
     // Restricted
     restrictedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },

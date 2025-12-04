@@ -9,17 +9,32 @@ import {
     TextInput,
     Alert,
     SafeAreaView,
-    ScrollView,
     Image,
     ActivityIndicator
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
-// Helper for Dates
-const getToday = () => new Date().toISOString().split('T')[0];
+// Icons
+const BACK_ICON = 'https://cdn-icons-png.flaticon.com/128/271/271220.png';
+const DENIED_ICON = 'https://cdn-icons-png.flaticon.com/128/3967/3967261.png';
+const EDIT_ICON = 'https://cdn-icons-png.flaticon.com/128/1159/1159633.png'; // Pencil Icon
+
+// Helper for Date Input (YYYY-MM-DD) - Required for SQL Input
+const getTodayISO = () => new Date().toISOString().split('T')[0];
+
+// Helper for Display (DD/MM/YYYY) - Required for UI
+const formatDateDisplay = (isoDate: string) => {
+    if (!isoDate) return '-';
+    // Handle cases where date might be full ISO string
+    const datePart = isoDate.split('T')[0]; 
+    const [year, month, day] = datePart.split('-');
+    return `${day}/${month}/${year}`;
+};
 
 const VehicleLogScreen = () => {
+    const navigation = useNavigation();
     const { user } = useAuth();
     
     // --- STATE ---
@@ -27,44 +42,53 @@ const VehicleLogScreen = () => {
     const [mainTab, setMainTab] = useState<'general' | 'service'>('general');
     const [generalSubTab, setGeneralSubTab] = useState<'daily' | 'monthly' | 'overall'>('daily');
     
-    const [vehicles, setVehicles] = useState<any[]>([]); // Dropdown data
-    const [logs, setLogs] = useState<any[]>([]); // Table data
+    const [vehicles, setVehicles] = useState<any[]>([]); 
+    const [logs, setLogs] = useState<any[]>([]); 
+
+    // Edit State
+    const [isEditing, setIsEditing] = useState(false);
+    const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
 
     // Modal States
-    const [showAddVehicle, setShowAddVehicle] = useState(false);
     const [showDailyModal, setShowDailyModal] = useState(false);
     const [showServiceModal, setShowServiceModal] = useState(false);
 
     // Form Data
     const [formData, setFormData] = useState({
         vehicle_id: '',
-        vehicle_no: '',
-        vehicle_name: '',
-        log_date: getToday(),
+        log_date: getTodayISO(),
         distance_km: '',
         fuel_consumed: '',
         notes: '',
-        service_date: getToday(),
+        service_date: getTodayISO(),
         prev_service_date: '',
         service_details: '',
         cost: ''
     });
 
-    // --- 1. ACCESS CONTROL ---
-    if (!user || user.role !== 'admin') {
+    // --- ACCESS CONTROL ---
+    if (!user || (user.role !== 'admin' && user.role !== 'others')) {
         return (
-            <View style={styles.restrictedContainer}>
-                <Image 
-                    source={{ uri: 'https://cdn-icons-png.flaticon.com/128/9995/9995370.png' }} 
-                    style={{ width: 80, height: 80, marginBottom: 20, tintColor: '#E53E3E' }} 
-                />
-                <Text style={styles.restrictedTitle}>Access Restricted</Text>
-                <Text style={styles.restrictedText}>Only Admins can access Vehicle Logs.</Text>
-            </View>
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                        <Image source={{ uri: BACK_ICON }} style={styles.backIcon} />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Vehicle Log</Text>
+                </View>
+                <View style={styles.restrictedContainer}>
+                    <Image source={{ uri: DENIED_ICON }} style={styles.deniedIcon} />
+                    <Text style={styles.restrictedTitle}>Access Restricted</Text>
+                    <Text style={styles.restrictedText}>You are not authorized to view logs.</Text>
+                    <TouchableOpacity style={styles.goBackBtn} onPress={() => navigation.goBack()}>
+                        <Text style={styles.goBackText}>Go Back</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
         );
     }
 
-    // --- 2. DATA FETCHING ---
+    // --- DATA FETCHING ---
     useEffect(() => {
         fetchVehicles();
     }, []);
@@ -79,7 +103,7 @@ const VehicleLogScreen = () => {
 
     const fetchVehicles = async () => {
         try {
-            const res = await apiClient.get('/vehicles');
+            const res = await apiClient.get('/transport/vehicles');
             setVehicles(res.data);
         } catch (e) { console.error(e); }
     };
@@ -87,63 +111,122 @@ const VehicleLogScreen = () => {
     const fetchGeneralLogs = async (type: string) => {
         setLoading(true);
         try {
-            const res = await apiClient.get(`/vehicles/logs/${type}`);
+            const res = await apiClient.get(`/transport/logs/${type}`);
             setLogs(res.data);
-        } catch (e) { Alert.alert('Error', 'Failed to load logs'); }
+        } catch (e) { console.error("Log fetch error", e); }
         finally { setLoading(false); }
     };
 
     const fetchServiceLogs = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get('/vehicles/service');
+            const res = await apiClient.get('/transport/logs/service');
             setLogs(res.data);
-        } catch (e) { Alert.alert('Error', 'Failed to load service logs'); }
+        } catch (e) { console.error("Service fetch error", e); }
         finally { setLoading(false); }
     };
 
-    // --- 3. SUBMIT ACTIONS ---
-    const handleAddVehicle = async () => {
-        if (!formData.vehicle_no || !formData.vehicle_name) return Alert.alert('Error', 'Fill all fields');
-        try {
-            await apiClient.post('/vehicles', {
-                vehicle_no: formData.vehicle_no,
-                vehicle_name: formData.vehicle_name
-            });
-            setShowAddVehicle(false);
-            fetchVehicles();
-            Alert.alert('Success', 'Vehicle Added');
-        } catch (e) { Alert.alert('Error', 'Failed to add vehicle'); }
+    // --- ACTIONS: OPEN MODALS ---
+
+    const openAddDaily = () => {
+        setIsEditing(false);
+        setFormData({ ...formData, log_date: getTodayISO(), distance_km: '', fuel_consumed: '', notes: '', vehicle_id: '' });
+        setShowDailyModal(true);
     };
+
+    const openEditDaily = (item: any) => {
+        setIsEditing(true);
+        setSelectedLogId(item.id);
+        setFormData({
+            ...formData,
+            vehicle_id: item.vehicle_id,
+            log_date: item.log_date.split('T')[0], // Keep YYYY-MM-DD for Input
+            distance_km: String(item.distance_km),
+            fuel_consumed: String(item.fuel_consumed),
+            notes: item.notes || ''
+        });
+        setShowDailyModal(true);
+    };
+
+    const openAddService = () => {
+        setIsEditing(false);
+        setFormData({ ...formData, service_date: getTodayISO(), prev_service_date: '', service_details: '', cost: '', vehicle_id: '' });
+        setShowServiceModal(true);
+    };
+
+    const openEditService = (item: any) => {
+        setIsEditing(true);
+        setSelectedLogId(item.id);
+        setFormData({
+            ...formData,
+            vehicle_id: item.vehicle_id,
+            service_date: item.service_date.split('T')[0],
+            prev_service_date: item.prev_service_date ? item.prev_service_date.split('T')[0] : '',
+            service_details: item.service_details,
+            cost: String(item.cost)
+        });
+        setShowServiceModal(true);
+    };
+
+    // --- SUBMIT ACTIONS ---
 
     const handleSubmitDaily = async () => {
         if (!formData.vehicle_id || !formData.distance_km) return Alert.alert('Error', 'Select vehicle & distance');
+        
+        const payload = {
+            vehicle_id: formData.vehicle_id,
+            log_date: formData.log_date,
+            distance_km: formData.distance_km,
+            fuel_consumed: formData.fuel_consumed,
+            notes: formData.notes
+        };
+
         try {
-            await apiClient.post('/vehicles/daily', formData);
+            if (isEditing && selectedLogId) {
+                await apiClient.put(`/transport/logs/daily/${selectedLogId}`, payload);
+                Alert.alert('Success', 'Daily Log Updated');
+            } else {
+                await apiClient.post('/transport/logs/daily', payload);
+                Alert.alert('Success', 'Daily Log Added');
+            }
             setShowDailyModal(false);
             fetchGeneralLogs('daily');
-            Alert.alert('Success', 'Daily Log Saved');
         } catch (e) { Alert.alert('Error', 'Failed to save log'); }
     };
 
     const handleSubmitService = async () => {
         if (!formData.vehicle_id || !formData.service_date) return Alert.alert('Error', 'Select vehicle & date');
+        
+        const payload = {
+            vehicle_id: formData.vehicle_id,
+            service_date: formData.service_date,
+            prev_service_date: formData.prev_service_date,
+            service_details: formData.service_details,
+            cost: formData.cost
+        };
+
         try {
-            await apiClient.post('/vehicles/service', formData);
+            if (isEditing && selectedLogId) {
+                await apiClient.put(`/transport/logs/service/${selectedLogId}`, payload);
+                Alert.alert('Success', 'Service Log Updated');
+            } else {
+                await apiClient.post('/transport/logs/service', payload);
+                Alert.alert('Success', 'Service Log Added');
+            }
             setShowServiceModal(false);
             fetchServiceLogs();
-            Alert.alert('Success', 'Service Log Saved');
         } catch (e) { Alert.alert('Error', 'Failed to save log'); }
     };
 
-    // --- 4. RENDERERS ---
+    // --- RENDERERS ---
 
-    // Generic Header for Tables
     const renderHeader = (headers: string[]) => (
         <View style={styles.tableHeader}>
             {headers.map((h, i) => (
-                <Text key={i} style={[styles.headerText, { flex: 1 }]}>{h}</Text>
+                <Text key={i} style={[styles.headerText, { flex: 1, textAlign: 'center' }]}>{h}</Text>
             ))}
+            {/* Empty header for Edit Action */}
+            {(generalSubTab === 'daily' || mainTab === 'service') && <Text style={[styles.headerText, {width: 40}]}></Text>}
         </View>
     );
 
@@ -153,10 +236,14 @@ const VehicleLogScreen = () => {
             if (generalSubTab === 'daily') {
                 return (
                     <View style={styles.tableRow}>
-                        <Text style={styles.cell}>{item.log_date.split('T')[0]}</Text>
+                        <Text style={styles.cell}>{formatDateDisplay(item.log_date)}</Text>
                         <Text style={styles.cell}>{item.vehicle_no}</Text>
                         <Text style={styles.cell}>{item.distance_km} km</Text>
                         <Text style={styles.cell}>{item.fuel_consumed} L</Text>
+                        {/* Edit Button */}
+                        <TouchableOpacity onPress={() => openEditDaily(item)} style={styles.editBtn}>
+                            <Image source={{ uri: EDIT_ICON }} style={styles.editIcon} />
+                        </TouchableOpacity>
                     </View>
                 );
             }
@@ -164,7 +251,7 @@ const VehicleLogScreen = () => {
                 return (
                     <View style={styles.tableRow}>
                         <Text style={styles.cell}>{item.month}</Text>
-                        <Text style={styles.cell}>{item.vehicle_name}</Text>
+                        <Text style={styles.cell}>{item.vehicle_name || 'N/A'}</Text>
                         <Text style={styles.cell}>{item.total_distance} km</Text>
                         <Text style={styles.cell}>{item.total_fuel} L</Text>
                     </View>
@@ -173,10 +260,10 @@ const VehicleLogScreen = () => {
             if (generalSubTab === 'overall') {
                 return (
                     <View style={styles.tableRow}>
-                        <Text style={styles.cell}>{item.vehicle_name}</Text>
+                        <Text style={styles.cell}>{item.vehicle_name || 'N/A'}</Text>
                         <Text style={styles.cell}>{item.total_trips}</Text>
-                        <Text style={styles.cell}>{item.total_distance} km</Text>
-                        <Text style={styles.cell}>{item.total_fuel} L</Text>
+                        <Text style={styles.cell}>{item.total_distance || 0} km</Text>
+                        <Text style={styles.cell}>{item.total_fuel || 0} L</Text>
                     </View>
                 );
             }
@@ -186,9 +273,13 @@ const VehicleLogScreen = () => {
             return (
                 <View style={styles.tableRow}>
                     <Text style={styles.cell}>{item.vehicle_no}</Text>
-                    <Text style={styles.cell}>{item.service_date.split('T')[0]}</Text>
+                    <Text style={styles.cell}>{formatDateDisplay(item.service_date)}</Text>
                     <Text style={styles.cell}>{item.service_details}</Text>
-                    <Text style={styles.cell}>${item.cost}</Text>
+                    <Text style={styles.cell}>₹{item.cost}</Text>
+                    {/* Edit Button */}
+                    <TouchableOpacity onPress={() => openEditService(item)} style={styles.editBtn}>
+                        <Image source={{ uri: EDIT_ICON }} style={styles.editIcon} />
+                    </TouchableOpacity>
                 </View>
             );
         }
@@ -196,23 +287,32 @@ const VehicleLogScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <Image source={{ uri: BACK_ICON }} style={styles.backIcon} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Vehicle Log Book</Text>
+                <View style={{width: 30}} />
+            </View>
+
             {/* Main Tabs */}
             <View style={styles.tabContainer}>
                 <TouchableOpacity 
                     style={[styles.tab, mainTab === 'general' && styles.activeTab]} 
                     onPress={() => setMainTab('general')}
                 >
-                    <Text style={[styles.tabText, mainTab === 'general' && styles.activeTabText]}>General Log</Text>
+                    <Text style={[styles.tabText, mainTab === 'general' && styles.activeTabText]}>Daily Log</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                     style={[styles.tab, mainTab === 'service' && styles.activeTab]} 
                     onPress={() => setMainTab('service')}
                 >
-                    <Text style={[styles.tabText, mainTab === 'service' && styles.activeTabText]}>Service Log</Text>
+                    <Text style={[styles.tabText, mainTab === 'service' && styles.activeTabText]}>Service / Repair</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Sub Tabs & Action Buttons */}
+            {/* Sub Header (Filters & Buttons) */}
             <View style={styles.subHeader}>
                 {mainTab === 'general' ? (
                     <View style={{flexDirection:'row'}}>
@@ -222,7 +322,7 @@ const VehicleLogScreen = () => {
                                 onPress={() => setGeneralSubTab(t as any)}
                                 style={[styles.subTab, generalSubTab === t && styles.activeSubTab]}
                             >
-                                <Text style={{color: generalSubTab === t ? '#3182CE' : '#718096', textTransform:'capitalize'}}>{t}</Text>
+                                <Text style={{color: generalSubTab === t ? '#3182CE' : '#718096', textTransform:'capitalize', fontSize: 12, fontWeight: 'bold'}}>{t}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -230,17 +330,15 @@ const VehicleLogScreen = () => {
                     <Text style={styles.sectionTitle}>Maintenance Records</Text>
                 )}
 
-                <View style={{flexDirection:'row'}}>
-                    <TouchableOpacity style={styles.addButton} onPress={() => setShowAddVehicle(true)}>
-                        <Text style={{color:'white', fontWeight:'bold'}}>+ Vehicle</Text>
-                    </TouchableOpacity>
+                {/* Show Add button only for daily/service */}
+                {(mainTab === 'service' || (mainTab === 'general' && generalSubTab === 'daily')) && (
                     <TouchableOpacity 
-                        style={[styles.addButton, {backgroundColor: '#38A169', marginLeft: 8}]} 
-                        onPress={() => mainTab === 'general' ? setShowDailyModal(true) : setShowServiceModal(true)}
+                        style={styles.addButton} 
+                        onPress={() => mainTab === 'general' ? openAddDaily() : openAddService()}
                     >
-                        <Text style={{color:'white', fontWeight:'bold'}}>+ Log</Text>
+                        <Text style={{color:'white', fontWeight:'bold'}}>+ Add Entry</Text>
                     </TouchableOpacity>
-                </View>
+                )}
             </View>
 
             {/* Data Table */}
@@ -260,80 +358,74 @@ const VehicleLogScreen = () => {
                 </View>
             )}
 
-            {/* --- MODAL 1: Add Vehicle --- */}
-            <Modal visible={showAddVehicle} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Add New Vehicle</Text>
-                        <TextInput placeholder="Vehicle No (e.g., TS09 AB 1234)" style={styles.input} onChangeText={t => setFormData({...formData, vehicle_no: t})} />
-                        <TextInput placeholder="Vehicle Name (e.g., School Bus 1)" style={styles.input} onChangeText={t => setFormData({...formData, vehicle_name: t})} />
-                        <View style={styles.modalBtns}>
-                            <TouchableOpacity onPress={() => setShowAddVehicle(false)} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity onPress={handleAddVehicle} style={styles.saveBtn}><Text style={{color:'white'}}>Save</Text></TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* --- MODAL 2: Daily Log --- */}
+            {/* --- MODAL 1: Daily Log --- */}
             <Modal visible={showDailyModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Daily Log Entry</Text>
+                        <Text style={styles.modalTitle}>{isEditing ? 'Edit Log' : 'New Daily Log'}</Text>
                         
                         <Text style={styles.label}>Select Vehicle:</Text>
-                        <View style={{flexDirection:'row', flexWrap:'wrap', marginBottom:10}}>
+                        <View style={{flexDirection:'row', flexWrap:'wrap', marginBottom:15}}>
                             {vehicles.map(v => (
                                 <TouchableOpacity 
                                     key={v.id} 
                                     onPress={() => setFormData({...formData, vehicle_id: v.id})}
                                     style={[styles.badge, formData.vehicle_id === v.id && styles.activeBadge]}
                                 >
-                                    <Text style={formData.vehicle_id === v.id ? {color:'white'} : {color:'#333'}}>{v.vehicle_no}</Text>
+                                    <Text style={formData.vehicle_id === v.id ? {color:'white', fontSize: 12} : {color:'#333', fontSize: 12}}>{v.bus_number}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        <TextInput placeholder="Date (YYYY-MM-DD)" value={formData.log_date} style={styles.input} onChangeText={t => setFormData({...formData, log_date: t})} />
-                        <TextInput placeholder="Distance (km)" keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, distance_km: t})} />
-                        <TextInput placeholder="Fuel Consumed (L)" keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, fuel_consumed: t})} />
-                        <TextInput placeholder="Notes (Optional)" style={styles.input} onChangeText={t => setFormData({...formData, notes: t})} />
+                        <Text style={styles.label}>Log Details:</Text>
+                        <TextInput 
+                            placeholder="YYYY-MM-DD" 
+                            value={formData.log_date} 
+                            style={styles.input} 
+                            onChangeText={t => setFormData({...formData, log_date: t})} 
+                        />
+                        <Text style={{fontSize:10, color:'#718096', marginBottom:10, marginTop:-8}}>Format: YYYY-MM-DD</Text>
+
+                        <TextInput placeholder="Distance Traveled (km)" value={formData.distance_km} keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, distance_km: t})} />
+                        <TextInput placeholder="Fuel Consumed (Litres)" value={formData.fuel_consumed} keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, fuel_consumed: t})} />
+                        <TextInput placeholder="Notes (Optional)" value={formData.notes} style={styles.input} onChangeText={t => setFormData({...formData, notes: t})} />
 
                         <View style={styles.modalBtns}>
-                            <TouchableOpacity onPress={() => setShowDailyModal(false)} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity onPress={handleSubmitDaily} style={styles.saveBtn}><Text style={{color:'white'}}>Save Log</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={() => setShowDailyModal(false)} style={styles.cancelBtn}><Text style={{color:'#E53E3E'}}>Cancel</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={handleSubmitDaily} style={styles.saveBtn}><Text style={{color:'white', fontWeight:'bold'}}>{isEditing ? 'Update' : 'Save'}</Text></TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
 
-            {/* --- MODAL 3: Service Log --- */}
+            {/* --- MODAL 2: Service Log --- */}
             <Modal visible={showServiceModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Service Log Entry</Text>
+                        <Text style={styles.modalTitle}>{isEditing ? 'Edit Record' : 'New Service Record'}</Text>
 
                         <Text style={styles.label}>Select Vehicle:</Text>
-                        <View style={{flexDirection:'row', flexWrap:'wrap', marginBottom:10}}>
+                        <View style={{flexDirection:'row', flexWrap:'wrap', marginBottom:15}}>
                             {vehicles.map(v => (
                                 <TouchableOpacity 
                                     key={v.id} 
                                     onPress={() => setFormData({...formData, vehicle_id: v.id})}
                                     style={[styles.badge, formData.vehicle_id === v.id && styles.activeBadge]}
                                 >
-                                    <Text style={formData.vehicle_id === v.id ? {color:'white'} : {color:'#333'}}>{v.vehicle_no}</Text>
+                                    <Text style={formData.vehicle_id === v.id ? {color:'white', fontSize: 12} : {color:'#333', fontSize: 12}}>{v.bus_number}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        <TextInput placeholder="Current Service Date" value={formData.service_date} style={styles.input} onChangeText={t => setFormData({...formData, service_date: t})} />
-                        <TextInput placeholder="Previous Service Date" style={styles.input} onChangeText={t => setFormData({...formData, prev_service_date: t})} />
-                        <TextInput placeholder="Service Details (Oil change, tires...)" style={styles.input} onChangeText={t => setFormData({...formData, service_details: t})} />
-                        <TextInput placeholder="Cost" keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, cost: t})} />
+                        <Text style={styles.label}>Service Details:</Text>
+                        <TextInput placeholder="YYYY-MM-DD" value={formData.service_date} style={styles.input} onChangeText={t => setFormData({...formData, service_date: t})} />
+                        <TextInput placeholder="Prev Date (YYYY-MM-DD)" value={formData.prev_service_date} style={styles.input} onChangeText={t => setFormData({...formData, prev_service_date: t})} />
+                        <TextInput placeholder="Work Details (Oil change, tires...)" value={formData.service_details} style={styles.input} onChangeText={t => setFormData({...formData, service_details: t})} />
+                        <TextInput placeholder="Total Cost (₹)" value={formData.cost} keyboardType="numeric" style={styles.input} onChangeText={t => setFormData({...formData, cost: t})} />
 
                         <View style={styles.modalBtns}>
-                            <TouchableOpacity onPress={() => setShowServiceModal(false)} style={styles.cancelBtn}><Text>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity onPress={handleSubmitService} style={styles.saveBtn}><Text style={{color:'white'}}>Save Log</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={() => setShowServiceModal(false)} style={styles.cancelBtn}><Text style={{color:'#E53E3E'}}>Cancel</Text></TouchableOpacity>
+                            <TouchableOpacity onPress={handleSubmitService} style={styles.saveBtn}><Text style={{color:'white', fontWeight:'bold'}}>{isEditing ? 'Update' : 'Save'}</Text></TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -346,10 +438,19 @@ const VehicleLogScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F7FAFC' },
     
-    // Restricted
+    // Header
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: 'white', borderBottomWidth: 1, borderColor: '#E2E8F0' },
+    backButton: { padding: 5 },
+    backIcon: { width: 24, height: 24, tintColor: '#2D3748' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#2D3748' },
+
+    // Restricted View
     restrictedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-    restrictedTitle: { fontSize: 22, fontWeight: 'bold', color: '#E53E3E', marginBottom: 10 },
-    restrictedText: { fontSize: 16, color: '#4A5568' },
+    deniedIcon: { width: 80, height: 80, marginBottom: 20, tintColor: '#E53E3E' },
+    restrictedTitle: { fontSize: 22, fontWeight: 'bold', color: '#2D3748', marginBottom: 10 },
+    restrictedText: { fontSize: 16, color: '#4A5568', textAlign: 'center', marginBottom: 30 },
+    goBackBtn: { backgroundColor: '#3182CE', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 25 },
+    goBackText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 
     // Tabs
     tabContainer: { flexDirection: 'row', backgroundColor: 'white', elevation: 2 },
@@ -359,32 +460,36 @@ const styles = StyleSheet.create({
     activeTabText: { color: '#3182CE' },
 
     // Sub Header
-    subHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, backgroundColor: '#EDF2F7' },
-    sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2D3748' },
-    subTab: { paddingVertical: 5, paddingHorizontal: 10, marginRight: 5, borderRadius: 15, backgroundColor: '#E2E8F0' },
+    subHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#EDF2F7' },
+    sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#2D3748' },
+    subTab: { paddingVertical: 6, paddingHorizontal: 12, marginRight: 5, borderRadius: 15, backgroundColor: '#E2E8F0' },
     activeSubTab: { backgroundColor: '#BEE3F8' },
-    addButton: { backgroundColor: '#3182CE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 5 },
+    addButton: { backgroundColor: '#38A169', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 6 },
 
     // Table
     tableHeader: { flexDirection: 'row', backgroundColor: '#CBD5E0', padding: 10, borderRadius: 5, marginBottom: 5 },
-    headerText: { fontWeight: 'bold', fontSize: 13, color: '#2D3748' },
+    headerText: { fontWeight: 'bold', fontSize: 12, color: '#2D3748' },
     tableRow: { flexDirection: 'row', backgroundColor: 'white', padding: 12, borderBottomWidth: 1, borderBottomColor: '#EDF2F7', alignItems:'center' },
-    cell: { flex: 1, fontSize: 13, color: '#4A5568' },
+    cell: { flex: 1, fontSize: 12, color: '#4A5568', textAlign: 'center' },
     emptyText: { textAlign: 'center', marginTop: 30, color: '#A0AEC0' },
+
+    // Edit Button
+    editBtn: { padding: 5, width: 30, alignItems: 'center' },
+    editIcon: { width: 16, height: 16, tintColor: '#3182CE' },
 
     // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
     modalContent: { backgroundColor: 'white', borderRadius: 10, padding: 20 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-    input: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 5, padding: 10, marginBottom: 10 },
-    label: { marginBottom: 8, fontWeight:'bold', color: '#4A5568'},
+    input: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 5, padding: 10, marginBottom: 12 },
+    label: { marginBottom: 8, fontWeight:'bold', color: '#4A5568', marginTop: 5},
     modalBtns: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-    cancelBtn: { padding: 10 },
-    saveBtn: { backgroundColor: '#3182CE', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5 },
+    cancelBtn: { padding: 12, flex: 1, alignItems: 'center' },
+    saveBtn: { backgroundColor: '#3182CE', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, flex: 1, alignItems: 'center', marginLeft: 10 },
     
     // Vehicle Selection Badge
-    badge: { padding: 8, borderRadius: 5, backgroundColor: '#EDF2F7', marginRight: 8, marginBottom: 8 },
-    activeBadge: { backgroundColor: '#3182CE' }
+    badge: { padding: 8, borderRadius: 5, backgroundColor: '#E2E8F0', marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: '#CBD5E0' },
+    activeBadge: { backgroundColor: '#3182CE', borderColor: '#3182CE' }
 });
 
 export default VehicleLogScreen;
