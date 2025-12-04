@@ -27,7 +27,7 @@ const PDF_ICON = 'https://cdn-icons-png.flaticon.com/128/337/337946.png';
 const BACK_ICON = 'https://cdn-icons-png.flaticon.com/128/271/271220.png';
 const DENIED_ICON = 'https://cdn-icons-png.flaticon.com/128/3967/3967261.png';
 const TRASH_ICON = 'https://cdn-icons-png.flaticon.com/128/6861/6861362.png';
-const EDIT_ICON = 'https://cdn-icons-png.flaticon.com/128/1159/1159633.png'; // Pencil Icon
+const EDIT_ICON = 'https://cdn-icons-png.flaticon.com/128/1159/1159633.png'; 
 
 interface Vehicle {
     id: number;
@@ -39,7 +39,7 @@ interface Vehicle {
 const VehicalDetails = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
-    const userRole = user?.role; // 'admin', 'teacher', 'others', 'student'
+    const userRole = user?.role; 
 
     // State
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -53,10 +53,12 @@ const VehicalDetails = () => {
     // Form Data
     const [busNumber, setBusNumber] = useState('');
     const [busName, setBusName] = useState('');
-    const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
+    
+    // Files State
+    const [selectedFiles, setSelectedFiles] = useState<any[]>([]); // New files
+    const [existingPhotos, setExistingPhotos] = useState<string[]>([]); // Old photos from DB
 
     useEffect(() => {
-        // Allow Admin, Teacher, Others
         if (userRole && userRole !== 'student') {
             fetchVehicles();
         }
@@ -68,7 +70,6 @@ const VehicalDetails = () => {
         setLoading(true);
         try {
             const response = await apiClient.get('/transport/vehicles');
-            // Parse JSON photos if needed
             const parsedData = response.data.map((v: any) => ({
                 ...v,
                 bus_photos: typeof v.bus_photos === 'string' ? JSON.parse(v.bus_photos) : v.bus_photos
@@ -91,7 +92,7 @@ const VehicalDetails = () => {
         formData.append('bus_number', busNumber);
         formData.append('bus_name', busName);
 
-        // Append real files
+        // 1. Append New Files
         selectedFiles.forEach((file) => {
             formData.append('files', {
                 uri: file.uri,
@@ -99,6 +100,11 @@ const VehicalDetails = () => {
                 name: file.name || `upload_${Date.now()}.jpg`,
             } as any);
         });
+
+        // 2. Append Existing Photos List (If Editing)
+        if (isEditing) {
+            formData.append('existing_photos', JSON.stringify(existingPhotos));
+        }
 
         setLoading(true);
         try {
@@ -152,6 +158,7 @@ const VehicalDetails = () => {
         setBusName('');
         setBusNumber('');
         setSelectedFiles([]);
+        setExistingPhotos([]);
         setShowModal(true);
     };
 
@@ -161,6 +168,14 @@ const VehicalDetails = () => {
         setBusName(item.bus_name);
         setBusNumber(item.bus_number);
         setSelectedFiles([]); // Reset new files
+        
+        // Load existing photos
+        let photos = [];
+        try {
+             photos = typeof item.bus_photos === 'string' ? JSON.parse(item.bus_photos) : item.bus_photos;
+        } catch(e) { photos = []; }
+        
+        setExistingPhotos(photos || []);
         setShowModal(true);
     };
 
@@ -169,6 +184,7 @@ const VehicalDetails = () => {
         setBusName('');
         setBusNumber('');
         setSelectedFiles([]);
+        setExistingPhotos([]);
         setIsEditing(false);
         setSelectedVehicleId(null);
     };
@@ -185,6 +201,18 @@ const VehicalDetails = () => {
                 Alert.alert('Error', 'Unknown Error: ' + JSON.stringify(err));
             }
         }
+    };
+
+    const removeExistingPhoto = (index: number) => {
+        const updated = [...existingPhotos];
+        updated.splice(index, 1);
+        setExistingPhotos(updated);
+    };
+
+    const removeNewFile = (index: number) => {
+        const updated = [...selectedFiles];
+        updated.splice(index, 1);
+        setSelectedFiles(updated);
     };
 
     // --- HELPERS ---
@@ -205,7 +233,7 @@ const VehicalDetails = () => {
 
     // --- RENDER ---
 
-    // 1. ACCESS DENIED (STUDENT)
+    // 1. ACCESS DENIED
     if (userRole === 'student') {
         return (
             <SafeAreaView style={styles.container}>
@@ -239,7 +267,6 @@ const VehicalDetails = () => {
         return (
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
-                    {/* LEFT SIDE: S.No + Bus Details */}
                     <View style={styles.headerLeftContent}>
                         <View style={styles.sNoBadge}>
                             <Text style={styles.sNoText}>{index + 1}</Text>
@@ -250,7 +277,6 @@ const VehicalDetails = () => {
                         </View>
                     </View>
 
-                    {/* RIGHT SIDE: EDIT & DELETE (Admin Only) */}
                     {userRole === 'admin' && (
                         <View style={styles.actionRow}>
                             <TouchableOpacity onPress={() => openEditModal(item)} style={styles.iconBtn}>
@@ -263,7 +289,6 @@ const VehicalDetails = () => {
                     )}
                 </View>
 
-                {/* Album Scroll */}
                 {files && files.length > 0 ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumContainer}>
                         {files.map((fileUrl, index) => {
@@ -293,7 +318,6 @@ const VehicalDetails = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
                     <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -302,7 +326,6 @@ const VehicalDetails = () => {
                     <Text style={styles.headerTitle}>Vehicle Details</Text>
                 </View>
                 
-                {/* Add Button (Admin Only) */}
                 {userRole === 'admin' && (
                     <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
                         <Text style={styles.addButtonText}>+ Add Bus</Text>
@@ -310,7 +333,6 @@ const VehicalDetails = () => {
                 )}
             </View>
 
-            {/* List */}
             {loading ? (
                 <View style={styles.centered}><ActivityIndicator size="large" color="#008080" /></View>
             ) : (
@@ -349,33 +371,60 @@ const VehicalDetails = () => {
                             onChangeText={setBusName}
                         />
 
-                        {/* File Picker */}
-                        <Text style={styles.label}>
-                            {isEditing ? "Add New Photos/Docs:" : "Album (Images & PDFs):"}
-                        </Text>
+                        {/* Photos Section */}
+                        <Text style={styles.label}>Photos / Documents:</Text>
                         <View style={styles.imagePickerContainer}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                {selectedFiles.map((file, i) => (
-                                    <View key={i} style={styles.previewContainer}>
-                                        <Image 
-                                            source={{ uri: (file.type === 'application/pdf' || file.name?.endsWith('.pdf')) ? PDF_ICON : file.uri }} 
-                                            style={styles.previewImage} 
-                                        />
-                                        <TouchableOpacity 
-                                            style={styles.removeFileBtn} 
-                                            onPress={() => setSelectedFiles(selectedFiles.filter((_, idx) => idx !== i))}
-                                        >
-                                            <Text style={styles.removeFileText}>✕</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                ))}
+                                
+                                {/* 1. Existing Photos (Edit Mode) */}
+                                {existingPhotos.map((photoUrl, i) => {
+                                    const fullUrl = getFileUrl(photoUrl);
+                                    const fileIsPdf = isPdf(photoUrl);
+                                    return (
+                                        <View key={`exist-${i}`} style={styles.previewContainer}>
+                                            <Image 
+                                                source={{ uri: fileIsPdf ? PDF_ICON : fullUrl }} 
+                                                style={[styles.previewImage, { borderColor: '#38A169' }]} // Green border for existing
+                                            />
+                                            <TouchableOpacity 
+                                                style={styles.removeFileBtn} 
+                                                onPress={() => removeExistingPhoto(i)}
+                                            >
+                                                <Text style={styles.removeFileText}>✕</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
+
+                                {/* 2. New Selected Files */}
+                                {selectedFiles.map((file, i) => {
+                                     const isPdfFile = file.type === 'application/pdf' || file.name?.endsWith('.pdf');
+                                     return (
+                                        <View key={`new-${i}`} style={styles.previewContainer}>
+                                            <Image 
+                                                source={{ uri: isPdfFile ? PDF_ICON : file.uri }} 
+                                                style={[styles.previewImage, { borderColor: '#3182CE' }]} // Blue border for new
+                                            />
+                                            <TouchableOpacity 
+                                                style={styles.removeFileBtn} 
+                                                onPress={() => removeNewFile(i)}
+                                            >
+                                                <Text style={styles.removeFileText}>✕</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                     );
+                                })}
+
+                                {/* 3. Pick Button */}
                                 <TouchableOpacity style={styles.pickBtn} onPress={pickFiles}>
                                     <Text style={styles.pickBtnText}>+</Text>
                                     <Text style={styles.pickBtnSubText}>Add File</Text>
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>
-                        <Text style={styles.hintText}>{selectedFiles.length} new files selected</Text>
+                        <Text style={styles.hintText}>
+                            {existingPhotos.length} existing, {selectedFiles.length} new selected
+                        </Text>
 
                         {/* Actions */}
                         <View style={styles.modalButtons}>
@@ -421,32 +470,24 @@ const styles = StyleSheet.create({
     listContent: { padding: 16 },
     card: { backgroundColor: '#FFF', borderRadius: 12, padding: 15, marginBottom: 15, elevation: 3 },
     
-    // Card Header Layout
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     headerLeftContent: { flexDirection: 'row', alignItems: 'center' },
     
-    // Serial Number Style
     sNoBadge: { 
-        backgroundColor: '#E2E8F0', 
-        width: 28, 
-        height: 28, 
-        borderRadius: 14, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        marginRight: 10 
+        backgroundColor: '#E2E8F0', width: 28, height: 28, borderRadius: 14, 
+        justifyContent: 'center', alignItems: 'center', marginRight: 10 
     },
     sNoText: { fontSize: 12, fontWeight: 'bold', color: '#4A5568' },
 
     busNo: { fontSize: 18, fontWeight: 'bold', color: '#2D3748' },
     busName: { fontSize: 14, color: '#718096' },
     
-    // Actions
     actionRow: { flexDirection: 'row', alignItems: 'center' },
     iconBtn: { marginLeft: 10, padding: 5 },
     editIcon: { width: 22, height: 22, tintColor: '#3182CE' },
     trashIcon: { width: 22, height: 22, tintColor: '#E53E3E' },
     
-    // Album
+    // Album in Card
     albumContainer: { marginTop: 10, flexDirection: 'row' },
     fileWrapper: { marginRight: 10, position: 'relative' },
     albumPhoto: { width: 90, height: 90, borderRadius: 8, backgroundColor: '#EDF2F7', borderWidth: 1, borderColor: '#E2E8F0' },
@@ -464,7 +505,7 @@ const styles = StyleSheet.create({
     
     imagePickerContainer: { flexDirection: 'row', marginBottom: 5, height: 80 },
     previewContainer: { marginRight: 10, position: 'relative' },
-    previewImage: { width: 70, height: 70, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+    previewImage: { width: 70, height: 70, borderRadius: 8, borderWidth: 1 },
     removeFileBtn: { position: 'absolute', top: -5, right: -5, backgroundColor: '#E53E3E', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     removeFileText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
     

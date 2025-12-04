@@ -8268,34 +8268,35 @@ app.post('/api/transport/vehicles', verifyToken, vehicleUpload.array('files', 10
     }
 });
 
-// 4. PUT Route (Edit - Admin Only) ★ NEW ★
+// 4. PUT Route (Edit - Admin Only)
 app.put('/api/transport/vehicles/:id', verifyToken, vehicleUpload.array('files', 10), async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
 
         const vehicleId = req.params.id;
-        const { bus_number, bus_name } = req.body;
+        // existing_photos will be a JSON string sent from frontend
+        const { bus_number, bus_name, existing_photos } = req.body;
 
-        // 1. Get existing photos to append new ones
-        const [existing] = await db.query('SELECT bus_photos FROM transport_vehicles WHERE id = ?', [vehicleId]);
-        if (existing.length === 0) return res.status(404).json({ message: 'Vehicle not found' });
+        // 1. Parse the existing photos list (photos the user KEPT)
+        let finalPhotoList = [];
+        if (existing_photos) {
+            try {
+                finalPhotoList = JSON.parse(existing_photos);
+                if (!Array.isArray(finalPhotoList)) finalPhotoList = [];
+            } catch (e) {
+                finalPhotoList = [];
+            }
+        }
 
-        let currentPhotos = [];
-        try {
-            // Handle if it's already an object or a string
-            const photosRaw = existing[0].bus_photos;
-            currentPhotos = typeof photosRaw === 'string' ? JSON.parse(photosRaw) : (photosRaw || []);
-        } catch (e) { currentPhotos = []; }
-
-        // 2. Add new files if uploaded
+        // 2. Add NEWLY uploaded files
         if (req.files && req.files.length > 0) {
             const newUrls = req.files.map(file => `/uploads/${file.filename}`);
-            currentPhotos = [...currentPhotos, ...newUrls];
+            finalPhotoList = [...finalPhotoList, ...newUrls];
         }
 
         // 3. Update DB
         const query = 'UPDATE transport_vehicles SET bus_number = ?, bus_name = ?, bus_photos = ? WHERE id = ?';
-        await db.query(query, [bus_number, bus_name, JSON.stringify(currentPhotos), vehicleId]);
+        await db.query(query, [bus_number, bus_name, JSON.stringify(finalPhotoList), vehicleId]);
 
         res.json({ message: 'Vehicle updated successfully' });
     } catch (error) {
@@ -8656,83 +8657,125 @@ app.get('/api/transport/student/my-route', verifyToken, async (req, res) => {
 });
 
 // ==========================================================
-// --- 📁 PROOFS MODULE CONFIGURATION & ROUTES ---
+// --- PROOFS / DOCUMENTS API ROUTES ---
 // ==========================================================
 
-// 1. Multer Config for Proofs
-const proofsStorage = multer.diskStorage({
-    destination: (req, file, cb) => { 
-        // Using your existing getUploadPath logic (or hardcoded /data/uploads)
-        const uploadPath = fs.existsSync('/data/uploads') ? '/data/uploads' : 'uploads';
-        cb(null, uploadPath); 
-    },
-    filename: (req, file, cb) => {
-        cb(null, `proof-${Date.now()}${path.extname(file.originalname)}`);
-    }
-});
-const proofsUpload = multer({ storage: proofsStorage });
-
-// 2. GET: List all Proof Folders
-app.get('/api/proofs/folders', verifyToken, isAdmin, async (req, res) => {
+// 1. GET: Fetch Candidates (Staff members who don't have a folder yet)
+// Used in the "Create Folder" dropdown
+app.get('/api/transport/proofs/candidates', verifyToken, async (req, res) => {
     try {
-        const [folders] = await db.query('SELECT * FROM proof_folders ORDER BY created_at DESC');
-        res.json(folders);
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error fetching folders' });
-    }
-});
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
 
-// 3. POST: Create a New Folder (with Cover Image)
-app.post('/api/proofs/folders', verifyToken, isAdmin, proofsUpload.single('cover_image'), async (req, res) => {
-    const { folder_name, custom_id, created_date } = req.body;
-    const cover_image = req.file ? req.file.filename : null;
-    const created_by = req.user.id;
-
-    try {
-        const [result] = await db.query(
-            'INSERT INTO proof_folders (folder_name, custom_id, cover_image, created_date, created_by) VALUES (?, ?, ?, ?, ?)',
-            [folder_name, custom_id, cover_image, created_date, created_by]
-        );
-        res.json({ message: 'Folder created', id: result.insertId });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error creating folder' });
+        const query = `
+            SELECT ts.id, ts.staff_type, u.full_name, up.profile_image_url
+            FROM transport_staff ts
+            JOIN users u ON ts.user_id = u.id
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            LEFT JOIN transport_proof_folders tpf ON ts.id = tpf.staff_id
+            WHERE tpf.id IS NULL
+            ORDER BY u.full_name ASC
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (error) {
+        console.error("Fetch Candidates Error:", error);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// 4. GET: Get Images inside a Folder
-app.get('/api/proofs/folders/:id/images', verifyToken, isAdmin, async (req, res) => {
+// 2. GET: Fetch All Folders (With Staff Details)
+app.get('/api/transport/proofs/folders', verifyToken, async (req, res) => {
     try {
-        const [images] = await db.query('SELECT * FROM proof_images WHERE folder_id = ? ORDER BY uploaded_at DESC', [req.params.id]);
-        res.json(images);
-    } catch (e) {
-        res.status(500).json({ message: 'Error fetching images' });
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+
+        const query = `
+            SELECT 
+                tpf.id, 
+                tpf.created_at,
+                ts.staff_type,
+                u.full_name,
+                up.profile_image_url
+            FROM transport_proof_folders tpf
+            JOIN transport_staff ts ON tpf.staff_id = ts.id
+            JOIN users u ON ts.user_id = u.id
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            ORDER BY tpf.created_at DESC
+        `;
+        const [rows] = await db.query(query);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// 5. POST: Add Images to a Folder
-app.post('/api/proofs/upload', verifyToken, isAdmin, proofsUpload.array('images', 10), async (req, res) => {
-    const { folder_id } = req.body;
-    if (!req.files || req.files.length === 0) return res.status(400).json({ message: 'No files uploaded' });
-
+// 3. POST: Create a Folder (Assign to Staff)
+app.post('/api/transport/proofs/folders', verifyToken, async (req, res) => {
     try {
-        const values = req.files.map(file => [folder_id, file.filename]);
-        await db.query('INSERT INTO proof_images (folder_id, image_url) VALUES ?', [values]);
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+
+        const { staff_id } = req.body;
+        if (!staff_id) return res.status(400).json({ message: 'Staff ID required' });
+
+        await db.query('INSERT INTO transport_proof_folders (staff_id) VALUES (?)', [staff_id]);
+        res.json({ message: 'Folder created successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create folder' });
+    }
+});
+
+// 4. POST: Upload Images to Folder
+// Re-using your existing multer configuration 'vehicleUpload' or similar
+app.post('/api/transport/proofs/upload', verifyToken, vehicleUpload.array('images', 10), async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+
+        const { folder_id } = req.body;
+        
+        if (req.files && req.files.length > 0) {
+            const values = req.files.map(file => [folder_id, `/uploads/${file.filename}`]);
+            await db.query('INSERT INTO transport_proof_files (folder_id, file_url) VALUES ?', [values]);
+        }
+
         res.json({ message: 'Images uploaded successfully' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error uploading images' });
+    } catch (error) {
+        console.error("Upload Error", error);
+        res.status(500).json({ message: 'Upload failed' });
     }
 });
 
-// 6. DELETE: Delete a Folder (Cascades to images)
-app.delete('/api/proofs/folders/:id', verifyToken, isAdmin, async (req, res) => {
+// 5. GET: Fetch Images in a Folder
+app.get('/api/transport/proofs/folders/:id/images', verifyToken, async (req, res) => {
     try {
-        await db.query('DELETE FROM proof_folders WHERE id = ?', [req.params.id]);
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+
+        const [rows] = await db.query('SELECT * FROM transport_proof_files WHERE folder_id = ?', [req.params.id]);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 6. DELETE: Delete Folder
+app.delete('/api/transport/proofs/folders/:id', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+        
+        // Due to CASCADE in DB, this deletes images automatically
+        await db.query('DELETE FROM transport_proof_folders WHERE id = ?', [req.params.id]);
         res.json({ message: 'Folder deleted' });
-    } catch (e) {
-        res.status(500).json({ message: 'Error deleting folder' });
+    } catch (error) {
+        res.status(500).json({ message: 'Delete failed' });
+    }
+});
+
+// 7. DELETE: Delete Single Image
+app.delete('/api/transport/proofs/images/:id', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied.' });
+        await db.query('DELETE FROM transport_proof_files WHERE id = ?', [req.params.id]);
+        res.json({ message: 'Image deleted' });
+    } catch (error) {
+        res.status(500).json({ message: 'Delete failed' });
     }
 });
 
