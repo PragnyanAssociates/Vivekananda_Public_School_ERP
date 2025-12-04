@@ -8780,78 +8780,119 @@ app.delete('/api/transport/proofs/images/:id', verifyToken, async (req, res) => 
 });
 
 // ==========================================================
-// --- 📢 COMPLAINTS MODULE ---
+// --- COMPLAINTS & CHAT API ROUTES ---
 // ==========================================================
 
-// 1. POST: Create a Complaint (Students & Others ONLY)
-app.post('/api/complaints', verifyToken, async (req, res) => {
-    const { subject, description } = req.body;
-    const { id, role } = req.user;
-
-    // Strict Restriction: Teachers cannot raise complaints
-    if (role === 'teacher') {
-        return res.status(403).json({ message: 'Teachers are not allowed to raise complaints.' });
-    }
-
-    if (!subject || !description) {
-        return res.status(400).json({ message: 'Subject and description are required.' });
-    }
-
-    try {
-        await db.query(
-            'INSERT INTO complaints (user_id, subject, description) VALUES (?, ?, ?)',
-            [id, subject, description]
-        );
-        res.json({ message: 'Complaint submitted successfully.' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Failed to submit complaint.' });
-    }
-});
-
-// 2. GET: Fetch Complaints (Dynamic based on Role)
+// 1. GET: Fetch Complaints (Admin sees all, Student/Others sees own)
 app.get('/api/complaints', verifyToken, async (req, res) => {
-    const { id, role } = req.user;
-
-    if (role === 'teacher') {
-        return res.status(403).json({ message: 'Access Denied' });
-    }
-
     try {
-        let query;
+        if (req.user.role === 'teacher') return res.status(403).json({ message: 'Access Denied' });
+
+        let query = '';
         let params = [];
 
-        if (role === 'admin') {
-            // Admin sees ALL complaints with User Details
+        if (req.user.role === 'admin') {
+            // Admin: Fetch ALL complaints + User details
             query = `
-                SELECT c.*, u.full_name, u.role as user_role, u.username
-                FROM complaints c
-                JOIN users u ON c.user_id = u.id
-                ORDER BY c.created_at DESC
+                SELECT tc.*, u.full_name, u.role as user_role 
+                FROM transport_complaints tc
+                JOIN users u ON tc.user_id = u.id
+                ORDER BY 
+                    CASE WHEN tc.status = 'pending' THEN 1 ELSE 2 END, 
+                    tc.created_at DESC
             `;
         } else {
-            // Students/Others see ONLY their own complaints
-            query = `SELECT * FROM complaints WHERE user_id = ? ORDER BY created_at DESC`;
-            params = [id];
+            // Student/Others: Fetch OWN complaints
+            query = `SELECT * FROM transport_complaints WHERE user_id = ? ORDER BY created_at DESC`;
+            params = [req.user.id];
         }
 
-        const [results] = await db.query(query, params);
-        res.json(results);
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error fetching complaints' });
+        const [rows] = await db.query(query, params);
+        res.json(rows);
+    } catch (error) {
+        console.error("Fetch Complaints Error:", error);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// 3. PUT: Update Complaint Status (Admin ONLY)
-app.put('/api/complaints/:id/status', verifyToken, isAdmin, async (req, res) => {
-    const { status } = req.body; // 'pending', 'resolved', 'dismissed'
-    
+// 2. POST: Create Complaint
+app.post('/api/complaints', verifyToken, async (req, res) => {
     try {
-        await db.query('UPDATE complaints SET status = ? WHERE id = ?', [status, req.params.id]);
-        res.json({ message: `Complaint marked as ${status}` });
-    } catch (e) {
-        res.status(500).json({ message: 'Update failed' });
+        const { subject, description } = req.body;
+        await db.query(
+            'INSERT INTO transport_complaints (user_id, subject, description) VALUES (?, ?, ?)',
+            [req.user.id, subject, description]
+        );
+        res.json({ message: 'Complaint raised' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create complaint' });
+    }
+});
+
+// 3. PUT: Update Status (Admin Only)
+app.put('/api/complaints/:id/status', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Access Denied' });
+
+        const { status } = req.body; // 'resolved', 'dismissed', 'pending'
+        await db.query('UPDATE transport_complaints SET status = ? WHERE id = ?', [status, req.params.id]);
+        
+        res.json({ message: 'Status updated' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update status' });
+    }
+});
+
+// 4. GET: Fetch Chat Messages for a specific complaint
+app.get('/api/complaints/:id/messages', verifyToken, async (req, res) => {
+    try {
+        const complaintId = req.params.id;
+        
+        // Security Check: Ensure user owns the complaint or is admin
+        const [check] = await db.query('SELECT user_id FROM transport_complaints WHERE id = ?', [complaintId]);
+        if (check.length === 0) return res.status(404).json({ message: 'Not found' });
+        
+        if (req.user.role !== 'admin' && check[0].user_id !== req.user.id) {
+            return res.status(403).json({ message: 'Access Denied' });
+        }
+
+        const query = `
+            SELECT tcc.*, u.full_name 
+            FROM transport_complaint_chat tcc
+            JOIN users u ON tcc.sender_id = u.id
+            WHERE tcc.complaint_id = ?
+            ORDER BY tcc.created_at ASC
+        `;
+        const [rows] = await db.query(query, [complaintId]);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// 5. POST: Send Chat Message
+app.post('/api/complaints/:id/messages', verifyToken, async (req, res) => {
+    try {
+        const complaintId = req.params.id;
+        const { message } = req.body;
+
+        // Check if complaint is already resolved/dismissed
+        const [comp] = await db.query('SELECT status FROM transport_complaints WHERE id = ?', [complaintId]);
+        if (comp.length === 0) return res.status(404).json({ message: 'Not found' });
+        
+        // If resolved or dismissed, block new messages
+        if (comp[0].status !== 'pending') {
+            return res.status(400).json({ message: 'Chat is closed for this complaint.' });
+        }
+
+        await db.query(
+            'INSERT INTO transport_complaint_chat (complaint_id, sender_id, message) VALUES (?, ?, ?)',
+            [complaintId, req.user.id, message]
+        );
+
+        res.json({ message: 'Sent' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to send' });
     }
 });
 
