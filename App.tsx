@@ -74,7 +74,7 @@ import TeacherSyllabusScreen from './src/screens/syllabus/TeacherSyllabusScreen'
 // Student-Specific Screens
 import StudentHealthScreen from './src/screens/health/StudentHealthScreen';
 // import StudentResultsScreen from './src/screens/results/StudentResultsScreen';
-import StudentSyllabusScreen from './src/screens/syllabus/StudentSyllabusScreen';
+import StudentSyllabusNavigator from './src/screens/syllabus/StudentSyllabusScreen';
 
 import StudentExamsScreen from './src/screens/exams/StudentExamsScreen';
 import TeacherAdminExamsScreen from './src/screens/exams/TeacherAdminExamsScreen';
@@ -245,7 +245,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="StudentMaterialsScreen" component={StudentMaterialsScreen} />
       <Stack.Screen name="TeacherAdminMaterialsScreen" component={TeacherAdminMaterialsScreen} />
       <Stack.Screen name="TeacherSyllabusScreen" component={TeacherSyllabusScreen} />
-      <Stack.Screen name="StudentSyllabusScreen" component={StudentSyllabusScreen} />
+      <Stack.Screen name="StudentSyllabusScreen" component={StudentSyllabusNavigator} />
       <Stack.Screen name="AdminSyllabusScreen" component={AdminSyllabusScreen} />
       <Stack.Screen name="StudentResourcesScreen" component={StudentResourcesScreen} />
       <Stack.Screen name="TeacherAdminResourcesScreen" component={TeacherAdminResourcesScreen} />

@@ -3,6 +3,7 @@
  * Purpose: View class-wise student performance.
  * Logic: Calculates percentage based ONLY on completed exams (exams with entered marks).
  * Updated: Strict Color Logic (<60 Red, 60-90 Blue, >90 Green).
+ * Added: Subject Filter in Comparison Modal.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -127,7 +128,10 @@ const StudentPerformance = () => {
     const [isGraphVisible, setIsGraphVisible] = useState(false);
     const [graphData, setGraphData] = useState<any>(null);
     const [isCompareVisible, setIsCompareVisible] = useState(false);
+    
+    // Comparison State
     const [compareExam, setCompareExam] = useState('Overall');
+    const [compareSubject, setCompareSubject] = useState('All Subjects'); // New Subject State
 
     // --- 1. Fetch Classes ---
     useEffect(() => {
@@ -146,7 +150,11 @@ const StudentPerformance = () => {
 
     // --- 2. Fetch Data ---
     useEffect(() => {
-        if (selectedClass) fetchClassData(selectedClass);
+        if (selectedClass) {
+            fetchClassData(selectedClass);
+            // Reset filters when class changes
+            setCompareSubject('All Subjects');
+        }
     }, [selectedClass]);
 
     const fetchClassData = async (classGroup: string) => {
@@ -275,24 +283,57 @@ const StudentPerformance = () => {
     const studentList = processedData.students || [];
     const availableExams = ['Overall', ...(processedData.activeExams || [])];
 
-    // --- Comparison Data Logic ---
+    // --- Comparison Data Logic (Includes Subject Filter) ---
     const getComparisonData = () => {
         if (studentList.length === 0) return [];
 
         return studentList.map(student => {
             let ob = 0; let max = 0; let perc = 0;
 
-            if (compareExam === 'Overall') {
-                ob = student.totalObtained;
-                max = student.maxTotal;
-                perc = student.percentage;
-            } else {
-                const examData = student.examBreakdown.find((e: any) => e.exam_type === compareExam);
-                if (examData) {
-                    ob = examData.total_obtained;
-                    max = examData.total_possible;
-                    perc = parseFloat(examData.percentage);
+            if (compareSubject === 'All Subjects') {
+                // Default Logic (Total of all subjects)
+                if (compareExam === 'Overall') {
+                    ob = student.totalObtained;
+                    max = student.maxTotal;
+                    perc = student.percentage;
+                } else {
+                    const examData = student.examBreakdown.find((e: any) => e.exam_type === compareExam);
+                    if (examData) {
+                        ob = examData.total_obtained;
+                        max = examData.total_possible;
+                        perc = parseFloat(examData.percentage);
+                    }
                 }
+            } else {
+                // Specific Subject Logic
+                // Filter marks from raw marksData for this specific student and subject
+                const studentMarks = marksData.filter(m => m.student_id === student.id && m.subject === compareSubject);
+                
+                if (compareExam === 'Overall') {
+                    // Sum all available exams for this subject
+                    EXAM_ORDER.forEach(examCode => {
+                        // Find mark where exam code matches
+                        const markEntry = studentMarks.find(m => EXAM_NAME_TO_CODE[m.exam_type] === examCode);
+                        if (markEntry && markEntry.marks_obtained !== null && markEntry.marks_obtained !== '') {
+                             const val = parseFloat(markEntry.marks_obtained);
+                             if (!isNaN(val)) {
+                                 ob += val;
+                                 max += (EXAM_MAX_SCORES[examCode] || 0);
+                             }
+                        }
+                    });
+                } else {
+                    // Specific Exam + Specific Subject
+                    const markEntry = studentMarks.find(m => EXAM_NAME_TO_CODE[m.exam_type] === compareExam);
+                    if (markEntry && markEntry.marks_obtained !== null && markEntry.marks_obtained !== '') {
+                        const val = parseFloat(markEntry.marks_obtained);
+                         if (!isNaN(val)) {
+                             ob = val;
+                             max = EXAM_MAX_SCORES[compareExam] || 0;
+                         }
+                    }
+                }
+                perc = max > 0 ? (ob / max) * 100 : 0;
             }
 
             return {
@@ -511,16 +552,30 @@ const StudentPerformance = () => {
                     </View>
 
                     <View style={styles.compareControls}>
+                        {/* 1. Exam Filter */}
                         <Text style={styles.controlLabel}>Select Comparison Criterion:</Text>
                         <View style={styles.controlPicker}>
                             <Picker selectedValue={compareExam} onValueChange={setCompareExam}>
                                 {availableExams.map(t => <Picker.Item key={t} label={t} value={t} />)}
                             </Picker>
                         </View>
+
+                        {/* 2. Subject Filter (NEW) */}
+                        <View style={{ marginTop: 15 }}>
+                            <Text style={styles.controlLabel}>Select Subject:</Text>
+                            <View style={styles.controlPicker}>
+                                <Picker selectedValue={compareSubject} onValueChange={setCompareSubject}>
+                                    <Picker.Item label="All Subjects" value="All Subjects" />
+                                    {(CLASS_SUBJECTS[selectedClass] || []).map((s: string) => (
+                                        <Picker.Item key={s} label={s} value={s} />
+                                    ))}
+                                </Picker>
+                            </View>
+                        </View>
                     </View>
 
                     <View style={styles.compareGraphArea}>
-                        <Text style={styles.compareGraphTitle}>Ranking by {compareExam}</Text>
+                        <Text style={styles.compareGraphTitle}>Ranking by {compareExam} ({compareSubject})</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end' }}>
                             {getComparisonData().length > 0 ? (
                                 getComparisonData().map((item, idx) => {
@@ -537,7 +592,7 @@ const StudentPerformance = () => {
                                     );
                                 })
                             ) : (
-                                <View style={styles.noDataContainer}><Text style={styles.noDataTxt}>No data available for {compareExam}.</Text></View>
+                                <View style={styles.noDataContainer}><Text style={styles.noDataTxt}>No data available for {compareExam} in {compareSubject}.</Text></View>
                             )}
                         </ScrollView>
                     </View>
