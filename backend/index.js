@@ -1038,7 +1038,7 @@ app.get('/api/attendance/sheet', async (req, res) => {
     }
 });
 
-// POST attendance data and send notifications to absent students
+// POST attendance data (Updated to allow Admins to override)
 app.post('/api/attendance', async (req, res) => {
     const { class_group, subject_name, period_number, date, teacher_id, attendanceData } = req.body;
     const connection = await db.getConnection();
@@ -1047,16 +1047,26 @@ app.post('/api/attendance', async (req, res) => {
             return res.status(400).json({ message: 'All fields are required, and attendanceData must be an array.' });
         }
 
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayOfWeek = days[new Date(date).getDay()];
+        // 1. Check the role of the person submitting the attendance
+        const [[user]] = await connection.query("SELECT role, full_name FROM users WHERE id = ?", [teacher_id]);
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
 
-        const [timetableSlot] = await connection.query(
-            'SELECT teacher_id FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?',
-            [class_group, dayOfWeek, period_number]
-        );
+        // 2. If NOT admin, validate against the timetable
+        if (user.role !== 'admin') {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayOfWeek = days[new Date(date).getDay()];
 
-        if (!timetableSlot.length || timetableSlot[0].teacher_id !== parseInt(teacher_id, 10)) {
-            return res.status(403).json({ message: `You are not assigned to this period for this class on ${dayOfWeek}.` });
+            const [timetableSlot] = await connection.query(
+                'SELECT teacher_id FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?',
+                [class_group, dayOfWeek, period_number]
+            );
+
+            if (!timetableSlot.length || timetableSlot[0].teacher_id !== parseInt(teacher_id, 10)) {
+                return res.status(403).json({ message: `You are not assigned to this period for this class on ${dayOfWeek}.` });
+            }
         }
 
         if (attendanceData.length === 0) {
@@ -1079,9 +1089,7 @@ app.post('/api/attendance', async (req, res) => {
         ]);
         await connection.query(query, [valuesToInsert]);
 
-        const [[teacher]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
-        const senderName = teacher.full_name || "School Staff";
-
+        const senderName = user.full_name || "School Staff";
         const absentStudents = attendanceData.filter(record => record.status === 'Absent');
 
         if (absentStudents.length > 0) {

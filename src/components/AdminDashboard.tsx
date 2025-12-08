@@ -33,6 +33,7 @@ import AdminLM from './AdminLM';
 import ProfileScreen from '../screens/ProfileScreen';
 import TimetableScreen from '../screens/TimetableScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
+import MarkStudentAttendance from '../screens/MarkStudentAttendance';
 import TeacherAdminHomeworkScreen from '../screens/homework/TeacherAdminHomeworkScreen';
 import AboutUs from './AboutUs';
 import TeacherAdminExamsScreen from '../screens/exams/TeacherAdminExamsScreen';
@@ -123,6 +124,7 @@ const AdminDashboard = ({ navigation }) => {
     { id: 'qa27', title: 'Student Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'StudentPerformance' },
     { id: 'qa18', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/18479/18479099.png', navigateTo: 'ReportScreen' },
     { id: 'qa1', title: 'Time Table', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
+    { id: 'qa30', title: 'Mark Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/3125/3125856.png', navigateToTab: 'MarkStudentAttendance' },
     { id: 'qa2', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
     { id: 'qa23', title: 'Teacher Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceMarkingScreen' },
     { id: 'qa3', title: 'Homework', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
@@ -204,6 +206,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'AdminLM': return ( <><ContentScreenHeader title="Login Management" onBack={handleBack} /><AdminLM /></> );
         case 'Timetable': return ( <><ContentScreenHeader title="Time Table Management" onBack={handleBack} /><TimetableScreen /></> );
         case 'Attendance': return ( <><ContentScreenHeader title="Attendance" onBack={handleBack} /><AttendanceScreen /></> );
+        case 'MarkStudentAttendance': return ( <><ContentScreenHeader title="Mark Student Attendance" onBack={handleBack} /><MarkStudentAttendance /></> );
         case 'TeacherAdminHomeworkScreen': return ( <> <ContentScreenHeader title="Homework" onBack={handleBack} /> <TeacherAdminHomeworkScreen /> </> );
         case 'AboutUs': return ( <><ContentScreenHeader title="About Us" onBack={handleBack} /><AboutUs /></> );
         case 'TeacherAdminExamsScreen': return ( <><ContentScreenHeader title="Exams" onBack={handleBack} /><TeacherAdminExamsScreen /></> );

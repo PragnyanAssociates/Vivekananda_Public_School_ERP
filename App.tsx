@@ -41,6 +41,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import AcademicCalendar from './src/components/AcademicCalendar';
 import TimetableScreen from './src/screens/TimetableScreen';
 import AttendanceScreen from './src/screens/AttendanceScreen';
+import MarkStudentAttendance from './src/screens/MarkStudentAttendance';
 // import TransportScreen from './src/screens/transport/TransportScreen';
 import GalleryScreen from './src/screens/gallery/GalleryScreen';
 import AlbumDetailScreen from './src/screens/gallery/AlbumDetailScreen';
@@ -233,6 +234,7 @@ const AuthenticatedStack = () => {
 
       <Stack.Screen name="TimetableScreen" component={TimetableScreen} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} />
+      <Stack.Screen name="MarkStudentAttendance" component={MarkStudentAttendance} />
       <Stack.Screen name="AdminLM" component={AdminLM} />
       <Stack.Screen name="FoodScreen" component={FoodScreen} />
       <Stack.Screen name="AdminEventsScreen" component={AdminEventsScreen} />

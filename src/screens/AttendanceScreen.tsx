@@ -12,6 +12,7 @@ import {
   TextInput,
   UIManager,
   LayoutAnimation,
+  Dimensions
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,7 +27,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // --- Constants ---
-const PRIMARY_COLOR = '#008080';
+const PRIMARY_COLOR = '#008080'; // Teal color from your image
 const TEXT_COLOR_DARK = '#37474F';
 const TEXT_COLOR_MEDIUM = '#566573';
 const BORDER_COLOR = '#E0E0E0';
@@ -80,6 +81,7 @@ const AttendanceScreen = ({ route }) => {
 
   switch (user.role) {
     case 'teacher':
+      // If params exist (class_group, etc.), show Live View, otherwise Summary View
       return route?.params ? <TeacherLiveAttendanceView route={route} teacher={user} /> : <TeacherSummaryView teacher={user} />;
     case 'student':
       return <StudentAttendanceView student={user} />;
@@ -577,12 +579,193 @@ const AdminAttendanceView = () => {
   );
 };
 
-// --- Teacher Live Attendance ---
+// ==========================================================
+// --- MODIFIED TEACHER LIVE ATTENDANCE VIEW ---
+// ==========================================================
 const TeacherLiveAttendanceView = ({ route, teacher }) => {
-    const { class_group, subject_name, date } = route?.params || {};
-    // ... (Teacher Live Attendance Logic remains as is, using the same structure provided previously)
-    // Placeholder for brevity since no changes were requested here, but integration is standard
-    return ( <View><Text>Live Attendance View</Text></View> ); 
+    const navigation = useNavigation();
+    const { class_group, subject_name, date, period_number } = route?.params || {};
+    
+    const [students, setStudents] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // State to toggle between "Already Marked" view and "Edit/List" view
+    const [attendanceAlreadyMarked, setAttendanceAlreadyMarked] = useState(false);
+
+    // Initial Data Fetch
+    useEffect(() => {
+        const init = async () => {
+            setIsLoading(true);
+            try {
+                // 1. Check if attendance is already marked
+                const statusRes = await apiClient.get('/attendance/status', {
+                    params: { class_group, date, period_number, subject_name }
+                });
+                
+                if (statusRes.data.isMarked) {
+                    setAttendanceAlreadyMarked(true);
+                }
+
+                // 2. Fetch the student list (we need it regardless, to populate state)
+                const sheetRes = await apiClient.get('/attendance/sheet', {
+                    params: { class_group, date, period_number }
+                });
+
+                // Map response: if status is null (not marked yet), default to 'Present'
+                const formattedData = sheetRes.data.map(student => ({
+                    ...student,
+                    status: student.status || 'Present' 
+                }));
+                setStudents(formattedData);
+
+            } catch (error) {
+                console.error("Init Error:", error);
+                Alert.alert('Error', 'Failed to load attendance data.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (class_group) init();
+    }, [class_group, date, period_number, subject_name]);
+
+    // Set Status (Present / Absent)
+    const setStatus = (id, newStatus) => {
+        setStudents(currentStudents => 
+            currentStudents.map(student => 
+                student.id === id ? { ...student, status: newStatus } : student
+            )
+        );
+    };
+
+    // Submit Attendance
+    const handleSubmit = async () => {
+        if (students.length === 0) return;
+        setIsSubmitting(true);
+        try {
+            const payload = {
+                class_group,
+                subject_name,
+                period_number,
+                date,
+                teacher_id: teacher.id,
+                attendanceData: students.map(s => ({ student_id: s.id, status: s.status }))
+            };
+
+            await apiClient.post('/attendance', payload);
+            setAttendanceAlreadyMarked(true); // Switch to "Marked" view
+        } catch (error) {
+            Alert.alert('Error', 'Failed to save attendance.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (isLoading) {
+        return <View style={styles.loaderContainer}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    }
+
+    // --- VIEW 1: ATTENDANCE ALREADY MARKED (Success Screen) ---
+    if (attendanceAlreadyMarked) {
+        return (
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Animatable.View animation="zoomIn" duration={600} style={{ alignItems: 'center' }}>
+                    <View style={styles.successCircle}>
+                        <Icon name="check" size={60} color={WHITE} />
+                    </View>
+                    <Text style={styles.successTitle}>Attendance Marked!</Text>
+                    <Text style={styles.successSubtitle}>
+                        Attendance for {formatDate(date)} has been saved successfully. You can click "Edit Attendance" to make any changes.
+                    </Text>
+                    
+                    <TouchableOpacity 
+                        style={styles.editButton} 
+                        onPress={() => setAttendanceAlreadyMarked(false)}
+                    >
+                        <Text style={styles.editButtonText}>Edit Attendance</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            </SafeAreaView>
+        );
+    }
+
+    // --- VIEW 2: LIST VIEW (Marking Screen) ---
+    return (
+        <SafeAreaView style={styles.container}>
+            {/* Header */}
+            <View style={styles.listHeader}>
+                <Text style={styles.listHeaderTitle}>
+                     {class_group} List ({students.length})
+                </Text>
+            </View>
+
+            {/* Student List */}
+            <FlatList
+                data={students}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                renderItem={({ item, index }) => {
+                    const isPresent = item.status === 'Present';
+                    return (
+                        <View style={styles.attendanceRow}>
+                            {/* Left Side: Name & Info */}
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.rowName}>{item.full_name}</Text>
+                                <Text style={styles.rowSubText}>{item.subject || 'Maths, P.S'}</Text>
+                            </View>
+
+                            {/* Right Side: P / A Buttons */}
+                            <View style={styles.actionButtonsContainer}>
+                                {/* Present Button */}
+                                <TouchableOpacity 
+                                    style={[
+                                        styles.statusCircle, 
+                                        isPresent ? styles.circleGreenFilled : styles.circleGreenOutline
+                                    ]}
+                                    onPress={() => setStatus(item.id, 'Present')}
+                                >
+                                    <Text style={[
+                                        styles.statusText, 
+                                        isPresent ? { color: WHITE } : { color: GREEN }
+                                    ]}>P</Text>
+                                </TouchableOpacity>
+
+                                {/* Absent Button */}
+                                <TouchableOpacity 
+                                    style={[
+                                        styles.statusCircle, 
+                                        !isPresent ? styles.circleRedFilled : styles.circleRedOutline
+                                    ]}
+                                    onPress={() => setStatus(item.id, 'Absent')}
+                                >
+                                    <Text style={[
+                                        styles.statusText, 
+                                        !isPresent ? { color: WHITE } : { color: RED }
+                                    ]}>A</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    );
+                }}
+            />
+
+            {/* Footer Submit Button */}
+            <View style={styles.footerContainer}>
+                <TouchableOpacity 
+                    style={styles.submitFooterButton}
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting ? (
+                        <ActivityIndicator color={WHITE} />
+                    ) : (
+                        <Text style={styles.submitFooterText}>SUBMIT ATTENDANCE</Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </SafeAreaView>
+    ); 
 };
 
 // --- Styles ---
@@ -590,16 +773,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: WHITE },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: WHITE },
   noDataText: { textAlign: 'center', marginTop: 20, color: TEXT_COLOR_MEDIUM, fontSize: 16 },
+  
+  // Generic Headers
   header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: TEXT_COLOR_DARK, textAlign: 'center' },
   headerSubtitleSmall: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2, textAlign: 'center' },
   backButton: { position: 'absolute', left: 15, zIndex: 1, padding: 5 },
+  
+  // Pickers
   pickerContainer: { flexDirection: 'row', padding: 10, backgroundColor: WHITE, borderBottomColor: BORDER_COLOR, borderBottomWidth: 1, alignItems: 'center' },
   pickerWrapper: { flex: 1, marginHorizontal: 5, backgroundColor: '#F0F4F8', borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 8, height: 50, justifyContent: 'center' },
+  
+  // Summary Cards
   summaryContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 15, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
   summaryBox: { alignItems: 'center', flex: 1, paddingVertical: 10, paddingHorizontal: 5 },
   summaryValue: { fontSize: 22, fontWeight: 'bold' },
   summaryLabel: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 5, fontWeight: '500', textAlign: 'center' },
+  
+  // Search Bar
   searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, marginHorizontal: 15, marginTop: 15, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR, paddingHorizontal: 10 },
   searchBar: { flex: 1, height: 45, fontSize: 16, color: TEXT_COLOR_DARK },
   searchIcon: { marginRight: 8 },
@@ -608,6 +799,7 @@ const styles = StyleSheet.create({
   studentDetailText: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 4 },
   percentageText: { fontSize: 20, fontWeight: 'bold' },
   
+  // Toggles
   toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 2, backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, alignItems: 'center', flexWrap: 'wrap' },
   toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, backgroundColor: '#E0E0E0', marginBottom: 5 },
   toggleButtonActive: { backgroundColor: PRIMARY_COLOR },
@@ -615,17 +807,56 @@ const styles = StyleSheet.create({
   toggleButtonTextActive: { color: WHITE },
   calendarButton: { padding: 8, marginLeft: 5, justifyContent: 'center', alignItems: 'center' },
   
+  // Range
   rangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: '#f9f9f9', borderBottomWidth: 1, borderBottomColor: BORDER_COLOR },
   dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', padding: 10, borderRadius: 6, marginHorizontal: 5, justifyContent: 'center' },
   dateInputText: { color: TEXT_COLOR_DARK, fontSize: 13, fontWeight: '500' },
   goButton: { backgroundColor: GREEN, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
   goButtonText: { color: WHITE, fontWeight: 'bold' },
 
+  // History List
   historyTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 20, marginTop: 15, marginBottom: 10, color: TEXT_COLOR_DARK },
   historyDayCard: { backgroundColor: WHITE, marginHorizontal: 15, marginVertical: 8, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 5 },
   historyDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   historyDate: { fontSize: 16, fontWeight: '600', color: TEXT_COLOR_DARK },
   historyStatus: { fontSize: 14, fontWeight: 'bold' },
+
+  // ===================================
+  // --- NEW STYLES FOR ATTENDANCE ---
+  // ===================================
+
+  // Success View Styles
+  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#43A047', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  successTitle: { fontSize: 22, fontWeight: 'bold', color: '#37474F', marginBottom: 10 },
+  successSubtitle: { fontSize: 14, color: '#566573', textAlign: 'center', paddingHorizontal: 40, lineHeight: 20, marginBottom: 30 },
+  editButton: { backgroundColor: '#008080', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 8 },
+  editButtonText: { color: WHITE, fontSize: 16, fontWeight: 'bold' },
+
+  // List View Styles
+  listHeader: { paddingVertical: 15, paddingHorizontal: 20, backgroundColor: '#E0E0E0' },
+  listHeaderTitle: { fontSize: 16, fontWeight: 'bold', color: '#37474F' },
+  
+  attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  rowName: { fontSize: 16, fontWeight: 'bold', color: '#37474F', textTransform: 'uppercase' },
+  rowSubText: { fontSize: 12, color: '#78909C', marginTop: 4 },
+  
+  actionButtonsContainer: { flexDirection: 'row', alignItems: 'center' },
+  statusCircle: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 15 },
+  
+  // P (Present) Styling
+  circleGreenFilled: { backgroundColor: '#43A047', borderWidth: 0 },
+  circleGreenOutline: { backgroundColor: WHITE, borderWidth: 1.5, borderColor: '#43A047' },
+  
+  // A (Absent) Styling
+  circleRedFilled: { backgroundColor: '#E53935', borderWidth: 0 },
+  circleRedOutline: { backgroundColor: WHITE, borderWidth: 1.5, borderColor: '#E53935' },
+  
+  statusText: { fontSize: 16, fontWeight: 'bold' },
+
+  // Footer Submit
+  footerContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#008080' },
+  submitFooterButton: { paddingVertical: 18, alignItems: 'center', justifyContent: 'center' },
+  submitFooterText: { color: WHITE, fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
 });
 
 export default AttendanceScreen;
