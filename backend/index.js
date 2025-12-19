@@ -9161,26 +9161,60 @@ const libraryUpload = multer({
 
 // --- 2. BOOK MANAGEMENT ROUTES ---
 
-// ADD BOOK (Admin Only)
+// ADD BOOK (Admin Only) - Fixed for optional fields & Validation
 app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
-    // UPDATED: 'isbn' changed to 'book_no'
-    const { title, author, book_no, category, publisher, edition, language, price, purchase_date, total_copies, rack_no } = req.body;
-    
-    const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
-    
     try {
+        // 1. Destructure all possible fields
+        const { 
+            title, author, book_no, category, publisher, 
+            edition, language, price, purchase_date, 
+            total_copies, rack_no 
+        } = req.body;
+
+        // 2. Validate Required Fields
+        if (!title || !author || !total_copies || !book_no) {
+            return res.status(400).json({ message: 'Title, Author, Book No, and Copies are required.' });
+        }
+
+        const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
+        
+        // 3. Convert 'undefined' or empty strings to NULL for optional fields
+        // This prevents SQL errors if these fields are missing in the frontend
+        const safe_edition = edition || null;
+        const safe_language = language || null;
+        const safe_price = price || null;
+        const safe_purchase_date = purchase_date || null;
+        const safe_rack = rack_no || null;
+        const safe_category = category || null;
+        const safe_publisher = publisher || null;
+
         const query = `
             INSERT INTO library_books 
             (title, author, book_no, category, publisher, edition, language, price, purchase_date, total_copies, available_copies, rack_no, cover_image_url) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        // available_copies initially equals total_copies
-        await db.query(query, [title, author, book_no, category, publisher, edition, language, price, purchase_date, total_copies, total_copies, rack_no, cover_image_url]); 
+        // available_copies starts equal to total_copies
+        await db.query(query, [
+            title, 
+            author, 
+            book_no, 
+            safe_category, 
+            safe_publisher, 
+            safe_edition, 
+            safe_language, 
+            safe_price, 
+            safe_purchase_date, 
+            total_copies, 
+            total_copies, // available = total initially
+            safe_rack, 
+            cover_image_url
+        ]); 
         
         res.status(201).json({ message: 'Book added successfully' });
+
     } catch (error) { 
-        console.error("Add Book Error:", error);
-        res.status(500).json({ message: 'Error adding book' }); 
+        console.error("Add Book SQL Error:", error); // Check your terminal for this log
+        res.status(500).json({ message: 'Database error while adding book.' }); 
     }
 });
 
