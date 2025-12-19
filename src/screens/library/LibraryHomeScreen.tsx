@@ -48,14 +48,14 @@ const LibraryHomeScreen = () => {
     const getFeatures = () => {
         const commonModules = [
             { id: '1', title: 'Search Books', icon: 'https://cdn-icons-png.flaticon.com/128/6983/6983319.png', screen: 'BookListScreen' },
-            { id: '2', title: 'Issued Books', icon: 'https://cdn-icons-png.flaticon.com/128/2232/2232696.png', screen: 'MyIssuedBooksScreen' },
+            { id: '2', title: 'Issued Books', icon: 'https://cdn-icons-png.flaticon.com/128/9436/9436168.png', screen: 'MyIssuedBooksScreen' },
             { id: '3', title: 'Digital Library', icon: 'https://cdn-icons-png.flaticon.com/128/2997/2997608.png', screen: 'DigitalLibraryScreen' },
         ];
 
         const adminModules = [
-            { id: '4', title: 'Issue/Return', icon: 'https://cdn-icons-png.flaticon.com/128/9562/9562689.png', screen: 'IssueBookScreen' },
+            { id: '4', title: 'Issue/Return', icon: 'https://cdn-icons-png.flaticon.com/128/465/465950.png', screen: 'IssueBookScreen' },
             { id: '5', title: 'Add Books', icon: 'https://cdn-icons-png.flaticon.com/128/4683/4683468.png', screen: 'AddBookScreen' },
-            { id: '6', title: 'Reports', icon: 'https://cdn-icons-png.flaticon.com/128/2835/2835532.png', screen: 'LibraryReportsScreen' },
+            { id: '6', title: 'Reports', icon: 'https://cdn-icons-png.flaticon.com/128/1484/1484584.png', screen: 'LibraryReportsScreen' },
         ];
 
         // LOGIC: Use the context role

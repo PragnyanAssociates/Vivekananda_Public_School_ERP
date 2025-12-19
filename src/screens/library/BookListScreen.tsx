@@ -6,6 +6,8 @@ import {
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+// 1. Import useAuth
+import { useAuth } from '../../context/AuthContext';
 
 const BookListScreen = () => {
     const navigation = useNavigation();
@@ -14,7 +16,10 @@ const BookListScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Fetch books when screen focuses or search changes
+    // 2. Get User Role
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+
     useFocusEffect(
         useCallback(() => {
             fetchBooks();
@@ -51,7 +56,6 @@ const BookListScreen = () => {
                 onPress={() => navigation.navigate('BookDetailsScreen', { book: item })}
                 activeOpacity={0.8}
             >
-                {/* Book Cover */}
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: imageUrl }} style={styles.coverImage} resizeMode="cover" />
                     <View style={[styles.badge, isAvailable ? styles.bgGreen : styles.bgRed]}>
@@ -59,7 +63,6 @@ const BookListScreen = () => {
                     </View>
                 </View>
 
-                {/* Book Info */}
                 <View style={styles.infoContainer}>
                     <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
                     <Text style={styles.author} numberOfLines={1}>{item.author}</Text>
@@ -71,7 +74,6 @@ const BookListScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* Search Header */}
             <View style={styles.headerContainer}>
                 <Text style={styles.screenTitle}>Library Collection</Text>
                 <View style={styles.searchBox}>
@@ -84,13 +86,16 @@ const BookListScreen = () => {
                         onChangeText={setSearch} 
                     />
                 </View>
-                {/* Add Button Shortcut (Optional) */}
-                <TouchableOpacity 
-                    style={styles.fab}
-                    onPress={() => navigation.navigate('AddBookScreen')}
-                >
-                    <Text style={styles.fabText}>+</Text>
-                </TouchableOpacity>
+                
+                {/* 3. CONDITIONALLY RENDER ADD BUTTON (Admin Only) */}
+                {isAdmin && (
+                    <TouchableOpacity 
+                        style={styles.fab}
+                        onPress={() => navigation.navigate('AddBookScreen')}
+                    >
+                        <Text style={styles.fabText}>+</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             {loading && !refreshing ? (
@@ -123,36 +128,23 @@ const styles = StyleSheet.create({
     searchIcon: { fontSize: 16, marginRight: 8 },
     input: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#334155' },
     
-    // FAB for adding
+    // FAB styles
     fab: { position: 'absolute', right: 20, top: 20, backgroundColor: '#2563EB', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 4 },
     fabText: { color: '#FFF', fontSize: 24, marginTop: -2 },
 
     listContent: { padding: 12, paddingBottom: 40 },
     rowWrapper: { justifyContent: 'space-between' },
-    
-    card: { 
-        width: '48%', 
-        backgroundColor: '#FFF', 
-        borderRadius: 12, 
-        marginBottom: 16, 
-        elevation: 3, 
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 5,
-        overflow: 'hidden'
-    },
+    card: { width: '48%', backgroundColor: '#FFF', borderRadius: 12, marginBottom: 16, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, overflow: 'hidden' },
     imageContainer: { height: 180, width: '100%', position: 'relative' },
     coverImage: { width: '100%', height: '100%' },
     badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     bgGreen: { backgroundColor: 'rgba(34, 197, 94, 0.9)' },
     bgRed: { backgroundColor: 'rgba(239, 68, 68, 0.9)' },
     badgeText: { fontSize: 10, fontWeight: 'bold', color: '#FFF' },
-    
     infoContainer: { padding: 10 },
     title: { fontSize: 14, fontWeight: 'bold', color: '#1E293B', marginBottom: 4, height: 40 },
     author: { fontSize: 12, color: '#64748B', marginBottom: 2 },
     bookNo: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
-    
     emptyState: { alignItems: 'center', marginTop: 50 },
     emptyText: { color: '#94A3B8', fontSize: 16 }
 });

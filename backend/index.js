@@ -9162,7 +9162,7 @@ const libraryUpload = multer({
 
 // --- 1. Library BOOKs MANAGEMENT ROUTES ---
 
-// 1. ADD BOOK
+// 1. ADD BOOK (Admin Only)
 app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
     try {
         const { 
@@ -9177,7 +9177,7 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
 
         const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
         
-        // Optional fields
+        // Safe optional fields
         const safe_edition = edition || null;
         const safe_language = language || null;
         const safe_price = price || null;
@@ -9204,7 +9204,7 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
     }
 });
 
-// 2. GET BOOKS
+// 2. GET BOOKS (Open to all authenticated users)
 app.get('/api/library/books', verifyToken, async (req, res) => {
     try {
         const { search, category, availability } = req.query;
@@ -9232,7 +9232,7 @@ app.get('/api/library/books', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Error fetching books' }); 
     }
 });
-// 3. UPDATE BOOK (NEW)
+// 3. UPDATE BOOK (Admin Only)
 app.put('/api/library/books/:id', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
     try {
         const { id } = req.params;
@@ -9242,22 +9242,18 @@ app.put('/api/library/books/:id', verifyToken, isAdmin, libraryUpload.single('co
             total_copies, rack_no 
         } = req.body;
 
-        // Get current book to calculate copy difference
         const [currentBook] = await db.query('SELECT total_copies, available_copies, cover_image_url FROM library_books WHERE id = ?', [id]);
-        
         if (currentBook.length === 0) return res.status(404).json({ message: 'Book not found' });
 
+        // Calculate available copies adjustment
         const oldTotal = currentBook[0].total_copies;
         const oldAvailable = currentBook[0].available_copies;
         const newTotal = parseInt(total_copies);
-        
-        // Calculate new available copies based on the difference
-        // e.g., If total goes from 10 to 12 (+2), available goes from 5 to 7.
         const diff = newTotal - oldTotal;
         const newAvailable = oldAvailable + diff;
 
         if (newAvailable < 0) {
-            return res.status(400).json({ message: 'Cannot reduce total copies below currently borrowed amount.' });
+            return res.status(400).json({ message: 'Cannot reduce total copies below borrowed amount.' });
         }
 
         let cover_image_url = currentBook[0].cover_image_url;
@@ -9280,27 +9276,16 @@ app.put('/api/library/books/:id', verifyToken, isAdmin, libraryUpload.single('co
         ]);
 
         res.json({ message: 'Book updated successfully' });
-
     } catch (error) {
         console.error("Update Book Error:", error);
         res.status(500).json({ message: error.message || 'Update failed' });
     }
 });
 
-// 4. DELETE BOOK (NEW)
+// 4. DELETE BOOK (Admin Only)
 app.delete('/api/library/books/:id', verifyToken, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        // Optional: Check if books are currently borrowed before deleting
-        const [book] = await db.query('SELECT total_copies, available_copies FROM library_books WHERE id = ?', [id]);
-        
-        if (book.length > 0) {
-            if (book[0].total_copies !== book[0].available_copies) {
-                // Determine if you want to block deletion if books are borrowed
-                // return res.status(400).json({ message: 'Cannot delete book while copies are borrowed.' });
-            }
-        }
-
         await db.query('DELETE FROM library_books WHERE id = ?', [id]);
         res.json({ message: 'Book deleted successfully' });
     } catch (error) {
