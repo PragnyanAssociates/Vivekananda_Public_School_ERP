@@ -9161,10 +9161,10 @@ const libraryUpload = multer({
 
 // --- 2. BOOK MANAGEMENT ROUTES ---
 
-// ADD BOOK (Admin Only) - Fixed for optional fields & Validation
+// ADD BOOK (Fixed: Matches DB column 'book_no')
 app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
     try {
-        // 1. Destructure all possible fields
+        // 1. Get 'book_no' from frontend (previously isbn)
         const { 
             title, author, book_no, category, publisher, 
             edition, language, price, purchase_date, 
@@ -9178,8 +9178,7 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
 
         const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
         
-        // 3. Convert 'undefined' or empty strings to NULL for optional fields
-        // This prevents SQL errors if these fields are missing in the frontend
+        // 3. Handle optional fields safely
         const safe_edition = edition || null;
         const safe_language = language || null;
         const safe_price = price || null;
@@ -9188,16 +9187,16 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
         const safe_category = category || null;
         const safe_publisher = publisher || null;
 
+        // 4. CORRECTED SQL QUERY (Uses 'book_no', NOT 'isbn')
         const query = `
             INSERT INTO library_books 
             (title, author, book_no, category, publisher, edition, language, price, purchase_date, total_copies, available_copies, rack_no, cover_image_url) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-        // available_copies starts equal to total_copies
         await db.query(query, [
             title, 
             author, 
-            book_no, 
+            book_no, // Maps to 3rd ? above
             safe_category, 
             safe_publisher, 
             safe_edition, 
@@ -9205,7 +9204,7 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
             safe_price, 
             safe_purchase_date, 
             total_copies, 
-            total_copies, // available = total initially
+            total_copies, 
             safe_rack, 
             cover_image_url
         ]); 
@@ -9213,8 +9212,9 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
         res.status(201).json({ message: 'Book added successfully' });
 
     } catch (error) { 
-        console.error("Add Book SQL Error:", error); // Check your terminal for this log
-        res.status(500).json({ message: 'Database error while adding book.' }); 
+        console.error("Add Book Error:", error);
+        // Return the actual error message to the frontend for easier debugging
+        res.status(500).json({ message: error.message || 'Database error' }); 
     }
 });
 
