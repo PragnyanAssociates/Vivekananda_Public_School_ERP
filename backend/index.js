@@ -9135,6 +9135,199 @@ app.put('/api/transport/logs/service/:id', verifyToken, async (req, res) => {
 
 
 
+// ==========================================================
+// --- 📚 LIBRARY MODULE API ROUTES ---
+// ==========================================================
+
+// --- 📚 LIBRARY MULTER STORAGE (RAILWAY COMPATIBLE) ---
+const libraryStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        // We use your existing ROOT_STORAGE_PATH variable
+        const libraryPath = path.join(ROOT_STORAGE_PATH, 'library');
+        
+        // Check if folder exists, if not, create it (Fix for Railway)
+        if (!fs.existsSync(libraryPath)) {
+            fs.mkdirSync(libraryPath, { recursive: true });
+        }
+        cb(null, libraryPath);
+    },
+    filename: (req, file, cb) => {
+        const prefix = file.mimetype === 'application/pdf' ? 'ebook' : 'cover';
+        cb(null, `lib-${prefix}-${Date.now()}${path.extname(file.originalname)}`);
+    }
+});
+
+// Limit file size to 50MB for PDFs
+const libraryUpload = multer({ 
+    storage: libraryStorage,
+    limits: { fileSize: 50 * 1024 * 1024 } 
+});
+
+// 1. ADD A NEW BOOK (Admin/Librarian)
+app.post('/api/library/books', verifyToken, isTeacherOrAdmin, libraryUpload.single('cover_image'), async (req, res) => {
+    const { title, author, isbn, category, publisher, total_copies, rack_no } = req.body;
+    
+    // Store path relative to your public mount
+    const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
+
+    try {
+        const query = `
+            INSERT INTO library_books 
+            (title, author, isbn, category, publisher, total_copies, available_copies, rack_no, cover_image_url) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        
+        await db.query(query, [title, author, isbn, category, publisher, total_copies, total_copies, rack_no, cover_image_url]);
+        res.status(201).json({ message: 'Book added successfully' });
+    } catch (error) {
+        console.error("Library Add Book Error:", error);
+        res.status(500).json({ message: 'Error adding book' });
+    }
+});
+
+// 2. GET BOOKS (With Search)
+app.get('/api/library/books', verifyToken, async (req, res) => {
+    try {
+        const { search } = req.query;
+        let query = 'SELECT * FROM library_books WHERE 1=1';
+        let params = [];
+
+        if (search) {
+            query += ' AND (title LIKE ? OR author LIKE ? OR isbn LIKE ?)';
+            const term = `%${search}%`;
+            params.push(term, term, term);
+        }
+        query += ' ORDER BY id DESC';
+        
+        const [books] = await db.query(query, params);
+        res.status(200).json(books);
+    } catch (error) {
+        console.error("Library Get Error:", error);
+        res.status(500).json({ message: 'Error fetching books' });
+    }
+});
+
+// 3. ISSUE BOOK
+app.post('/api/library/issue', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { book_id, user_id, due_date } = req.body;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [[book]] = await connection.query('SELECT available_copies FROM library_books WHERE id = ?', [book_id]);
+        if (!book || book.available_copies < 1) throw new Error('Book not available');
+
+        await connection.query(
+            'INSERT INTO library_issues (book_id, user_id, issued_by, due_date, status) VALUES (?, ?, ?, ?, ?)',
+            [book_id, user_id, req.user.id, due_date, 'issued']
+        );
+
+        await connection.query('UPDATE library_books SET available_copies = available_copies - 1 WHERE id = ?', [book_id]);
+        
+        await connection.commit();
+        res.status(200).json({ message: 'Book issued successfully' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(400).json({ message: error.message || 'Error issuing book' });
+    } finally {
+        connection.release();
+    }
+});
+
+// 4. UPLOAD DIGITAL RESOURCE
+app.post('/api/library/digital', verifyToken, isTeacherOrAdmin, libraryUpload.single('file'), async (req, res) => {
+    const { title, subject, class_group } = req.body;
+    const file_url = req.file ? `/uploads/library/${req.file.filename}` : null;
+
+    try {
+        await db.query(
+            'INSERT INTO library_digital_resources (title, file_url, subject, class_group, uploaded_by) VALUES (?, ?, ?, ?, ?)',
+            [title, file_url, subject, class_group, req.user.id]
+        );
+        res.status(201).json({ message: 'Resource uploaded' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error uploading resource' });
+    }
+});
+
+// 5. GET DIGITAL RESOURCES
+app.get('/api/library/digital', verifyToken, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM library_digital_resources ORDER BY id DESC');
+        res.status(200).json(rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching resources' });
+    }
+});
+
+// 6. RETURN BOOK (Admin/Teacher Only)
+app.post('/api/library/return', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { issue_id } = req.body; 
+    
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Get Issue Details to calculate fine
+        const [issues] = await connection.query('SELECT * FROM library_issues WHERE id = ?', [issue_id]);
+        if (issues.length === 0) throw new Error('Issue record not found');
+        
+        const issue = issues[0];
+        if (issue.status === 'returned') throw new Error('Book already returned');
+
+        // 2. Calculate Fine (Example: 10 units per day late)
+        const today = new Date();
+        const due = new Date(issue.due_date);
+        let fineAmount = 0;
+        
+        if (today > due) {
+            const diffTime = Math.abs(today - due);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            fineAmount = diffDays * 10; // Change '10' to your fine amount per day
+        }
+
+        // 3. Update Issue Record
+        await connection.query(`
+            UPDATE library_issues 
+            SET return_date = NOW(), status = 'returned', fine_amount = ? 
+            WHERE id = ?`, 
+            [fineAmount, issue_id]
+        );
+
+        // 4. Increase Book Availability
+        await connection.query('UPDATE library_books SET available_copies = available_copies + 1 WHERE id = ?', [issue.book_id]);
+
+        await connection.commit();
+        res.status(200).json({ message: 'Book returned successfully', fine: fineAmount });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Return Book Error:", error);
+        res.status(500).json({ message: error.message || 'Error returning book' });
+    } finally {
+        connection.release();
+    }
+});
+
+// 7. GET MY ISSUED BOOKS (For Students & Teachers)
+app.get('/api/library/my-books', verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        // Join with books table to get Title and Image
+        const query = `
+            SELECT i.id, i.issue_date, i.due_date, i.return_date, i.status, i.fine_amount,
+                   b.title, b.author, b.cover_image_url 
+            FROM library_issues i 
+            JOIN library_books b ON i.book_id = b.id 
+            WHERE i.user_id = ? 
+            ORDER BY i.issue_date DESC`;
+        
+        const [rows] = await db.query(query, [userId]);
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error("My Books Error:", error);
+        res.status(500).json({ message: 'Error fetching history' });
+    }
+});
+
 
 
 

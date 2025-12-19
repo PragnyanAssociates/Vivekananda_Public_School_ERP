@@ -172,9 +172,9 @@ const MarkStudentAttendance = () => {
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Icon name="arrow-left" size={24} color={TEXT_COLOR_DARK} />
+                        {/* <Icon name="arrow-left" size={24} color={TEXT_COLOR_DARK} /> */}
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Admin Attendance</Text>
+                    <Text style={styles.headerTitle}>Mark Attendance</Text>
                 </View>
 
                 <View style={styles.selectionContent}>

@@ -36,7 +36,7 @@ const eventTypesConfig: { [key: string]: { color: string; displayName: string } 
   'Festival': { color: '#fa5353ff', displayName: 'Festival' },      // Light Red
   'Holiday (General)': { color: '#6ced70ff', displayName: 'Holiday' },// Light Green
   // 'Holiday (Optional)': { color: '#53e5d6ff', displayName: 'Optional' }, // Teal
-  'Exam': { color: '#d35de7ff', displayName: 'Exam' },          // Light Purple
+  'Exam': { color: '#4625c7ff', displayName: 'Exam' },          // Light Purple
   'Other': { color: '#af2ffeff', displayName: 'Other' }           // Light Pink
 };
 const DEFAULT_EVENT_TYPE = 'Meeting';

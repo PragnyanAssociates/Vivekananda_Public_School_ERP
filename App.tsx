@@ -123,6 +123,12 @@ import RoutesScreen from './src/screens/transport/RoutesScreen';
 import ProofsScreen from './src/screens/transport/ProofsScreen';
 import ComplaintsScreen from './src/screens/transport/ComplaintsScreen';
 import VehicleLogScreen from './src/screens/transport/VehicleLogScreen';
+
+
+import LibraryHomeScreen from './src/screens/library/LibraryHomeScreen';
+import BookListScreen from './src/screens/library/BookListScreen';
+import DigitalLibraryScreen from './src/screens/library/DigitalLibraryScreen';
+import AddBookScreen from './src/screens/library/AddBookScreen';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -303,7 +309,11 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="ComplaintsScreen" component={ComplaintsScreen} />
       <Stack.Screen name="VehicleLogScreen" component={VehicleLogScreen} />
 
-      {/* <Stack.Screen name="MarksEntryScreen" component={MarksEntryScreen} /> */}
+      
+      <Stack.Screen name="LibraryHomeScreen" component={LibraryHomeScreen} />
+      <Stack.Screen name="BookListScreen" component={BookListScreen} />
+      <Stack.Screen name="DigitalLibraryScreen" component={DigitalLibraryScreen} />
+      <Stack.Screen name="AddBookScreen" component={AddBookScreen} />
 
       <Stack.Screen name="TeacherPerformanceScreen" component={TeacherPerformanceScreen} />
       <Stack.Screen name="StudentPerformance" component={StudentPerformance} />

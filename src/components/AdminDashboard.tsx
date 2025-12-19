@@ -63,6 +63,7 @@ import AccountsScreen from '../screens/Accounts/AccountsScreen';
 import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
 import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
 import TransportScreen from '../screens/transport/TransportScreen';
+import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -117,6 +118,7 @@ const AdminDashboard = ({ navigation }) => {
   const allQuickAccessItems = [
     { id: 'qa0', title: 'Manage Login', imageSource: 'https://cdn-icons-png.flaticon.com/128/15096/15096966.png', navigateToTab: 'AdminLM' },
     { id: 'qa29', title: 'Accounts', imageSource: 'https://cdn-icons-png.flaticon.com/128/1552/1552545.png', navigateToTab: 'AccountsScreen' },
+    { id: 'qa32', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
     // { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
     { id: 'qa25', title: 'Staff', imageSource: 'https://cdn-icons-png.flaticon.com/128/12105/12105197.png', navigateToTab: 'StaffNavigator' },
     { id: 'qa26', title: 'Students', imageSource: 'https://cdn-icons-png.flaticon.com/128/16405/16405976.png', navigateToTab: 'StudentStackNavigator' },
@@ -234,6 +236,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'ActivitiesScreen': return ( <><ContentScreenHeader title="Extracurricular Activities" onBack={handleBack} /><ActivitiesScreen /></> );
         case 'DictionaryScreen': return ( <><ContentScreenHeader title="Dictionary" onBack={handleBack} /><DictionaryScreen /></> );
         case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleBack} /><TransportScreen /></> );
+        case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleBack} /><LibraryHomeScreen /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
       }
