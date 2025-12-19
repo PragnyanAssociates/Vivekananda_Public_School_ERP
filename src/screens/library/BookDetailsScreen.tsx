@@ -2,11 +2,46 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
+import { useNavigation } from '@react-navigation/native';
 
 const BookDetailsScreen = ({ route }) => {
+    const navigation = useNavigation();
     const { book } = route.params;
     const [loading, setLoading] = useState(false);
 
+    // 1. DELETE FUNCTION
+    const handleDelete = () => {
+        Alert.alert(
+            "Delete Book",
+            "Are you sure you want to delete this book? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Delete", 
+                    style: "destructive", 
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            await apiClient.delete(`/library/books/${book.id}`);
+                            Alert.alert("Success", "Book deleted.");
+                            navigation.goBack(); // Return to list
+                        } catch (error) {
+                            Alert.alert("Error", error.response?.data?.message || "Delete failed.");
+                            setLoading(false);
+                        }
+                    } 
+                }
+            ]
+        );
+    };
+
+    // 2. EDIT FUNCTION
+    const handleEdit = () => {
+        // Navigate to AddBookScreen but pass the book object
+        navigation.navigate('AddBookScreen', { book: book });
+    };
+
+    // 3. RESERVE FUNCTION
     const handleReserve = async () => {
         setLoading(true);
         try {
@@ -31,6 +66,17 @@ const BookDetailsScreen = ({ route }) => {
             </View>
 
             <View style={styles.contentContainer}>
+                
+                {/* Admin Actions Row */}
+                <View style={styles.adminRow}>
+                    <TouchableOpacity style={[styles.adminBtn, styles.editBtn]} onPress={handleEdit}>
+                        <Text style={styles.adminBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.adminBtn, styles.deleteBtn]} onPress={handleDelete}>
+                        <Text style={styles.adminBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                </View>
+
                 {/* Title Section */}
                 <View style={styles.headerSection}>
                     <Text style={styles.title}>{book.title}</Text>
@@ -55,7 +101,7 @@ const BookDetailsScreen = ({ route }) => {
                     <DetailItem label="Edition" value={book.edition || 'Standard'} />
                 </View>
 
-                {/* Action Button */}
+                {/* User Action Button */}
                 <TouchableOpacity 
                     style={[styles.btn, (!isAvailable || loading) && styles.disabledBtn]} 
                     onPress={handleReserve}
@@ -83,6 +129,14 @@ const styles = StyleSheet.create({
     cover: { width: 160, height: 240, borderRadius: 8, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
     
     contentContainer: { padding: 24 },
+
+    // Admin Buttons
+    adminRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 },
+    adminBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, marginLeft: 10 },
+    editBtn: { backgroundColor: '#3B82F6' },
+    deleteBtn: { backgroundColor: '#EF4444' },
+    adminBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+
     headerSection: { marginBottom: 24, borderBottomWidth: 1, borderColor: '#F1F5F9', paddingBottom: 20 },
     title: { fontSize: 22, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
     author: { fontSize: 16, color: '#64748B', fontWeight: '500' },

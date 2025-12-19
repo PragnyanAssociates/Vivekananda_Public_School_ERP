@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TextInput, Image, 
     TouchableOpacity, ActivityIndicator, RefreshControl 
 } from 'react-native';
 import apiClient from '../../api/client';
-import { SERVER_URL } from '../../../apiConfig'; // Ensure this points to your backend base URL (e.g. http://192.168.1.5:3000)
+import { SERVER_URL } from '../../../apiConfig';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const BookListScreen = () => {
@@ -54,7 +54,6 @@ const BookListScreen = () => {
                 {/* Book Cover */}
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: imageUrl }} style={styles.coverImage} resizeMode="cover" />
-                    {/* Status Badge */}
                     <View style={[styles.badge, isAvailable ? styles.bgGreen : styles.bgRed]}>
                         <Text style={styles.badgeText}>{isAvailable ? 'Available' : 'Out'}</Text>
                     </View>
@@ -85,6 +84,13 @@ const BookListScreen = () => {
                         onChangeText={setSearch} 
                     />
                 </View>
+                {/* Add Button Shortcut (Optional) */}
+                <TouchableOpacity 
+                    style={styles.fab}
+                    onPress={() => navigation.navigate('AddBookScreen')}
+                >
+                    <Text style={styles.fabText}>+</Text>
+                </TouchableOpacity>
             </View>
 
             {loading && !refreshing ? (
@@ -94,8 +100,8 @@ const BookListScreen = () => {
                     data={books} 
                     renderItem={renderBookCard} 
                     keyExtractor={(item) => item.id.toString()} 
-                    numColumns={2} // ★ GRID LAYOUT
-                    columnWrapperStyle={styles.rowWrapper} // Gap between columns
+                    numColumns={2} 
+                    columnWrapperStyle={styles.rowWrapper} 
                     contentContainerStyle={styles.listContent}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     ListEmptyComponent={
@@ -117,11 +123,13 @@ const styles = StyleSheet.create({
     searchIcon: { fontSize: 16, marginRight: 8 },
     input: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#334155' },
     
-    // List Styles
+    // FAB for adding
+    fab: { position: 'absolute', right: 20, top: 20, backgroundColor: '#2563EB', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 4 },
+    fabText: { color: '#FFF', fontSize: 24, marginTop: -2 },
+
     listContent: { padding: 12, paddingBottom: 40 },
     rowWrapper: { justifyContent: 'space-between' },
     
-    // Card Styles
     card: { 
         width: '48%', 
         backgroundColor: '#FFF', 
@@ -141,7 +149,7 @@ const styles = StyleSheet.create({
     badgeText: { fontSize: 10, fontWeight: 'bold', color: '#FFF' },
     
     infoContainer: { padding: 10 },
-    title: { fontSize: 14, fontWeight: 'bold', color: '#1E293B', marginBottom: 4, height: 40 }, // Fixed height for alignment
+    title: { fontSize: 14, fontWeight: 'bold', color: '#1E293B', marginBottom: 4, height: 40 },
     author: { fontSize: 12, color: '#64748B', marginBottom: 2 },
     bookNo: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
     

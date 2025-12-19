@@ -9159,26 +9159,25 @@ const libraryUpload = multer({
     limits: { fileSize: 50 * 1024 * 1024 } 
 });
 
-// --- 2. BOOK MANAGEMENT ROUTES ---
 
-// ADD BOOK (Fixed: Matches DB column 'book_no')
+// --- 1. Library BOOKs MANAGEMENT ROUTES ---
+
+// 1. ADD BOOK
 app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
     try {
-        // 1. Get 'book_no' from frontend (previously isbn)
         const { 
             title, author, book_no, category, publisher, 
             edition, language, price, purchase_date, 
             total_copies, rack_no 
         } = req.body;
 
-        // 2. Validate Required Fields
         if (!title || !author || !total_copies || !book_no) {
             return res.status(400).json({ message: 'Title, Author, Book No, and Copies are required.' });
         }
 
         const cover_image_url = req.file ? `/uploads/library/${req.file.filename}` : null;
         
-        // 3. Handle optional fields safely
+        // Optional fields
         const safe_edition = edition || null;
         const safe_language = language || null;
         const safe_price = price || null;
@@ -9187,38 +9186,25 @@ app.post('/api/library/books', verifyToken, isAdmin, libraryUpload.single('cover
         const safe_category = category || null;
         const safe_publisher = publisher || null;
 
-        // 4. CORRECTED SQL QUERY (Uses 'book_no', NOT 'isbn')
         const query = `
             INSERT INTO library_books 
             (title, author, book_no, category, publisher, edition, language, price, purchase_date, total_copies, available_copies, rack_no, cover_image_url) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
         await db.query(query, [
-            title, 
-            author, 
-            book_no, // Maps to 3rd ? above
-            safe_category, 
-            safe_publisher, 
-            safe_edition, 
-            safe_language, 
-            safe_price, 
-            safe_purchase_date, 
-            total_copies, 
-            total_copies, 
-            safe_rack, 
-            cover_image_url
+            title, author, book_no, safe_category, safe_publisher, 
+            safe_edition, safe_language, safe_price, safe_purchase_date, 
+            total_copies, total_copies, safe_rack, cover_image_url
         ]); 
         
         res.status(201).json({ message: 'Book added successfully' });
-
     } catch (error) { 
         console.error("Add Book Error:", error);
-        // Return the actual error message to the frontend for easier debugging
         res.status(500).json({ message: error.message || 'Database error' }); 
     }
 });
 
-// GET BOOKS (Search via Title, Author, or Book No)
+// 2. GET BOOKS
 app.get('/api/library/books', verifyToken, async (req, res) => {
     try {
         const { search, category, availability } = req.query;
@@ -9226,7 +9212,6 @@ app.get('/api/library/books', verifyToken, async (req, res) => {
         let params = [];
 
         if (search) {
-            // UPDATED: Search includes book_no
             query += ' AND (title LIKE ? OR author LIKE ? OR book_no LIKE ?)';
             const term = `%${search}%`;
             params.push(term, term, term);
@@ -9240,7 +9225,6 @@ app.get('/api/library/books', verifyToken, async (req, res) => {
         }
         
         query += ' ORDER BY id DESC';
-        
         const [books] = await db.query(query, params);
         res.status(200).json(books);
     } catch (error) { 
@@ -9248,111 +9232,86 @@ app.get('/api/library/books', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Error fetching books' }); 
     }
 });
-
-// --- 3. ISSUE & RETURN ROUTES ---
-
-// ISSUE BOOK (UPDATED: Changed isTeacherOrAdmin -> isAdmin)
-app.post('/api/library/issue', verifyToken, isAdmin, async (req, res) => {
-    const { book_id, user_id, due_date } = req.body;
-    const connection = await db.getConnection();
+// 3. UPDATE BOOK (NEW)
+app.put('/api/library/books/:id', verifyToken, isAdmin, libraryUpload.single('cover_image'), async (req, res) => {
     try {
-        await connection.beginTransaction();
-        
-        const [[book]] = await connection.query('SELECT available_copies, title FROM library_books WHERE id = ?', [book_id]);
-        if (!book || book.available_copies < 1) throw new Error('Book not available');
+        const { id } = req.params;
+        const { 
+            title, author, book_no, category, publisher, 
+            edition, language, price, purchase_date, 
+            total_copies, rack_no 
+        } = req.body;
 
-        await connection.query(
-            'INSERT INTO library_issues (book_id, user_id, issued_by, due_date, status) VALUES (?, ?, ?, ?, ?)', 
-            [book_id, user_id, req.user.id, due_date, 'issued']
-        );
+        // Get current book to calculate copy difference
+        const [currentBook] = await db.query('SELECT total_copies, available_copies, cover_image_url FROM library_books WHERE id = ?', [id]);
         
-        await connection.query('UPDATE library_books SET available_copies = available_copies - 1 WHERE id = ?', [book_id]);
+        if (currentBook.length === 0) return res.status(404).json({ message: 'Book not found' });
+
+        const oldTotal = currentBook[0].total_copies;
+        const oldAvailable = currentBook[0].available_copies;
+        const newTotal = parseInt(total_copies);
         
-        if (typeof createNotification === 'function') {
-            await createNotification(connection, user_id, "Library", "Book Issued", `You borrowed: ${book.title}. Due: ${due_date}`);
+        // Calculate new available copies based on the difference
+        // e.g., If total goes from 10 to 12 (+2), available goes from 5 to 7.
+        const diff = newTotal - oldTotal;
+        const newAvailable = oldAvailable + diff;
+
+        if (newAvailable < 0) {
+            return res.status(400).json({ message: 'Cannot reduce total copies below currently borrowed amount.' });
         }
 
-        await connection.commit();
-        res.status(200).json({ message: 'Book issued successfully' });
-    } catch (error) {
-        await connection.rollback();
-        res.status(400).json({ message: error.message || 'Error issuing book' });
-    } finally { 
-        connection.release(); 
-    }
-});
-
-// RETURN BOOK (UPDATED: Changed isTeacherOrAdmin -> isAdmin)
-app.post('/api/library/return', verifyToken, isAdmin, async (req, res) => {
-    const { issue_id, is_fine_paid } = req.body; 
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        
-        const [issues] = await connection.query('SELECT * FROM library_issues WHERE id = ?', [issue_id]);
-        if (issues.length === 0) throw new Error('Issue not found');
-        const issue = issues[0];
-        if (issue.status === 'returned') throw new Error('Book already returned');
-
-        // Fine Calculation
-        const today = new Date();
-        const due = new Date(issue.due_date);
-        let fineAmount = 0;
-        
-        if (today > due) {
-            const diffTime = Math.abs(today - due);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            fineAmount = diffDays * 10; 
+        let cover_image_url = currentBook[0].cover_image_url;
+        if (req.file) {
+            cover_image_url = `/uploads/library/${req.file.filename}`;
         }
 
-        const fineStatus = (fineAmount > 0 && is_fine_paid) ? 'paid' : (fineAmount > 0 ? 'unpaid' : 'paid');
-
-        await connection.query(
-            'UPDATE library_issues SET return_date = NOW(), status = ?, fine_amount = ?, fine_status = ? WHERE id = ?', 
-            ['returned', fineAmount, fineStatus, issue_id]
-        );
-        
-        await connection.query('UPDATE library_books SET available_copies = available_copies + 1 WHERE id = ?', [issue.book_id]);
-
-        await connection.commit();
-        res.status(200).json({ message: 'Book returned', fine: fineAmount });
-    } catch (error) {
-        await connection.rollback();
-        res.status(500).json({ message: error.message });
-    } finally { 
-        connection.release(); 
-    }
-});
-
-// --- 4. RESERVATION & DIGITAL ROUTES ---
-
-// RESERVE BOOK (Available to Students/Teachers)
-app.post('/api/library/reserve', verifyToken, async (req, res) => {
-    const { book_id } = req.body;
-    try {
-        const [existing] = await db.query('SELECT id FROM library_reservations WHERE book_id = ? AND user_id = ? AND status = ?', [book_id, req.user.id, 'pending']);
-        if (existing.length > 0) return res.status(400).json({ message: 'You have already requested this book.' });
-
-        await db.query('INSERT INTO library_reservations (book_id, user_id, status) VALUES (?, ?, ?)', [book_id, req.user.id, 'pending']);
-        res.status(201).json({ message: 'Reservation request sent.' });
-    } catch (error) { res.status(500).json({ message: 'Error reserving book' }); }
-});
-
-// GET HISTORY (Available to All)
-app.get('/api/library/my-books', verifyToken, async (req, res) => {
-    try {
         const query = `
-            SELECT i.*, b.title, b.author, b.cover_image_url 
-            FROM library_issues i 
-            JOIN library_books b ON i.book_id = b.id 
-            WHERE i.user_id = ? ORDER BY i.issue_date DESC`;
-        const [rows] = await db.query(query, [req.user.id]);
-        res.status(200).json(rows);
-    } catch (error) { res.status(500).json({ message: 'Error fetching history' }); }
+            UPDATE library_books SET 
+            title=?, author=?, book_no=?, category=?, publisher=?, 
+            edition=?, language=?, price=?, purchase_date=?, 
+            total_copies=?, available_copies=?, rack_no=?, cover_image_url=?
+            WHERE id=?
+        `;
+
+        await db.query(query, [
+            title, author, book_no, category || null, publisher || null,
+            edition || null, language || null, price || null, purchase_date || null,
+            newTotal, newAvailable, rack_no || null, cover_image_url, id
+        ]);
+
+        res.json({ message: 'Book updated successfully' });
+
+    } catch (error) {
+        console.error("Update Book Error:", error);
+        res.status(500).json({ message: error.message || 'Update failed' });
+    }
 });
 
-// 1. UPLOAD RESOURCE (Admin Only - Supports File + Cover Image)
-// 1. UPLOAD RESOURCE (Admin Only)
+// 4. DELETE BOOK (NEW)
+app.delete('/api/library/books/:id', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Optional: Check if books are currently borrowed before deleting
+        const [book] = await db.query('SELECT total_copies, available_copies FROM library_books WHERE id = ?', [id]);
+        
+        if (book.length > 0) {
+            if (book[0].total_copies !== book[0].available_copies) {
+                // Determine if you want to block deletion if books are borrowed
+                // return res.status(400).json({ message: 'Cannot delete book while copies are borrowed.' });
+            }
+        }
+
+        await db.query('DELETE FROM library_books WHERE id = ?', [id]);
+        res.json({ message: 'Book deleted successfully' });
+    } catch (error) {
+        console.error("Delete Book Error:", error);
+        res.status(500).json({ message: 'Delete failed' });
+    }
+});
+
+
+// 1. Digital Library UPLOAD RESOURCE (Admin Only - Supports File + Cover Image)
+// 1. Digital Library (Admin Only)
 app.post('/api/library/digital', verifyToken, isAdmin, libraryUpload.fields([
     { name: 'file', maxCount: 1 }, 
     { name: 'cover_image', maxCount: 1 }
@@ -9475,6 +9434,108 @@ app.put('/api/library/digital/:id', verifyToken, isAdmin, libraryUpload.fields([
         console.error("Update Error:", error);
         res.status(500).json({ message: 'Error updating resource' });
     }
+});
+
+
+// --- 3. ISSUE & RETURN ROUTES ---
+// ISSUE BOOK (UPDATED: Changed isTeacherOrAdmin -> isAdmin)
+app.post('/api/library/issue', verifyToken, isAdmin, async (req, res) => {
+    const { book_id, user_id, due_date } = req.body;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        const [[book]] = await connection.query('SELECT available_copies, title FROM library_books WHERE id = ?', [book_id]);
+        if (!book || book.available_copies < 1) throw new Error('Book not available');
+
+        await connection.query(
+            'INSERT INTO library_issues (book_id, user_id, issued_by, due_date, status) VALUES (?, ?, ?, ?, ?)', 
+            [book_id, user_id, req.user.id, due_date, 'issued']
+        );
+        
+        await connection.query('UPDATE library_books SET available_copies = available_copies - 1 WHERE id = ?', [book_id]);
+        
+        if (typeof createNotification === 'function') {
+            await createNotification(connection, user_id, "Library", "Book Issued", `You borrowed: ${book.title}. Due: ${due_date}`);
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Book issued successfully' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(400).json({ message: error.message || 'Error issuing book' });
+    } finally { 
+        connection.release(); 
+    }
+});
+
+// RETURN BOOK (UPDATED: Changed isTeacherOrAdmin -> isAdmin)
+app.post('/api/library/return', verifyToken, isAdmin, async (req, res) => {
+    const { issue_id, is_fine_paid } = req.body; 
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        const [issues] = await connection.query('SELECT * FROM library_issues WHERE id = ?', [issue_id]);
+        if (issues.length === 0) throw new Error('Issue not found');
+        const issue = issues[0];
+        if (issue.status === 'returned') throw new Error('Book already returned');
+
+        // Fine Calculation
+        const today = new Date();
+        const due = new Date(issue.due_date);
+        let fineAmount = 0;
+        
+        if (today > due) {
+            const diffTime = Math.abs(today - due);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            fineAmount = diffDays * 10; 
+        }
+
+        const fineStatus = (fineAmount > 0 && is_fine_paid) ? 'paid' : (fineAmount > 0 ? 'unpaid' : 'paid');
+
+        await connection.query(
+            'UPDATE library_issues SET return_date = NOW(), status = ?, fine_amount = ?, fine_status = ? WHERE id = ?', 
+            ['returned', fineAmount, fineStatus, issue_id]
+        );
+        
+        await connection.query('UPDATE library_books SET available_copies = available_copies + 1 WHERE id = ?', [issue.book_id]);
+
+        await connection.commit();
+        res.status(200).json({ message: 'Book returned', fine: fineAmount });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ message: error.message });
+    } finally { 
+        connection.release(); 
+    }
+});
+
+// --- 4. RESERVATION & DIGITAL ROUTES ---
+
+// RESERVE BOOK (Available to Students/Teachers)
+app.post('/api/library/reserve', verifyToken, async (req, res) => {
+    const { book_id } = req.body;
+    try {
+        const [existing] = await db.query('SELECT id FROM library_reservations WHERE book_id = ? AND user_id = ? AND status = ?', [book_id, req.user.id, 'pending']);
+        if (existing.length > 0) return res.status(400).json({ message: 'You have already requested this book.' });
+
+        await db.query('INSERT INTO library_reservations (book_id, user_id, status) VALUES (?, ?, ?)', [book_id, req.user.id, 'pending']);
+        res.status(201).json({ message: 'Reservation request sent.' });
+    } catch (error) { res.status(500).json({ message: 'Error reserving book' }); }
+});
+
+// GET HISTORY (Available to All)
+app.get('/api/library/my-books', verifyToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT i.*, b.title, b.author, b.cover_image_url 
+            FROM library_issues i 
+            JOIN library_books b ON i.book_id = b.id 
+            WHERE i.user_id = ? ORDER BY i.issue_date DESC`;
+        const [rows] = await db.query(query, [req.user.id]);
+        res.status(200).json(rows);
+    } catch (error) { res.status(500).json({ message: 'Error fetching history' }); }
 });
 
 // --- 5. ADMIN STATS ---

@@ -1,26 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
     Alert, Image, ActivityIndicator, Platform, KeyboardAvoidingView
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import apiClient from '../../api/client';
-import { useNavigation } from '@react-navigation/native';
+import { SERVER_URL } from '../../../apiConfig';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 const AddBookScreen = () => {
     const navigation = useNavigation();
+    const route = useRoute();
+    
+    // Check if we are in Edit Mode
+    const isEditMode = route.params?.book ? true : false;
+    const bookToEdit = route.params?.book || {};
+
     const [loading, setLoading] = useState(false);
     const [image, setImage] = useState(null);
 
     const [formData, setFormData] = useState({
         title: '',
         author: '',
-        book_no: '', // Changed from isbn
+        book_no: '',
         category: '',
         publisher: '',
         total_copies: '',
         rack_no: ''
     });
+
+    // Populate form if Edit Mode
+    useEffect(() => {
+        if (isEditMode) {
+            setFormData({
+                title: bookToEdit.title || '',
+                author: bookToEdit.author || '',
+                book_no: bookToEdit.book_no || '',
+                category: bookToEdit.category || '',
+                publisher: bookToEdit.publisher || '',
+                total_copies: bookToEdit.total_copies ? String(bookToEdit.total_copies) : '',
+                rack_no: bookToEdit.rack_no || ''
+            });
+        }
+    }, [isEditMode]);
 
     const handleInputChange = (field, value) => {
         setFormData({ ...formData, [field]: value });
@@ -58,28 +80,46 @@ const AddBookScreen = () => {
                 });
             }
 
-            await apiClient.post('/library/books', data, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            if (isEditMode) {
+                // UPDATE REQUEST
+                await apiClient.put(`/library/books/${bookToEdit.id}`, data, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                Alert.alert('Success', 'Book updated successfully!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+            } else {
+                // ADD REQUEST
+                await apiClient.post('/library/books', data, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                Alert.alert('Success', 'Book added successfully!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+            }
 
-            Alert.alert('Success', 'Book added successfully!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
         } catch (error) {
-            console.error('Add Book Error:', error);
-            Alert.alert('Error', 'Failed to add book.');
+            console.error('Save Book Error:', error);
+            const msg = error.response?.data?.message || 'Operation failed.';
+            Alert.alert('Error', msg);
         } finally {
             setLoading(false);
         }
     };
 
+    // Determine image source for preview
+    const getPreviewSource = () => {
+        if (image) return { uri: image.uri };
+        if (isEditMode && bookToEdit.cover_image_url) return { uri: `${SERVER_URL}${bookToEdit.cover_image_url}` };
+        return null;
+    };
+    const previewSource = getPreviewSource();
+
     return (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 
-                <Text style={styles.header}>Add New Book</Text>
+                <Text style={styles.header}>{isEditMode ? 'Edit Book' : 'Add New Book'}</Text>
 
                 <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-                    {image ? (
-                        <Image source={{ uri: image.uri }} style={styles.previewImage} />
+                    {previewSource ? (
+                        <Image source={previewSource} style={styles.previewImage} />
                     ) : (
                         <View style={styles.placeholder}>
                             <Text style={styles.plusIcon}>+</Text>
@@ -98,7 +138,7 @@ const AddBookScreen = () => {
                     </View>
 
                     <View style={styles.row}>
-                        <InputLabel containerStyle={{flex:1, marginRight:10}} label="Copies *" placeholder="10" keyboardType="numeric" value={formData.total_copies} onChangeText={t => handleInputChange('total_copies', t)} />
+                        <InputLabel containerStyle={{flex:1, marginRight:10}} label="Total Copies *" placeholder="10" keyboardType="numeric" value={formData.total_copies} onChangeText={t => handleInputChange('total_copies', t)} />
                         <InputLabel containerStyle={{flex:1}} label="Rack No" placeholder="A-1" value={formData.rack_no} onChangeText={t => handleInputChange('rack_no', t)} />
                     </View>
 
@@ -106,7 +146,7 @@ const AddBookScreen = () => {
                 </View>
 
                 <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>Save Book</Text>}
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>{isEditMode ? 'Update Book' : 'Save Book'}</Text>}
                 </TouchableOpacity>
 
             </ScrollView>
@@ -114,7 +154,7 @@ const AddBookScreen = () => {
     );
 };
 
-// Helper Component for cleaner code
+// Helper Component
 const InputLabel = ({ label, placeholder, value, onChangeText, keyboardType, containerStyle }) => (
     <View style={[styles.inputGroup, containerStyle]}>
         <Text style={styles.label}>{label}</Text>

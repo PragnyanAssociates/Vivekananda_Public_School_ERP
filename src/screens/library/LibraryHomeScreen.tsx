@@ -48,7 +48,7 @@ const LibraryHomeScreen = () => {
     const getFeatures = () => {
         const commonModules = [
             { id: '1', title: 'Search Books', icon: 'https://cdn-icons-png.flaticon.com/128/6983/6983319.png', screen: 'BookListScreen' },
-            { id: '2', title: 'My Issued Books', icon: 'https://cdn-icons-png.flaticon.com/128/2232/2232696.png', screen: 'MyIssuedBooksScreen' },
+            { id: '2', title: 'Issued Books', icon: 'https://cdn-icons-png.flaticon.com/128/2232/2232696.png', screen: 'MyIssuedBooksScreen' },
             { id: '3', title: 'Digital Library', icon: 'https://cdn-icons-png.flaticon.com/128/2997/2997608.png', screen: 'DigitalLibraryScreen' },
         ];
 
