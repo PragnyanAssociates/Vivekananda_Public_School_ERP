@@ -9296,128 +9296,74 @@ app.delete('/api/library/books/:id', verifyToken, isAdmin, async (req, res) => {
 
 
 // Borrow details 
-// 1. SUBMIT BORROW REQUEST
-// 1. SUBMIT BORROW REQUEST
+// 1. SUBMIT BORROW REQUEST (Student)
+// Logic: Creates a 'pending' request. Does NOT deduct a copy yet.
 app.post('/api/library/request', verifyToken, async (req, res) => {
     try {
-        console.log("Received Borrow Request Body:", req.body); // DEBUG LOG
-
         const { book_id, full_name, roll_no, class_name, mobile, email, borrow_date, return_date } = req.body;
-
+        
+        // 1. Validation
         if (!book_id || !roll_no || !mobile || !borrow_date || !return_date) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        // 1. Check User ID from Token
+        // 2. Get User ID from Token (CRITICAL for Foreign Key Constraint)
         const userId = req.user ? req.user.id : null;
-        if (!userId) return res.status(401).json({ message: 'Unauthorized: No User ID found' });
-
-        // 2. Check Copies
-        const [book] = await db.query('SELECT available_copies FROM library_books WHERE id = ?', [book_id]);
-        if (!book || book.length === 0) return res.status(404).json({ message: 'Book not found' });
-        
-        if (book[0].available_copies <= 0) {
-            return res.status(400).json({ message: 'No copies left. Please wait.' });
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized: No User ID found in token.' });
         }
 
-        // 3. Insert Record
-        const query = `INSERT INTO library_transactions 
+        // 3. Check Book Availability (Don't allow request if 0 copies)
+        const [book] = await db.query('SELECT available_copies FROM library_books WHERE id = ?', [book_id]);
+        if (!book.length || book[0].available_copies < 1) {
+            return res.status(400).json({ message: 'Book is currently unavailable.' });
+        }
+
+        // 4. Insert Transaction
+        const query = `
+            INSERT INTO library_transactions 
             (book_id, user_id, full_name, roll_no, class_name, mobile, email, borrow_date, expected_return_date, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`;
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        `;
         
         await db.query(query, [
             book_id, userId, full_name, roll_no, class_name, mobile, email, borrow_date, return_date
         ]);
 
-        console.log("Borrow Request Inserted Successfully!"); // DEBUG LOG
-        res.status(201).json({ message: 'Request sent to admin successfully!' });
+        res.status(201).json({ message: 'Request submitted successfully!' });
 
     } catch (error) {
-        console.error("Borrow Request Error:", error); // DEBUG LOG
+        console.error("Borrow Request Error:", error);
         res.status(500).json({ message: error.message || 'Server Error' });
     }
 });
 
-
-// 2. ADMIN: GET ALL REQUESTS (Updated with LEFT JOIN)
+// 2. GET ACTIVE REQUESTS (Admin Dashboard)
+// Fetches Pending, Issued, and Overdue items
 app.get('/api/library/admin/requests', verifyToken, isAdmin, async (req, res) => {
     try {
         const query = `
             SELECT t.*, 
-                   COALESCE(b.title, 'Unknown Book') as book_title, 
-                   COALESCE(b.book_no, 'N/A') as book_no,
-                   CASE 
-                       WHEN t.status = 'approved' AND t.expected_return_date < CURDATE() THEN 1 
-                       ELSE 0 
-                   END as is_overdue
+                   b.title as book_title, 
+                   b.book_no,
+                   b.cover_image_url
             FROM library_transactions t
             LEFT JOIN library_books b ON t.book_id = b.id
-            WHERE t.status != 'returned'
-            ORDER BY t.created_at DESC`;
-            
+            WHERE t.status != 'returned' 
+            ORDER BY t.created_at DESC
+        `;
         const [requests] = await db.query(query);
         res.json(requests);
     } catch (error) {
-        console.error("Get Requests Error:", error);
-        res.status(500).json({ message: error.message });
+        console.error("Admin Fetch Error:", error);
+        res.status(500).json({ message: 'Failed to fetch requests' });
     }
 });
 
-// 3. GET STATS (Strict Count)
-app.get('/api/library/stats', verifyToken, isAdmin, async (req, res) => {
-    try {
-        const query = `
-            SELECT 
-                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
-                COUNT(CASE WHEN status = 'approved' AND expected_return_date < CURDATE() THEN 1 END) AS overdue,
-                COUNT(CASE WHEN status = 'approved' AND expected_return_date >= CURDATE() THEN 1 END) AS issued
-            FROM library_transactions
-        `;
-        const [rows] = await db.query(query);
-        res.json(rows[0]); 
-    } catch (error) {
-        res.status(500).json({ message: "Failed to fetch stats" });
-    }
-});
-
-// 4. RETURN BOOK
-app.put('/api/library/return/:id', verifyToken, async (req, res) => {
-    const { id } = req.params;
-    try {
-        const [trans] = await db.query('SELECT book_id FROM library_transactions WHERE id = ?', [id]);
-        
-        // Update status and increment book count
-        await db.query('UPDATE library_transactions SET status = "returned", actual_return_date = NOW() WHERE id = ?', [id]);
-        await db.query('UPDATE library_books SET available_copies = available_copies + 1 WHERE id = ?', [trans[0].book_id]);
-        
-        res.json({ message: 'Book returned successfully.' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-});
-// 5. GET LIBRARY STATS (Admin Dashboard)
-app.get('/api/library/stats', verifyToken, isAdmin, async (req, res) => {
-    try {
-        // Strict counts logic:
-        // Pending = status 'pending'
-        // Overdue = status 'approved' AND date passed
-        // Issued  = status 'approved' AND date NOT passed (Strict separation)
-        const query = `
-            SELECT 
-                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
-                COUNT(CASE WHEN status = 'approved' AND expected_return_date < CURDATE() THEN 1 END) AS overdue,
-                COUNT(CASE WHEN status = 'approved' AND expected_return_date >= CURDATE() THEN 1 END) AS issued
-            FROM library_transactions
-        `;
-        
-        const [rows] = await db.query(query);
-        res.json(rows[0]); 
-    } catch (error) {
-        console.error("Stats Error:", error);
-        res.status(500).json({ message: "Failed to fetch stats" });
-    }
-});
-// 1. ACTION ENDPOINT (Fixes: Admin can now Approve/Reject)
+// 3. APPROVE OR REJECT REQUEST (Admin Action)
+// Logic: 
+// - If Approved: Deduct 1 book copy, set status 'approved'.
+// - If Rejected: Just set status 'rejected'.
 app.put('/api/library/admin/request-action/:id', verifyToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const { action } = req.body; // 'approved' or 'rejected'
@@ -9427,19 +9373,14 @@ app.put('/api/library/admin/request-action/:id', verifyToken, isAdmin, async (re
     }
 
     try {
-        // If rejected, we might want to release the book copy count immediately?
-        // Your current logic deducts copies only when "borrowed" (physically taken) or reserved?
-        // Current logic: Logic dictates copies are deducted on 'issued'. 
-        // NOTE: In your POST request, you check copies but don't deduct them. 
-        // We should deduct available_copies when status becomes 'approved'.
-        
         if (action === 'approved') {
+            // Get transaction to find book_id
             const [trans] = await db.query('SELECT book_id FROM library_transactions WHERE id = ?', [id]);
             if (!trans.length) return res.status(404).json({ message: 'Transaction not found' });
             
             const bookId = trans[0].book_id;
             
-            // Check copies one last time
+            // Check copies one last time before approving
             const [book] = await db.query('SELECT available_copies FROM library_books WHERE id = ?', [bookId]);
             if (book[0].available_copies <= 0) {
                  return res.status(400).json({ message: 'Cannot approve: Book is out of stock.' });
@@ -9449,7 +9390,7 @@ app.put('/api/library/admin/request-action/:id', verifyToken, isAdmin, async (re
             await db.query('UPDATE library_books SET available_copies = available_copies - 1 WHERE id = ?', [bookId]);
             await db.query('UPDATE library_transactions SET status = ? WHERE id = ?', ['approved', id]);
         } else {
-            // If rejected, just update status
+            // If rejected, just update status (No copy change)
             await db.query('UPDATE library_transactions SET status = ? WHERE id = ?', ['rejected', id]);
         }
 
@@ -9460,7 +9401,26 @@ app.put('/api/library/admin/request-action/:id', verifyToken, isAdmin, async (re
     }
 });
 
-// 2. HISTORY ENDPOINT (For the new separate screen)
+// 4. RETURN BOOK (Admin Action)
+// Logic: Adds 1 book copy back, moves transaction to 'returned' history.
+app.put('/api/library/return/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [trans] = await db.query('SELECT book_id FROM library_transactions WHERE id = ?', [id]);
+        if (!trans.length) return res.status(404).json({ message: 'Transaction not found' });
+
+        // Update status and increment book count
+        await db.query('UPDATE library_transactions SET status = "returned", actual_return_date = NOW() WHERE id = ?', [id]);
+        await db.query('UPDATE library_books SET available_copies = available_copies + 1 WHERE id = ?', [trans[0].book_id]);
+        
+        res.json({ message: 'Book returned successfully.' });
+    } catch (error) {
+        console.error("Return Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// 5. GET HISTORY (Returned Books Only)
 app.get('/api/library/admin/history', verifyToken, isAdmin, async (req, res) => {
     try {
         const query = `
@@ -9479,6 +9439,26 @@ app.get('/api/library/admin/history', verifyToken, isAdmin, async (req, res) => 
         res.status(500).json({ message: error.message });
     }
 });
+
+// 6. GET DASHBOARD STATS
+app.get('/api/library/stats', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
+                COUNT(CASE WHEN status = 'approved' AND expected_return_date < CURDATE() THEN 1 END) AS overdue,
+                COUNT(CASE WHEN status = 'approved' AND expected_return_date >= CURDATE() THEN 1 END) AS issued
+            FROM library_transactions
+        `;
+        
+        const [rows] = await db.query(query);
+        res.json(rows[0]); 
+    } catch (error) {
+        console.error("Stats Error:", error);
+        res.status(500).json({ message: "Failed to fetch stats" });
+    }
+});
+
 
 
 
