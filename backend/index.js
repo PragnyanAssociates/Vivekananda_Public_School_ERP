@@ -9417,6 +9417,68 @@ app.get('/api/library/stats', verifyToken, isAdmin, async (req, res) => {
         res.status(500).json({ message: "Failed to fetch stats" });
     }
 });
+// 1. ACTION ENDPOINT (Fixes: Admin can now Approve/Reject)
+app.put('/api/library/admin/request-action/:id', verifyToken, isAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { action } = req.body; // 'approved' or 'rejected'
+
+    if (!['approved', 'rejected'].includes(action)) {
+        return res.status(400).json({ message: 'Invalid action' });
+    }
+
+    try {
+        // If rejected, we might want to release the book copy count immediately?
+        // Your current logic deducts copies only when "borrowed" (physically taken) or reserved?
+        // Current logic: Logic dictates copies are deducted on 'issued'. 
+        // NOTE: In your POST request, you check copies but don't deduct them. 
+        // We should deduct available_copies when status becomes 'approved'.
+        
+        if (action === 'approved') {
+            const [trans] = await db.query('SELECT book_id FROM library_transactions WHERE id = ?', [id]);
+            if (!trans.length) return res.status(404).json({ message: 'Transaction not found' });
+            
+            const bookId = trans[0].book_id;
+            
+            // Check copies one last time
+            const [book] = await db.query('SELECT available_copies FROM library_books WHERE id = ?', [bookId]);
+            if (book[0].available_copies <= 0) {
+                 return res.status(400).json({ message: 'Cannot approve: Book is out of stock.' });
+            }
+
+            // Deduct 1 copy and update status
+            await db.query('UPDATE library_books SET available_copies = available_copies - 1 WHERE id = ?', [bookId]);
+            await db.query('UPDATE library_transactions SET status = ? WHERE id = ?', ['approved', id]);
+        } else {
+            // If rejected, just update status
+            await db.query('UPDATE library_transactions SET status = ? WHERE id = ?', ['rejected', id]);
+        }
+
+        res.json({ message: `Request ${action} successfully` });
+    } catch (error) {
+        console.error("Action Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// 2. HISTORY ENDPOINT (For the new separate screen)
+app.get('/api/library/admin/history', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT t.*, 
+                   b.title as book_title, 
+                   b.book_no 
+            FROM library_transactions t
+            LEFT JOIN library_books b ON t.book_id = b.id
+            WHERE t.status = 'returned'
+            ORDER BY t.actual_return_date DESC
+        `;
+        const [history] = await db.query(query);
+        res.json(history);
+    } catch (error) {
+        console.error("History Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
 
 
 
