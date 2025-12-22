@@ -9294,6 +9294,7 @@ app.delete('/api/library/books/:id', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+
 // Borrow details 
 // 1. SUBMIT BORROW REQUEST
 app.post('/api/library/request', verifyToken, async (req, res) => {
@@ -9317,15 +9318,19 @@ app.post('/api/library/request', verifyToken, async (req, res) => {
     }
 });
 
-// 2. ADMIN: GET ALL PENDING REQUESTS
+// 2. ADMIN: GET ALL REQUESTS (Updated with LEFT JOIN)
 app.get('/api/library/admin/requests', verifyToken, isAdmin, async (req, res) => {
     try {
+        // Use LEFT JOIN so if a book is deleted, we still see the request
         const query = `
-            SELECT t.*, b.title as book_title, b.book_no 
+            SELECT t.*, 
+                   COALESCE(b.title, 'Unknown Book (Deleted)') as book_title, 
+                   COALESCE(b.book_no, 'N/A') as book_no 
             FROM library_transactions t
-            JOIN library_books b ON t.book_id = b.id
+            LEFT JOIN library_books b ON t.book_id = b.id
             WHERE t.status != 'returned'
             ORDER BY t.created_at DESC`;
+            
         const [requests] = await db.query(query);
         res.json(requests);
     } catch (error) {
