@@ -9321,11 +9321,16 @@ app.post('/api/library/request', verifyToken, async (req, res) => {
 // 2. ADMIN: GET ALL REQUESTS (Updated with LEFT JOIN)
 app.get('/api/library/admin/requests', verifyToken, isAdmin, async (req, res) => {
     try {
-        // Use LEFT JOIN so if a book is deleted, we still see the request
+        // We calculate 'is_overdue' directly in SQL:
+        // If status is approved AND return date is in the past, it returns 1 (true)
         const query = `
             SELECT t.*, 
-                   COALESCE(b.title, 'Unknown Book (Deleted)') as book_title, 
-                   COALESCE(b.book_no, 'N/A') as book_no 
+                   COALESCE(b.title, 'Unknown Book') as book_title, 
+                   COALESCE(b.book_no, 'N/A') as book_no,
+                   CASE 
+                       WHEN t.status = 'approved' AND t.expected_return_date < CURDATE() THEN 1 
+                       ELSE 0 
+                   END as is_overdue
             FROM library_transactions t
             LEFT JOIN library_books b ON t.book_id = b.id
             WHERE t.status != 'returned'
@@ -9334,6 +9339,7 @@ app.get('/api/library/admin/requests', verifyToken, isAdmin, async (req, res) =>
         const [requests] = await db.query(query);
         res.json(requests);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: error.message });
     }
 });
@@ -9376,17 +9382,20 @@ app.put('/api/library/return/:id', verifyToken, async (req, res) => {
 // 5. GET LIBRARY STATS (Admin Dashboard)
 app.get('/api/library/stats', verifyToken, isAdmin, async (req, res) => {
     try {
-        // Calculate counts using SQL conditional aggregation
+        // Strict counts logic:
+        // Pending = status 'pending'
+        // Overdue = status 'approved' AND date passed
+        // Issued  = status 'approved' AND date NOT passed (Strict separation)
         const query = `
             SELECT 
-                COUNT(CASE WHEN status = 'approved' THEN 1 END) AS issued,
                 COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
-                COUNT(CASE WHEN status = 'approved' AND expected_return_date < CURDATE() THEN 1 END) AS overdue
+                COUNT(CASE WHEN status = 'approved' AND expected_return_date < CURDATE() THEN 1 END) AS overdue,
+                COUNT(CASE WHEN status = 'approved' AND expected_return_date >= CURDATE() THEN 1 END) AS issued
             FROM library_transactions
         `;
         
         const [rows] = await db.query(query);
-        res.json(rows[0]); // Returns { issued: 10, pending: 5, overdue: 2 }
+        res.json(rows[0]); 
     } catch (error) {
         console.error("Stats Error:", error);
         res.status(500).json({ message: "Failed to fetch stats" });
