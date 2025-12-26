@@ -49,6 +49,8 @@ import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
 import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 
+import MyPerformance from '../screens/report/MyPerformance';
+
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
 const CONTENT_HORIZONTAL_PADDING = 15;
@@ -100,7 +102,8 @@ const StudentDashboard = ({ navigation }) => {
   const allQuickAccessItems = [
     { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
     { id: 'qa3', title: 'Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-     { id: 'qa32', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
+    { id: 'qa32', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
+    { id: 'qa32', title: 'My Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/3696/3696744.png', navigateToTab: 'MyPerformance' },
     // { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
     // { id: 'qa28', title: 'Extracurricular Activities', imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png', navigateToTab: 'ActivitiesScreen' },
     { id: 'qa14', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateTo: 'StudentHomework' },
@@ -204,6 +207,7 @@ const StudentDashboard = ({ navigation }) => {
       case 'DictionaryScreen': return ( <><ContentScreenHeader title="Dictionary" onBack={handleBack} /><DictionaryScreen /></> );
       case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleBack} /><TransportScreen /></> );
       case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleBack} /><LibraryHomeScreen /></> );
+      case 'MyPerformance': return ( <><ContentScreenHeader title="My Performance" onBack={handleBack} /><MyPerformance /></> );
       
 
       default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );

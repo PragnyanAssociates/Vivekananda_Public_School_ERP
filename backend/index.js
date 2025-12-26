@@ -7150,6 +7150,61 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
 
 
 
+// --- NEW STUDENT PERFORMANCE ROUTE ---
+
+// GET: specific class data for the logged-in student (For Performance Graph)
+app.get('/api/reports/student-class-performance', verifyToken, async (req, res) => {
+    const studentId = req.user.id; // Get ID from the logged-in token
+    const academicYear = getCurrentAcademicYear(); // Helper function from your existing code
+
+    try {
+        // 1. Get the Class Group of the logged-in student
+        const [userResult] = await db.query(
+            "SELECT class_group FROM users WHERE id = ?", 
+            [studentId]
+        );
+
+        if (userResult.length === 0 || !userResult[0].class_group) {
+            return res.status(404).json({ message: "Class group not found for this student." });
+        }
+
+        const classGroup = userResult[0].class_group;
+
+        // 2. Fetch all students in that class (Needed to calculate Ranks)
+        const [students] = await db.query(
+            `SELECT 
+                u.id, 
+                u.full_name, 
+                COALESCE(up.roll_no, u.username) as roll_no
+            FROM users u
+            LEFT JOIN user_profiles up ON u.id = up.user_id
+            WHERE u.role = 'student' AND u.class_group = ? 
+            ORDER BY u.full_name`,
+            [classGroup]
+        );
+
+        if (students.length === 0) {
+            return res.json({ students: [], marks: [] });
+        }
+
+        const studentIds = students.map(s => s.id);
+
+        // 3. Fetch marks for the whole class (Needed to calculate Topper/Least)
+        const [marks] = await db.query(
+            "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?) AND academic_year = ?",
+            [studentIds, academicYear]
+        );
+
+        // Return the data in the same structure the frontend expects
+        res.json({ students, marks, currentUserClass: classGroup });
+
+    } catch (error) {
+        console.error("Error fetching student class performance:", error);
+        res.status(500).json({ message: "Failed to fetch performance data" });
+    }
+});
+
+
 
 
 // ===============================================================

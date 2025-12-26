@@ -137,6 +137,9 @@ import AdminActionScreen from './src/screens/library/AdminActionScreen';
 import BorrowRequestScreen from './src/screens/library/BorrowRequestScreen';
 import LibraryHistoryScreen from './src/screens/library/LibraryHistoryScreen';
 import MyBooksScreen from './src/screens/library/MyBooksScreen';
+
+
+import MyPerformance from './src/screens/report/MyPerformance';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -333,6 +336,7 @@ const AuthenticatedStack = () => {
 
       <Stack.Screen name="TeacherPerformanceScreen" component={TeacherPerformanceScreen} />
       <Stack.Screen name="StudentPerformance" component={StudentPerformance} />
+      <Stack.Screen name="MyPerformance" component={MyPerformance} />
       <Stack.Screen name="ReportScreen" component={ReportNavigator} options={{ headerShown: false, 
           title: 'Progress Reports',
           headerStyle: { backgroundColor: '#e0f2f7' },

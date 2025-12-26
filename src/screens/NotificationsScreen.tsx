@@ -47,11 +47,11 @@ const notificationIcons = {
   kitchen: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png',
   chat: 'https://cdn-icons-png.flaticon.com/128/13819/13819448.png',
   'online-class': 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png',
-  attendance: 'https://cdn-icons-png.flaticon.com/128/992/992683.png', // New icon
+  attendance: 'https://cdn-icons-png.flaticon.com/128/992/992683.png',
 };
 
-const getIconForTitle = (title: string = '') => {
-    const lowerCaseTitle = title.toLowerCase();
+const getIconForTitle = (title) => {
+    const lowerCaseTitle = (title || '').toLowerCase();
     if (lowerCaseTitle.includes('homework') || lowerCaseTitle.includes('assignment')) return notificationIcons.homework;
     if (lowerCaseTitle.includes('submit') || lowerCaseTitle.includes('submission')) return notificationIcons.submission;
     if (lowerCaseTitle.includes('event')) return notificationIcons.event;
@@ -70,14 +70,46 @@ const getIconForTitle = (title: string = '') => {
     return notificationIcons.default;
 };
 
+// ★★★ CORRECTED DATE FORMATTER ★★★
+const formatNotificationTime = (dateInput) => {
+  if (!dateInput) return '';
+  try {
+      // 1. If backend returns a JS Date object (some drivers do)
+      if (dateInput instanceof Date) {
+          return format(dateInput, "MMM d, yyyy - h:mm a");
+      }
+
+      // 2. If backend returns a String
+      let dateString = String(dateInput);
+
+      // 3. Fix MySQL Date String "YYYY-MM-DD HH:MM:SS"
+      // If it doesn't have a 'T' (ISO format) or 'Z' (UTC), we assume it's UTC 
+      // and force the browser/phone to treat it as such.
+      if (dateString.indexOf('T') === -1 && dateString.indexOf('Z') === -1) {
+         // Converts "2025-01-05 10:00:00" -> "2025-01-05T10:00:00Z"
+         dateString = dateString.replace(' ', 'T') + 'Z';
+      }
+
+      const date = new Date(dateString);
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) return String(dateInput);
+
+      return format(date, "MMM d, yyyy - h:mm a");
+  } catch (e) {
+      console.error("Date parsing error", e);
+      return String(dateInput);
+  }
+};
+
 const NotificationsScreen = ({ onUnreadCountChange }) => {
-  const navigation = useNavigation<any>(); 
+  const navigation = useNavigation(); 
   const { user } = useAuth(); 
   const [filterStatus, setFilterStatus] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -104,11 +136,9 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   };
 
   const handleNotificationPress = async (notification) => {
-    // Mark notification as read on the server
     if (!notification.is_read) {
         try {
             await apiClient.put(`/notifications/${notification.id}/read`);
-            // Update UI immediately
             setNotifications(prev =>
                 prev.map(n => n.id === notification.id ? { ...n, is_read: 1 } : n)
             );
@@ -117,10 +147,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         }
     }
 
-    if (!notification.link) {
-        console.log("Notification has no link to navigate to.");
-        return;
-    }
+    if (!notification.link) return;
 
     try {
         const parts = notification.link.split('/').filter(Boolean);
@@ -130,83 +157,35 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         const param1 = parts[1];
         const param2 = parts[2];
 
-        console.log(`Navigating to screen: '${screen}' with params:`, param1, param2);
-
-        // --- ✅ ADDED TEACHER ATTENDANCE CASES ✅ ---
         if (user?.role === 'teacher' && (screen === 'teacher-attendance' || screen === 'my-attendance-report')) {
             return navigation.navigate('TeacherAttendanceReportScreen');
         }
         if (user?.role === 'admin' && (screen === 'teacher-attendance')) {
             return navigation.navigate('TeacherAttendanceMarkingScreen');
         }
-        // --- END NEW CASES ---
         
         switch (screen) {
-            // Core Features
-            case 'calendar':
-                navigation.navigate('AcademicCalendar');
-                break;
-            case 'timetable':
-                // Timetable updates link to the main Timetable screen
-                navigation.navigate('TimetableScreen');
-                break;
-                
+            case 'calendar': navigation.navigate('AcademicCalendar'); break;
+            case 'timetable': navigation.navigate('TimetableScreen'); break;
             case 'my-attendance':
-            case 'attendance':
-                // Student/Teacher/Admin attendance notifications link to the Attendance screen
-                navigation.navigate('Attendance');
-                break;
-
+            case 'attendance': navigation.navigate('Attendance'); break;
             case 'chat':
-            case 'groupchat':
-                 navigation.navigate('GroupChatScreen');
-                 break;
-            case 'online-class':
-                navigation.navigate('OnlineClassScreen');
-                break;
-
-            // Nested Navigators
+            case 'groupchat': navigation.navigate('GroupChatScreen'); break;
+            case 'online-class': navigation.navigate('OnlineClassScreen'); break;
             case 'gallery':
-                navigation.navigate('Gallery', {
-                    screen: 'AlbumDetail',
-                    params: { title: param1 } 
-                });
+                navigation.navigate('Gallery', { screen: 'AlbumDetail', params: { title: param1 } });
                 break;
-            case 'homework':
-                navigation.navigate('StudentHomework', { screen: 'HomeworkList' });
-                break;
-
-            // Role-based Screens 
-            case 'events':
-                navigation.navigate(user?.role === 'admin' ? 'AdminEventsScreen' : 'StudentEventsScreen');
-                break;
+            case 'homework': navigation.navigate('StudentHomework', { screen: 'HomeworkList' }); break;
+            case 'events': navigation.navigate(user?.role === 'admin' ? 'AdminEventsScreen' : 'StudentEventsScreen'); break;
             case 'health':
-            case 'health-info':
-                navigation.navigate(user?.role === 'teacher' ? 'TeacherHealthAdminScreen' : 'StudentHealthScreen');
-                break;
-            case 'exam-schedule':
-                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamScreen' : 'StudentExamScreen');
-                break;
-            case 'exams':
-                 navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamsScreen' : 'StudentExamsScreen');
-                 break;
-            case 'materials':
-                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminMaterialsScreen' : 'StudentMaterialsScreen');
-                break;
-            case 'syllabus':
-                 navigation.navigate(user?.role === 'teacher' ? 'TeacherSyllabusScreen' : 'StudentSyllabusScreen');
-                 break;
-             case 'resources':
-                 navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResourcesScreen' : 'StudentResourcesScreen');
-                 break;
-            case 'ptm':
-                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminPTMScreen' : 'StudentPTMScreen');
-                break;
-            case 'labs':
-                navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminLabsScreen' : 'StudentLabsScreen');
-                break;
-
-            // Results and Reports
+            case 'health-info': navigation.navigate(user?.role === 'teacher' ? 'TeacherHealthAdminScreen' : 'StudentHealthScreen'); break;
+            case 'exam-schedule': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamScreen' : 'StudentExamScreen'); break;
+            case 'exams': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminExamsScreen' : 'StudentExamsScreen'); break;
+            case 'materials': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminMaterialsScreen' : 'StudentMaterialsScreen'); break;
+            case 'syllabus': navigation.navigate(user?.role === 'teacher' ? 'TeacherSyllabusScreen' : 'StudentSyllabusScreen'); break;
+            case 'resources': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResourcesScreen' : 'StudentResourcesScreen'); break;
+            case 'ptm': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminPTMScreen' : 'StudentPTMScreen'); break;
+            case 'labs': navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminLabsScreen' : 'StudentLabsScreen'); break;
             case 'reports':
                 if (param1 === 'report' && param2) {
                     navigation.navigate('ReportDetailScreen', { reportId: parseInt(param2, 10) });
@@ -214,41 +193,24 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
                     navigation.navigate(user?.role === 'teacher' ? 'TeacherAdminResultsScreen' : 'StudentResultsScreen');
                 }
                 break;
-
-            // Teacher/Admin specific
-            case 'submissions': 
-                navigation.navigate('TeacherAdminHomeworkScreen');
-                break;
-            case 'leave': 
-                 navigation.navigate('AdminLM');
-                 break;
-             case 'ads': 
-                 navigation.navigate('AdminAdDashboardScreen');
-                 break;
-
-            // Other Features
-              case 'food-menu':
-              case 'food':
-              navigation.navigate('FoodScreen');
-              break;
-            case 'kitchen':
-            navigation.navigate('KitchenScreen');
-            break;
-
+            case 'submissions': navigation.navigate('TeacherAdminHomeworkScreen'); break;
+            case 'leave': navigation.navigate('AdminLM'); break;
+            case 'ads': navigation.navigate('AdminAdDashboardScreen'); break;
+            case 'food-menu':
+            case 'food': navigation.navigate('FoodScreen'); break;
+            case 'kitchen': navigation.navigate('KitchenScreen'); break;
             default:
                 Alert.alert("Navigation", `This notification type (${screen}) doesn't have a configured screen.`);
-                console.warn(`No navigation route configured for link: ${notification.link}`);
         }
     } catch (e) {
-        console.error("Navigation error:", e);
-        Alert.alert("Navigation Error", "Could not open the linked page. The screen may not exist.");
+        Alert.alert("Navigation Error", "Could not open the linked page.");
     }
   };
 
   const filteredNotifications = notifications.filter(notification => {
     if (filterStatus === 'unread') return !notification.is_read;
     if (filterStatus === 'read') return notification.is_read;
-    return true; // for 'all'
+    return true;
   });
 
   const renderContent = () => {
@@ -274,8 +236,9 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         <View style={styles.notificationContent}>
           <Text style={styles.notificationTitle}>{notification.title}</Text>
           <Text style={styles.notificationMessage}>{notification.message}</Text>
+          {/* Use the new formatter */}
           <Text style={styles.notificationDate}>
-            {format(new Date(notification.created_at), "MMM d, yyyy - h:mm a")}
+            {formatNotificationTime(notification.created_at)}
           </Text>
         </View>
       </TouchableOpacity>
