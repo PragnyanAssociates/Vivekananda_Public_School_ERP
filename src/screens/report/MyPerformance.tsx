@@ -1,16 +1,22 @@
 /**
  * File: src/screens/report/MyPerformance.tsx
- * Purpose: Student view to compare their performance against Class Topper and Least scorer.
+ * Purpose: Student view to compare performance.
+ * Features: 
+ *  1. Single Subject View: Topper vs Me.
+ *  2. Overview Mode: All subjects side-by-side.
+ *  3. Displays Rank, Marks, and Percentage.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
-    ScrollView, Animated, Easing, RefreshControl
+    ScrollView, Animated, Easing, RefreshControl, Dimensions
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
 
 // --- Constants ---
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
 const CLASS_SUBJECTS: any = {
     'LKG': ['All Subjects'], 'UKG': ['All Subjects'],
     'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
@@ -42,60 +48,136 @@ const EXAM_OPTIONS = ['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3'
 
 const COLORS = {
     primary: '#00897B',
-    background: '#FFFFFF',
+    background: '#F5F7FA',
+    cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
-    success: '#43A047',    // > 90%
-    average: '#1E88E5',    // 60-90%
-    poor: '#E53935',       // < 60%
+    success: '#43A047',    // Green
+    average: '#1976D2',    // Blue
+    poor: '#E53935',       // Red
     barBase: '#ECEFF1',
-    border: '#CFD8DC'
+    border: '#CFD8DC',
+    selectedChip: '#1976D2', // Blue for selected subject
+    overviewChip: '#292828ff'  // Red for Overview button
 };
 
-// --- ANIMATED BAR COMPONENT ---
-const PerformanceBar = ({ data, label, height = 250, isMe = false }: any) => {
+// --- HELPER: Calculate Stats for One Subject ---
+const calculateStatsForSubject = (
+    subject: string, 
+    examType: string, 
+    students: any[], 
+    marks: any[], 
+    myId: number, 
+    isSeniorClass: boolean
+) => {
+    // 1. Calculate score for every student in this subject
+    const classResults = students.map((student: any) => {
+        let totalObtained = 0;
+        let totalPossible = 0;
+        const studentMarks = marks.filter((m: any) => m.student_id === student.id);
+
+        if (subject === 'All Subjects') {
+             // (Logic handled in main component for aggregation usually, but keeping structure safe)
+        } else {
+            if (examType === 'Overall') {
+                EXAM_OPTIONS.slice(1).forEach(examName => {
+                    const code = EXAM_NAME_TO_CODE[examName];
+                    const entry = studentMarks.find((m: any) => m.subject === subject && EXAM_NAME_TO_CODE[m.exam_type] === code);
+                    if (entry && entry.marks_obtained) {
+                         const val = parseFloat(entry.marks_obtained);
+                         if(!isNaN(val)) {
+                            totalObtained += val;
+                            if(['SA1','SA2','Pre-Final'].includes(code)) totalPossible += 100;
+                            else totalPossible += (isSeniorClass ? 20 : 25);
+                         }
+                    }
+                });
+            } else {
+                const entry = studentMarks.find((m: any) => m.subject === subject && EXAM_NAME_TO_CODE[m.exam_type] === examType);
+                if (entry && entry.marks_obtained) {
+                     const val = parseFloat(entry.marks_obtained);
+                     if(!isNaN(val)) {
+                        totalObtained += val;
+                        if(['SA1','SA2','Pre-Final'].includes(examType)) totalPossible += 100;
+                        else totalPossible += (isSeniorClass ? 20 : 25);
+                     }
+                }
+            }
+        }
+
+        const percentage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
+        return {
+            id: student.id,
+            obtained: totalObtained,
+            total: totalPossible,
+            percentage: percentage
+        };
+    });
+
+    // 2. Sort & Rank
+    classResults.sort((a: any, b: any) => b.obtained - a.obtained);
+    const rankedResults = classResults.map((item: any, index: number) => ({ ...item, rank: index + 1 }));
+
+    // 3. Extract Topper & Me
+    const topper = rankedResults[0] || { obtained: 0, percentage: 0, rank: '-', total: 0 };
+    const me = rankedResults.find((r: any) => r.id === myId) || { obtained: 0, percentage: 0, rank: '-', total: 0 };
+
+    return { topper, me };
+};
+
+
+// --- COMPONENT: ANIMATED BAR ---
+const PerformanceBar = ({ data, label, color, showRank = true, slim = false }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         Animated.timing(animatedHeight, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: false,
-            easing: Easing.out(Easing.exp),
+            toValue: 1, duration: 1000, useNativeDriver: false, easing: Easing.out(Easing.back(1.5)), 
         }).start();
     }, [data.percentage]);
 
-    // Color Logic
-    let barColor = COLORS.poor;
-    if (data.percentage >= 90) barColor = COLORS.success;
-    else if (data.percentage >= 60) barColor = COLORS.average;
-
     const fillHeight = animatedHeight.interpolate({
         inputRange: [0, 1],
-        outputRange: ['0%', `${data.percentage}%`]
+        outputRange: ['0%', `${Math.min(data.percentage, 100)}%`]
     });
 
+    // Determine Color based on strict percentage logic for the TEXT
+    let percentageColor = COLORS.poor;
+    if (data.percentage >= 90) percentageColor = COLORS.success;
+    else if (data.percentage >= 60) percentageColor = COLORS.average;
+
+    const labelSize = slim ? 11 : 13;
+    const marksSize = slim ? 14 : 18;
+
     return (
-        <View style={styles.barContainer}>
-            {/* Stats Header above bar */}
-            <View style={styles.statsContainer}>
-                <Text style={styles.statLabel}>Rank</Text>
-                <Text style={styles.statValue}>#{data.rank}</Text>
+        <View style={slim ? styles.barWrapperSlim : styles.barWrapper}>
+            {/* Header: Rank, Marks, Percentage */}
+            <View style={styles.statsHeader}>
+                {showRank && (
+                    <View style={styles.rankBadge}>
+                        <Text style={styles.rankText}>#{data.rank}</Text>
+                    </View>
+                )}
                 
-                <Text style={[styles.statLabel, { marginTop: 4 }]}>Marks</Text>
-                <Text style={styles.statValue}>{Math.round(data.obtained)}</Text>
-                
-                <Text style={[styles.statLabel, { marginTop: 4 }]}>%</Text>
-                <Text style={[styles.statValue, { color: barColor }]}>{Math.round(data.percentage)}%</Text>
+                {/* Marks */}
+                <View style={styles.marksContainer}>
+                    <Text style={[styles.marksText, { fontSize: marksSize }]}>{Math.round(data.obtained)}</Text>
+                    <Text style={[styles.totalMarksText, { fontSize: slim ? 10 : 13 }]}>/{Math.round(data.total)}</Text>
+                </View>
+
+                {/* Percentage Display */}
+                <Text style={[styles.percentageText, { color: percentageColor, fontSize: slim ? 10 : 12 }]}>
+                    {Math.round(data.percentage)}%
+                </Text>
             </View>
 
-            {/* The Bar */}
-            <View style={[styles.barTrack, { height: height }]}>
-                <Animated.View style={[styles.barFill, { height: fillHeight, backgroundColor: barColor }]} />
+            {/* Track - UPDATED WIDTH HERE: slim uses 80% (of small container), normal uses 40% (slimmed down) */}
+            <View style={[styles.barTrack, { height: slim ? '60%' : '65%', width: slim ? '80%' : '40%' }]}>
+                <Animated.View style={[styles.barFill, { height: fillHeight, backgroundColor: color }]} />
             </View>
 
-            {/* Label (Who is this?) */}
-            <Text style={[styles.barLabel, isMe && styles.barLabelMe]} numberOfLines={2}>
+            {/* Label */}
+            <Text style={[styles.barLabel, { fontSize: labelSize, color: label === 'My Marks' ? COLORS.average : COLORS.textSub }]} numberOfLines={1}>
                 {label}
             </Text>
         </View>
@@ -103,167 +185,100 @@ const PerformanceBar = ({ data, label, height = 250, isMe = false }: any) => {
 };
 
 const MyPerformance = () => {
-    
-    // State
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     
-    // User Data
-    const [myInfo, setMyInfo] = useState<any>(null); // Stores ID and Class info
-    const [classData, setClassData] = useState<any>(null); // Stores Raw Class Data
+    const [myInfo, setMyInfo] = useState<any>(null); 
+    const [classData, setClassData] = useState<any>(null); 
     
-    // Filters
     const [selectedExam, setSelectedExam] = useState('Overall');
     const [selectedSubject, setSelectedSubject] = useState('All Subjects');
 
-    // --- 1. Fetch Data ---
     const fetchData = async () => {
         setLoading(true);
         try {
-            // ★★★ UPDATED: Fetch from the new Student-Specific Endpoint ★★★
             const response = await apiClient.get('/reports/student-class-performance');
-            
-            // The new API returns { students, marks, currentUserClass }
             setClassData(response.data);
-
-            // We also need to know "Who am I?" (My ID) to find myself in the list.
-            // We can get this from a separate call, OR you can store user ID in global context.
-            // For safety, let's just get the basic profile again or rely on the fact 
-            // that we need to identify the current user ID. 
-            // Let's call my-report-card just to get the ID safely if not in context.
             const profileRes = await apiClient.get('/reports/my-report-card');
             setMyInfo(profileRes.data.studentInfo);
-
         } catch (error) {
-            console.error('Error fetching performance data:', error);
+            console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    useEffect(() => { fetchData(); }, []);
+    const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-    const onRefresh = () => {
-        setRefreshing(true);
-        fetchData();
-    };
-
-    // --- 2. Calculation Logic ---
-    const graphData = useMemo(() => {
+    const processedData = useMemo(() => {
         if (!myInfo || !classData || !classData.students) return null;
 
         const { students, marks, currentUserClass } = classData;
         const myId = myInfo.id;
-        
-        // Use the class from API or fallback to profile
         const currentClassGroup = currentUserClass || myInfo.class_group;
         const isSeniorClass = SENIOR_CLASSES.includes(currentClassGroup);
+        const subjectsList = CLASS_SUBJECTS[currentClassGroup] || [];
 
-        // Helper: Calculate stats for a single student based on current filters
-        const calculateStudentStats = (studentId: number) => {
-            let totalObtained = 0;
-            let totalPossible = 0;
-
-            const studentMarks = marks.filter((m: any) => m.student_id === studentId);
-
+        if (selectedSubject === 'Overview') {
+            const overviewResults = subjectsList.map((subj: string) => {
+                if (subj === 'All Subjects') return null;
+                const stats = calculateStatsForSubject(subj, selectedExam, students, marks, myId, isSeniorClass);
+                return { subject: subj, ...stats };
+            }).filter(Boolean);
+            return { mode: 'Overview', data: overviewResults };
+        } else {
             if (selectedSubject === 'All Subjects') {
-                const relevantSubjects = CLASS_SUBJECTS[currentClassGroup] || [];
-                
-                if (selectedExam === 'Overall') {
-                    relevantSubjects.forEach((subj: string) => {
-                         EXAM_OPTIONS.slice(1).forEach(examName => { 
-                             const code = EXAM_NAME_TO_CODE[examName];
-                             const entry = studentMarks.find((m: any) => m.subject === subj && EXAM_NAME_TO_CODE[m.exam_type] === code);
-                             
-                             if (entry && entry.marks_obtained) {
+                const classResults = students.map((student: any) => {
+                    let totalObtained = 0;
+                    let totalPossible = 0;
+                    const studentMarks = marks.filter((m: any) => m.student_id === student.id);
+
+                    subjectsList.forEach((s: string) => {
+                         if (s === 'All Subjects') return;
+                         if (selectedExam === 'Overall') {
+                            EXAM_OPTIONS.slice(1).forEach(examName => {
+                                const code = EXAM_NAME_TO_CODE[examName];
+                                const entry = studentMarks.find((m: any) => m.subject === s && EXAM_NAME_TO_CODE[m.exam_type] === code);
+                                if (entry && entry.marks_obtained) {
+                                     const val = parseFloat(entry.marks_obtained);
+                                     if(!isNaN(val)) {
+                                        totalObtained += val;
+                                        if(['SA1','SA2','Pre-Final'].includes(code)) totalPossible += 100;
+                                        else totalPossible += (isSeniorClass ? 20 : 25);
+                                     }
+                                }
+                            });
+                         } else {
+                            const entry = studentMarks.find((m: any) => m.subject === s && EXAM_NAME_TO_CODE[m.exam_type] === selectedExam);
+                            if (entry && entry.marks_obtained) {
                                  const val = parseFloat(entry.marks_obtained);
                                  if(!isNaN(val)) {
                                     totalObtained += val;
-                                    if(['SA1','SA2','Pre-Final'].includes(code)) totalPossible += 100;
+                                    if(['SA1','SA2','Pre-Final'].includes(selectedExam)) totalPossible += 100;
                                     else totalPossible += (isSeniorClass ? 20 : 25);
                                  }
-                             }
-                         });
-                    });
-                } else {
-                    relevantSubjects.forEach((subj: string) => {
-                        const entry = studentMarks.find((m: any) => m.subject === subj && EXAM_NAME_TO_CODE[m.exam_type] === selectedExam);
-                        if (entry && entry.marks_obtained) {
-                             const val = parseFloat(entry.marks_obtained);
-                             if(!isNaN(val)) {
-                                totalObtained += val;
-                                if(['SA1','SA2','Pre-Final'].includes(selectedExam)) totalPossible += 100;
-                                else totalPossible += (isSeniorClass ? 20 : 25);
-                             }
-                        }
-                    });
-                }
-            } else {
-                if (selectedExam === 'Overall') {
-                    EXAM_OPTIONS.slice(1).forEach(examName => {
-                        const code = EXAM_NAME_TO_CODE[examName];
-                        const entry = studentMarks.find((m: any) => m.subject === selectedSubject && EXAM_NAME_TO_CODE[m.exam_type] === code);
-                        if (entry && entry.marks_obtained) {
-                             const val = parseFloat(entry.marks_obtained);
-                             if(!isNaN(val)) {
-                                totalObtained += val;
-                                if(['SA1','SA2','Pre-Final'].includes(code)) totalPossible += 100;
-                                else totalPossible += (isSeniorClass ? 20 : 25);
-                             }
-                        }
-                    });
-                } else {
-                    const entry = studentMarks.find((m: any) => m.subject === selectedSubject && EXAM_NAME_TO_CODE[m.exam_type] === selectedExam);
-                    if (entry && entry.marks_obtained) {
-                         const val = parseFloat(entry.marks_obtained);
-                         if(!isNaN(val)) {
-                            totalObtained += val;
-                            if(['SA1','SA2','Pre-Final'].includes(selectedExam)) totalPossible += 100;
-                            else totalPossible += (isSeniorClass ? 20 : 25);
+                            }
                          }
-                    }
-                }
+                    });
+                    return { id: student.id, obtained: totalObtained, total: totalPossible, percentage: totalPossible > 0 ? (totalObtained/totalPossible)*100 : 0 };
+                });
+                classResults.sort((a: any, b: any) => b.obtained - a.obtained);
+                const ranked = classResults.map((item: any, idx: number) => ({ ...item, rank: idx + 1 }));
+                const topper = ranked[0] || { obtained: 0, percentage: 0, rank: '-', total: 0 };
+                const me = ranked.find((r: any) => r.id === myId) || { obtained: 0, percentage: 0, rank: '-', total: 0 };
+                return { mode: 'Single', data: { topper, me } };
+            } else {
+                const stats = calculateStatsForSubject(selectedSubject, selectedExam, students, marks, myId, isSeniorClass);
+                return { mode: 'Single', data: stats };
             }
-
-            const percentage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
-            return {
-                id: studentId,
-                obtained: totalObtained,
-                total: totalPossible,
-                percentage: percentage
-            };
-        };
-
-        const classResults = students.map((s: any) => {
-            const stats = calculateStudentStats(s.id);
-            return { ...stats, name: s.full_name };
-        });
-
-        // Sort Highest to Lowest
-        classResults.sort((a: any, b: any) => b.obtained - a.obtained);
-
-        // Assign Ranks
-        const rankedResults = classResults.map((item: any, index: number) => ({
-            ...item,
-            rank: index + 1
-        }));
-
-        const topper = rankedResults[0] || { obtained: 0, percentage: 0, rank: '-' };
-        const me = rankedResults.find((r: any) => r.id === myId) || { obtained: 0, percentage: 0, rank: '-' };
-        const least = rankedResults[rankedResults.length - 1] || { obtained: 0, percentage: 0, rank: '-' };
-
-        return { topper, me, least };
-
+        }
     }, [myInfo, classData, selectedExam, selectedSubject]);
 
-
-    // --- 3. Render ---
-    // Safely derive subjects based on the class info we have
     const currentClass = myInfo?.class_group || classData?.currentUserClass;
-    const subjectsList = currentClass ? ['All Subjects', ...(CLASS_SUBJECTS[currentClass] || [])] : [];
+    const rawSubjects = currentClass ? CLASS_SUBJECTS[currentClass] || [] : [];
+    const subjectsToRender = ['All Subjects', ...rawSubjects.filter((s: string) => s !== 'All Subjects'), 'Overview'];
 
     return (
         <View style={styles.container}>
@@ -274,78 +289,104 @@ const MyPerformance = () => {
                     contentContainerStyle={styles.scrollContent}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
-                    
-                    {/* Controls Container */}
-                    <View style={styles.controlsContainer}>
-                        
-                        {/* Exam Type Selector */}
+                    <View style={styles.controlsSection}>
                         <Text style={styles.label}>Select Exam Type :-</Text>
-                        <View style={styles.pickerWrapper}>
+                        <View style={styles.pickerContainer}>
                             <Picker
                                 selectedValue={selectedExam}
-                                onValueChange={(itemValue) => setSelectedExam(itemValue)}
+                                onValueChange={setSelectedExam}
                                 style={styles.picker}
-                                dropdownIconColor={COLORS.primary}
+                                dropdownIconColor={COLORS.textMain}
                             >
-                                {EXAM_OPTIONS.map(exam => (
-                                    <Picker.Item key={exam} label={exam} value={exam} style={{fontSize: 14}} />
-                                ))}
+                                {EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} style={{fontSize: 14}} />)}
                             </Picker>
                         </View>
 
-                        {/* Subject Selector */}
                         <Text style={[styles.label, { marginTop: 20 }]}>Select Subject :-</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subjectScroll}>
-                            {subjectsList.map((subject) => {
+                        <View style={styles.subjectsGrid}>
+                            {subjectsToRender.map((subject) => {
                                 const isSelected = selectedSubject === subject;
+                                const isOverview = subject === 'Overview';
+                                let shortName = subject;
+                                if (subject === 'All Subjects') shortName = 'All';
+                                else if (subject !== 'Overview') shortName = subject.substring(0, 3).toUpperCase();
+                                
                                 return (
                                     <TouchableOpacity
                                         key={subject}
-                                        style={[styles.subjectChip, isSelected && styles.subjectChipActive]}
+                                        style={[
+                                            styles.subjectChip, 
+                                            isSelected && styles.subjectChipActive,
+                                            isOverview && styles.subjectChipOverview
+                                        ]}
                                         onPress={() => setSelectedSubject(subject)}
+                                        activeOpacity={0.7}
                                     >
-                                        <Text style={[styles.subjectText, isSelected && styles.subjectTextActive]}>
-                                            {subject === 'All Subjects' ? 'All' : subject.substring(0, 3).toUpperCase()}
+                                        <Text style={[
+                                            styles.subjectText, 
+                                            isSelected && styles.subjectTextActive,
+                                            isOverview && styles.subjectTextOverview
+                                        ]}>
+                                            {shortName}
                                         </Text>
                                     </TouchableOpacity>
                                 );
                             })}
-                        </ScrollView>
+                        </View>
                     </View>
 
-                    {/* Graph Area */}
                     <View style={styles.graphCard}>
-                        {graphData && (graphData.topper.obtained > 0 || graphData.me.obtained > 0) ? (
-                            <View style={styles.graphRow}>
-                                {/* 1. Topper */}
-                                <PerformanceBar 
-                                    data={graphData.topper} 
-                                    label="Topper" 
-                                />
-
-                                {/* 2. Me */}
-                                <PerformanceBar 
-                                    data={graphData.me} 
-                                    label="My Performance"
-                                    isMe={true} 
-                                />
-
-                                {/* 3. Least */}
-                                <PerformanceBar 
-                                    data={graphData.least} 
-                                    label="Least Marks" 
-                                />
-                            </View>
+                        {!processedData ? (
+                            <Text style={styles.noDataText}>Loading...</Text>
+                        ) : processedData.mode === 'Single' ? (
+                            <>
+                                <View style={styles.singleGraphContainer}>
+                                    <PerformanceBar 
+                                        data={processedData.data.topper} 
+                                        label="Topper" 
+                                        color={COLORS.success} 
+                                    />
+                                    <PerformanceBar 
+                                        data={processedData.data.me} 
+                                        label="My Marks" 
+                                        color={COLORS.average} 
+                                        isMe={true} 
+                                    />
+                                </View>
+                                <View style={styles.legendContainer}>
+                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]}/><Text style={styles.legendText}>&gt;90%</Text></View>
+                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]}/><Text style={styles.legendText}>60-90%</Text></View>
+                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]}/><Text style={styles.legendText}>&lt;60%</Text></View>
+                                </View>
+                            </>
                         ) : (
-                            <Text style={styles.noData}>No Data Available</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <View style={styles.overviewContainer}>
+                                    {processedData.data.map((item: any, index: number) => (
+                                        <View key={index} style={styles.overviewGroup}>
+                                            <Text style={styles.overviewSubjectTitle}>{item.subject.substring(0,3).toUpperCase()}</Text>
+                                            <View style={styles.overviewBarPair}>
+                                                <PerformanceBar 
+                                                    data={item.topper} 
+                                                    label="Top" 
+                                                    color={COLORS.success} 
+                                                    height={160} 
+                                                    slim={true}
+                                                />
+                                                <PerformanceBar 
+                                                    data={item.me} 
+                                                    label="Me" 
+                                                    color={COLORS.average} 
+                                                    height={160} 
+                                                    slim={true}
+                                                    isMe={true}
+                                                />
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            </ScrollView>
                         )}
-                        
-                        {/* Legend */}
-                        <View style={styles.legendContainer}>
-                             <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]}/><Text style={styles.legendText}>Excellent (&gt;90%)</Text></View>
-                             <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]}/><Text style={styles.legendText}>Average (60-90%)</Text></View>
-                             <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]}/><Text style={styles.legendText}>Poor (&lt;60%)</Text></View>
-                        </View>
                     </View>
 
                 </ScrollView>
@@ -355,100 +396,60 @@ const MyPerformance = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8F9FA' },
+    container: { flex: 1, backgroundColor: COLORS.background },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     scrollContent: { paddingBottom: 40 },
     
-    // Controls
-    controlsContainer: { padding: 20, paddingTop: 30 },
-    label: { fontSize: 18, fontWeight: '600', color: '#000', marginBottom: 10 }, 
+    controlsSection: { padding: 20, paddingTop: 10 },
+    label: { fontSize: 16, fontWeight: '700', color: COLORS.textMain, marginBottom: 8, marginTop: 10 }, 
+    pickerContainer: { borderWidth: 1, borderColor: COLORS.textMain, borderRadius: 8, backgroundColor: COLORS.cardBg, height: 50, justifyContent: 'center', elevation: 2 },
+    picker: { width: '100%', height: 50, color: COLORS.textMain },
     
-    pickerWrapper: {
-        borderWidth: 1.5,
-        borderColor: COLORS.textMain,
-        borderRadius: 8,
-        backgroundColor: '#FFF',
-        overflow: 'hidden',
-        height: 55,
-        justifyContent: 'center'
-    },
-    picker: { width: '100%', height: 55, color: COLORS.textMain },
+    subjectsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 5 },
+    subjectChip: { borderWidth: 1.5, borderColor: COLORS.textMain, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: COLORS.cardBg, minWidth: 70, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
     
-    subjectScroll: { flexDirection: 'row', marginTop: 5 },
-    subjectChip: {
-        borderWidth: 1.5,
-        borderColor: COLORS.textMain,
-        borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        marginRight: 12,
-        backgroundColor: '#FFF',
-        minWidth: 60,
-        alignItems: 'center'
-    },
-    subjectChipActive: {
-        backgroundColor: COLORS.textMain, 
-        borderColor: COLORS.textMain,
-    },
-    subjectText: { fontSize: 16, fontWeight: '600', color: COLORS.textMain },
+    subjectChipActive: { backgroundColor: COLORS.selectedChip, borderColor: COLORS.selectedChip, elevation: 3 },
+    subjectText: { fontSize: 14, fontWeight: '700', color: COLORS.textMain },
     subjectTextActive: { color: '#FFF' },
 
-    // Graph Area
-    graphCard: {
-        margin: 20,
-        marginTop: 10,
-        padding: 20,
-        backgroundColor: '#FFF',
-        borderRadius: 15,
-        borderWidth: 1.5,
-        borderColor: COLORS.textMain,
-        minHeight: 400
-    },
-    graphRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'flex-end',
-        height: 320,
-        paddingBottom: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ccc'
-    },
-    noData: { textAlign: 'center', fontSize: 16, color: COLORS.textSub, marginTop: 100 },
+    subjectChipOverview: { borderColor: COLORS.overviewChip }, 
+    subjectTextOverview: { color: COLORS.overviewChip },
 
-    // Bar Components
-    barContainer: { alignItems: 'center', width: '30%', justifyContent: 'flex-end', height: '100%' },
+    graphCard: { backgroundColor: COLORS.cardBg, margin: 15, marginTop: 30, padding: 20, paddingTop: 30, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, borderWidth: 1, borderColor: '#EEEEEE', minHeight: 380 },
     
-    statsContainer: { alignItems: 'center', marginBottom: 5 },
-    statLabel: { fontSize: 10, color: COLORS.textSub, textTransform: 'uppercase' },
-    statValue: { fontSize: 14, fontWeight: 'bold', color: COLORS.textMain },
-    
-    barTrack: {
-        width: 45,
-        backgroundColor: '#F0F0F0',
-        borderWidth: 1,
-        borderColor: '#000',
-        justifyContent: 'flex-end'
-    },
-    barFill: { width: '100%' },
-    
-    barLabel: { 
-        marginTop: 10, 
-        textAlign: 'center', 
-        fontSize: 14, 
-        fontWeight: '600', 
-        color: COLORS.textMain,
-    },
-    barLabelMe: {
-        color: COLORS.primary,
-        fontWeight: 'bold',
-        textDecorationLine: 'underline'
-    },
+    noDataText: { textAlign: 'center', marginTop: 50, color: COLORS.textSub },
 
-    // Legend
-    legendContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 10 },
+    singleGraphContainer: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-end', height: 320, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+
+    overviewContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingBottom: 10 },
+    overviewGroup: { marginRight: 25, alignItems: 'center', width: 100 }, 
+    overviewSubjectTitle: { fontWeight: 'bold', fontSize: 14, marginBottom: 15, color: COLORS.textMain },
+    overviewBarPair: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', height: 250, alignItems: 'flex-end', borderLeftWidth: 1, borderLeftColor: '#eee', paddingLeft: 5 },
+
+    barWrapper: { alignItems: 'center', width: '35%', height: '100%', justifyContent: 'flex-end' },
+    barWrapperSlim: { alignItems: 'center', width: '45%', height: '100%', justifyContent: 'flex-end' },
+
+    statsHeader: { alignItems: 'center', marginBottom: 8, width: '100%', justifyContent: 'flex-end' },
+    rankBadge: { backgroundColor: '#ECEFF1', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginBottom: 4 },
+    rankText: { fontSize: 10, fontWeight: 'bold', color: '#455A64' },
+    
+    marksContainer: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 1 },
+    marksText: { fontWeight: '800', color: COLORS.textMain },
+    totalMarksText: { fontSize: 14, fontWeight: '600', color: COLORS.textSub },
+
+    percentageText: { fontWeight: '700', marginBottom: 3 },
+
+    // REMOVED 'width' from here to let the inline style control it dynamically
+    barTrack: { backgroundColor: '#FAFAFA', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', elevation: 1 },
+    barFill: { width: '100%', borderRadius: 2 },
+    
+    barLabel: { marginTop: 12, textAlign: 'center', fontWeight: '600' },
+    barLabelMe: { fontWeight: 'bold', textDecorationLine: 'underline' },
+
+    legendContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
-    dot: { width: 10, height: 10, borderRadius: 5, marginRight: 5 },
-    legendText: { fontSize: 10, color: COLORS.textSub }
+    dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+    legendText: { fontSize: 11, color: COLORS.textSub, fontWeight: '500' }
 });
 
 export default MyPerformance;
