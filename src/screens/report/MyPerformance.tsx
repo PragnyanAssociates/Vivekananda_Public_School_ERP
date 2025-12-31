@@ -5,6 +5,8 @@
  *  1. Single Subject View: Topper vs Me.
  *  2. Overview Mode: All subjects side-by-side.
  *  3. Displays Rank, Marks, and Percentage.
+ *  4. Color coded performance (Green > 90, Orange 60-90, Red < 60).
+ *  5. Improved Note/Legend Section for clarity.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -52,13 +54,28 @@ const COLORS = {
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
-    success: '#43A047',    // Green
-    average: '#1976D2',    // Blue
-    poor: '#E53935',       // Red
-    barBase: '#ECEFF1',
-    border: '#CFD8DC',
-    selectedChip: '#1976D2', // Blue for selected subject
-    overviewChip: '#292828ff'  // Red for Overview button
+    
+    // --- COLORS ---
+    success: '#43A047',    // Green (> 90%)
+    average: '#FB8C00',    // Orange (60% - 90%)
+    poor: '#E53935',       // Red (< 60%)
+    
+    // Note Section Colors
+    noteBg: '#FFF8E1',     // Light Buttery Background
+    noteBorder: '#FFE0B2', // Orange-ish border
+    
+    rankBg: '#ECEFF1',     // Background for rank badge
+    rankText: '#37474F',   // Color for rank text
+    
+    selectedChip: '#1976D2', 
+    overviewChip: '#292828ff' 
+};
+
+// --- Helper: Get Color Based on Percentage ---
+const getColorForPercentage = (percentage: number) => {
+    if (percentage >= 90) return COLORS.success; // Green
+    if (percentage >= 60) return COLORS.average; // Orange
+    return COLORS.poor;                          // Red
 };
 
 // --- HELPER: Calculate Stats for One Subject ---
@@ -70,14 +87,13 @@ const calculateStatsForSubject = (
     myId: number, 
     isSeniorClass: boolean
 ) => {
-    // 1. Calculate score for every student in this subject
     const classResults = students.map((student: any) => {
         let totalObtained = 0;
         let totalPossible = 0;
         const studentMarks = marks.filter((m: any) => m.student_id === student.id);
 
         if (subject === 'All Subjects') {
-             // (Logic handled in main component for aggregation usually, but keeping structure safe)
+             // Logic handled in main component usually
         } else {
             if (examType === 'Overall') {
                 EXAM_OPTIONS.slice(1).forEach(examName => {
@@ -114,11 +130,9 @@ const calculateStatsForSubject = (
         };
     });
 
-    // 2. Sort & Rank
     classResults.sort((a: any, b: any) => b.obtained - a.obtained);
     const rankedResults = classResults.map((item: any, index: number) => ({ ...item, rank: index + 1 }));
 
-    // 3. Extract Topper & Me
     const topper = rankedResults[0] || { obtained: 0, percentage: 0, rank: '-', total: 0 };
     const me = rankedResults.find((r: any) => r.id === myId) || { obtained: 0, percentage: 0, rank: '-', total: 0 };
 
@@ -127,7 +141,7 @@ const calculateStatsForSubject = (
 
 
 // --- COMPONENT: ANIMATED BAR ---
-const PerformanceBar = ({ data, label, color, showRank = true, slim = false }: any) => {
+const PerformanceBar = ({ data, label, showRank = true, slim = false }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -141,43 +155,34 @@ const PerformanceBar = ({ data, label, color, showRank = true, slim = false }: a
         outputRange: ['0%', `${Math.min(data.percentage, 100)}%`]
     });
 
-    // Determine Color based on strict percentage logic for the TEXT
-    let percentageColor = COLORS.poor;
-    if (data.percentage >= 90) percentageColor = COLORS.success;
-    else if (data.percentage >= 60) percentageColor = COLORS.average;
-
+    const dynamicColor = getColorForPercentage(data.percentage);
     const labelSize = slim ? 11 : 13;
     const marksSize = slim ? 14 : 18;
 
     return (
         <View style={slim ? styles.barWrapperSlim : styles.barWrapper}>
-            {/* Header: Rank, Marks, Percentage */}
             <View style={styles.statsHeader}>
                 {showRank && (
                     <View style={styles.rankBadge}>
-                        <Text style={styles.rankText}>#{data.rank}</Text>
+                        <Text style={styles.rankText} numberOfLines={1}>#{data.rank}</Text>
                     </View>
                 )}
                 
-                {/* Marks */}
                 <View style={styles.marksContainer}>
                     <Text style={[styles.marksText, { fontSize: marksSize }]}>{Math.round(data.obtained)}</Text>
                     <Text style={[styles.totalMarksText, { fontSize: slim ? 10 : 13 }]}>/{Math.round(data.total)}</Text>
                 </View>
 
-                {/* Percentage Display */}
-                <Text style={[styles.percentageText, { color: percentageColor, fontSize: slim ? 10 : 12 }]}>
+                <Text style={[styles.percentageText, { color: dynamicColor, fontSize: slim ? 10 : 12 }]}>
                     {Math.round(data.percentage)}%
                 </Text>
             </View>
 
-            {/* Track - UPDATED WIDTH HERE: slim uses 80% (of small container), normal uses 40% (slimmed down) */}
             <View style={[styles.barTrack, { height: slim ? '60%' : '65%', width: slim ? '80%' : '40%' }]}>
-                <Animated.View style={[styles.barFill, { height: fillHeight, backgroundColor: color }]} />
+                <Animated.View style={[styles.barFill, { height: fillHeight, backgroundColor: dynamicColor }]} />
             </View>
 
-            {/* Label */}
-            <Text style={[styles.barLabel, { fontSize: labelSize, color: label === 'My Marks' ? COLORS.average : COLORS.textSub }]} numberOfLines={1}>
+            <Text style={[styles.barLabel, { fontSize: labelSize, color: label === 'My Marks' || label === 'Me' ? COLORS.textMain : COLORS.textSub }]} numberOfLines={1}>
                 {label}
             </Text>
         </View>
@@ -336,6 +341,38 @@ const MyPerformance = () => {
                     </View>
 
                     <View style={styles.graphCard}>
+                        
+                        {/* --- NEW DYNAMIC NOTE SECTION --- */}
+                        <View style={styles.noteCard}>
+                            <View style={styles.noteHeader}>
+                                <Text style={styles.noteTitle}>Performance Guide :-</Text>
+                            </View>
+
+                            <View style={styles.noteGrid}>
+                                {/* Row 1 */}
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.colorBox, { backgroundColor: COLORS.success }]} />
+                                    <Text style={styles.legendText}>&gt;90% (Excel)</Text>
+                                </View>
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.colorBox, { backgroundColor: COLORS.average }]} />
+                                    <Text style={styles.legendText}>60-90% (Avg)</Text>
+                                </View>
+
+                                {/* Row 2 */}
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.colorBox, { backgroundColor: COLORS.poor }]} />
+                                    <Text style={styles.legendText}>&lt;60% (Poor)</Text>
+                                </View>
+                                <View style={styles.legendItem}>
+                                    <View style={styles.miniRankBadge}>
+                                        <Text style={styles.miniRankText}>#1</Text>
+                                    </View>
+                                    <Text style={styles.legendText}>Rank in Class</Text>
+                                </View>
+                            </View>
+                        </View>
+
                         {!processedData ? (
                             <Text style={styles.noDataText}>Loading...</Text>
                         ) : processedData.mode === 'Single' ? (
@@ -344,19 +381,11 @@ const MyPerformance = () => {
                                     <PerformanceBar 
                                         data={processedData.data.topper} 
                                         label="Topper" 
-                                        color={COLORS.success} 
                                     />
                                     <PerformanceBar 
                                         data={processedData.data.me} 
                                         label="My Marks" 
-                                        color={COLORS.average} 
-                                        isMe={true} 
                                     />
-                                </View>
-                                <View style={styles.legendContainer}>
-                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]}/><Text style={styles.legendText}>&gt;90%</Text></View>
-                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]}/><Text style={styles.legendText}>60-90%</Text></View>
-                                     <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]}/><Text style={styles.legendText}>&lt;60%</Text></View>
                                 </View>
                             </>
                         ) : (
@@ -369,17 +398,14 @@ const MyPerformance = () => {
                                                 <PerformanceBar 
                                                     data={item.topper} 
                                                     label="Top" 
-                                                    color={COLORS.success} 
                                                     height={160} 
                                                     slim={true}
                                                 />
                                                 <PerformanceBar 
                                                     data={item.me} 
                                                     label="Me" 
-                                                    color={COLORS.average} 
                                                     height={160} 
                                                     slim={true}
-                                                    isMe={true}
                                                 />
                                             </View>
                                         </View>
@@ -415,14 +441,47 @@ const styles = StyleSheet.create({
     subjectChipOverview: { borderColor: COLORS.overviewChip }, 
     subjectTextOverview: { color: COLORS.overviewChip },
 
-    graphCard: { backgroundColor: COLORS.cardBg, margin: 15, marginTop: 30, padding: 20, paddingTop: 30, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, borderWidth: 1, borderColor: '#EEEEEE', minHeight: 380 },
+    graphCard: { backgroundColor: COLORS.cardBg, margin: 15, marginTop: 10, padding: 20, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, borderWidth: 1, borderColor: '#EEEEEE', minHeight: 380 },
     
+    // --- UPDATED NOTE / LEGEND STYLES ---
+    noteCard: {
+        backgroundColor: COLORS.noteBg,
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: COLORS.noteBorder,
+    },
+    noteHeader: { marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#FFE0B2', paddingBottom: 5 },
+    noteTitle: { fontSize: 14, fontWeight: '800', color: '#E65100', textTransform: 'uppercase' },
+    
+    noteGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    legendItem: { flexDirection: 'row', alignItems: 'center', width: '48%', marginBottom: 6 },
+    
+    colorBox: { width: 14, height: 14, borderRadius: 3, marginRight: 8 },
+    
+    // Mini Rank Badge for Legend
+    miniRankBadge: { 
+        backgroundColor: '#ECEFF1', 
+        paddingHorizontal: 4, 
+        paddingVertical: 1,
+        borderRadius: 6, 
+        borderWidth: 1, 
+        borderColor: '#B0BEC5', 
+        marginRight: 8,
+        minWidth: 20,
+        alignItems: 'center'
+    },
+    miniRankText: { fontSize: 9, fontWeight: 'bold', color: '#455A64' },
+    
+    legendText: { fontSize: 11, color: COLORS.textMain, fontWeight: '600' },
+
     noDataText: { textAlign: 'center', marginTop: 50, color: COLORS.textSub },
 
     singleGraphContainer: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-end', height: 320, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
 
     overviewContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingBottom: 10 },
-    overviewGroup: { marginRight: 25, alignItems: 'center', width: 100 }, 
+    overviewGroup: { marginRight: 20, alignItems: 'center', width: 110 }, 
     overviewSubjectTitle: { fontWeight: 'bold', fontSize: 14, marginBottom: 15, color: COLORS.textMain },
     overviewBarPair: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', height: 250, alignItems: 'flex-end', borderLeftWidth: 1, borderLeftColor: '#eee', paddingLeft: 5 },
 
@@ -430,8 +489,20 @@ const styles = StyleSheet.create({
     barWrapperSlim: { alignItems: 'center', width: '45%', height: '100%', justifyContent: 'flex-end' },
 
     statsHeader: { alignItems: 'center', marginBottom: 8, width: '100%', justifyContent: 'flex-end' },
-    rankBadge: { backgroundColor: '#ECEFF1', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginBottom: 4 },
-    rankText: { fontSize: 10, fontWeight: 'bold', color: '#455A64' },
+    
+    rankBadge: { 
+        backgroundColor: '#ECEFF1', 
+        paddingHorizontal: 6,  
+        paddingVertical: 2,    
+        borderRadius: 12, 
+        marginBottom: 6, 
+        borderWidth: 1, 
+        borderColor: '#B0BEC5',
+        minWidth: 30,          
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    rankText: { fontSize: 12, fontWeight: 'bold', color: '#455A64' },
     
     marksContainer: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 1 },
     marksText: { fontWeight: '800', color: COLORS.textMain },
@@ -439,17 +510,10 @@ const styles = StyleSheet.create({
 
     percentageText: { fontWeight: '700', marginBottom: 3 },
 
-    // REMOVED 'width' from here to let the inline style control it dynamically
     barTrack: { backgroundColor: '#FAFAFA', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', elevation: 1 },
     barFill: { width: '100%', borderRadius: 2 },
     
     barLabel: { marginTop: 12, textAlign: 'center', fontWeight: '600' },
-    barLabelMe: { fontWeight: 'bold', textDecorationLine: 'underline' },
-
-    legendContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
-    legendItem: { flexDirection: 'row', alignItems: 'center' },
-    dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-    legendText: { fontSize: 11, color: COLORS.textSub, fontWeight: '500' }
 });
 
 export default MyPerformance;
