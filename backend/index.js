@@ -6699,17 +6699,7 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 // ==========================================================
 // --- PROGRESS CARD (REPORTS) API ROUTES (COMPLETE VERSION) ---
 // ==========================================================
-
-/**
- * Calculates the current academic year based on a cutoff month (June).
- * @returns {string} The academic year in "YYYY-YYYY" format.
- */
-const getCurrentAcademicYear = () => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth(); // 5 = June
-    return currentMonth >= 5 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
-};
+// Note: Date/Year logic removed.
 
 // Subject configuration based on class
 const CLASS_SUBJECTS = {
@@ -6744,14 +6734,14 @@ app.get('/api/reports/teachers', [verifyToken, isAdmin], async (req, res) => {
 // GET: Get teacher assignments for a class (Admin only)
 app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], async (req, res) => {
     const { classGroup } = req.params;
-    const academicYear = getCurrentAcademicYear();
     try {
+        // Removed academic_year filter
         const [assignments] = await db.query(
             `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
              FROM report_teacher_assignments ta
              JOIN users u ON ta.teacher_id = u.id
-             WHERE ta.class_group = ? AND ta.academic_year = ?`,
-            [classGroup, academicYear]
+             WHERE ta.class_group = ?`,
+            [classGroup]
         );
         res.json(assignments);
     } catch (error) {
@@ -6763,18 +6753,18 @@ app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], 
 // POST: Assign teacher to subject (Admin only)
 app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res) => {
     const { teacherId, classGroup, subject } = req.body;
-    const academicYear = getCurrentAcademicYear();
     
     if (!teacherId || !classGroup || !subject) {
         return res.status(400).json({ message: "Missing required fields" });
     }
 
     try {
+        // Removed academic_year from Insert
         await db.query(
-            `INSERT INTO report_teacher_assignments (teacher_id, class_group, subject, academic_year)
-             VALUES (?, ?, ?, ?)
+            `INSERT INTO report_teacher_assignments (teacher_id, class_group, subject)
+             VALUES (?, ?, ?)
              ON DUPLICATE KEY UPDATE teacher_id = VALUES(teacher_id)`,
-            [teacherId, classGroup, subject, academicYear]
+            [teacherId, classGroup, subject]
         );
         res.status(200).json({ message: "Teacher assigned successfully" });
     } catch (error) {
@@ -6812,7 +6802,6 @@ app.get('/api/reports/classes', [verifyToken, isTeacherOrAdmin], async (req, res
 // GET: All data for an entire class
 app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { classGroup } = req.params;
-    const academicYear = getCurrentAcademicYear();
 
     try {
         const [students] = await db.query(
@@ -6833,22 +6822,25 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
 
         const studentIds = students.map(s => s.id);
 
+        // Removed academic_year filter
         const [marks] = await db.query(
-            "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?) AND academic_year = ?",
-            [studentIds, academicYear]
+            "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?)",
+            [studentIds]
         );
         
+        // Removed academic_year filter
         const [attendance] = await db.query(
-            "SELECT student_id, month, working_days, present_days FROM report_student_attendance WHERE student_id IN (?) AND academic_year = ?",
-            [studentIds, academicYear]
+            "SELECT student_id, month, working_days, present_days FROM report_student_attendance WHERE student_id IN (?)",
+            [studentIds]
         );
 
+        // Removed academic_year filter
         const [assignments] = await db.query(
             `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
              FROM report_teacher_assignments ta
              JOIN users u ON ta.teacher_id = u.id
-             WHERE ta.class_group = ? AND ta.academic_year = ?`,
-            [classGroup, academicYear]
+             WHERE ta.class_group = ?`,
+            [classGroup]
         );
 
         res.json({ students, marks, attendance, assignments });
@@ -6862,7 +6854,6 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
 // POST: Bulk save/update marks for multiple students
 app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { marksPayload } = req.body;
-    const academicYear = getCurrentAcademicYear();
 
     if (!Array.isArray(marksPayload) || marksPayload.length === 0) {
         return res.status(400).json({ message: "Invalid or empty marks data." });
@@ -6872,8 +6863,9 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     try {
         await connection.beginTransaction();
 
+        // Removed academic_year column from INSERT
         const query = `
-            INSERT INTO report_student_marks (student_id, academic_year, class_group, subject, exam_type, marks_obtained)
+            INSERT INTO report_student_marks (student_id, class_group, subject, exam_type, marks_obtained)
             VALUES ? 
             ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)`;
         
@@ -6883,7 +6875,7 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
             
             return [
                 m.student_id, 
-                academicYear, 
+                // Removed academic_year
                 m.class_group, 
                 m.subject,
                 m.exam_type, 
@@ -6906,7 +6898,6 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
 // POST: Bulk save/update attendance for multiple students
 app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { attendancePayload } = req.body;
-    const academicYear = getCurrentAcademicYear();
     
     if (!Array.isArray(attendancePayload) || attendancePayload.length === 0) {
         return res.status(400).json({ message: "Invalid or empty attendance data." });
@@ -6915,8 +6906,10 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
+        
+        // Removed academic_year column from INSERT
         const query = `
-            INSERT INTO report_student_attendance (student_id, academic_year, month, working_days, present_days)
+            INSERT INTO report_student_attendance (student_id, month, working_days, present_days)
             VALUES ? 
             ON DUPLICATE KEY UPDATE 
                 working_days = VALUES(working_days), 
@@ -6930,7 +6923,7 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
             
             return [
                 a.student_id, 
-                academicYear, 
+                // Removed academic_year
                 a.month,
                 finalWorking,
                 finalPresent
@@ -6950,11 +6943,11 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
 });
 
 // --- STUDENT ROUTE (CORRECTED) ---
+// Note: Date/Year logic removed.
 
 // GET: Student's own report card
 app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
     const studentId = req.user.id;
-    const academicYear = getCurrentAcademicYear();
     
     try {
         const [studentRows] = await db.query(
@@ -6976,17 +6969,19 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
         
         const studentInfo = studentRows[0];
 
+        // Removed academic_year filter
         const [marks] = await db.query(
-            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
-            [studentId, academicYear]
+            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ?",
+            [studentId]
         );
         
+        // Removed academic_year filter
         const [attendance] = await db.query(
-            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
-            [studentId, academicYear]
+            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ?",
+            [studentId]
         );
 
-        res.json({ studentInfo, marks, attendance, academicYear });
+        res.json({ studentInfo, marks, attendance });
     } catch (error) {
         console.error("Error fetching report card data:", error);
         res.status(500).json({ message: "Failed to fetch report card" });
@@ -6997,7 +6992,6 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
 
 // GET: Get performance summaries for all classes
 app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (req, res) => {
-    const academicYear = getCurrentAcademicYear();
     try {
         const [classes] = await db.query(
             "SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group"
@@ -7007,6 +7001,7 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
         const summaries = [];
 
         for (const classGroup of classGroups) {
+            // Removed m.academic_year filter
             const [marks] = await db.query(
                 `SELECT 
                     m.student_id, 
@@ -7015,8 +7010,8 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
                     m.marks_obtained
                  FROM report_student_marks m
                  JOIN users u ON m.student_id = u.id
-                 WHERE m.class_group = ? AND m.academic_year = ? AND m.exam_type = 'Total'`,
-                [classGroup, academicYear]
+                 WHERE m.class_group = ? AND m.exam_type = 'Total'`,
+                [classGroup]
             );
 
             if (marks.length === 0) {
@@ -7102,8 +7097,6 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
         return res.status(400).json({ message: "An invalid student ID was provided." });
     }
 
-    const academicYear = getCurrentAcademicYear();
-
     try {
         // Step 1: Fetch basic student info
         const [studentRows] = await db.query(
@@ -7127,20 +7120,20 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
         const studentInfo = studentRows[0];
         console.log(`[Report Card] Found student: ${studentInfo.full_name}`);
 
-        // Step 3: Fetch all marks for the student for the current academic year
+        // Step 3: Fetch all marks for the student (Removed academic_year filter)
         const [marks] = await db.query(
-            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ? AND academic_year = ?",
-            [studentId, academicYear]
+            "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ?",
+            [studentId]
         );
 
-        // Step 4: Fetch all attendance for the student for the current academic year
+        // Step 4: Fetch all attendance for the student (Removed academic_year filter)
         const [attendance] = await db.query(
-            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ? AND academic_year = ?",
-            [studentId, academicYear]
+            "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ?",
+            [studentId]
         );
 
         // Step 5: Send the combined data
-        res.json({ studentInfo, marks, attendance, academicYear });
+        res.json({ studentInfo, marks, attendance });
 
     } catch (error) {
         console.error(`Error fetching consolidated report card for student ${studentId}:`, error);
@@ -7155,7 +7148,6 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
 // GET: specific class data for the logged-in student (For Performance Graph)
 app.get('/api/reports/student-class-performance', verifyToken, async (req, res) => {
     const studentId = req.user.id; // Get ID from the logged-in token
-    const academicYear = getCurrentAcademicYear(); // Helper function from your existing code
 
     try {
         // 1. Get the Class Group of the logged-in student
@@ -7189,10 +7181,10 @@ app.get('/api/reports/student-class-performance', verifyToken, async (req, res) 
 
         const studentIds = students.map(s => s.id);
 
-        // 3. Fetch marks for the whole class (Needed to calculate Topper/Least)
+        // 3. Fetch marks for the whole class (Removed academic_year filter)
         const [marks] = await db.query(
-            "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?) AND academic_year = ?",
-            [studentIds, academicYear]
+            "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?)",
+            [studentIds]
         );
 
         // Return the data in the same structure the frontend expects

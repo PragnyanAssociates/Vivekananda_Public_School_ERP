@@ -1,6 +1,7 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
  * Purpose: Teacher Performance Analytics with Table View and Class-wise Max Mark Logic (20/25).
+ * Note: Date/Year logic removed.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -22,15 +23,6 @@ if (Platform.OS === 'android') {
 
 // --- Constants ---
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const ACADEMIC_YEARS = (() => {
-    const currentYear = new Date().getFullYear();
-    const years = [];
-    for (let i = 0; i < 5; i++) {
-        const startYear = currentYear - i;
-        years.push(`${startYear}-${startYear + 1}`);
-    }
-    return years;
-})();
 
 // Mapping for consistency with Backend
 const EXAM_TYPES = ['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4', 'SA1', 'SA2', 'Pre-Final'];
@@ -124,7 +116,6 @@ const TeacherPerformanceScreen = () => {
     const [isCompareVisible, setIsCompareVisible] = useState(false);
     
     // Filter States
-    const [selectedYear, setSelectedYear] = useState(ACADEMIC_YEARS[0]);
     const [sortBy, setSortBy] = useState('high-low');
     
     // Comparison States
@@ -134,21 +125,23 @@ const TeacherPerformanceScreen = () => {
 
     // --- FETCH PERFORMANCE DATA ---
     const fetchData = async () => {
-        if (!userId || !selectedYear) return;
+        if (!userId) return;
         setLoading(true);
         try {
             let response;
             if (userRole === 'admin') {
-                response = await apiClient.get(`/performance/admin/all-teachers/${selectedYear}`);
+                // Removed year parameter
+                response = await apiClient.get(`/performance/admin/all-teachers`);
             } else {
-                response = await apiClient.get(`/performance/teacher/${userId}/${selectedYear}`);
+                // Removed year parameter
+                response = await apiClient.get(`/performance/teacher/${userId}`);
             }
             const data = response.data || [];
             setPerformanceData(data);
             setExpandedId(null);
             extractClasses(data);
             
-            // Reset attendance data when year changes
+            // Reset attendance data
             setAttendanceData({});
             if (isTableView && userRole === 'admin') {
                 fetchAttendanceForTable(data);
@@ -167,15 +160,13 @@ const TeacherPerformanceScreen = () => {
         
         setLoadingAttendance(true);
         const attendanceMap = {};
-        const yearStart = selectedYear.split('-')[0];
 
         try {
             const promises = teachersList.map(async (teacher) => {
                 const tId = teacher.teacher_id;
                 try {
-                    const res = await apiClient.get(`/teacher-attendance/report/${tId}`, {
-                        params: { period: 'yearly', targetYear: yearStart }
-                    });
+                    // Removed period/targetYear params
+                    const res = await apiClient.get(`/teacher-attendance/report/${tId}`);
                     const pct = res.data?.stats?.overallPercentage || '0.00';
                     return { id: tId, pct: pct };
                 } catch (err) {
@@ -211,7 +202,7 @@ const TeacherPerformanceScreen = () => {
 
     useEffect(() => {
         fetchData();
-    }, [selectedYear, userId]);
+    }, [userId]);
 
     useEffect(() => {
         if (isTableView && userRole === 'admin' && performanceData.length > 0 && Object.keys(attendanceData).length === 0) {
@@ -235,8 +226,6 @@ const TeacherPerformanceScreen = () => {
     };
 
     // --- COMPARISON LOGIC ---
-    // Note: The Backend now provides the correct 'total_possible' (20 or 25).
-    // The Frontend simply sums up these values from the API response.
     const getComparisonData = () => {
         if (!performanceData) return [];
 
@@ -252,11 +241,10 @@ const TeacherPerformanceScreen = () => {
                     teacher.detailed_performance.forEach(detail => {
                         if (compareClass !== 'All Classes' && detail.class_group !== compareClass) return;
                         
-                        // Find the specific exam in the detailed breakdown
                         const exam = detail.exam_breakdown.find(e => e.exam_type === compareExam);
                         if (exam) {
                             totalObtained += exam.total_obtained;
-                            totalPossible += exam.total_possible; // This comes pre-calculated (20 or 25) from backend
+                            totalPossible += exam.total_possible;
                         }
                     });
                 }
@@ -536,11 +524,7 @@ const TeacherPerformanceScreen = () => {
                     </View>
                 </View>
                 <View style={styles.filterContainer}>
-                    <View style={styles.filterBox}>
-                        <Picker selectedValue={selectedYear} onValueChange={setSelectedYear} style={styles.picker}>
-                            {ACADEMIC_YEARS.map(year => <Picker.Item key={year} label={year} value={year} />)}
-                        </Picker>
-                    </View>
+                    {/* Removed Year Picker */}
                     <View style={styles.filterBox}>
                         <Picker selectedValue={sortBy} onValueChange={setSortBy} style={styles.picker}>
                             <Picker.Item label="High to Low" value="high-low" />
