@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/StudentReportCardScreen.js
- * Purpose: A visually appealing, downloadable A4-style report card for students.
- * Fixed: Now displays (25) marks for all AT/UT exams for all classes.
+ * Purpose: A visually appealing, downloadable A4-style report card for students,
+ * while maintaining a scrollable view on the mobile screen.
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -32,13 +32,21 @@ const EXAM_MAPPING = {
 const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4', 'SA1', 'SA2', 'Total'];
 const MONTHS = ['June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May'];
 
+// ★★★ NEW: Define which classes are out of 20 marks for AT/UT (Seniors) ★★★
+const SENIOR_CLASSES = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+
 /**
  * @name ReportCardContent
- * @description Renders the report card layout.
+ * @description A new component to render the report card layout.
+ * It accepts a prop `isForCapture` to switch between on-screen and A4-style layouts.
  */
 const ReportCardContent = ({ studentInfo, academicYear, marksData, attendanceData, isForCapture = false }) => {
     const subjects = CLASS_SUBJECTS[studentInfo.class_group] || [];
     const formatMonthForDisplay = (month) => { if (month === 'September') return 'Sept'; return month.substring(0, 3); };
+
+    // ★★★ NEW: Determine max marks based on class group ★★★
+    // If student is in Class 6-10, this will be true.
+    const isSeniorClass = SENIOR_CLASSES.includes(studentInfo.class_group);
 
     // Use different styles based on whether we are capturing for download
     const s = isForCapture ? printStyles : styles;
@@ -63,14 +71,18 @@ const ReportCardContent = ({ studentInfo, academicYear, marksData, attendanceDat
             <Text style={s.sectionTitle}>PROGRESS CARD</Text>
             <ScrollView horizontal={!isForCapture} showsHorizontalScrollIndicator={false}>
                 <View style={s.table}>
-                    {/* --- UPDATED HEADER ROW (FIXED) --- */}
+                    {/* UPDATED HEADER ROW WITH DYNAMIC MARKS DISPLAY */}
                     <View style={s.tableRow}>
                         <Text style={[s.tableHeader, s.subjectCol]}>Subjects</Text>
                         {DISPLAY_EXAM_ORDER.map(exam => {
                             let label = exam;
-                            // ★★★ FIX: Always show (25) for AT/UT, and (100) for SA
+                            // Append max marks based on exam type AND class group
                             if (exam.startsWith('AT') || exam.startsWith('UT')) {
-                                label = `${exam}\n(25)`;
+                                // ★★★ LOGIC APPLIED HERE ★★★
+                                // If Senior (6-10) -> 20 Marks
+                                // If Junior (1-5) -> 25 Marks
+                                const maxMarks = isSeniorClass ? '20' : '25';
+                                label = `${exam}\n(${maxMarks})`;
                             } else if (exam.startsWith('SA')) {
                                 label = `${exam}\n(100)`;
                             }

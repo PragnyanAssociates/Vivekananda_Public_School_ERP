@@ -6697,16 +6697,21 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 
 
 // ==========================================================
-// --- PROGRESS CARD (REPORTS) API ROUTES (COMPLETE VERSION) ---
+// --- PROGRESS CARD (REPORTS) API ROUTES (FIXED MAX MARKS) ---
 // ==========================================================
-// Configuration for Max Marks (Adjust these values based on your school's logic)
-// 1. HELPER: Dynamic Max Marks Logic (Based on Class Group)
+
+// 1. HELPER: Dynamic Max Marks Logic
+// Rules: 
+// Classes 1-5: AT/UT = 25 marks
+// Classes 6-10: AT/UT = 20 marks
+// SA Exams: Always 100 marks
 const getMaxMarks = (examType, classGroup) => {
     // Sanitize input
     const type = examType ? examType.toUpperCase() : '';
-    
+    const className = classGroup ? classGroup.toString() : '';
+
     // SA Exams (Always 100)
-    if (type.startsWith('SA') || type === 'PRE-FINAL') {
+    if (type.startsWith('SA') || type === 'PRE-FINAL' || type === 'TOTAL') {
         return 100;
     }
 
@@ -6714,29 +6719,34 @@ const getMaxMarks = (examType, classGroup) => {
     if (type.startsWith('AT') || type.startsWith('UT') || 
         type.startsWith('ASSIGNMENT') || type.startsWith('UNITEST')) {
         
-        // You requested BOTH Class 1-5 and Class 6-10 to have 25 Marks.
-        // If you ever need Class 6-10 to be 20 marks, change the return value below.
+        // Define Senior Classes (Exams are out of 20)
+        const seniorClasses = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
         
-        // Logic for Classes 1 to 10
+        // Check if the current class is in the senior list
+        if (seniorClasses.includes(className)) {
+            return 20; // Seniors (6-10) get 20 Marks
+        }
+        
+        // Default: Juniors (Class 1-5) get 25 Marks
         return 25; 
     }
 
     return 100; // Fallback default
 };
 
-// 2. HELPER: Calculate Performance Stats (Now accepts ClassGroup)
+// 2. HELPER: Calculate Performance Stats
 const calculateStats = (marksData, classGroup) => {
     let totalObtained = 0;
     let totalPossible = 0;
     const examBreakdown = {};
 
     marksData.forEach(row => {
-        // Skip null marks or 'Total' rows
+        // Skip null marks or 'Total' rows (we calculate totals based on components)
         if (row.marks_obtained === null || row.marks_obtained === '' || row.exam_type === 'Total') return;
 
         const obtained = parseFloat(row.marks_obtained);
         
-        // ★★★ FIX: Get max marks dynamically based on the Class and Exam Type
+        // ★★★ FIX: Pass classGroup to determine if max is 20 or 25
         const maxMark = getMaxMarks(row.exam_type, classGroup); 
 
         totalObtained += obtained;
@@ -6801,7 +6811,7 @@ app.get('/api/performance/admin/all-teachers', [verifyToken, isAdmin], async (re
                     [assign.class_group, assign.subject]
                 );
 
-                // ★★★ PASS THE CLASS GROUP HERE
+                // Pass Class Group to calculation
                 const stats = calculateStats(marks, assign.class_group);
 
                 if (stats.totalPossible > 0) {
@@ -6867,7 +6877,7 @@ app.get('/api/performance/teacher/:teacherId', [verifyToken], async (req, res) =
                 [assign.class_group, assign.subject]
             );
 
-            // ★★★ PASS THE CLASS GROUP HERE
+            // Pass Class Group to calculation
             const stats = calculateStats(marks, assign.class_group);
 
             if (stats.totalPossible > 0) {
