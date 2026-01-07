@@ -7,89 +7,101 @@ import {
     SafeAreaView,
     FlatList,
     Image,
-    Alert // Keep Alert for now in case of undefined routes
+    Platform,
+    UIManager
 } from 'react-native';
-// ★★★ 1. IMPORT THE useNavigation HOOK ★★★
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Define the structure for each item in our accounts dashboard
 interface AccountModule {
     id: string;
     title: string;
     imageSource: string;
-    navigateTo: string; // This MUST match the screen name in your Navigator
+    navigateTo: string;
 }
 
-// Data for the grid items with high-quality icons
+// Data for the grid items
 const accountModules: AccountModule[] = [
     {
         id: 'acc1',
         title: 'Transactions',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/9405/9405698.png',
-        navigateTo: 'TransactionsScreen', // Screen name for Transactions
+        navigateTo: 'TransactionsScreen',
     },
     {
         id: 'acc2',
         title: 'Vouchers',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/4306/4306892.png',
-        navigateTo: 'VouchersScreen', // Screen name for Vouchers
+        navigateTo: 'VouchersScreen',
     },
     {
         id: 'acc3',
         title: 'Registers',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/9875/9875512.png',
-        navigateTo: 'RegistersScreen', // Screen name for Registers
+        navigateTo: 'RegistersScreen',
     },
     {
         id: 'acc4',
         title: 'Reports',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/4149/4149706.png',
-        navigateTo: 'ReportsScreen', // Screen name for Reports
+        navigateTo: 'ReportsScreen',
     },
     {
         id: 'acc5',
         title: 'Screenshots',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/2496/2496847.png',
-        navigateTo: 'Screenshots', // Screen name for Calendar
+        navigateTo: 'Screenshots',
     },
     {
         id: 'acc6',
         title: 'Calendar',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/16090/16090543.png',
-        navigateTo: 'CalendarScreen', // Screen name for Calendar
+        navigateTo: 'CalendarScreen',
     },
 ];
 
-// Main Accounts Screen Component
 const AccountsScreen = () => {
-    // ★★★ 2. INITIALIZE THE NAVIGATION OBJECT ★★★
     const navigation = useNavigation();
 
-    // ★★★ 3. UPDATE THE NAVIGATION HANDLER ★★★
     const handleNavigation = (navigateTo: string) => {
-        // This now uses the navigation object to move to the specified screen
         navigation.navigate(navigateTo as never);
     };
 
-    // This function renders each card in the grid
     const renderModuleCard = ({ item }: { item: AccountModule }) => (
         <TouchableOpacity
             style={styles.card}
             onPress={() => handleNavigation(item.navigateTo)}
+            activeOpacity={0.8}
         >
-            <Image
-                source={{ uri: item.imageSource }}
-                style={styles.cardImage}
-                resizeMode="contain"
-            />
+            <View style={styles.imageContainer}>
+                <Image
+                    source={{ uri: item.imageSource }}
+                    style={styles.cardImage}
+                    resizeMode="contain"
+                />
+            </View>
             <Text style={styles.cardTitle}>{item.title}</Text>
         </TouchableOpacity>
     );
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Accounts</Text>
+            
+            {/* Header Card */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerIconContainer}>
+                    <Icon name="account-balance-wallet" size={28} color="#008080" />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>Accounts</Text>
+                    <Text style={styles.headerSubtitle}>Manage financial records</Text>
+                </View>
             </View>
 
             <FlatList
@@ -98,6 +110,7 @@ const AccountsScreen = () => {
                 keyExtractor={(item) => item.id}
                 numColumns={2}
                 contentContainerStyle={styles.gridContainer}
+                showsVerticalScrollIndicator={false}
             />
         </SafeAreaView>
     );
@@ -106,49 +119,84 @@ const AccountsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F7FAFC', // A light grey background
+        backgroundColor: '#F2F5F8', 
     },
-    header: {
-        paddingVertical: 20,
-        paddingHorizontal: 16,
+    
+    // --- HEADER STYLES ---
+    headerCard: {
         backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E2E8F0',
+        paddingHorizontal: 15,
+        paddingVertical: 10, // REDUCED Padding (Smaller box height)
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1',
+        borderRadius: 30,
+        width: 45, // Slightly smaller circle to match reduced height
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 22, // INCREASED Font Size
         fontWeight: 'bold',
-        color: '#1A202C',
+        color: '#333333',
     },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
+    },
+
+    // --- GRID STYLES ---
     gridContainer: {
-        padding: 12, // Adjusted padding
+        paddingHorizontal: 8, 
+        paddingBottom: 20,
     },
     card: {
         flex: 1,
-        margin: 8, // Adjusted margin
-        height: 150, // Increased height for better balance
+        margin: 6,
+        height: 150,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
-        borderRadius: 16, // Slightly more rounded corners
+        borderRadius: 16,
         padding: 10,
-        // iOS Shadow
+        elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 6,
-        // Android Shadow
-        elevation: 5,
+        shadowRadius: 4,
+    },
+    imageContainer: {
+        marginBottom: 15,
+        padding: 10,
+        backgroundColor: '#F7FAFC', 
+        borderRadius: 50,
     },
     cardImage: {
-        width: 60, // Increased icon size
-        height: 60, // Increased icon size
-        marginBottom: 12,
+        width: 50,
+        height: 50,
     },
     cardTitle: {
-        fontSize: 14, // Increased font size
+        fontSize: 15,
         fontWeight: '600',
-        color: '#4A5568',
+        color: '#2D3748',
         textAlign: 'center',
     },
 });

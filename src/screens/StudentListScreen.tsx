@@ -1,12 +1,18 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator,
-    TouchableOpacity, Image, RefreshControl
+    TouchableOpacity, Image, RefreshControl, SafeAreaView, Platform, UIManager
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
+import Icon from 'react-native-vector-icons/MaterialIcons'; 
 import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
+
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const CLASS_ORDER = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
@@ -15,6 +21,11 @@ const StudentListScreen = ({ navigation }) => {
     const [selectedClass, setSelectedClass] = useState('Class 10');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
+    // --- NEW: HIDE DEFAULT HEADER ---
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     const loadStudentData = async () => {
         try {
@@ -42,7 +53,7 @@ const StudentListScreen = ({ navigation }) => {
         loadStudentData();
     };
 
-    // MODIFIED: Added a sorting function inside useMemo
+    // Sorting logic
     const groupedStudents = useMemo(() => {
         const groups = {};
         students.forEach(student => {
@@ -53,10 +64,9 @@ const StudentListScreen = ({ navigation }) => {
             groups[groupName].push(student);
         });
 
-        // Sort each class group by roll number
         for (const groupName in groups) {
             groups[groupName].sort((a, b) => {
-                const rollA = parseInt(a.roll_no, 10) || 9999; // Treat null/invalid roll numbers as high numbers
+                const rollA = parseInt(a.roll_no, 10) || 9999;
                 const rollB = parseInt(b.roll_no, 10) || 9999;
                 return rollA - rollB;
             });
@@ -75,14 +85,16 @@ const StudentListScreen = ({ navigation }) => {
                 style={styles.studentMemberContainer}
                 onPress={() => navigation.navigate('StudentDetail', { studentId: item.id })}
             >
-                <Image
-                    source={
-                        imageUrl
-                            ? { uri: imageUrl }
-                            : require('../assets/default_avatar.png')
-                    }
-                    style={styles.avatar}
-                />
+                <View style={styles.avatarContainer}>
+                    <Image
+                        source={
+                            imageUrl
+                                ? { uri: imageUrl }
+                                : require('../assets/default_avatar.png')
+                        }
+                        style={styles.avatar}
+                    />
+                </View>
                 <Text style={styles.studentName} numberOfLines={2}>
                     {item.full_name}
                 </Text>
@@ -102,26 +114,43 @@ const StudentListScreen = ({ navigation }) => {
     }
 
     return (
-        <View style={styles.container}>
-            <View style={styles.pickerContainer}>
-                <Text style={styles.pickerLabel}>Select Class:</Text>
-                <View style={styles.pickerWrapper}>
-                    <Picker
-                        selectedValue={selectedClass}
-                        onValueChange={(itemValue) => setSelectedClass(itemValue)}
-                        style={styles.picker}
-                        dropdownIconColor="#008080"
-                    >
-                        {CLASS_ORDER.map(className => (
-                            <Picker.Item key={className} label={className} value={className} />
-                        ))}
-                    </Picker>
+        <SafeAreaView style={styles.container}>
+            
+            {/* 1. Header Card */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerIconContainer}>
+                    <Icon name="groups" size={28} color="#008080" />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>Student Directory</Text>
+                    <Text style={styles.headerSubtitle}>View profiles by class</Text>
+                </View>
+            </View>
+
+            {/* 2. Filter Card (Class Picker) */}
+            <View style={styles.filterCard}>
+                <View style={styles.pickerRow}>
+                    <Icon name="class" size={20} color="#008080" style={{ marginRight: 10 }} />
+                    <View style={styles.pickerWrapper}>
+                        <Picker
+                            selectedValue={selectedClass}
+                            onValueChange={(itemValue) => setSelectedClass(itemValue)}
+                            style={styles.picker}
+                            dropdownIconColor="#008080"
+                            mode="dropdown"
+                        >
+                            {CLASS_ORDER.map(className => (
+                                <Picker.Item key={className} label={className} value={className} />
+                            ))}
+                        </Picker>
+                    </View>
                 </View>
             </View>
 
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#008080']} />}
+                showsVerticalScrollIndicator={false}
             >
                 {currentClassStudents.length > 0 ? (
                     <View style={styles.studentGrid}>
@@ -131,51 +160,100 @@ const StudentListScreen = ({ navigation }) => {
                     </View>
                 ) : (
                     <View style={styles.noDataContainer}>
-                        <Text style={styles.noDataText}>No students found in this class.</Text>
+                        <Icon name="person-off" size={40} color="#BDC3C7" />
+                        <Text style={styles.noDataText}>No students found in {selectedClass}.</Text>
                     </View>
                 )}
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f4f6f8',
+        backgroundColor: '#F2F5F8', // Light Blue-Grey Background
     },
     loaderContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f4f6f8',
+        backgroundColor: '#F2F5F8',
     },
-    pickerContainer: {
-        paddingHorizontal: 20,
-        paddingTop: 15,
-        paddingBottom: 5,
+
+    // --- Header Card Style ---
+    headerCard: {
         backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15, // Margin from top of safe area
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
     },
-    pickerLabel: {
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Light Teal Circle
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+        flex: 1,
+    },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#333333',
+    },
+    headerSubtitle: {
         fontSize: 14,
-        fontWeight: '600',
-        color: '#7f8c8d',
-        marginBottom: 5,
+        color: '#666666',
+        marginTop: 1,
+    },
+
+    // --- Filter Card (Picker) ---
+    filterCard: {
+        backgroundColor: '#FFFFFF',
+        width: '96%',
+        alignSelf: 'center',
+        borderRadius: 12,
+        padding: 5,
+        marginBottom: 10,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        shadowOffset: { width: 0, height: 1 },
+    },
+    pickerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
     },
     pickerWrapper: {
-        backgroundColor: '#f4f6f8',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#dfe4ea',
+        flex: 1,
     },
     picker: {
         width: '100%',
-        height: 50,
+        color: '#2C3E50',
     },
+
+    // --- Content Area ---
     scrollContent: {
-        padding: 15,
+        paddingHorizontal: 8,
+        paddingBottom: 20,
     },
     studentGrid: {
         flexDirection: 'row',
@@ -183,37 +261,48 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-start',
     },
     studentMemberContainer: {
-        width: '25%',
+        width: '25%', // 4 columns
         alignItems: 'center',
         marginBottom: 20,
-        paddingHorizontal: 5,
+        paddingHorizontal: 4,
+    },
+    avatarContainer: {
+        elevation: 3,
+        backgroundColor: '#FFF',
+        borderRadius: 35,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
     },
     avatar: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        backgroundColor: '#bdc3c7',
+        width: 65,
+        height: 65,
+        borderRadius: 32.5,
+        backgroundColor: '#ECF0F1',
     },
     studentName: {
-        marginTop: 8,
+        marginTop: 6,
         fontSize: 12,
-        fontWeight: '500',
-        color: '#34495e',
+        fontWeight: '600',
+        color: '#2C3E50',
         textAlign: 'center',
     },
     rollNumber: {
         fontSize: 11,
-        color: '#7f8c8d',
+        color: '#008080', // Teal color for roll number
         textAlign: 'center',
         marginTop: 2,
+        fontWeight: '500',
     },
     noDataContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: 50,
+        marginTop: 50,
     },
     noDataText: {
+        marginTop: 10,
         fontSize: 16,
         color: '#95a5a6',
     },

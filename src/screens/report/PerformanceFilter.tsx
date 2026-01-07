@@ -1,27 +1,30 @@
 /**
  * File: src/screens/report/PerformanceFilter.tsx
  * Purpose: Filter students by Class, Exam & Subject.
- * Design: Modern UI with floating cards, avatars, and dynamic styling.
- * Update: Teacher Badge is now Orange with "Teacher : Name" format.
+ * Design: Consistent Card Header UI.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, RefreshControl, Dimensions, StatusBar
+    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 // --- CONSTANTS ---
 const COLORS = {
-    primary: '#00897B',      // Main Teal
-    primaryDark: '#00695C',  // Darker Teal for Header
-    background: '#F0F4F8',   // Very light grey/blue background
+    primary: '#008080',      // Main Teal (Matches other screens)
+    background: '#F2F5F8',   // Light Blue-Grey Background (Matches other screens)
     cardBg: '#FFFFFF',
-    textMain: '#102027',
-    textSub: '#546E7A',
+    textMain: '#333333',
+    textSub: '#666666',
     
     // Status Colors
     success: '#00C853',      // Vibrant Green (> 90%)
@@ -267,16 +270,23 @@ const PerformanceFilter = () => {
     const TABS = ['Above Average', 'Average', 'Below Average'];
 
     return (
-        <View style={styles.container}>
-            <StatusBar backgroundColor={COLORS.primaryDark} barStyle="light-content" />
+        <SafeAreaView style={styles.safeArea}>
+            <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
             
-            <View style={styles.headerBackground}>
-                <Text style={styles.headerTitle}>Analytics</Text>
+            {/* 1. Header Card (Standardized) */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerIconContainer}>
+                    <Icon name="chart-box-outline" size={28} color={COLORS.primary} />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>Student Reports</Text>
+                    <Text style={styles.headerSubtitle}>Analyze class performance</Text>
+                </View>
             </View>
 
             <View style={styles.bodyContainer}>
                 
-                {/* 1. Filter Card */}
+                {/* 2. Filter Card */}
                 <View style={styles.filterCard}>
                     {/* Class Picker */}
                     <View style={styles.pickerRow}>
@@ -331,7 +341,7 @@ const PerformanceFilter = () => {
                     </View>
                 </View>
 
-                {/* 2. Tabs */}
+                {/* 3. Tabs */}
                 <View style={styles.tabWrapper}>
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab;
@@ -356,7 +366,7 @@ const PerformanceFilter = () => {
                     })}
                 </View>
 
-                {/* 3. List Content */}
+                {/* 4. List Content */}
                 <View style={styles.contentArea}>
                     {loading ? (
                         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
@@ -368,8 +378,11 @@ const PerformanceFilter = () => {
                                     <Text style={styles.listHeaderTitle}>
                                         {activeTab === 'Above Average' ? 'Top Performers' : activeTab === 'Below Average' ? 'Need Attention' : 'Average Performers'}
                                     </Text>
+                                    {/* --- MODIFIED: Shows Filtered / Total --- */}
                                     <View style={styles.badgeCount}>
-                                        <Text style={styles.badgeCountText}>{filteredList.length}</Text>
+                                        <Text style={styles.badgeCountText}>
+                                            {filteredList.length} / {processedList.length}
+                                        </Text>
                                     </View>
                                 </View>
 
@@ -403,48 +416,74 @@ const PerformanceFilter = () => {
                     )}
                 </View>
             </View>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1, backgroundColor: COLORS.background },
 
-    // Header Background
-    headerBackground: {
-        backgroundColor: COLORS.primary,
-        height: 120, 
-        paddingHorizontal: 20,
-        paddingTop: 15,
-        borderBottomRightRadius: 30,
-        borderBottomLeftRadius: 30,
-        zIndex: 1,
+    // --- Header Card Style (Matches others) ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Light Teal Circle
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+        flex: 1,
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: 'bold',
-        color: '#FFF',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
     },
 
     // Main Body Container
     bodyContainer: {
         flex: 1,
-        marginTop: -60,
-        paddingHorizontal: 15,
-        zIndex: 2,
+        paddingHorizontal: 8, // Reduced horizontal padding
     },
 
     // Filter Card
     filterCard: {
         backgroundColor: COLORS.cardBg,
-        borderRadius: 20,
-        padding: 15,
-        elevation: 6,
+        borderRadius: 16,
+        padding: 12, // Reduced padding
+        elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        marginBottom: 15,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        marginBottom: 10,
+        width: '96%',
+        alignSelf: 'center'
     },
     pickerRow: {
         flexDirection: 'row',
@@ -452,7 +491,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#F5F7FA',
         borderRadius: 12,
         paddingHorizontal: 10,
-        marginBottom: 12,
+        marginBottom: 10,
         borderWidth: 1,
         borderColor: COLORS.border,
     },
@@ -460,7 +499,7 @@ const styles = StyleSheet.create({
     picker: { width: '100%', color: COLORS.textMain },
     
     // Pills
-    pillContainer: { marginBottom: 8 },
+    pillContainer: { marginBottom: 6 },
     pill: {
         paddingVertical: 6,
         paddingHorizontal: 14,
@@ -480,33 +519,35 @@ const styles = StyleSheet.create({
         backgroundColor: '#E0E7FF',
         borderRadius: 15,
         padding: 4,
-        marginBottom: 15,
+        marginBottom: 10,
+        width: '96%',
+        alignSelf: 'center'
     },
     tabButton: {
         flex: 1,
         flexDirection: 'row',
-        paddingVertical: 10,
+        paddingVertical: 8,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 12,
-        gap: 6
+        gap: 4
     },
     tabButtonActive: {
         backgroundColor: COLORS.primary,
-        elevation: 3,
+        elevation: 2,
     },
     tabText: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
     tabTextActive: { color: '#FFF' },
 
     // Content
-    contentArea: { flex: 1 },
+    contentArea: { flex: 1, width: '96%', alignSelf: 'center' },
     
-    // Header Row (Title on Left, Teacher on Right)
+    // Header Row
     listHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 10,
+        marginBottom: 8,
     },
     listHeaderLeft: {
         flexDirection: 'row',
@@ -526,23 +567,22 @@ const styles = StyleSheet.create({
     },
     badgeCountText: { fontSize: 11, fontWeight: 'bold', color: COLORS.textMain },
     
-    // Updated Teacher Badge (Orange Theme)
+    // Teacher Badge
     teacherBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF3E0', // Very light orange background
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        backgroundColor: '#FFF3E0', 
+        paddingHorizontal: 10,
+        paddingVertical: 4,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#FFE0B2', // Soft orange border
+        borderColor: '#FFE0B2', 
         maxWidth: '55%',
-        elevation: 1, // Subtle shadow for attractiveness
     },
     teacherText: {
         fontSize: 12,
         fontWeight: 'bold',
-        color: '#E65100', // Deep Orange Text
+        color: '#E65100', 
         marginLeft: 6,
     },
 
@@ -553,7 +593,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         backgroundColor: COLORS.cardBg,
         borderRadius: 16,
-        marginBottom: 12,
+        marginBottom: 10,
         padding: 12,
         alignItems: 'center',
         elevation: 2,

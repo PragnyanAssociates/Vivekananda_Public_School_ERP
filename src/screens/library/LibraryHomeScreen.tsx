@@ -1,26 +1,36 @@
 import React, { useState } from 'react';
 import { 
-    View, Text, StyleSheet, TouchableOpacity, FlatList, 
-    Image, RefreshControl 
+    View, 
+    Text, 
+    StyleSheet, 
+    TouchableOpacity, 
+    FlatList, 
+    Image, 
+    RefreshControl,
+    Platform,
+    UIManager,
+    SafeAreaView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons'; // Import Vector Icons
 
 // IMPORT YOUR AUTH HOOK
 import { useAuth } from '../../context/AuthContext'; 
 
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const LibraryHomeScreen = () => {
     const navigation = useNavigation();
-    
-    // 1. GET USER DIRECTLY FROM CONTEXT
     const { user } = useAuth(); 
-    
     const [refreshing, setRefreshing] = useState(false);
 
-    // 2. Determine Role safely
+    // Determine Role & Name safely
     const role = user?.role || 'student';
     const userName = user?.full_name || user?.username || 'User';
 
-    // 3. Refresh Logic (Just simulates a refresh since stats are removed)
     const onRefresh = () => {
         setRefreshing(true);
         setTimeout(() => {
@@ -40,27 +50,28 @@ const LibraryHomeScreen = () => {
             { id: '5', title: 'Action Center', icon: 'https://cdn-icons-png.flaticon.com/128/1484/1484584.png', screen: 'AdminActionScreen' },
         ];
 
-        // LOGIC: Use the context role
         if (role === 'admin') {
             return [...commonModules, ...adminModules];
         }
         return commonModules;
     };
 
+    // New Header Component (Matches AccountsScreen)
     const renderHeader = () => (
-        <View style={styles.header}>
-            <View>
-                <Text style={styles.headerTitle}>📚 Library Hub</Text>
-                <Text style={styles.subHeader}>
-                    Welcome, {userName}
-                </Text>
+        <View style={styles.headerCard}>
+            <View style={styles.headerIconContainer}>
+                {/* Library Icon */}
+                <Icon name="local-library" size={28} color="#008080" />
             </View>
-            {/* Stats Container Removed */}
+            <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>Library Hub</Text>
+                <Text style={styles.headerSubtitle}>Welcome, {userName}</Text>
+            </View>
         </View>
     );
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
             <FlatList
                 ListHeaderComponent={renderHeader}
                 data={getFeatures()}
@@ -68,46 +79,110 @@ const LibraryHomeScreen = () => {
                 numColumns={2}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate(item.screen)}>
-                        <Image source={{ uri: item.icon }} style={styles.icon} resizeMode="contain" />
-                        <Text style={styles.cardText}>{item.title}</Text>
+                    <TouchableOpacity 
+                        style={styles.card} 
+                        onPress={() => navigation.navigate(item.screen as never)}
+                        activeOpacity={0.8}
+                    >
+                        <View style={styles.imageContainer}>
+                            <Image source={{ uri: item.icon }} style={styles.cardImage} resizeMode="contain" />
+                        </View>
+                        <Text style={styles.cardTitle}>{item.title}</Text>
                     </TouchableOpacity>
                 )}
-                contentContainerStyle={{ padding: 12, paddingBottom: 50 }}
+                contentContainerStyle={styles.gridContainer}
+                showsVerticalScrollIndicator={false}
             />
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8FAFC' },
-    header: { 
-        padding: 24, 
-        backgroundColor: '#FFF', 
-        elevation: 2, 
-        marginBottom: 10, 
-        borderBottomLeftRadius: 20, 
-        borderBottomRightRadius: 20 
+    container: { 
+        flex: 1, 
+        backgroundColor: '#F2F5F8' // Light Blue-Grey Background
     },
-    headerTitle: { fontSize: 26, fontWeight: '800', color: '#1E293B' },
-    subHeader: { fontSize: 15, color: '#64748B', marginTop: 4 },
     
-    // Card Styles
+    // --- HEADER STYLES ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10, // Compact height
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        // Shadow
+        elevation: 3,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Light Teal Circle
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+        flex: 1, // Ensure text takes available space
+    },
+    headerTitle: {
+        fontSize: 22, // Large Title
+        fontWeight: 'bold',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
+    },
+
+    // --- GRID STYLES ---
+    gridContainer: {
+        paddingHorizontal: 8,
+        paddingBottom: 50,
+    },
     card: { 
         flex: 1, 
-        margin: 8, 
-        height: 130, 
+        margin: 6, // Consistent spacing
+        height: 150, 
         backgroundColor: '#FFF', 
         borderRadius: 16, 
         alignItems: 'center', 
         justifyContent: 'center', 
+        padding: 10,
+        // Shadow
         elevation: 3, 
         shadowColor: '#000', 
-        shadowOpacity: 0.05, 
-        shadowRadius: 4 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
     },
-    icon: { width: 48, height: 48, marginBottom: 12 },
-    cardText: { fontSize: 14, fontWeight: '600', color: '#475569' }
+    imageContainer: {
+        marginBottom: 15,
+        padding: 10,
+        backgroundColor: '#F7FAFC', // Subtle circle bg for icon
+        borderRadius: 50,
+    },
+    cardImage: { 
+        width: 50, 
+        height: 50, 
+    },
+    cardTitle: { 
+        fontSize: 15, 
+        fontWeight: '600', 
+        color: '#2D3748',
+        textAlign: 'center'
+    }
 });
 
 export default LibraryHomeScreen;

@@ -14,7 +14,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const CLASS_CATEGORIES = [ 'Admins', 'Teachers', 'Others', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10' ];
 
-// MODIFIED: Create a new list for the UI dropdown. The actual role in the DB remains 'admin'.
 const DISPLAY_USER_ROLES = [
   { label: 'Management Admin', value: 'Management Admin' },
   { label: 'General Admin', value: 'General Admin' },
@@ -28,8 +27,8 @@ interface User {
   username: string;
   password?: string;
   full_name: string;
-  role: 'student' | 'teacher' | 'admin' | 'others'; // DB role is still 'admin'
-  class_group: string; // This will hold 'Management Admin' or 'General Admin' for admins
+  role: 'student' | 'teacher' | 'admin' | 'others';
+  class_group: string;
   subjects_taught?: string[];
   roll_no?: string;
   admission_no?: string;
@@ -52,6 +51,9 @@ const AdminLM = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [currentSubjectInput, setCurrentSubjectInput] = useState('');
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchUsers = async () => {
     try {
@@ -70,20 +72,32 @@ const AdminLM = () => {
   }, []);
 
   const groupedUsers = useMemo(() => {
+    // 1. Filter logic
+    const query = searchQuery.toLowerCase().trim();
+    const filteredUsers = users.filter(user => {
+        if (!query) return true;
+        return (
+            (user.full_name && user.full_name.toLowerCase().includes(query)) ||
+            (user.username && user.username.toLowerCase().includes(query)) ||
+            (user.roll_no && user.roll_no.toString().toLowerCase().includes(query)) ||
+            (user.admission_no && user.admission_no.toLowerCase().includes(query))
+        );
+    });
+
+    // 2. Group logic
     const groups: { [key: string]: User[] } = {};
     CLASS_CATEGORIES.forEach(category => {
-        // This logic remains correct. It groups all users with role='admin' into the "Admins" section.
         if (category === 'Admins') {
-             groups[category] = users.filter(user => user.role === 'admin');
+             groups[category] = filteredUsers.filter(user => user.role === 'admin');
         } else if (category === 'Others') {
-             groups[category] = users.filter(user => user.role === 'others');
+             groups[category] = filteredUsers.filter(user => user.role === 'others');
         }
         else {
-            groups[category] = users.filter(user => user.class_group === category);
+            groups[category] = filteredUsers.filter(user => user.class_group === category);
         }
     });
     return groups;
-  }, [users]);
+  }, [users, searchQuery]);
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -120,8 +134,6 @@ const AdminLM = () => {
     if (payload.role !== 'teacher') {
         delete payload.subjects_taught;
     }
-    // No special logic needed here, formData is already correctly structured
-    // role: 'admin', class_group: 'Management Admin'
 
     const isEditing = !!editingUser;
 
@@ -187,34 +199,45 @@ const AdminLM = () => {
       setFormData({ ...formData, subjects_taught: updatedSubjects });
   };
 
-
   const renderUserItem = (item: User) => (
     <View style={styles.userRow}>
-      <Icon
-        name={ item.role === 'admin' ? 'admin-panel-settings' : item.role === 'teacher' ? 'school' : item.role === 'others' ? 'group' : 'person' }
-        size={24} color="#008080" style={styles.userIcon}
-      />
+      <View style={styles.userIconWrapper}>
+        <Icon
+          name={ item.role === 'admin' ? 'admin-panel-settings' : item.role === 'teacher' ? 'school' : item.role === 'others' ? 'group' : 'person' }
+          size={30} color="#008080"
+        />
+      </View>
+
       <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.full_name}</Text>
-        {/* MODIFIED: Display the admin subtype from class_group if the user is an admin */}
-        <Text style={styles.userUsername}>
-          Username: {item.username} {item.role === 'admin' ? `| Type: ${item.class_group}` : ''}
+        <Text style={styles.userName}>{item.full_name.toUpperCase()}</Text>
+        <Text style={styles.userSubtitle}>
+           Username: {item.username} 
+           {item.role === 'admin' ? ` | Type: ${item.class_group}` : ''}
         </Text>
-        {item.roll_no && (<Text style={styles.userSubjects}>Roll: {item.roll_no}</Text>)}
-        {item.admission_no && (<Text style={styles.userSubjects}>Admission No: {item.admission_no}</Text>)}
+
         {item.role === 'teacher' && item.subjects_taught && item.subjects_taught.length > 0 && (
-          <Text style={styles.userSubjects}>Subjects: {item.subjects_taught.join(', ')}</Text>
+             <Text style={styles.userDetailText}>Subjects: {item.subjects_taught.join(', ')}</Text>
+        )}
+
+        {item.role === 'student' && (
+            <View>
+                {item.roll_no ? <Text style={styles.userDetailText}>Roll: {item.roll_no}</Text> : null}
+                {item.admission_no ? <Text style={styles.userDetailText}>Admission No: {item.admission_no}</Text> : null}
+            </View>
         )}
       </View>
-      <TouchableOpacity onPress={() => handleShowPassword(item)} style={styles.actionButton}>
-        <Icon name="vpn-key" size={22} color="#F39C12" />
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
-        <Icon name="edit" size={24} color="#3498DB" />
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionButton}>
-        <Icon name="delete-outline" size={24} color="#E74C3C" />
-      </TouchableOpacity>
+      
+      <View style={styles.actionRow}>
+        <TouchableOpacity onPress={() => handleShowPassword(item)} style={styles.actionButton}>
+            <Icon name="vpn-key" size={24} color="#F39C12" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
+            <Icon name="edit" size={24} color="#3498DB" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionButton}>
+            <Icon name="delete-outline" size={24} color="#E74C3C" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -223,29 +246,59 @@ const AdminLM = () => {
   }
 
   const isEditing = !!editingUser;
-
-  // MODIFIED: Determine what value the picker should show.
-  // If the role is 'admin', show the subtype from class_group. Otherwise, show the role itself.
   const displayRole = formData.role === 'admin' ? formData.class_group : formData.role;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Animatable.View animation="fadeInDown" duration={500}>
-        <View style={styles.header}>
-            <Text style={styles.headerTitle}>User Management</Text>
-            <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-                <Icon name="add" size={20} color="#fff" />
-                <Text style={styles.addButtonText}>Add User</Text>
-            </TouchableOpacity>
+      
+      {/* Header Card */}
+      <View style={styles.headerCard}>
+        <View style={styles.headerLeftContainer}>
+             <View style={styles.headerIconContainer}>
+                <Icon name="manage-accounts" size={32} color="#008080" />
+            </View>
+            <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>User Management</Text>
+                <Text style={styles.headerSubtitle}>Manage and view user data</Text>
+            </View>
         </View>
-      </Animatable.View>
+       
+        <TouchableOpacity style={styles.headerAddBtn} onPress={openAddModal}>
+            <Icon name="add" size={22} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Add User</Text>
+        </TouchableOpacity>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        
+        {/* Search Bar Card */}
+        <View style={styles.searchCard}>
+            <Icon name="search" size={26} color="#90A4AE" style={styles.searchIcon} />
+            <TextInput
+                style={styles.searchInput}
+                placeholder="Search by name or roll number..."
+                placeholderTextColor="#90A4AE"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+            />
+             {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Icon name="close" size={22} color="#90A4AE" />
+                </TouchableOpacity>
+            )}
+        </View>
+
+        {/* List Items */}
         {CLASS_CATEGORIES.map((className, index) => (
-          <Animatable.View key={className} animation="fadeInUp" duration={600} delay={index * 100} style={styles.accordionSection}>
-            <TouchableOpacity style={styles.accordionHeader} onPress={() => handleToggleAccordion(className)} activeOpacity={0.8}>
-              <Text style={styles.accordionTitle}>{className} ({groupedUsers[className]?.length || 0})</Text>
-              <Icon name={expandedClass === className ? 'expand-less' : 'expand-more'} size={28} color="#555" />
+          <Animatable.View key={className} animation="fadeInUp" duration={400} delay={index * 50} style={styles.accordionCard}>
+            <TouchableOpacity style={styles.accordionHeader} onPress={() => handleToggleAccordion(className)} activeOpacity={0.7}>
+              <View style={styles.accordionLeft}>
+                  <Text style={styles.accordionTitle}>{className}</Text>
+                   <View style={styles.badgeContainer}>
+                      <Text style={styles.badgeText}>{groupedUsers[className]?.length || 0}</Text>
+                   </View>
+              </View>
+              <Icon name={expandedClass === className ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={28} color="#666" />
             </TouchableOpacity>
 
             {expandedClass === className && (
@@ -253,7 +306,7 @@ const AdminLM = () => {
                 {groupedUsers[className]?.length > 0 ? (
                   groupedUsers[className].map((user) => ( <Animatable.View key={user.id} animation="fadeIn">{renderUserItem(user)}</Animatable.View> ))
                 ) : (
-                  <Text style={styles.emptySectionText}>No users in this section.</Text>
+                  <Text style={styles.emptySectionText}>No matching users found.</Text>
                 )}
               </View>
             )}
@@ -261,36 +314,36 @@ const AdminLM = () => {
         ))}
       </ScrollView>
 
+      {/* Modal Section (Unchanged style-wise) */}
       <Modal animationType="fade" transparent={true} visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <Animatable.View animation="zoomIn" duration={400} style={styles.modalContainer}>
                 <ScrollView contentContainerStyle={styles.modalContent}>
                     <Text style={styles.modalTitle}>{isEditing ? 'Edit User' : 'Add New User'}</Text>
-                    <View style={styles.modalTitleSeparator} />
+                    <View style={styles.modalDivider} />
 
                     <Text style={styles.inputLabel}>Username</Text>
-                    <TextInput style={styles.input} placeholder="e.g., john.doe, STU101" value={formData.username} onChangeText={(val) => setFormData({ ...formData, username: val })} autoCapitalize="none" />
+                    <TextInput style={styles.input} placeholder="e.g. john.doe" value={formData.username} onChangeText={(val) => setFormData({ ...formData, username: val })} autoCapitalize="none" />
 
                     <Text style={styles.inputLabel}>Password</Text>
                     <View style={styles.passwordContainer}>
                       <TextInput
                         style={styles.passwordInput}
-                        placeholder={isEditing ? "Leave blank to keep same" : "Enter user password"}
+                        placeholder={isEditing ? "Leave blank to keep current" : "Enter password"}
                         value={formData.password}
                         onChangeText={(val) => setFormData({ ...formData, password: val })}
                         secureTextEntry={!isPasswordVisible}
                       />
                       <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
-                        <Icon name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={22} color="#7F8C8D" />
+                        <Icon name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={20} color="#7F8C8D" />
                       </TouchableOpacity>
                     </View>
 
                     <Text style={styles.inputLabel}>Full Name</Text>
-                    <TextInput style={styles.input} placeholder="Enter user's full name" value={formData.full_name} onChangeText={(val) => setFormData({ ...formData, full_name: val })} />
+                    <TextInput style={styles.input} placeholder="Full Name" value={formData.full_name} onChangeText={(val) => setFormData({ ...formData, full_name: val })} />
 
                     <Text style={styles.inputLabel}>Role</Text>
                     <View style={styles.pickerWrapper}>
-                        {/* MODIFIED: This picker now handles the logic of setting role and class_group */}
                         <Picker selectedValue={displayRole} onValueChange={(val) => {
                                 const newFormData = { ...formData };
                                 if (val === 'Management Admin' || val === 'General Admin') {
@@ -300,7 +353,6 @@ const AdminLM = () => {
                                     newFormData.role = val;
                                     if (val === 'teacher') newFormData.class_group = 'Teachers';
                                     else if (val === 'others') newFormData.class_group = 'Others';
-                                    // For student, class_group remains what it was or defaults
                                 }
                                 setFormData(newFormData);
                             }} style={styles.modalPicker}>
@@ -314,24 +366,23 @@ const AdminLM = () => {
                             <View style={styles.subjectInputContainer}>
                                 <TextInput
                                     style={styles.subjectInput}
-                                    placeholder="e.g., English"
+                                    placeholder="Subject"
                                     value={currentSubjectInput}
                                     onChangeText={setCurrentSubjectInput}
                                     onSubmitEditing={handleAddSubject}
                                 />
                                 <TouchableOpacity style={styles.subjectAddButton} onPress={handleAddSubject}>
-                                    <Text style={styles.subjectAddButtonText}>Add</Text>
+                                    <Text style={styles.subjectAddButtonText}>ADD</Text>
                                 </TouchableOpacity>
                             </View>
-
                             <View style={styles.subjectTagContainer}>
                                 {formData.subjects_taught?.map((subject: string, index: number) => (
-                                    <Animatable.View animation="fadeIn" duration={300} key={index} style={styles.subjectTag}>
+                                    <View key={index} style={styles.subjectTag}>
                                         <Text style={styles.subjectTagText}>{subject}</Text>
                                         <TouchableOpacity onPress={() => handleRemoveSubject(subject)} style={styles.removeTagButton}>
-                                            <Icon name="close" size={16} color="#fff" />
+                                            <Icon name="close" size={14} color="#fff" />
                                         </TouchableOpacity>
-                                    </Animatable.View>
+                                    </View>
                                 ))}
                             </View>
                         </>
@@ -339,7 +390,6 @@ const AdminLM = () => {
 
                     {formData.role === 'student' ? (
                         <>
-                          {/* --- STUDENT ACADEMIC FIELDS --- */}
                           <Text style={styles.inputLabel}>Class / Group</Text>
                           <View style={styles.pickerWrapper}>
                               <Picker selectedValue={formData.class_group} onValueChange={(val) => setFormData({ ...formData, class_group: val })} style={styles.modalPicker}>
@@ -347,29 +397,28 @@ const AdminLM = () => {
                               </Picker>
                           </View>
                           <Text style={styles.inputLabel}>Roll No.</Text>
-                          <TextInput style={styles.input} placeholder="Enter class roll number" value={formData.roll_no} onChangeText={(val) => setFormData({ ...formData, roll_no: val })} keyboardType="numeric" />
+                          <TextInput style={styles.input} placeholder="Roll Number" value={formData.roll_no} onChangeText={(val) => setFormData({ ...formData, roll_no: val })} keyboardType="numeric" />
                           <Text style={styles.inputLabel}>Admission No.</Text>
-                          <TextInput style={styles.input} placeholder="Enter admission number" value={formData.admission_no} onChangeText={(val) => setFormData({ ...formData, admission_no: val })} />
+                          <TextInput style={styles.input} placeholder="Admission No" value={formData.admission_no} onChangeText={(val) => setFormData({ ...formData, admission_no: val })} />
                           <Text style={styles.inputLabel}>Parent Name</Text>
-                          <TextInput style={styles.input} placeholder="Enter parent's full name" value={formData.parent_name} onChangeText={(val) => setFormData({ ...formData, parent_name: val })} />
+                          <TextInput style={styles.input} placeholder="Parent Name" value={formData.parent_name} onChangeText={(val) => setFormData({ ...formData, parent_name: val })} />
                           <Text style={styles.inputLabel}>Aadhar No.</Text>
-                          <TextInput style={styles.input} placeholder="Enter 12-digit Aadhar number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
+                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
                           <Text style={styles.inputLabel}>PEN No.</Text>
-                          <TextInput style={styles.input} placeholder="Enter PEN number" value={formData.pen_no} onChangeText={(val) => setFormData({ ...formData, pen_no: val })} />
+                          <TextInput style={styles.input} placeholder="PEN Number" value={formData.pen_no} onChangeText={(val) => setFormData({ ...formData, pen_no: val })} />
                         </>
                     ) : (
                         <>
-                          {/* --- ADMIN, TEACHER & OTHERS PROFESSIONAL FIELDS --- */}
                           <Text style={styles.inputLabel}>Aadhar No.</Text>
-                          <TextInput style={styles.input} placeholder="Enter 12-digit Aadhar number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
+                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
                           <Text style={styles.inputLabel}>Joining Date</Text>
                           <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={formData.joining_date} onChangeText={(val) => setFormData({ ...formData, joining_date: val })} />
                           <Text style={styles.inputLabel}>Previous Salary</Text>
-                          <TextInput style={styles.input} placeholder="e.g., 50000" value={formData.previous_salary} onChangeText={(val) => setFormData({ ...formData, previous_salary: val })} keyboardType="numeric" />
+                          <TextInput style={styles.input} placeholder="Amount" value={formData.previous_salary} onChangeText={(val) => setFormData({ ...formData, previous_salary: val })} keyboardType="numeric" />
                           <Text style={styles.inputLabel}>Present Salary</Text>
-                          <TextInput style={styles.input} placeholder="e.g., 60000" value={formData.present_salary} onChangeText={(val) => setFormData({ ...formData, present_salary: val })} keyboardType="numeric" />
+                          <TextInput style={styles.input} placeholder="Amount" value={formData.present_salary} onChangeText={(val) => setFormData({ ...formData, present_salary: val })} keyboardType="numeric" />
                           <Text style={styles.inputLabel}>Experience</Text>
-                          <TextInput style={styles.input} placeholder="e.g., 5 years in Mathematics" value={formData.experience} onChangeText={(val) => setFormData({ ...formData, experience: val })} />
+                          <TextInput style={styles.input} placeholder="Years of experience" value={formData.experience} onChangeText={(val) => setFormData({ ...formData, experience: val })} />
                         </>
                     )}
 
@@ -378,7 +427,7 @@ const AdminLM = () => {
                         <Text style={styles.modalButtonText}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.modalButton, styles.submitButton]} onPress={handleSave}>
-                        <Text style={styles.modalButtonText}>{isEditing ? 'Save Changes' : 'Add User'}</Text>
+                        <Text style={styles.modalButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
@@ -390,130 +439,244 @@ const AdminLM = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F7F9FC' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F9FC' },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15,
-    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
-    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2,
-  },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#008080' },
-  addButton: {
-    flexDirection: 'row', backgroundColor: '#27AE60', paddingVertical: 10, paddingHorizontal: 14,
-    borderRadius: 20, alignItems: 'center', elevation: 2,
-  },
-  addButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginLeft: 5 },
-  container: { padding: 10 },
-  accordionSection: {
-    backgroundColor: '#FFFFFF', borderRadius: 12, marginBottom: 12, overflow: 'hidden',
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3,
-  },
-  accordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 15 },
-  accordionTitle: { fontSize: 18, fontWeight: '600', color: '#2C3E50' },
-  userListContainer: { borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-  userRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 15,
-    borderBottomWidth: 1, borderBottomColor: '#ECEFF1',
-  },
-  userIcon: { marginRight: 15 },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '500', color: '#2C3E50' },
-  userUsername: { fontSize: 14, color: '#7F8C8D', marginTop: 2 },
-  userSubjects: { fontSize: 13, color: '#008080', fontStyle: 'italic', marginTop: 4 },
-  actionButton: { padding: 8 },
-  emptySectionText: { textAlign: 'center', padding: 20, color: '#95A5A6', fontStyle: 'italic' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: {
-    width: '90%', maxHeight: '85%', backgroundColor: '#FFFFFF', borderRadius: 20,
-    elevation: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, overflow: 'hidden',
-  },
-  modalContent: { padding: 25 },
-  modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#2C3E50', textAlign: 'center' },
-  modalTitleSeparator: {
-    height: 3, width: 40, backgroundColor: '#008080', borderRadius: 2,
-    alignSelf: 'center', marginTop: 8, marginBottom: 25,
-  },
-  inputLabel: { fontSize: 16, color: '#34495E', marginBottom: 8, fontWeight: '500' },
-  input: {
-    backgroundColor: '#F7F9FC', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12,
-    fontSize: 16, color: '#2C3E50', borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 20,
-  },
-  passwordContainer: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7F9FC',
-    borderRadius: 10, borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 20,
-  },
-  passwordInput: {
-    flex: 1, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#2C3E50',
-  },
-  eyeIcon: {
-    padding: 10,
-  },
-  pickerWrapper: {
-    backgroundColor: '#F7F9FC', borderRadius: 10, borderWidth: 1,
-    borderColor: '#E0E0E0', justifyContent: 'center', marginBottom: 20,
-  },
-  modalPicker: { height: 50, width: '100%', color: '#2C3E50' },
-  modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
-  modalButton: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center', elevation: 2 },
-  cancelButton: { backgroundColor: '#95A5A6', marginRight: 10 },
-  submitButton: { backgroundColor: '#27AE60', marginLeft: 10 },
-  modalButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  safeArea: { flex: 1, backgroundColor: '#F2F5F8' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F5F8' },
+  container: { paddingVertical: 10, paddingBottom: 50 },
 
-  subjectInputContainer: {
+  // --- Header Card Style ---
+  headerCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    width: '96%', // Full Width with margin
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8, // Reduced Gap
+    borderRadius: 12,
     flexDirection: 'row',
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },
-  subjectInput: {
+  headerLeftContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
-    backgroundColor: '#F7F9FC',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#2C3E50',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0,
   },
-  subjectAddButton: {
-    paddingHorizontal: 20,
+  headerIconContainer: {
+    backgroundColor: '#E0F2F1',
+    borderRadius: 30,
+    width: 50,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#008080',
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
+    marginRight: 12,
   },
-  subjectAddButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  headerTextContainer: {
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#333333',
   },
-  subjectTagContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 20,
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#666666',
+    marginTop: 2,
   },
-  subjectTag: {
+  headerAddBtn: {
+    backgroundColor: '#2ECC71',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
     flexDirection: 'row',
-    backgroundColor: '#3498DB',
-    borderRadius: 15,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    marginTop: 8,
     alignItems: 'center',
+    marginLeft: 8,
+    elevation: 2,
   },
-  subjectTagText: {
+  headerAddBtnText: {
     color: '#FFFFFF',
+    fontWeight: 'bold',
     fontSize: 14,
-    marginRight: 8,
+    marginLeft: 4,
   },
-  removeTagButton: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 10,
-    padding: 2,
+
+  // --- Search Bar Card Style ---
+  searchCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      width: '96%', // Matches header width perfectly
+      alignSelf: 'center',
+      marginBottom: 8, // Reduced Gap
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 15,
+      height: 55, // Slightly taller
+      elevation: 2,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
   },
+  searchIcon: {
+      marginRight: 10,
+  },
+  searchInput: {
+      flex: 1,
+      fontSize: 16, // Increased Font Size
+      color: '#333333',
+      height: '100%',
+  },
+
+  // --- Accordion Card Style ---
+  accordionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    width: '96%', // Matches other cards
+    alignSelf: 'center',
+    marginBottom: 6, // Significantly Reduced Gap for "Attractive" look
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+  },
+  accordionHeader: {
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingVertical: 18, // Taller header for larger text
+    paddingHorizontal: 16,
+  },
+  accordionLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  accordionTitle: { 
+    fontSize: 18, // Increased Font Size (Admins, Teachers, etc.)
+    fontWeight: '700', // Bolder
+    color: '#2C3E50' 
+  },
+  badgeContainer: {
+      backgroundColor: '#EAEAEA',
+      paddingHorizontal: 12, 
+      paddingVertical: 5,
+      borderRadius: 15, 
+      marginLeft: 12,
+      justifyContent: 'center',
+      alignItems: 'center'
+  },
+  badgeText: { 
+    fontSize: 14, // Increased Badge Text Size
+    color: '#333333', 
+    fontWeight: 'bold' 
+  },
+
+  // --- User Row List ---
+  userListContainer: { 
+    borderTopWidth: 1, 
+    borderTopColor: '#F5F5F5' 
+  },
+  userRow: {
+    flexDirection: 'row', 
+    alignItems: 'center',
+    paddingVertical: 15, 
+    paddingHorizontal: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F9F9F9',
+    backgroundColor: '#FFFFFF',
+  },
+  userIconWrapper: {
+      width: 45, 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      marginRight: 12
+  },
+  userInfo: { 
+    flex: 1, 
+    justifyContent: 'center' 
+  },
+  userName: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#2C3E50', 
+    marginBottom: 4 
+  },
+  userSubtitle: { 
+    fontSize: 14, 
+    color: '#7F8C8D', 
+    marginBottom: 2 
+  },
+  userDetailText: { 
+    fontSize: 14, 
+    color: '#008080', 
+    fontWeight: '500', 
+    marginTop: 1 
+  },
+  actionRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  actionButton: { 
+    padding: 8, 
+    marginLeft: 2 
+  },
+  emptySectionText: { 
+    textAlign: 'center', 
+    padding: 20, 
+    color: '#999', 
+    fontStyle: 'italic',
+    fontSize: 15
+  },
+
+  // --- Modal Styles ---
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContainer: {
+    width: '90%', maxHeight: '85%', backgroundColor: '#fff', borderRadius: 15,
+    elevation: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, overflow: 'hidden'
+  },
+  modalContent: { padding: 25 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#008080', textAlign: 'center' },
+  modalDivider: { height: 2, width: 40, backgroundColor: '#008080', alignSelf: 'center', marginTop: 8, marginBottom: 20 },
+
+  inputLabel: { fontSize: 14, color: '#555', marginBottom: 6, fontWeight: '600' },
+  input: {
+    backgroundColor: '#f9f9f9', borderRadius: 8, paddingHorizontal: 15, paddingVertical: 12,
+    fontSize: 15, color: '#333', borderWidth: 1, borderColor: '#eee', marginBottom: 15,
+  },
+  passwordContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9f9f9',
+    borderRadius: 8, borderWidth: 1, borderColor: '#eee', marginBottom: 15,
+  },
+  passwordInput: { flex: 1, paddingHorizontal: 15, paddingVertical: 12, fontSize: 15, color: '#333' },
+  eyeIcon: { padding: 10 },
+
+  pickerWrapper: {
+    backgroundColor: '#f9f9f9', borderRadius: 8, borderWidth: 1, borderColor: '#eee',
+    justifyContent: 'center', marginBottom: 15,
+  },
+  modalPicker: { height: 50, width: '100%', color: '#333' },
+
+  subjectInputContainer: { flexDirection: 'row', marginBottom: 10 },
+  subjectInput: {
+    flex: 1, backgroundColor: '#f9f9f9', borderRadius: 8, paddingHorizontal: 15, paddingVertical: 12,
+    fontSize: 15, color: '#333', borderWidth: 1, borderColor: '#eee',
+    borderTopRightRadius: 0, borderBottomRightRadius: 0,
+  },
+  subjectAddButton: {
+    paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#008080', borderTopRightRadius: 8, borderBottomRightRadius: 8,
+  },
+  subjectAddButtonText: { color: '#fff', fontWeight: 'bold' },
+  subjectTagContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
+  subjectTag: {
+    flexDirection: 'row', backgroundColor: '#008080', borderRadius: 20,
+    paddingVertical: 5, paddingHorizontal: 12, marginRight: 8, marginTop: 8, alignItems: 'center',
+  },
+  subjectTagText: { color: '#fff', fontSize: 13, marginRight: 6 },
+  removeTagButton: { backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 12, padding: 2 },
+
+  modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', elevation: 1 },
+  cancelButton: { backgroundColor: '#7f8c8d', marginRight: 10 },
+  submitButton: { backgroundColor: '#008080', marginLeft: 10 },
+  modalButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default AdminLM;

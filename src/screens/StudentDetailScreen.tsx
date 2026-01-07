@@ -1,13 +1,19 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator, Image,
-    TouchableOpacity, Modal, Pressable, Dimensions, FlatList, Platform, SafeAreaView
+    TouchableOpacity, Modal, Pressable, Dimensions, Platform, SafeAreaView, UIManager
 } from 'react-native';
 import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
+
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // --- Timetable Constants ---
 type Day = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
@@ -32,11 +38,8 @@ const getSubjectColor = (subject?: string): string => { if (!subject) return '#F
 const CLASS_SUBJECTS = { 'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'] };
 const EXAM_MAPPING = { 'AT1': 'Assignment-1', 'UT1': 'Unitest-1', 'AT2': 'Assignment-2', 'UT2': 'Unitest-2', 'AT3': 'Assignment-3', 'UT3': 'Unitest-3', 'AT4': 'Assignment-4', 'UT4': 'Unitest-4', 'SA1': 'SA1', 'SA2': 'SA2', 'Total': 'Overall' };
 const DISPLAY_EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4','SA1', 'SA2', 'Total'];
-
-// ★★★ NEW: Define Senior Classes for 20 Marks Logic ★★★
 const SENIOR_CLASSES = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
-// --- Helper: Date Formatter (DD/MM/YYYY) ---
 const formatDate = (date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -45,8 +48,6 @@ const formatDate = (date) => {
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
 };
-
-const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
 // --- Attendance Constants & Components ---
 const PRIMARY_COLOR = '#008080'; 
@@ -57,7 +58,6 @@ const ORANGE = '#F57C00';
 const GREY = '#9E9E9E';
 const WHITE = '#FFFFFF';
 
-// Reusable Component for Timetable Grid
 const StudentTimetable = ({ classGroup }) => {
     const [timetableData, setTimetableData] = useState<TimetableSlotFromAPI[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -67,24 +67,18 @@ const StudentTimetable = ({ classGroup }) => {
     return (<View style={styles.ttContainer}><View style={styles.ttHeaderRow}>{tableHeaders.map(h => (<View key={h.name} style={[styles.ttHeaderCell, { backgroundColor: h.color, width: h.width }]}><Text style={[styles.ttHeaderText, { color: h.textColor }]}>{h.name}</Text></View>))}</View>{scheduleData.map((row, rowIndex) => (<View key={rowIndex} style={styles.ttRow}><View style={[styles.ttCell, styles.ttTimeCell, { width: tableHeaders[0].width }]}><Text style={styles.ttTimeText}>{row.time}</Text></View>{row.periods.map((period, periodIndex) => (<View key={periodIndex} style={[styles.ttCell, period.isBreak ? styles.ttBreakCell : { backgroundColor: getSubjectColor(period.subject) }, { width: tableHeaders[periodIndex + 1].width },]}>{period.isBreak ? (<Text style={styles.ttBreakTextSubject}>{period.subject}</Text>) : (<><Text style={styles.ttSubjectText} numberOfLines={2}>{period.subject || ''}</Text>{period.teacher && <Text style={styles.ttTeacherText} numberOfLines={1}>{period.teacher}</Text>}</>)}</View>))}</View>))}</View>);
 };
 
-// Embedded Report Card Component - UPDATED WITH MAX MARKS LOGIC
 const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceData }) => {
     const subjects = CLASS_SUBJECTS[studentInfo.class_group] || [];
-    
-    // Check if senior class
     const isSeniorClass = SENIOR_CLASSES.includes(studentInfo.class_group);
-
     return (
         <View style={rcStyles.card}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={rcStyles.table}>
-                    {/* Header Row with Max Marks Calculation */}
                     <View style={rcStyles.tableRow}>
                         <Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Subjects</Text>
                         {DISPLAY_EXAM_ORDER.map(exam => {
                             let label = exam;
                             if (exam.startsWith('AT') || exam.startsWith('UT')) {
-                                // ★★★ LOGIC CHANGE HERE ★★★
                                 const maxMarks = isSeniorClass ? '20' : '25';
                                 label = `${exam}\n(${maxMarks})`;
                             } else if (exam.startsWith('SA')) {
@@ -93,16 +87,12 @@ const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceDa
                             return <Text key={exam} style={[rcStyles.tableHeader, rcStyles.markCol]}>{label}</Text>;
                         })}
                     </View>
-                    
-                    {/* Data Rows */}
                     {subjects.map(subject => (
                         <View key={subject} style={rcStyles.tableRow}>
                             <Text style={[rcStyles.tableCell, rcStyles.subjectCol]}>{subject}</Text>
                             {DISPLAY_EXAM_ORDER.map(exam => <Text key={exam} style={[rcStyles.tableCell, rcStyles.markCol]}>{marksData[subject]?.[EXAM_MAPPING[exam]] ?? '-'}</Text>)}
                         </View>
                     ))}
-                    
-                    {/* Total Row */}
                     <View style={[rcStyles.tableRow, rcStyles.totalRow]}>
                         <Text style={[rcStyles.tableHeader, rcStyles.subjectCol]}>Total</Text>
                         {DISPLAY_EXAM_ORDER.map(exam => {
@@ -119,8 +109,6 @@ const EmbeddedReportCard = ({ studentInfo, academicYear, marksData, attendanceDa
     );
 };
 
-// --- ATTENDANCE SUB-COMPONENTS ---
-
 const SummaryCard = ({ label, value, color, width = '23%' }) => (
     <Animatable.View animation="zoomIn" duration={500} style={[attStyles.summaryBox, { width: width }]}>
         <Text style={[attStyles.summaryValue, { color }]}>{value}</Text>
@@ -131,46 +119,26 @@ const SummaryCard = ({ label, value, color, width = '23%' }) => (
 const DailyStatusCard = ({ record, date }) => {
     const hasRecord = !!record;
     const status = hasRecord ? record.status : null;
-    
     let bgColor = GREY;
     let iconName = "help-circle-outline";
     let statusText = "No Record";
-
-    if (status === 'Present') {
-        bgColor = GREEN;
-        iconName = "check-circle-outline";
-        statusText = "Present";
-    } else if (status === 'Absent') {
-        bgColor = RED;
-        iconName = "close-circle-outline";
-        statusText = "Absent";
-    }
-
+    if (status === 'Present') { bgColor = GREEN; iconName = "check-circle-outline"; statusText = "Present"; } else if (status === 'Absent') { bgColor = RED; iconName = "close-circle-outline"; statusText = "Absent"; }
     return (
         <Animatable.View animation="flipInX" duration={600} style={[attStyles.dailyCard, { backgroundColor: hasRecord ? bgColor : WHITE, borderColor: bgColor }]}>
             <Icon name={iconName} size={50} color={hasRecord ? WHITE : bgColor} />
-            <Text style={[attStyles.dailyStatusText, { color: hasRecord ? WHITE : bgColor }]}>
-                {statusText.toUpperCase()}
-            </Text>
-            <Text style={[attStyles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : '#566573' }]}>
-                {formatDate(date)}
-            </Text>
+            <Text style={[attStyles.dailyStatusText, { color: hasRecord ? WHITE : bgColor }]}>{statusText.toUpperCase()}</Text>
+            <Text style={[attStyles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : '#566573' }]}>{formatDate(date)}</Text>
         </Animatable.View>
     );
 };
 
-// --- EMBEDDED ATTENDANCE VIEW ---
 const EmbeddedAttendanceView = ({ studentId }) => {
-    const [viewMode, setViewMode] = useState('daily'); // Default to Daily
+    const [viewMode, setViewMode] = useState('daily'); 
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    
-    // Dates
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
     const [toDate, setToDate] = useState(new Date());
-    
-    // Pickers
     const [showMainPicker, setShowMainPicker] = useState(false);
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
@@ -180,17 +148,10 @@ const EmbeddedAttendanceView = ({ studentId }) => {
         setIsLoading(true);
         try {
             let url = `/attendance/student-history-admin/${studentId}?viewMode=${viewMode}`;
-            
-            if (viewMode === 'daily') {
-                url += `&date=${selectedDate.toISOString().split('T')[0]}`;
-            } else if (viewMode === 'monthly') {
-                url += `&date=${selectedDate.toISOString().slice(0, 7)}`;
-            } else if (viewMode === 'yearly') {
-                url += `&targetYear=${selectedDate.getFullYear()}`;
-            } else if (viewMode === 'custom') {
-                url += `&startDate=${fromDate.toISOString().split('T')[0]}&endDate=${toDate.toISOString().split('T')[0]}`;
-            }
-
+            if (viewMode === 'daily') url += `&date=${selectedDate.toISOString().split('T')[0]}`;
+            else if (viewMode === 'monthly') url += `&date=${selectedDate.toISOString().slice(0, 7)}`;
+            else if (viewMode === 'yearly') url += `&targetYear=${selectedDate.getFullYear()}`;
+            else if (viewMode === 'custom') url += `&startDate=${fromDate.toISOString().split('T')[0]}&endDate=${toDate.toISOString().split('T')[0]}`;
             const response = await apiClient.get(url);
             setData(response.data);
         } catch (error: any) {
@@ -201,96 +162,41 @@ const EmbeddedAttendanceView = ({ studentId }) => {
         }
     }, [studentId, viewMode, selectedDate, fromDate, toDate]);
 
-    // Auto fetch when mode or date changes (except custom range)
-    useEffect(() => {
-        if (viewMode !== 'custom') fetchHistory();
-    }, [fetchHistory, viewMode, selectedDate]);
+    useEffect(() => { if (viewMode !== 'custom') fetchHistory(); }, [fetchHistory, viewMode, selectedDate]);
+    const onMainDateChange = (event, date) => { setShowMainPicker(Platform.OS === 'ios'); if (date) setSelectedDate(date); };
+    const onFromDateChange = (event, date) => { setShowFromPicker(Platform.OS === 'ios'); if (date) setFromDate(date); };
+    const onToDateChange = (event, date) => { setShowToPicker(Platform.OS === 'ios'); if (date) setToDate(date); };
 
-    const onMainDateChange = (event, date) => {
-        setShowMainPicker(Platform.OS === 'ios');
-        if (date) setSelectedDate(date);
-    };
-
-    const onFromDateChange = (event, date) => {
-        setShowFromPicker(Platform.OS === 'ios');
-        if (date) setFromDate(date);
-    };
-
-    const onToDateChange = (event, date) => {
-        setShowToPicker(Platform.OS === 'ios');
-        if (date) setToDate(date);
-    };
-
-    // Stats Calculation
     const summary = data?.summary || { total_days: 0, present_days: 0, absent_days: 0 };
     const percentage = summary.total_days > 0 ? ((summary.present_days / summary.total_days) * 100).toFixed(1) : '0.0';
-    
-    // Daily Record logic (find the record matching selected date)
-    const dailyRecord = (viewMode === 'daily' && data?.history?.length) 
-        ? data.history.find(r => r.attendance_date.startsWith(selectedDate.toISOString().split('T')[0])) || data.history[0]
-        : null;
+    const dailyRecord = (viewMode === 'daily' && data?.history?.length) ? data.history.find(r => r.attendance_date.startsWith(selectedDate.toISOString().split('T')[0])) || data.history[0] : null;
 
     return (
         <SafeAreaView style={attStyles.container}>
-            {/* TABS */}
             <View style={attStyles.toggleContainer}>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'daily' && attStyles.toggleButtonActive]} onPress={() => setViewMode('daily')}>
-                    <Text style={[attStyles.toggleButtonText, viewMode === 'daily' && attStyles.toggleButtonTextActive]}>Daily</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'monthly' && attStyles.toggleButtonActive]} onPress={() => setViewMode('monthly')}>
-                    <Text style={[attStyles.toggleButtonText, viewMode === 'monthly' && attStyles.toggleButtonTextActive]}>Monthly</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'yearly' && attStyles.toggleButtonActive]} onPress={() => setViewMode('yearly')}>
-                    <Text style={[attStyles.toggleButtonText, viewMode === 'yearly' && attStyles.toggleButtonTextActive]}>Yearly</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[attStyles.toggleButton, viewMode === 'custom' && attStyles.toggleButtonActive]} onPress={() => setViewMode('custom')}>
-                    <Text style={[attStyles.toggleButtonText, viewMode === 'custom' && attStyles.toggleButtonTextActive]}>Range</Text>
-                </TouchableOpacity>
-                
-                {viewMode !== 'custom' && (
-                    <TouchableOpacity style={attStyles.calendarButton} onPress={() => setShowMainPicker(true)}>
-                        <Icon name="calendar" size={22} color={PRIMARY_COLOR} />
-                    </TouchableOpacity>
-                )}
+                {['daily', 'monthly', 'yearly', 'custom'].map(m => (<TouchableOpacity key={m} style={[attStyles.toggleButton, viewMode === m && attStyles.toggleButtonActive]} onPress={() => setViewMode(m)}><Text style={[attStyles.toggleButtonText, viewMode === m && attStyles.toggleButtonTextActive]}>{m.charAt(0).toUpperCase() + m.slice(1)}</Text></TouchableOpacity>))}
+                {viewMode !== 'custom' && (<TouchableOpacity style={attStyles.calendarButton} onPress={() => setShowMainPicker(true)}><Icon name="calendar" size={22} color={PRIMARY_COLOR} /></TouchableOpacity>)}
             </View>
-
-            {/* Subtitle */}
             <View style={attStyles.subtitleContainer}>
                  {viewMode === 'daily' && <Text style={attStyles.subtitle}>Date: {formatDate(selectedDate)}</Text>}
                  {viewMode === 'monthly' && <Text style={attStyles.subtitle}>Month: {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
                  {viewMode === 'yearly' && <Text style={attStyles.subtitle}>Year: {selectedDate.getFullYear()}</Text>}
                  {viewMode === 'custom' && <Text style={attStyles.subtitle}>Custom Range</Text>}
             </View>
-
-            {/* Range Inputs */}
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={attStyles.rangeContainer}>
-                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowFromPicker(true)}>
-                        <Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/>
-                        <Text style={attStyles.dateInputText}>{formatDate(fromDate)}</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowFromPicker(true)}><Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/><Text style={attStyles.dateInputText}>{formatDate(fromDate)}</Text></TouchableOpacity>
                     <Icon name="arrow-right" size={20} color="#566573" />
-                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowToPicker(true)}>
-                        <Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/>
-                        <Text style={attStyles.dateInputText}>{formatDate(toDate)}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={attStyles.goButton} onPress={fetchHistory}>
-                        <Text style={attStyles.goButtonText}>Go</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity style={attStyles.dateInputBox} onPress={() => setShowToPicker(true)}><Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/><Text style={attStyles.dateInputText}>{formatDate(toDate)}</Text></TouchableOpacity>
+                    <TouchableOpacity style={attStyles.goButton} onPress={fetchHistory}><Text style={attStyles.goButtonText}>Go</Text></TouchableOpacity>
                 </Animatable.View>
             )}
-
             {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
             {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={onFromDateChange} />}
             {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={onToDateChange} />}
-
             {isLoading ? <ActivityIndicator style={{ marginVertical: 30 }} size="large" color={PRIMARY_COLOR} /> : (
                 <>
-                    {viewMode === 'daily' ? (
-                         <View style={{ padding: 20, alignItems: 'center' }}>
-                            <DailyStatusCard record={dailyRecord} date={selectedDate} />
-                        </View>
-                    ) : (
+                    {viewMode === 'daily' ? (<View style={{ padding: 20, alignItems: 'center' }}><DailyStatusCard record={dailyRecord} date={selectedDate} /></View>) : (
                         <View style={attStyles.summaryContainer}>
                             <SummaryCard label="Overall %" value={`${percentage}%`} color={BLUE} delay={100} />
                             <SummaryCard label="Working Days" value={summary.total_days || 0} color={ORANGE} delay={150} />
@@ -305,7 +211,7 @@ const EmbeddedAttendanceView = ({ studentId }) => {
 };
 
 
-const StudentDetailScreen = ({ route }) => {
+const StudentDetailScreen = ({ route, navigation }) => {
     const { studentId } = route.params;
     const [studentDetails, setStudentDetails] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -318,6 +224,11 @@ const StudentDetailScreen = ({ route }) => {
     const [reportCardLoading, setReportCardLoading] = useState(false);
     
     const scrollViewRef = useRef(null);
+
+    // --- HIDE NATIVE HEADER ---
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     useEffect(() => {
         if (studentId) {
@@ -339,12 +250,7 @@ const StudentDetailScreen = ({ route }) => {
     const scrollToBottom = () => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
     const handleAcademicToggle = () => { if (!isAcademicExpanded) scrollToBottom(); setIsAcademicExpanded(prevState => !prevState); };
     const handleTimetableToggle = () => { if (!isTimetableExpanded) scrollToBottom(); setIsTimetableExpanded(prevState => !prevState); };
-    
-    const handleAttendanceToggle = () => {
-        if (!isAttendanceExpanded) scrollToBottom(); 
-        setIsAttendanceExpanded(prevState => !prevState); 
-    }; 
-
+    const handleAttendanceToggle = () => { if (!isAttendanceExpanded) scrollToBottom(); setIsAttendanceExpanded(prevState => !prevState); }; 
     const handleReportCardToggle = async () => {
         if (!studentDetails || !studentDetails.id) return;
         if (!isReportCardExpanded && !reportCardData) {
@@ -374,19 +280,49 @@ const StudentDetailScreen = ({ route }) => {
     const DetailRow = ({ label, value }) => (<View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value || 'Not Provided'}</Text></View>);
     if (loading) return <View style={styles.loaderContainer}><ActivityIndicator size="large" color="#008080" /></View>;
     if (!studentDetails) return <View style={styles.loaderContainer}><Text>Could not load student details.</Text></View>;
+    
     const imageUrl = studentDetails.profile_image_url ? `${SERVER_URL}${studentDetails.profile_image_url}` : null;
 
     return (
-        <View style={{ flex: 1 }}>
+        <SafeAreaView style={styles.container}>
             <Modal visible={isViewerVisible} transparent={true} onRequestClose={() => setViewerVisible(false)} animationType="fade"><Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}><View style={styles.modalContent}><Image source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} style={styles.enlargedAvatar} resizeMode="contain" /><TouchableOpacity style={styles.closeButton} onPress={() => setViewerVisible(false)}><Text style={styles.closeButtonText}>Close</Text></TouchableOpacity></View></Pressable></Modal>
-            <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.scrollContentContainer}>
-                <View style={styles.profileHeader}><TouchableOpacity onPress={() => setViewerVisible(true)}><Image source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} style={styles.avatar} /></TouchableOpacity><Text style={styles.fullName}>{studentDetails.full_name}</Text><Text style={styles.role}>{studentDetails.class_group}</Text></View>
+            
+            {/* Header Card with Improved Back Button */}
+            <View style={styles.headerCard}>
+                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.6}>
+                    <MaterialIcons name="arrow-back" size={24} color="#333" />
+                </TouchableOpacity>
+                <View style={styles.headerIconContainer}>
+                    <MaterialIcons name="person" size={28} color="#008080" />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>Student Profile</Text>
+                    <Text style={styles.headerSubtitle}>View detailed information</Text>
+                </View>
+            </View>
+
+            <ScrollView ref={scrollViewRef} style={styles.scrollContainer} contentContainerStyle={styles.scrollContentContainer}>
+                
+                {/* Profile Card */}
+                <View style={styles.profileCard}>
+                    <TouchableOpacity onPress={() => setViewerVisible(true)} style={styles.avatarWrapper}>
+                        <Image 
+                            source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} 
+                            style={styles.avatar} 
+                            fadeDuration={0} // Makes image appear instantly if cached
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.fullName}>{studentDetails.full_name}</Text>
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{studentDetails.class_group}</Text>
+                    </View>
+                </View>
+
                 <View style={styles.card}><Text style={styles.cardTitle}>Personal Details</Text><DetailRow label="Full Name" value={studentDetails.full_name} /><DetailRow label="Username" value={studentDetails.username} /><DetailRow label="Date of Birth" value={studentDetails.dob} /><DetailRow label="Gender" value={studentDetails.gender} /></View>
                 <View style={styles.card}><Text style={styles.cardTitle}>Contact Details</Text><DetailRow label="Mobile No" value={studentDetails.phone} /><DetailRow label="Email Address" value={studentDetails.email} /><DetailRow label="Address" value={studentDetails.address} /></View>
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleAcademicToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Academic Details</Text><Text style={styles.arrowIcon}>{isAcademicExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isAcademicExpanded && (<View style={styles.cardContent}><DetailRow label="Class" value={studentDetails.class_group} /><DetailRow label="Roll No." value={studentDetails.roll_no} /><DetailRow label="Admission No." value={studentDetails.admission_no} /><DetailRow label="Parent Name" value={studentDetails.parent_name} /><DetailRow label="Aadhar No." value={studentDetails.aadhar_no} /><DetailRow label="PEN No." value={studentDetails.pen_no} /><DetailRow label="Admission Date" value={studentDetails.admission_date} /></View>)}</View>
                 <View style={styles.collapsibleCard}><TouchableOpacity style={styles.collapsibleHeader} onPress={handleTimetableToggle} activeOpacity={0.8}><Text style={styles.collapsibleTitle}>Timetable</Text><Text style={styles.arrowIcon}>{isTimetableExpanded ? '▲' : '▼'}</Text></TouchableOpacity>{isTimetableExpanded && <StudentTimetable classGroup={studentDetails.class_group} />}</View>
 
-                {/* ATTENDANCE SECTION */}
                 <View style={styles.collapsibleCard}>
                     <TouchableOpacity style={styles.collapsibleHeader} onPress={handleAttendanceToggle} activeOpacity={0.8}>
                         <Text style={styles.collapsibleTitle}>Attendance</Text>
@@ -400,13 +336,94 @@ const StudentDetailScreen = ({ route }) => {
                     {isReportCardExpanded && (reportCardLoading ? <ActivityIndicator size="large" color="#008080" style={{ marginVertical: 20 }} /> : reportCardData ? <EmbeddedReportCard {...reportCardData} /> : <Text style={styles.errorText}>No report data available.</Text>)}
                 </View>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 
 // --- General Styles ---
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f4f6f8' }, scrollContentContainer: { paddingBottom: 20 }, loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }, errorText: { fontSize: 16, color: '#d32f2f', textAlign: 'center', padding: 20 }, profileHeader: { alignItems: 'center', paddingVertical: 30, paddingHorizontal: 15, backgroundColor: '#008080' }, avatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, borderColor: '#ffffff', marginBottom: 15, backgroundColor: '#bdc3c7' }, fullName: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', textAlign: 'center' }, role: { fontSize: 16, color: '#ecf0f1', marginTop: 5, backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 15 }, card: { backgroundColor: '#ffffff', borderRadius: 8, marginHorizontal: 15, marginTop: 15, paddingHorizontal: 15, paddingBottom: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 }, cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', marginBottom: 5 }, cardContent: { paddingHorizontal: 15, paddingBottom: 5 }, detailRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', alignItems: 'center' }, detailLabel: { fontSize: 15, color: '#7f8c8d', flex: 2 }, detailValue: { fontSize: 15, color: '#2c3e50', flex: 3, fontWeight: '500', textAlign: 'right' }, collapsibleCard: { backgroundColor: '#ffffff', borderRadius: 8, marginHorizontal: 15, marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, overflow: 'hidden' }, collapsibleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 }, collapsibleTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080' }, arrowIcon: { fontSize: 20, color: '#008080' }, modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center' }, modalContent: { width: '90%', height: '70%', justifyContent: 'center', alignItems: 'center' }, enlargedAvatar: { width: '100%', height: '100%', borderRadius: 10 }, closeButton: { position: 'absolute', bottom: 20, backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 35, borderRadius: 25 }, closeButtonText: { color: '#2c3e50', fontSize: 16, fontWeight: 'bold' },
+    container: { flex: 1, backgroundColor: '#F2F5F8' }, 
+    scrollContainer: { flex: 1 },
+    scrollContentContainer: { paddingBottom: 30 }, 
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
+    
+    // Header Card Style
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    // Updated Back Button Style (Transparent, Aligned)
+    backButton: {
+        marginRight: 8,
+        padding: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1',
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
+    headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#333333' },
+    headerSubtitle: { fontSize: 14, color: '#666666', marginTop: 1 },
+
+    // Profile Card
+    profileCard: {
+        alignItems: 'center',
+        backgroundColor: '#008080', 
+        marginHorizontal: 15,
+        borderRadius: 16,
+        paddingVertical: 25,
+        marginBottom: 10,
+        elevation: 4,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 5,
+    },
+    avatarWrapper: {
+        borderRadius: 65,
+        borderWidth: 4,
+        borderColor: 'rgba(255,255,255,0.3)',
+        padding: 4,
+        marginBottom: 10,
+    },
+    avatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#bdc3c7' },
+    fullName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 5 },
+    badge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+    badgeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+
+    errorText: { fontSize: 16, color: '#d32f2f', textAlign: 'center', padding: 20 }, 
+    card: { backgroundColor: '#ffffff', borderRadius: 12, marginHorizontal: 15, marginTop: 15, paddingHorizontal: 15, paddingBottom: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 }, 
+    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', marginBottom: 5 }, 
+    cardContent: { paddingHorizontal: 15, paddingBottom: 5 }, 
+    detailRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', alignItems: 'center' }, 
+    detailLabel: { fontSize: 15, color: '#7f8c8d', flex: 2 }, 
+    detailValue: { fontSize: 15, color: '#2c3e50', flex: 3, fontWeight: '500', textAlign: 'right' }, 
+    collapsibleCard: { backgroundColor: '#ffffff', borderRadius: 12, marginHorizontal: 15, marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, overflow: 'hidden' }, 
+    collapsibleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 }, 
+    collapsibleTitle: { fontSize: 18, fontWeight: 'bold', color: '#008080' }, 
+    arrowIcon: { fontSize: 20, color: '#008080' }, 
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center' }, 
+    modalContent: { width: '90%', height: '70%', justifyContent: 'center', alignItems: 'center' }, 
+    enlargedAvatar: { width: '100%', height: '100%', borderRadius: 10 }, 
+    closeButton: { position: 'absolute', bottom: 20, backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 35, borderRadius: 25 }, 
+    closeButtonText: { color: '#2c3e50', fontSize: 16, fontWeight: 'bold' },
     ttContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' }, ttHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#CFD8DC' }, ttHeaderCell: { paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#ECEFF1' }, ttHeaderText: { fontSize: 12, fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase' }, ttRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F1F3F4' }, ttCell: { paddingVertical: 12, paddingHorizontal: 4, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#F1F3F4', minHeight: 70 }, ttTimeCell: { alignItems: 'center', backgroundColor: '#F8F9FA' }, ttTimeText: { fontSize: 11, color: '#495057', fontWeight: '600' }, ttSubjectText: { fontSize: 13, fontWeight: '800', color: '#37474F', marginBottom: 3, textAlign: 'center' }, ttTeacherText: { fontSize: 10, color: '#78909C', textAlign: 'center', marginTop: 2, fontWeight: '500' }, ttBreakCell: { alignItems: 'center', backgroundColor: '#EAECEE' }, ttBreakTextSubject: { fontSize: 12, fontWeight: '600', color: '#546E7A' },
 });
 
@@ -448,12 +465,6 @@ const attStyles = StyleSheet.create({
     summaryValue: { fontSize: 20, fontWeight: 'bold' },
     summaryLabel: { fontSize: 12, color: '#566573', marginTop: 5, textAlign: 'center' },
     
-    // History Styles (Only used for Card now if needed, or kept for future ref)
-    historyDayCard: { backgroundColor: WHITE, marginHorizontal: 15, marginVertical: 8, borderRadius: 8, elevation: 2, shadowColor: '#999', shadowOpacity: 0.1, shadowRadius: 5 },
-    historyDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-    historyDate: { fontSize: 16, fontWeight: '600', color: '#37474F' },
-    historyStatus: { fontSize: 14, fontWeight: 'bold' },
-
     dailyCard: { width: '100%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, elevation: 2 },
     dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
     dailyDateText: { fontSize: 16, marginTop: 5 },

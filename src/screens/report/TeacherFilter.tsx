@@ -1,24 +1,29 @@
 /**
  * File: src/screens/report/TeacherFilter.tsx
- * Purpose: Filter Teachers by Performance (Class & Subject) - Date Logic Removed.
+ * Purpose: Filter Teachers by Performance (Class & Subject).
+ * Design: Consistent Card Header UI.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, RefreshControl, StatusBar
+    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager
 } from 'react-native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 // --- CONSTANTS ---
 const COLORS = {
-    primary: '#00897B',      // Main Teal
-    primaryDark: '#00695C',  // Darker Teal for Header
-    background: '#F0F4F8',   // Very light grey/blue background
+    primary: '#008080',      // Main Teal (Matches other screens)
+    background: '#F2F5F8',   // Light Blue-Grey Background
     cardBg: '#FFFFFF',
-    textMain: '#102027',
-    textSub: '#546E7A',
+    textMain: '#333333',
+    textSub: '#666666',
     
     // Status Colors
     success: '#00C853',      // Vibrant Green (> 90%)
@@ -81,12 +86,11 @@ const TeacherFilter = () => {
     // --- 2. Fetch Teacher Data ---
     useEffect(() => {
         fetchTeacherData();
-    }, []); // Removed dependency on selectedYear
+    }, []);
 
     const fetchTeacherData = async () => {
         setLoading(true);
         try {
-            // Using the endpoint from TeacherPerformanceScreen.js (No year param)
             const response = await apiClient.get(`/performance/admin/all-teachers`);
             setRawTeacherData(response.data || []);
         } catch (error) {
@@ -114,12 +118,10 @@ const TeacherFilter = () => {
 
             // Logic to calculate percentage based on filters
             if (selectedClass === 'All Classes') {
-                // Use Overall Data from API
                 percentage = parseFloat(teacher.overall_average) || 0;
                 totalObtained = teacher.overall_total || 0;
                 totalPossible = teacher.overall_possible || 0;
             } else {
-                // Filter specifically for Class & Subject
                 displayLabel = selectedClass;
                 if (selectedSubject !== 'All Subjects') {
                     displayLabel += ` - ${selectedSubject}`;
@@ -127,10 +129,7 @@ const TeacherFilter = () => {
 
                 if (teacher.detailed_performance) {
                     teacher.detailed_performance.forEach((detail: any) => {
-                        // Check Class Match
                         if (detail.class_group !== selectedClass) return;
-
-                        // Check Subject Match (if specific subject selected)
                         if (selectedSubject !== 'All Subjects' && detail.subject !== selectedSubject) return;
 
                         totalObtained += parseFloat(detail.total_marks) || 0;
@@ -141,7 +140,7 @@ const TeacherFilter = () => {
                 if (totalPossible > 0) {
                     percentage = (totalObtained / totalPossible) * 100;
                 } else {
-                    percentage = -1; // Mark as no data for this specific filter
+                    percentage = -1; 
                 }
             }
 
@@ -155,13 +154,8 @@ const TeacherFilter = () => {
             };
         });
 
-        // Filter out teachers who don't have data for the selected filters (percentage -1)
         calculatedTeachers = calculatedTeachers.filter(t => t.percentage >= 0 && t.max > 0);
-
-        // Sort by Percentage High to Low
         calculatedTeachers.sort((a, b) => b.percentage - a.percentage);
-
-        // Assign Rank
         calculatedTeachers = calculatedTeachers.map((t, index) => ({ ...t, rank: index + 1 }));
 
         return calculatedTeachers;
@@ -174,7 +168,7 @@ const TeacherFilter = () => {
 
         if (activeTab === 'Above Average') return list.filter(s => s.percentage >= 90);
         if (activeTab === 'Average') return list.filter(s => s.percentage >= 60 && s.percentage < 90);
-        if (activeTab === 'Below Average') return list.filter(s => s.percentage < 60).sort((a, b) => a.percentage - b.percentage); // Sort lowest first for attention
+        if (activeTab === 'Below Average') return list.filter(s => s.percentage < 60).sort((a, b) => a.percentage - b.percentage);
 
         return [];
     }, [activeTab, processedList]);
@@ -242,22 +236,25 @@ const TeacherFilter = () => {
     const TABS = ['Above Average', 'Average', 'Below Average'];
 
     return (
-        <View style={styles.container}>
-            <StatusBar backgroundColor={COLORS.primaryDark} barStyle="light-content" />
+        <SafeAreaView style={styles.safeArea}>
+            <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
             
-            {/* Header Background */}
-            <View style={styles.headerBackground}>
-                <Text style={styles.headerTitle}>Teacher Analytics</Text>
+            {/* 1. Header Card (Standardized) */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerIconContainer}>
+                    <Icon name="chart-line" size={28} color={COLORS.primary} />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>Teacher Analytics</Text>
+                    <Text style={styles.headerSubtitle}>Monitor staff performance</Text>
+                </View>
             </View>
 
-            {/* Content Body Container */}
             <View style={styles.bodyContainer}>
                 
-                {/* 1. Filter Card */}
+                {/* 2. Filter Card */}
                 <View style={styles.filterCard}>
                     
-                    {/* --- YEAR PICKER REMOVED --- */}
-
                     {/* Class Pills */}
                     <View style={styles.pillContainer}>
                         <Text style={styles.pillLabel}>Class:</Text>
@@ -301,7 +298,7 @@ const TeacherFilter = () => {
                     </View>
                 </View>
 
-                {/* 2. Tabs */}
+                {/* 3. Tabs */}
                 <View style={styles.tabWrapper}>
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab;
@@ -326,7 +323,7 @@ const TeacherFilter = () => {
                     })}
                 </View>
 
-                {/* 3. List Content */}
+                {/* 4. List Content */}
                 <View style={styles.contentArea}>
                     {loading ? (
                         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
@@ -360,48 +357,74 @@ const TeacherFilter = () => {
                     )}
                 </View>
             </View>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1, backgroundColor: COLORS.background },
 
-    // Header Background
-    headerBackground: {
-        backgroundColor: COLORS.primary,
-        height: 120, 
-        paddingHorizontal: 20,
-        paddingTop: 15,
-        borderBottomRightRadius: 30,
-        borderBottomLeftRadius: 30,
-        zIndex: 1,
+    // --- Header Card Style ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Light Teal Circle
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+        flex: 1,
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: 'bold',
-        color: '#FFF',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
     },
 
     // Main Body Container
     bodyContainer: {
         flex: 1,
-        marginTop: -60,
-        paddingHorizontal: 15,
-        zIndex: 2,
+        paddingHorizontal: 8,
     },
 
     // Filter Card
     filterCard: {
         backgroundColor: COLORS.cardBg,
-        borderRadius: 20,
-        padding: 15,
-        elevation: 6,
+        borderRadius: 16,
+        padding: 12,
+        elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        marginBottom: 15,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        marginBottom: 10,
+        width: '96%',
+        alignSelf: 'center'
     },
     
     // Pills
@@ -426,12 +449,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#E0E7FF',
         borderRadius: 15,
         padding: 4,
-        marginBottom: 15,
+        marginBottom: 10,
+        width: '96%',
+        alignSelf: 'center'
     },
     tabButton: {
         flex: 1,
         flexDirection: 'row',
-        paddingVertical: 10,
+        paddingVertical: 8,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 12,
@@ -439,17 +464,17 @@ const styles = StyleSheet.create({
     },
     tabButtonActive: {
         backgroundColor: COLORS.primary,
-        elevation: 3,
+        elevation: 2,
     },
     tabText: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
     tabTextActive: { color: '#FFF' },
 
     // Content
-    contentArea: { flex: 1 },
+    contentArea: { flex: 1, width: '96%', alignSelf: 'center' },
     listHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 8,
     },
     listHeaderTitle: {
         fontSize: 16,
@@ -471,7 +496,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         backgroundColor: COLORS.cardBg,
         borderRadius: 16,
-        marginBottom: 12,
+        marginBottom: 10,
         padding: 12,
         alignItems: 'center',
         elevation: 2,
