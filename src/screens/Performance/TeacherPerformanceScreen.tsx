@@ -1,8 +1,8 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
- * Purpose: Teacher Performance Analytics with Table View and Class-wise Max Mark Logic (20/25).
- * Updated: Strict Color Logic (0-50 Red, 50-85 Blue, 85-100 Green).
- * Updated: Custom Rounding (94.5 -> 94, 94.6 -> 95).
+ * Purpose: Teacher Performance Analytics with Table View and Class-wise Max Mark Logic.
+ * Updated: Rectangular Bars in Comparison Graph.
+ * Updated: Added Subject Name below Teacher Name in Comparison Graph.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -70,7 +70,8 @@ const getStatusColor = (percentage) => {
 };
 
 // --- COMPONENT: ANIMATED BAR ---
-const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
+// Updated: Supports subLabel (Subject) and Rectangular shape
+const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 200 }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     // Use rounded integer for display
@@ -95,6 +96,7 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
             <Text style={styles.barLabelTop}>
                 {displayPercentage}%
             </Text>
+            {/* Rectangular Bar Background */}
             <View style={styles.barBackground}>
                 <Animated.View 
                     style={[
@@ -109,6 +111,10 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
                 </View>
             </View>
             <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
+            {/* Added Subject Label */}
+            {subLabel ? (
+                <Text style={styles.barSubLabel} numberOfLines={1}>{subLabel}</Text>
+            ) : null}
         </View>
     );
 };
@@ -184,7 +190,6 @@ const TeacherPerformanceScreen = () => {
                 try {
                     const res = await apiClient.get(`/teacher-attendance/report/${tId}`);
                     const pct = res.data?.stats?.overallPercentage || '0';
-                    // Store as rounded integer string for consistency
                     return { id: tId, pct: getRoundedPercentage(pct) };
                 } catch (err) {
                     return { id: tId, pct: 'N/A' };
@@ -242,29 +247,41 @@ const TeacherPerformanceScreen = () => {
         setIsGraphVisible(true);
     };
 
-    // --- COMPARISON LOGIC ---
+    // --- COMPARISON LOGIC (UPDATED WITH SUBJECT EXTRACTION) ---
     const getComparisonData = () => {
         if (!performanceData) return [];
 
         return performanceData.map(teacher => {
             let totalObtained = 0;
             let totalPossible = 0;
+            const subjectsFound = new Set(); // Track subjects for this specific filter
 
-            if (compareExam === 'Overall') {
-                totalObtained = teacher.overall_total || 0;
-                totalPossible = teacher.overall_possible || 0;
-            } else {
-                if (teacher.detailed_performance) {
-                    teacher.detailed_performance.forEach(detail => {
-                        if (compareClass !== 'All Classes' && detail.class_group !== compareClass) return;
-                        
+            if (teacher.detailed_performance) {
+                teacher.detailed_performance.forEach(detail => {
+                    // 1. Filter by Class
+                    if (compareClass !== 'All Classes' && detail.class_group !== compareClass) return;
+
+                    // 2. Identify Subject
+                    if (detail.subject) {
+                        subjectsFound.add(detail.subject);
+                    }
+
+                    // 3. Sum Marks based on Exam Filter
+                    if (compareExam === 'Overall') {
+                        // Sum all exams in this detail block
+                        detail.exam_breakdown.forEach(e => {
+                            totalObtained += e.total_obtained;
+                            totalPossible += e.total_possible;
+                        });
+                    } else {
+                        // Find specific exam
                         const exam = detail.exam_breakdown.find(e => e.exam_type === compareExam);
                         if (exam) {
                             totalObtained += exam.total_obtained;
                             totalPossible += exam.total_possible;
                         }
-                    });
-                }
+                    }
+                });
             }
 
             let rawPercentage = 0;
@@ -272,14 +289,15 @@ const TeacherPerformanceScreen = () => {
                 rawPercentage = (totalObtained / totalPossible) * 100;
             }
 
-            // Apply custom rounding
-            const finalPercentage = getRoundedPercentage(rawPercentage);
+            // Create Subject String (e.g., "Maths" or "Maths, Science")
+            const subjectLabel = Array.from(subjectsFound).join(', ');
 
             return {
                 name: teacher.teacher_name,
+                subject: subjectLabel, // Added Subject
                 total_obtained: totalObtained,
                 total_possible: totalPossible,
-                percentage: finalPercentage
+                percentage: getRoundedPercentage(rawPercentage)
             };
         })
         .filter(item => item.total_possible > 0)
@@ -298,7 +316,6 @@ const TeacherPerformanceScreen = () => {
                 name: teacher.teacher_name,
                 totalManaged: teacher.overall_total || 0,
                 maxPossible: teacher.overall_possible || 0,
-                // Store rounded integer directly
                 percentage: getRoundedPercentage(teacher.overall_average || 0),
                 details: teacher.detailed_performance || [],
                 performanceRank: 0
@@ -311,7 +328,6 @@ const TeacherPerformanceScreen = () => {
                 subName: item.subject,
                 totalManaged: item.total_marks,
                 maxPossible: item.max_possible_marks,
-                // Store rounded integer directly
                 percentage: getRoundedPercentage(item.average_marks || 0),
                 examBreakdown: item.exam_breakdown || [],
                 performanceRank: 0
@@ -327,7 +343,6 @@ const TeacherPerformanceScreen = () => {
         return mappedData;
     }, [performanceData, sortBy, userRole]);
 
-    // --- HELPER FOR RANK STRIP COLOR ONLY ---
     const getRankColor = (rank) => {
         if (rank === 1) return COLORS.success; 
         if (rank === 2) return COLORS.primary;
@@ -349,7 +364,6 @@ const TeacherPerformanceScreen = () => {
         return (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.tableContainer}>
-                    {/* Table Header */}
                     <View style={styles.tableHeaderRow}>
                         <Text style={[styles.tableHeaderCell, { width: 45 }]}>No</Text>
                         <Text style={[styles.tableHeaderCell, { width: 120, textAlign: 'left', paddingLeft: 5 }]}>Name</Text>
@@ -358,7 +372,6 @@ const TeacherPerformanceScreen = () => {
                         <Text style={[styles.tableHeaderCell, { width: 90 }]}>Attendance</Text>
                     </View>
 
-                    {/* Table Rows */}
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {processedData.map((item, index) => {
                             const attPercentageStr = attendanceData[item.id] !== undefined && attendanceData[item.id] !== 'N/A' 
@@ -421,8 +434,6 @@ const TeacherPerformanceScreen = () => {
         const rankStripColor = getRankColor(item.performanceRank);
         const performanceColor = getStatusColor(item.percentage);
         const isExpanded = expandedId === item.uniqueKey;
-        
-        // item.percentage is already the custom rounded integer
         const percentage = item.percentage;
 
         return (
@@ -566,6 +577,13 @@ const TeacherPerformanceScreen = () => {
                         </Picker>
                     </View>
                 </View>
+
+                {/* --- ADDED NOTE SECTION --- */}
+                <View style={styles.noteContainer}>
+                    <Text style={styles.noteText}>
+                        Note :- Teacher performance is evaluated based on exam-wise marks of all students in the class
+                    </Text>
+                </View>
             </View>
 
             {loading ? (
@@ -660,6 +678,7 @@ const TeacherPerformanceScreen = () => {
                                             percentage={item.percentage}
                                             marks={`${Math.round(item.total_obtained)}/${Math.round(item.total_possible)}`}
                                             label={shortName}
+                                            subLabel={item.subject} // Pass Subject here
                                             color={getStatusColor(item.percentage)}
                                             height={320}
                                         />
@@ -684,7 +703,7 @@ const styles = StyleSheet.create({
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     listPadding: { padding: 15, paddingBottom: 40 },
     emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30, fontStyle: 'italic' },
-    headerContainer: { backgroundColor: '#FFF', padding: 15, paddingBottom: 10, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 4 },
+    headerContainer: { backgroundColor: '#FFF', padding: 15, paddingBottom: 15, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 4 },
     headerTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
     headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.primary, letterSpacing: 0.5 },
     compareBtn: { flexDirection: 'row', backgroundColor: '#a13815ff', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 25, alignItems: 'center', elevation: 3 },
@@ -692,6 +711,27 @@ const styles = StyleSheet.create({
     filterContainer: { flexDirection: 'row', gap: 12 },
     filterBox: { flex: 1, backgroundColor: '#F0F2F5', borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E0E0E0', height: 45, justifyContent: 'center' },
     picker: { width: '100%', color: COLORS.textMain },
+    
+    // --- NOTE STYLES ---
+    noteContainer: {
+        marginTop: 12,
+        backgroundColor: '#FFF8E1', // Very light amber
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#FFE0B2', // Orange-ish border
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    noteText: {
+        fontSize: 11,
+        color: '#F57C00', // Deep Orange Text
+        fontWeight: 'bold',
+        textAlign: 'center',
+        flex: 1
+    },
+
     tableContainer: { padding: 10 },
     tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 5, marginBottom: 5 },
     tableHeaderCell: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textAlign: 'center' },
@@ -749,11 +789,14 @@ const styles = StyleSheet.create({
     noDataTxt: { marginTop: 10, color: COLORS.textSub },
     barWrapper: { width: 55, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 8 },
     barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
-    barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 15, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
-    barFill: { width: '100%', borderRadius: 15 },
+    // Updated Bar Style for Rectangle
+    barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
+    barFill: { width: '100%', borderRadius: 4 },
     barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
     barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#0e0e0eff', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
     barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', color: COLORS.textMain, textAlign: 'center', width: '100%' },
+    // Added Style for Subject Label
+    barSubLabel: { marginTop: 2, fontSize: 10, fontWeight: '500', color: COLORS.textSub, textAlign: 'center', width: '100%' },
     legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
     dot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
