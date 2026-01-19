@@ -6,23 +6,54 @@ import apiClient from '../../api/client';
 
 // ★ Reusable Schedule Card component for the list
 const ScheduleCard = ({ item }: { item: any }) => {
-    // This is the same table view from the admin screen, now used for each card
+    const isExternal = item.exam_type === 'External';
+
     return (
         <View style={styles.scheduleContainer}>
             <Text style={styles.scheduleTitle}>{item.title}</Text>
             {item.exam_type && (
                 <View style={styles.badgeContainer}>
-                    <Text style={styles.badgeText}>{item.exam_type} Exam</Text>
+                    <Text style={styles.badgeText}>{isExternal ? 'Govt Schedule' : 'School Exam'}</Text>
                 </View>
             )}
             <Text style={styles.scheduleSubtitle}>{item.subtitle}</Text>
             <View style={styles.table}>
                 <View style={styles.tableRow}>
-                    <View style={[styles.tableCell, styles.headerCell, { flex: 2.5 }]}><Text style={styles.headerCellText}>Date</Text></View>
-                    <View style={[styles.tableCell, styles.headerCell, { flex: 3 }]}><Text style={styles.headerCellText}>Subject</Text></View>
-                    <View style={[styles.tableCell, styles.headerCell, { flex: 3.5 }]}><Text style={styles.headerCellText}>Time</Text></View>
-                    <View style={[styles.tableCell, styles.headerCell, { flex: 1.5, borderRightWidth: 0 }]}><Text style={styles.headerCellText}>Block</Text></View>
+                    {isExternal ? (
+                        /* --- EXTERNAL (GOVT) HEADER --- */
+                        <>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 3 }]}>
+                                <Text style={styles.headerCellText}>Exam Name</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 1.5 }]}>
+                                <Text style={styles.headerCellText}>Class</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 2.5 }]}>
+                                <Text style={styles.headerCellText}>From Date</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 2.5, borderRightWidth: 0 }]}>
+                                <Text style={styles.headerCellText}>To Date</Text>
+                            </View>
+                        </>
+                    ) : (
+                        /* --- INTERNAL (SCHOOL) HEADER --- */
+                        <>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 2.5 }]}>
+                                <Text style={styles.headerCellText}>Date</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 3 }]}>
+                                <Text style={styles.headerCellText}>Subject</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 3.5 }]}>
+                                <Text style={styles.headerCellText}>Time</Text>
+                            </View>
+                            <View style={[styles.tableCell, styles.headerCell, { flex: 1.5, borderRightWidth: 0 }]}>
+                                <Text style={styles.headerCellText}>Block</Text>
+                            </View>
+                        </>
+                    )}
                 </View>
+                
                 {item.schedule_data.map((row: any, index: number) => {
                      if (row.type === 'special') {
                         return (
@@ -33,14 +64,34 @@ const ScheduleCard = ({ item }: { item: any }) => {
                         );
                     }
                     const isLastRow = index === item.schedule_data.length - 1;
-                    return (
-                        <View key={index} style={[styles.tableRow, isLastRow && { borderBottomWidth: 0 }]}>
-                            <View style={[styles.tableCell, { flex: 2.5 }]}><Text style={styles.dataCellText}>{row.date}</Text></View>
-                            <View style={[styles.tableCell, { flex: 3 }]}><Text style={styles.dataCellText}>{row.subject}</Text></View>
-                            <View style={[styles.tableCell, { flex: 3.5 }]}><Text style={styles.dataCellText}>{row.time}</Text></View>
-                            <View style={[styles.tableCell, { flex: 1.5, borderRightWidth: 0 }]}><Text style={styles.dataCellText}>{row.block}</Text></View>
-                        </View>
-                    );
+                    
+                    if (isExternal) {
+                         return (
+                            <View key={index} style={[styles.tableRow, isLastRow && { borderBottomWidth: 0 }]}>
+                                <View style={[styles.tableCell, { flex: 3 }]}>
+                                    <Text style={[styles.dataCellText, {fontWeight: 'bold'}]}>{row.examName || '-'}</Text>
+                                </View>
+                                <View style={[styles.tableCell, { flex: 1.5 }]}>
+                                    <Text style={styles.dataCellText}>{item.class_group}</Text>
+                                </View>
+                                <View style={[styles.tableCell, { flex: 2.5 }]}>
+                                    <Text style={styles.dataCellText}>{row.fromDate || '—'}</Text>
+                                </View>
+                                <View style={[styles.tableCell, { flex: 2.5, borderRightWidth: 0 }]}>
+                                    <Text style={styles.dataCellText}>{row.toDate || '—'}</Text>
+                                </View>
+                            </View>
+                        );
+                    } else {
+                        return (
+                            <View key={index} style={[styles.tableRow, isLastRow && { borderBottomWidth: 0 }]}>
+                                <View style={[styles.tableCell, { flex: 2.5 }]}><Text style={styles.dataCellText}>{row.date}</Text></View>
+                                <View style={[styles.tableCell, { flex: 3 }]}><Text style={styles.dataCellText}>{row.subject}</Text></View>
+                                <View style={[styles.tableCell, { flex: 3.5 }]}><Text style={styles.dataCellText}>{row.time}</Text></View>
+                                <View style={[styles.tableCell, { flex: 1.5, borderRightWidth: 0 }]}><Text style={styles.dataCellText}>{row.block}</Text></View>
+                            </View>
+                        );
+                    }
                 })}
             </View>
         </View>
@@ -52,7 +103,7 @@ const StudentExamScreen = () => {
     const [schedules, setSchedules] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState('Internal'); // State for tabs
+    const [activeTab, setActiveTab] = useState('Internal'); 
 
     const fetchSchedule = useCallback(async () => {
         if (!user || !user.class_group) {
@@ -70,7 +121,7 @@ const StudentExamScreen = () => {
                 ? "No exam schedule has been published for your class yet."
                 : e.response?.data?.message || "Failed to fetch exam schedules.";
             setError(errorMessage);
-            setSchedules([]); // Clear schedules on error
+            setSchedules([]); 
         } finally {
             setIsLoading(false);
         }
@@ -87,18 +138,32 @@ const StudentExamScreen = () => {
 
     return (
         <View style={styles.container}>
+            {/* --- Header Card --- */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerContentWrapper}>
+                    <View style={styles.headerIconContainer}>
+                        <MaterialIcons name="event" size={24} color="#008080" />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerTitle}>My Exams</Text>
+                        <Text style={styles.headerSubtitle}>View upcoming exams</Text>
+                    </View>
+                </View>
+            </View>
+
+            {/* --- UPDATED TABS --- */}
             <View style={styles.tabContainer}>
                 <TouchableOpacity
                     style={[styles.tabButton, activeTab === 'Internal' && styles.tabButtonActive]}
                     onPress={() => setActiveTab('Internal')}
                 >
-                    <Text style={[styles.tabText, activeTab === 'Internal' && styles.tabTextActive]}>Internal Exams</Text>
+                    <Text style={[styles.tabText, activeTab === 'Internal' && styles.tabTextActive]}>Exams</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={[styles.tabButton, activeTab === 'External' && styles.tabButtonActive]}
                     onPress={() => setActiveTab('External')}
                 >
-                    <Text style={[styles.tabText, activeTab === 'External' && styles.tabTextActive]}>External Exams</Text>
+                    <Text style={[styles.tabText, activeTab === 'External' && styles.tabTextActive]}>Govt Schedule</Text>
                 </TouchableOpacity>
             </View>
 
@@ -113,7 +178,7 @@ const StudentExamScreen = () => {
                         <View style={styles.errorContainer}>
                             <MaterialIcons name="error-outline" size={24} color="#757575" />
                             <Text style={styles.errorText}>
-                                {error ? error : `No ${activeTab.toLowerCase()} exam schedules published yet.`}
+                                {error ? error : `No ${activeTab === 'Internal' ? 'exams' : 'govt schedules'} published yet.`}
                             </Text>
                         </View>
                     }
@@ -127,12 +192,61 @@ const StudentExamScreen = () => {
 
 // Styles for Student Screen
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f4f6f8' },
-    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingTop: 15, backgroundColor: '#f4f6f8' },
+    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Matching background
+    
+    // --- HEADER CARD STYLES ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerContentWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Teal bg
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
+    },
+    // ----------------------------
+
+    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingTop: 15, backgroundColor: '#F2F5F8' },
     tabButton: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
     tabButtonActive: { borderBottomColor: '#47ffe0ff' },
     tabText: { fontSize: 16, color: '#546e7a', fontWeight: '500' },
     tabTextActive: { color: '#4e2eceff', fontWeight: 'bold' },
+    
     listContentContainer: { paddingBottom: 20 },
     errorContainer: { marginTop: 50, alignItems: 'center', padding: 20, marginHorizontal: 15 },
     errorText: { fontSize: 16, color: '#757575', textAlign: 'center', marginTop: 10 },

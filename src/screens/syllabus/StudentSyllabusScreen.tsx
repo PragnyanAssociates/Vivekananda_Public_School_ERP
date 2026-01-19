@@ -72,9 +72,16 @@ const StudentSyllabusDashboardScreen = ({ navigation }) => {
 
     return (
         <ScrollView style={styles.container}>
-            <View style={styles.heroHeader}>
-                <Text style={styles.heroTitle}>{user.class_group}</Text>
-                <Text style={styles.heroSubtitle}>Syllabus Tracking</Text>
+            
+            {/* --- NEW HEADER CARD --- */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerIconContainer}>
+                    <MaterialIcons name="school" size={24} color="#008080" />
+                </View>
+                <View style={styles.headerTextContainer}>
+                    <Text style={styles.headerTitle}>{user?.class_group || 'Student'}</Text>
+                    <Text style={styles.headerSubtitle}>Syllabus Tracking</Text>
+                </View>
             </View>
 
             {isLoading ? <ActivityIndicator size="large" style={{ marginTop: 40 }} color="#3b82f6" /> :
@@ -147,11 +154,23 @@ const StudentLessonListScreen = ({ route, navigation }) => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.navHeader}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <MaterialIcons name="arrow-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.navTitle}>{subjectName}</Text>
+            
+            {/* --- NEW HEADER CARD (With Back Button) --- */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerContentWrapper}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
+                        <MaterialIcons name="arrow-back" size={24} color="#333333" />
+                    </TouchableOpacity>
+
+                    <View style={styles.headerIconContainer}>
+                         <MaterialIcons name="menu-book" size={24} color="#008080" />
+                    </View>
+                    
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerTitle}>{subjectName}</Text>
+                        <Text style={styles.headerSubtitle}>Lesson Details</Text>
+                    </View>
+                </View>
             </View>
             
             {/* Filter Bar */}
@@ -206,14 +225,59 @@ const StudentLessonListScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f8fafc' },
-    heroHeader: { paddingVertical: 30, paddingTop: 60, backgroundColor: '#3b82f6', alignItems: 'center', borderBottomRightRadius: 30, borderBottomLeftRadius: 30 },
-    heroTitle: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
-    heroSubtitle: { fontSize: 16, color: '#dbeafe' },
-    contentContainer: { padding: 20, marginTop: -30 },
+    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Matching background
+    
+    // --- HEADER CARD STYLES ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerContentWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1', // Teal bg
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
+    },
+    // ----------------------------
+
+    contentContainer: { paddingHorizontal: 15, paddingBottom: 20 },
     
     // Cards
-    mainCard: { backgroundColor: '#fff', padding: 20, borderRadius: 20, shadowColor: '#3b82f6', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5, marginBottom: 25 },
+    mainCard: { backgroundColor: '#fff', padding: 20, borderRadius: 20, shadowColor: '#3b82f6', shadowOpacity: 0.1, shadowRadius: 10, elevation: 3, marginBottom: 25 },
     cardTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 15 },
     progressBarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
     percentText: { marginLeft: 10, fontWeight: 'bold', color: '#3b82f6' },
@@ -231,20 +295,15 @@ const styles = StyleSheet.create({
     subjectPercent: { fontWeight: '700', color: '#3b82f6' },
     miniStats: { fontSize: 12, color: '#94a3b8', marginTop: 6 },
 
-    // Lesson Detail
-    navHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#3b82f6', paddingVertical: 20, paddingTop: 50, paddingHorizontal: 15 },
-    backButton: { marginRight: 15 },
-    navTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-    
     // Filter Bar
-    filterBarContainer: { backgroundColor: '#fff', height: 60, elevation: 2 },
+    filterBarContainer: { backgroundColor: '#fff', height: 60, elevation: 2, marginBottom: 10 },
     filterScroll: { alignItems: 'center', paddingHorizontal: 10 },
     filterTab: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, marginRight: 10, backgroundColor: '#f1f5f9' },
     filterTabActive: { backgroundColor: '#3b82f6' },
     filterText: { color: '#64748b', fontWeight: '600' },
     filterTextActive: { color: '#fff' },
 
-    lessonItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 16, marginBottom: 10, borderRadius: 12 },
+    lessonItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 16, marginBottom: 10, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, elevation: 1, marginHorizontal: 2 },
     iconContainer: { marginRight: 15, alignItems: 'center' },
     lessonContent: { flex: 1 },
     lessonName: { fontSize: 16, fontWeight: '500', color: '#1e293b' },

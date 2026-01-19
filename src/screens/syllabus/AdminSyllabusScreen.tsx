@@ -4,7 +4,6 @@ import {
     ActivityIndicator, Alert, ScrollView, TextInput, Platform 
 } from 'react-native';
 import apiClient from '../../api/client';
-import { useAuth } from '../../context/AuthContext'; 
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { useIsFocused } from '@react-navigation/native';
@@ -113,8 +112,24 @@ const SyllabusHistoryList = ({ onEdit, onCreate, onViewProgress }) => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Syllabus Manager</Text>
+            
+            {/* --- UPDATED HEADER CARD (Matches Reference) --- */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerContentWrapper}>
+                    <View style={styles.headerIconContainer}>
+                        <MaterialIcons name="menu-book" size={24} color="#008080" />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerTitle}>Syllabus</Text>
+                        <Text style={styles.headerSubtitle}>Manage syllabus data</Text>
+                    </View>
+                </View>
+                
+                {/* Add Button positioned to the right */}
+                <TouchableOpacity style={styles.headerBtn} onPress={onCreate}>
+                    <MaterialIcons name="add" size={18} color="#fff" />
+                    <Text style={styles.headerBtnText}>Add</Text>
+                </TouchableOpacity>
             </View>
             
             <View style={styles.filterContainer}>
@@ -174,10 +189,6 @@ const SyllabusHistoryList = ({ onEdit, onCreate, onViewProgress }) => {
                 ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No syllabuses found.</Text>}
                 contentContainerStyle={{ paddingBottom: 100 }}
             />
-
-            <TouchableOpacity style={styles.fab} onPress={onCreate}>
-                <MaterialIcons name="add" size={30} color="#fff" />
-            </TouchableOpacity>
         </View>
     );
 };
@@ -190,7 +201,7 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
     const [selectedSubject, setSelectedSubject] = useState(isEditMode ? initialSyllabus.subject_name : '');
     const [selectedTeacherId, setSelectedTeacherId] = useState(isEditMode ? initialSyllabus.creator_id : '');
     
-    // Lessons State - Updated for Exam Type and Date Range
+    // Lessons State
     const [lessons, setLessons] = useState([{ lessonName: '', examType: 'AT1', fromDate: new Date(), toDate: new Date() }]);
     
     // Dropdown Data
@@ -203,27 +214,22 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubjectsLoading, setIsSubjectsLoading] = useState(false);
 
-    // Date Picker Logic (Modified for From/To)
-    const [datePickerState, setDatePickerState] = useState({ show: false, index: null, mode: 'from' }); // mode: 'from' or 'to'
+    // Date Picker Logic
+    const [datePickerState, setDatePickerState] = useState({ show: false, index: null, mode: 'from' });
 
     useEffect(() => {
         const bootstrapForm = async () => {
             setIsLoading(true);
             try {
-                // Fetch Teachers immediately
                 const [classRes, teacherRes] = await Promise.all([
                     apiClient.get('/student-classes'),
                     apiClient.get('/teachers/all-simple') 
                 ]);
 
-                // Handle Classes
                 const filteredClasses = classRes.data.filter(c => c && (c.startsWith('Class') || c === 'LKG' || c === 'UKG'));
                 setAllClasses(filteredClasses);
-
-                // Handle Teachers
                 setAvailableTeachers(teacherRes.data);
 
-                // If Edit Mode, populate existing data
                 if (isEditMode) {
                     await handleClassChange(initialSyllabus.class_group, true);
                     await handleSubjectChange(initialSyllabus.subject_name, true);
@@ -238,7 +244,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
                         toDate: new Date(l.to_date) 
                     }));
                     setLessons(formattedLessons.length > 0 ? formattedLessons : [{ lessonName: '', examType: 'AT1', fromDate: new Date(), toDate: new Date() }]);
-                    
                     setSelectedTeacherId(initialSyllabus.creator_id.toString());
                 }
             } catch (e) { console.error(e); Alert.alert("Error", "Could not load data."); } 
@@ -266,7 +271,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
         setSelectedSubject(subjectName);
     };
 
-    // --- Date Picker Handlers ---
     const openDatePicker = (index, mode) => {
         setDatePickerState({ show: true, index, mode });
     };
@@ -345,15 +349,17 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={onFinish} style={styles.navBackBtn}>
-                    <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
+            {/* Simple Header for Edit/Create - keeping as is but ensuring safe spacing */}
+            <View style={[styles.headerCard, { justifyContent: 'flex-start', gap: 10 }]}>
+                 <TouchableOpacity onPress={onFinish} style={{ padding: 4 }}>
+                    <MaterialIcons name="arrow-back" size={24} color="#333333" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>{isEditMode ? 'Edit Syllabus' : 'New Syllabus'}</Text>
+                <View style={styles.headerTextContainer}>
+                     <Text style={styles.headerTitle}>{isEditMode ? 'Edit Syllabus' : 'New Syllabus'}</Text>
+                </View>
             </View>
 
             <ScrollView style={styles.formContainer} contentContainerStyle={{paddingBottom: 40}}>
-                {/* Section 1: Details */}
                 <View style={styles.formSection}>
                     <Text style={styles.sectionHeader}>Class Details</Text>
                     
@@ -382,7 +388,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
                     </View>
                 </View>
 
-                {/* Section 2: Lessons */}
                 <View style={styles.formSection}>
                     <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 15}}>
                         <Text style={styles.sectionHeader}>Lessons Plan</Text>
@@ -407,7 +412,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
                                 onChangeText={(text) => handleLessonNameChange(index, text)} 
                             />
 
-                            {/* Exam Type Selector */}
                             <Text style={styles.labelSmall}>Exam Type</Text>
                             <View style={styles.inputWrapperSmall}>
                                 <Picker
@@ -421,7 +425,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
                                 </Picker>
                             </View>
                             
-                            {/* DYNAMIC DATE SELECTORS */}
                             <View style={{flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 10}}>
                                 <TouchableOpacity 
                                     style={[styles.dateSelector, {flex: 1}]} 
@@ -463,7 +466,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* Native Date Picker Modal */}
             {datePickerState.show && (
                 <DateTimePicker
                     value={datePickerState.mode === 'from' ? lessons[datePickerState.index].fromDate : lessons[datePickerState.index].toDate}
@@ -490,7 +492,7 @@ const AdminProgressView = ({ syllabus, onBack }) => {
             try {
                 const response = await apiClient.get(`/syllabus/class-progress/${syllabus.id}`);
                 setAuditLog(response.data);
-                setFilteredLogs(response.data); // Initialize with full list
+                setFilteredLogs(response.data);
             } catch (error) {
                 Alert.alert("Error", "Could not load class progress.");
             } finally {
@@ -512,14 +514,23 @@ const AdminProgressView = ({ syllabus, onBack }) => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={onBack} style={styles.navBackBtn}>
-                    <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Progress Tracking</Text>
-            </View>
-            <View style={styles.subHeader}>
-                <Text style={styles.subHeaderTitle}>{syllabus?.class_group} • {syllabus?.subject_name}</Text>
+            {/* --- UPDATED HEADER CARD (Progress) --- */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerContentWrapper}>
+                    {/* Back Button */}
+                    <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}>
+                        <MaterialIcons name="arrow-back" size={24} color="#333333" />
+                    </TouchableOpacity>
+
+                    <View style={[styles.headerIconContainer, { backgroundColor: '#e0e7ff' }]}>
+                         <MaterialIcons name="trending-up" size={24} color="#4f46e5" />
+                    </View>
+                    
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerTitle}>Progress</Text>
+                        <Text style={styles.headerSubtitle}>{syllabus?.class_group} • {syllabus?.subject_name}</Text>
+                    </View>
+                </View>
             </View>
 
             {/* Filter Bar */}
@@ -572,20 +583,77 @@ const AdminProgressView = ({ syllabus, onBack }) => {
     );
 };
 
-// --- DYNAMIC STYLES ---
+// --- STYLES ---
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f8fafc' }, // Slate-50
+    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Matches reference background
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // Header
-    header: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 40, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-    headerTitle: { fontSize: 22, fontWeight: '700', color: '#0f172a', marginLeft: 10 },
-    subHeader: { backgroundColor: '#fff', paddingHorizontal: 20, paddingBottom: 15 },
-    subHeaderTitle: { fontSize: 16, color: '#64748b', fontWeight: '500' },
-    navBackBtn: { padding: 5 },
+    // --- UPDATED HEADER STYLES (From Reference) ---
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 15,
+        paddingVertical: 10, // REDUCED Padding (Smaller box height)
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between', // Push button to right
+        elevation: 3,
+        shadowColor: '#000', 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerContentWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1, // Takes available space
+    },
+    headerIconContainer: {
+        backgroundColor: '#E0F2F1',
+        borderRadius: 30,
+        width: 45, // Slightly smaller circle to match reduced height
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: {
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontSize: 22, // INCREASED Font Size
+        fontWeight: 'bold',
+        color: '#333333',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: '#666666',
+        marginTop: 1,
+    },
+    // Button inside Header
+    headerBtn: {
+        backgroundColor: '#10b981', 
+        paddingVertical: 6, // Slightly reduced to fit header
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 10,
+    },
+    headerBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    // ----------------------------
 
     // Filter Area
-    filterContainer: { padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    filterContainer: { paddingHorizontal: 15, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     filterLabel: { fontSize: 14, fontWeight: '600', color: '#64748b' },
     pickerWrapper: { flex: 1, marginLeft: 10, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', height: 45, justifyContent: 'center' },
 
@@ -601,9 +669,6 @@ const styles = StyleSheet.create({
     cardDetailText: { marginLeft: 8, color: '#475569', fontSize: 14 },
     viewProgressButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4f46e5', padding: 10, borderRadius: 10, marginTop: 10 },
     buttonTextSmall: { color: '#fff', fontWeight: '600', fontSize: 14, marginRight: 5 },
-
-    // FAB (Floating Action Button) - Positioned Absolutely
-    fab: { position: 'absolute', bottom: 25, right: 25, backgroundColor: '#4f46e5', width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#4f46e5', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: {width: 0, height: 4}, zIndex: 10 },
 
     // Form Styles
     formContainer: { padding: 15 },
