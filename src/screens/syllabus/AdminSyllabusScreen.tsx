@@ -12,6 +12,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 // --- CONSTANTS ---
 const EXAM_TYPES = ["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+const FILTER_TYPES = ["Overall", ...EXAM_TYPES];
 
 // --- Helper: Format Date for Display (DD/MM/YYYY) ---
 const formatDateDisplay = (isoDateString) => {
@@ -478,6 +479,8 @@ const CreateOrEditSyllabus = ({ initialSyllabus, onFinish }) => {
 
 const AdminProgressView = ({ syllabus, onBack }) => {
     const [auditLog, setAuditLog] = useState([]);
+    const [filteredLogs, setFilteredLogs] = useState([]);
+    const [selectedFilter, setSelectedFilter] = useState("Overall");
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -487,6 +490,7 @@ const AdminProgressView = ({ syllabus, onBack }) => {
             try {
                 const response = await apiClient.get(`/syllabus/class-progress/${syllabus.id}`);
                 setAuditLog(response.data);
+                setFilteredLogs(response.data); // Initialize with full list
             } catch (error) {
                 Alert.alert("Error", "Could not load class progress.");
             } finally {
@@ -495,6 +499,16 @@ const AdminProgressView = ({ syllabus, onBack }) => {
         };
         fetchProgress();
     }, [syllabus]);
+
+    const handleFilter = (type) => {
+        setSelectedFilter(type);
+        if (type === "Overall") {
+            setFilteredLogs(auditLog);
+        } else {
+            const filtered = auditLog.filter(item => item.exam_type === type);
+            setFilteredLogs(filtered);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -508,11 +522,29 @@ const AdminProgressView = ({ syllabus, onBack }) => {
                 <Text style={styles.subHeaderTitle}>{syllabus?.class_group} • {syllabus?.subject_name}</Text>
             </View>
 
+            {/* Filter Bar */}
+            <View style={styles.filterBarContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                    {FILTER_TYPES.map((type) => (
+                        <TouchableOpacity 
+                            key={type} 
+                            style={[styles.filterTab, selectedFilter === type && styles.filterTabActive]}
+                            onPress={() => handleFilter(type)}
+                        >
+                            <Text style={[styles.filterText, selectedFilter === type && styles.filterTextActive]}>
+                                {type}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
             {isLoading ? <ActivityIndicator size="large" style={{ marginTop: 50 }} color="#4f46e5"/> : (
                 <FlatList
-                    data={auditLog}
+                    data={filteredLogs}
                     keyExtractor={(item) => item.lesson_id.toString()}
                     contentContainerStyle={{ padding: 15 }}
+                    ListEmptyComponent={<Text style={styles.emptyText}>No lessons found for {selectedFilter}</Text>}
                     renderItem={({ item }) => (
                         <View style={styles.logCard}>
                             <View style={[styles.statusStrip, { backgroundColor: item.status === 'Completed' ? '#10b981' : item.status === 'Missed' ? '#ef4444' : '#f59e0b' }]} />
@@ -597,6 +629,14 @@ const styles = StyleSheet.create({
     // Save Button
     saveButton: { backgroundColor: '#10b981', padding: 16, borderRadius: 12, alignItems: 'center', shadowColor: '#10b981', shadowOpacity: 0.3, shadowOffset: {width: 0, height: 4}, elevation: 4 },
     saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+    // Progress Filter Bar Styles
+    filterBarContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', marginBottom: 10 },
+    filterScroll: { paddingHorizontal: 15, paddingVertical: 12 },
+    filterTab: { marginRight: 15, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#f1f5f9' },
+    filterTabActive: { backgroundColor: '#4f46e5' },
+    filterText: { color: '#64748b', fontWeight: '600', fontSize: 13 },
+    filterTextActive: { color: '#fff' },
 
     // Log Card (Progress)
     logCard: { flexDirection: 'row', backgroundColor: '#fff', marginBottom: 10, borderRadius: 12, overflow: 'hidden', elevation: 1 },
