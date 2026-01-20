@@ -9893,12 +9893,61 @@ app.put('/api/library/digital/:id', verifyToken, isAdmin, libraryUpload.fields([
 
 
 // ==========================================================
-// --- STUDENT FEEDBACK API ROUTES ---
+// --- STUDENT BEHAVIOUR / FEEDBACK API ROUTES ---
 // ==========================================================
 
-// 1. Get classes assigned to a specific teacher based on the Timetable
-// This enforces the rule: "Only able to mark when assigned in timetable"
-// 1. Get classes assigned to the teacher (from Timetable)
+// 1. Get Distinct Classes (For Admin Filter Step 1)
+app.get('/api/feedback/classes', async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT DISTINCT class_group FROM timetables ORDER BY class_group");
+        res.json(rows.map(r => r.class_group));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching classes' });
+    }
+});
+
+// 2. Get Subjects for a specific Class (For Filter Step 2)
+// If a teacher is logged in, it only shows subjects THEY teach.
+app.get('/api/feedback/subjects', async (req, res) => {
+    const { class_group, teacher_id } = req.query; 
+    try {
+        let sql = "SELECT DISTINCT subject_name FROM timetables WHERE class_group = ?";
+        const params = [class_group];
+
+        if (teacher_id) {
+            sql += " AND teacher_id = ?";
+            params.push(teacher_id);
+        }
+        
+        sql += " ORDER BY subject_name";
+        const [rows] = await db.query(sql, params);
+        res.json(rows.map(r => r.subject_name));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching subjects' });
+    }
+});
+
+// 3. Get Teachers for a specific Class & Subject (For Admin Filter Step 3)
+app.get('/api/feedback/teachers', async (req, res) => {
+    const { class_group, subject } = req.query;
+    try {
+        const sql = `
+            SELECT DISTINCT u.id, u.full_name 
+            FROM timetables t
+            JOIN users u ON t.teacher_id = u.id
+            WHERE t.class_group = ? AND t.subject_name = ?
+        `;
+        const [rows] = await db.query(sql, [class_group, subject]);
+        res.json(rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching teachers' });
+    }
+});
+
+// 4. Get classes assigned to a specific teacher (For Teacher Login - Auto Setup)
 app.get('/api/teacher-classes/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
@@ -9908,11 +9957,12 @@ app.get('/api/teacher-classes/:teacherId', async (req, res) => {
         );
         res.json(rows.map(r => r.class_group));
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Error fetching classes' });
     }
 });
 
-// GET Students + Existing Feedback (No Date Filter)
+// 5. Get Students + Existing Feedback
 app.get('/api/feedback/students', async (req, res) => {
     const { class_group, teacher_id } = req.query;
     try {
@@ -9934,17 +9984,19 @@ app.get('/api/feedback/students', async (req, res) => {
         const [rows] = await db.query(sql, [teacher_id, class_group]);
         res.json(rows);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Error fetching data' });
     }
 });
 
-// POST Save Feedback (No Date Insert)
+// 6. Save Feedback (Bulk Save - One Time Marking)
 app.post('/api/feedback', async (req, res) => {
     const { teacher_id, class_group, feedback_data } = req.body;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
         for (const item of feedback_data) {
+            // Only save if status or remarks exist
             if (item.behavior_status || item.remarks) {
                 const sql = `
                     INSERT INTO student_feedback 
@@ -9961,6 +10013,7 @@ app.post('/api/feedback', async (req, res) => {
         res.json({ message: 'Saved successfully' });
     } catch (err) {
         await connection.rollback();
+        console.error(err);
         res.status(500).json({ message: 'Error saving feedback' });
     } finally {
         connection.release();
