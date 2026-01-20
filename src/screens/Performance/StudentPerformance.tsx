@@ -1,11 +1,7 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
- * Purpose: View class-wise student performance.
- * Logic: Calculates percentage based ONLY on completed exams.
- * Updated Logic: AT/UT Max marks are 20 for Classes 6-10, and 25 for others.
- * Updated: New Range Logic (0-50 Red, 50-85 Blue, 85-100 Green).
- * Updated: Custom Rounding (94.5 -> 94, 94.6 -> 95).
- * Updated: Rectangular Bars (Removed high border radius).
+ * Purpose: View class-wise student performance with Marks and Attendance.
+ * Updates: Added Attendance Logic from reference, Table View, and Attendance Columns.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -66,25 +62,22 @@ const COLORS = {
     textMain: '#263238',
     textSub: '#546E7A',
     
-    // UPDATED STATUS COLORS
-    success: '#43A047',    // Green (85% - 100%) - Topper
-    average: '#1E88E5',    // Blue (50% - 85%) - Average
-    poor: '#E53935',       // Red (0% - 50%) - Least
+    // STATUS COLORS
+    success: '#43A047',    // Green (85% - 100%)
+    average: '#1E88E5',    // Blue (50% - 85%)
+    poor: '#E53935',       // Red (0% - 50%)
     
     track: '#ECEFF1',      // Light Grey
     border: '#CFD8DC'
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
-// Rule: 94.5% -> 94%, 94.6% -> 95%
 const getRoundedPercentage = (value: number | string): number => {
     const floatVal = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(floatVal)) return 0;
     
     const decimalPart = floatVal - Math.floor(floatVal);
     
-    // If decimal is strictly greater than 0.5, round up.
-    // If decimal is 0.5 or less, round down.
     if (decimalPart > 0.5) {
         return Math.ceil(floatVal);
     } else {
@@ -93,7 +86,6 @@ const getRoundedPercentage = (value: number | string): number => {
 };
 
 // --- HELPER: STATUS COLOR LOGIC ---
-// 85-100: Green, 50-85: Blue, 0-50: Red
 const getStatusColor = (perc: number | string) => {
     const val = getRoundedPercentage(perc);
     if (val >= 85) return COLORS.success; 
@@ -105,7 +97,6 @@ const getStatusColor = (perc: number | string) => {
 const AnimatedBar = ({ percentage, marks, label, color, height = 200 }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
     
-    // Ensure we use the rounded integer for logic/display
     const displayPercentage = getRoundedPercentage(percentage);
 
     useEffect(() => {
@@ -125,7 +116,6 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }: any) => 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
             <Text style={[styles.barLabelTop, { color: COLORS.textMain }]}>{displayPercentage}%</Text>
-            {/* Rectangular Bar Background */}
             <View style={styles.barBackground}>
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
                 <View style={styles.barTextContainer}>
@@ -142,12 +132,16 @@ const StudentPerformance = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [expandedId, setExpandedId] = useState<number | null>(null);
 
+    // View State
+    const [isTableView, setIsTableView] = useState(false);
+
     const [classList, setClassList] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     
-    // Raw Data
+    // Data
     const [students, setStudents] = useState<any[]>([]);
     const [marksData, setMarksData] = useState<any[]>([]);
+    const [attendanceMap, setAttendanceMap] = useState<any>({}); // Store attendance per student ID
     
     // Filter State
     const [sortBy, setSortBy] = useState('roll_no');
@@ -176,33 +170,72 @@ const StudentPerformance = () => {
         fetchClasses();
     }, []);
 
-    // --- 2. Fetch Data ---
+    // --- 2. Fetch Data (Marks + Attendance) ---
     useEffect(() => {
         if (selectedClass) {
-            fetchClassData(selectedClass);
-            // Reset filters when class changes
+            fetchAllData(selectedClass);
             setCompareSubject('All Subjects');
         }
     }, [selectedClass]);
 
-    const fetchClassData = async (classGroup: string) => {
+    const fetchAllData = async (classGroup: string) => {
         setLoading(true);
         try {
-            const response = await apiClient.get(`/reports/class-data/${classGroup}`);
-            setStudents(response.data.students || []);
-            setMarksData(response.data.marks || []);
+            // Parallel fetch for Marks and Attendance
+            await Promise.all([
+                fetchClassPerformanceData(classGroup),
+                fetchAttendanceData(classGroup)
+            ]);
             setExpandedId(null);
         } catch (error) {
-            console.error('Error fetching class data:', error);
+            console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
+    const fetchClassPerformanceData = async (classGroup: string) => {
+        try {
+            const response = await apiClient.get(`/reports/class-data/${classGroup}`);
+            setStudents(response.data.students || []);
+            setMarksData(response.data.marks || []);
+        } catch (error) {
+            console.error('Error fetching marks:', error);
+        }
+    };
+
+    const fetchAttendanceData = async (classGroup: string) => {
+        try {
+            // Using the endpoint from your provided reference
+            // viewMode=overall gets cumulative stats
+            const response = await apiClient.get(`/attendance/admin-summary`, {
+                params: { classGroup: classGroup, viewMode: 'overall' }
+            });
+            
+            const attData = response.data?.studentDetails || [];
+            const attMap: any = {};
+            
+            attData.forEach((item: any) => {
+                const total = item.total_days || 0;
+                const present = item.present_days || 0;
+                const percentage = total > 0 ? (present / total) * 100 : 0;
+                // Key by student_id
+                attMap[item.student_id] = getRoundedPercentage(percentage);
+            });
+            
+            setAttendanceMap(attMap);
+
+        } catch (error) {
+            console.error('Error fetching attendance:', error);
+            // Don't block UI, just empty map
+            setAttendanceMap({});
+        }
+    };
+
     const onRefresh = () => {
         setRefreshing(true);
-        if (selectedClass) fetchClassData(selectedClass);
+        if (selectedClass) fetchAllData(selectedClass);
     };
 
     const toggleExpand = (id: number) => {
@@ -221,11 +254,9 @@ const StudentPerformance = () => {
 
         const subjects = CLASS_SUBJECTS[selectedClass] || [];
         const subjectCount = subjects.length;
-
-        // Determine if this is a senior class (6-10)
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
 
-        // 1. Map Marks: student_id -> exam_code -> subject -> marks
+        // 1. Map Marks
         const marksMap: any = {};
         marksData.forEach(mark => {
             if (!marksMap[mark.student_id]) marksMap[mark.student_id] = {};
@@ -242,7 +273,6 @@ const StudentPerformance = () => {
             let studentMaxTotal = 0; 
             const examBreakdown: any[] = [];
 
-            // Iterate through fixed exam order
             EXAM_ORDER.forEach(examCode => {
                 let examObtained = 0;
                 let hasExamData = false;
@@ -256,46 +286,40 @@ const StudentPerformance = () => {
                 });
 
                 if (hasExamData) {
-                    // DYNAMIC MAX MARKS LOGIC
                     let maxMarksPerSubject = 0;
-                    
                     if (['SA1', 'SA2', 'Pre-Final'].includes(examCode)) {
                         maxMarksPerSubject = 100;
                     } else {
-                        // AT / UT Exams
                         maxMarksPerSubject = isSeniorClass ? 20 : 25;
                     }
 
                     const examMax = maxMarksPerSubject * subjectCount;
-                    
                     studentTotalObtained += examObtained;
                     studentMaxTotal += examMax;
 
-                    // Raw percentage calculation
                     const rawPerc = examMax > 0 ? (examObtained / examMax) * 100 : 0;
-                    
-                    // Apply custom rounding immediately for the object
-                    const roundedPerc = getRoundedPercentage(rawPerc);
-
                     examBreakdown.push({
                         exam_type: examCode,
                         total_obtained: examObtained,
                         total_possible: examMax,
-                        percentage: roundedPerc // Store as integer
+                        percentage: getRoundedPercentage(rawPerc)
                     });
                 }
             });
 
-            // Calculate overall raw percentage
             const rawOverallPerc = studentMaxTotal > 0 ? (studentTotalObtained / studentMaxTotal) * 100 : 0;
             const roundedOverallPerc = getRoundedPercentage(rawOverallPerc);
+            
+            // Inject Attendance Data
+            const attendancePct = attendanceMap[student.id] !== undefined ? attendanceMap[student.id] : 0;
 
             return {
                 ...student,
                 id: student.id,
                 totalObtained: studentTotalObtained,
                 maxTotal: studentMaxTotal, 
-                percentage: roundedOverallPerc, // Store as integer
+                percentage: roundedOverallPerc,
+                attendancePercentage: attendancePct,
                 examBreakdown,
                 performanceRank: 0
             };
@@ -307,11 +331,10 @@ const StudentPerformance = () => {
 
         // 4. Final Sort
         if (sortBy === 'desc') {
-            // Already sorted by obtained marks (which correlates to percentage)
+            // Already sorted by ranks (obtained)
         } else if (sortBy === 'asc') {
             results.sort((a, b) => a.totalObtained - b.totalObtained);
         } else {
-            // Roll No
             results.sort((a, b) => {
                 const rA = parseInt(a.roll_no, 10);
                 const rB = parseInt(b.roll_no, 10);
@@ -326,7 +349,7 @@ const StudentPerformance = () => {
 
         return { students: results, activeExams };
 
-    }, [selectedClass, students, marksData, sortBy]);
+    }, [selectedClass, students, marksData, attendanceMap, sortBy]);
 
     const studentList = processedData.students || [];
     const availableExams = ['Overall', ...(processedData.activeExams || [])];
@@ -334,14 +357,12 @@ const StudentPerformance = () => {
     // --- Comparison Data Logic ---
     const getComparisonData = () => {
         if (studentList.length === 0) return [];
-
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
 
         return studentList.map(student => {
             let ob = 0; let max = 0; let rawPerc = 0;
 
             if (compareSubject === 'All Subjects') {
-                // Default Logic (Total of all subjects)
                 if (compareExam === 'Overall') {
                     ob = student.totalObtained;
                     max = student.maxTotal;
@@ -353,59 +374,45 @@ const StudentPerformance = () => {
                     }
                 }
             } else {
-                // Specific Subject Logic
                 const studentMarks = marksData.filter(m => m.student_id === student.id && m.subject === compareSubject);
-                
                 if (compareExam === 'Overall') {
                     EXAM_ORDER.forEach(examCode => {
                         const markEntry = studentMarks.find(m => EXAM_NAME_TO_CODE[m.exam_type] === examCode);
-                        if (markEntry && markEntry.marks_obtained !== null && markEntry.marks_obtained !== '') {
+                        if (markEntry && markEntry.marks_obtained) {
                              const val = parseFloat(markEntry.marks_obtained);
                              if (!isNaN(val)) {
                                  ob += val;
-                                 if (['SA1', 'SA2', 'Pre-Final'].includes(examCode)) {
-                                     max += 100;
-                                 } else {
-                                     max += isSeniorClass ? 20 : 25;
-                                 }
+                                 if (['SA1', 'SA2', 'Pre-Final'].includes(examCode)) max += 100;
+                                 else max += isSeniorClass ? 20 : 25;
                              }
                         }
                     });
                 } else {
                     const markEntry = studentMarks.find(m => EXAM_NAME_TO_CODE[m.exam_type] === compareExam);
-                    if (markEntry && markEntry.marks_obtained !== null && markEntry.marks_obtained !== '') {
+                    if (markEntry && markEntry.marks_obtained) {
                         const val = parseFloat(markEntry.marks_obtained);
                          if (!isNaN(val)) {
                              ob = val;
-                             if (['SA1', 'SA2', 'Pre-Final'].includes(compareExam)) {
-                                 max = 100;
-                             } else {
-                                 max = isSeniorClass ? 20 : 25;
-                             }
+                             if (['SA1', 'SA2', 'Pre-Final'].includes(compareExam)) max = 100;
+                             else max = isSeniorClass ? 20 : 25;
                          }
                     }
                 }
             }
 
             rawPerc = max > 0 ? (ob / max) * 100 : 0;
-            // Apply Custom Rounding
-            const finalPerc = getRoundedPercentage(rawPerc);
-
             return {
                 name: student.full_name,
                 roll: student.roll_no,
                 total_obtained: ob,
                 total_possible: max,
-                percentage: finalPerc
+                percentage: getRoundedPercentage(rawPerc)
             };
         })
         .filter(item => item.total_possible > 0)
         .sort((a, b) => b.percentage - a.percentage);
     };
 
-    // --- Helpers ---
-    
-    // For Rank Strip (Position only)
     const getColorForRank = (rank: number) => {
         if (rank === 1) return COLORS.success;
         if (rank === 2) return COLORS.primary;
@@ -413,14 +420,74 @@ const StudentPerformance = () => {
         return COLORS.textSub;
     };
 
-    // --- Render Item ---
+    // --- RENDER: TABLE VIEW ---
+    const renderTableView = () => {
+        return (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.tableContainer}>
+                    <View style={styles.tableHeaderRow}>
+                        <Text style={[styles.tableHeaderCell, { width: 45 }]}>Rank</Text>
+                        <Text style={[styles.tableHeaderCell, { width: 140, textAlign: 'left', paddingLeft: 5 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { width: 60 }]}>Roll No</Text>
+                        <Text style={[styles.tableHeaderCell, { width: 100 }]}>Marks</Text>
+                        <Text style={[styles.tableHeaderCell, { width: 80 }]}>Perf %</Text>
+                        {/* Added Attendance Header */}
+                        <Text style={[styles.tableHeaderCell, { width: 80 }]}>Attend %</Text>
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {studentList.map((item, index) => {
+                            const performanceColor = getStatusColor(item.percentage);
+                            const attendanceColor = getStatusColor(item.attendancePercentage);
+
+                            return (
+                                <View key={item.id} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
+                                    <View style={{ width: 45, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={[styles.tableCell, { fontWeight: 'bold' }]}>{item.performanceRank}</Text>
+                                    </View>
+                                    <View style={{ width: 140, justifyContent: 'center', paddingLeft: 5 }}>
+                                        <Text style={[styles.tableCell, { fontWeight: 'bold' }]} numberOfLines={2}>
+                                            {item.full_name}
+                                        </Text>
+                                    </View>
+                                    <View style={{ width: 60, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={styles.tableCell}>{item.roll_no}</Text>
+                                    </View>
+                                    <View style={{ width: 100, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={styles.tableCell}>
+                                            {Math.round(item.totalObtained)} / {Math.round(item.maxTotal)}
+                                        </Text>
+                                    </View>
+                                    <View style={{ width: 80, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={{ fontWeight: 'bold', color: performanceColor }}>
+                                            {item.percentage}%
+                                        </Text>
+                                    </View>
+                                    {/* Added Attendance Cell */}
+                                    <View style={{ width: 80, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={{ fontWeight: 'bold', color: attendanceColor }}>
+                                            {item.attendancePercentage}%
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                        {studentList.length === 0 && (
+                            <Text style={styles.emptyText}>No data found for this class.</Text>
+                        )}
+                    </ScrollView>
+                </View>
+            </ScrollView>
+        );
+    };
+
+    // --- RENDER: CARD VIEW ---
     const renderStudentItem = ({ item }: any) => {
         const rankColor = getColorForRank(item.performanceRank);
         const performanceColor = getStatusColor(item.percentage);
+        const attendanceColor = getStatusColor(item.attendancePercentage);
         const isExpanded = expandedId === item.id;
 
-        // NOTE: item.percentage is already rounded using custom logic in useMemo
-        
         return (
             <View style={styles.card}>
                 <TouchableOpacity 
@@ -428,32 +495,25 @@ const StudentPerformance = () => {
                     onPress={() => toggleExpand(item.id)}
                     activeOpacity={0.8}
                 >
-                    {/* Rank Strip */}
                     <View style={[styles.rankStrip, { backgroundColor: rankColor }]}>
                         <Text style={styles.rankText}>#{item.performanceRank}</Text>
                     </View>
-
                     <View style={styles.cardBody}>
                         <View style={styles.cardTopRow}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.studentName}>{item.full_name}</Text>
                                 <Text style={styles.rollNo}>Roll No: {item.roll_no}</Text>
                             </View>
-                            {/* Circle Badge (Uses Integer Percentage) */}
                             <View style={[styles.circleBadge, { borderColor: performanceColor }]}>
                                 <Text style={[styles.circleText, { color: performanceColor }]}>{item.percentage}%</Text>
                             </View>
                         </View>
-
                         <Text style={styles.marksLabel}>
                             Total Marks: <Text style={styles.marksValue}>{Math.round(item.totalObtained)} / {Math.round(item.maxTotal)}</Text>
                         </Text>
-
-                        {/* Progress Bar */}
                         <View style={styles.progressTrack}>
                             <View style={[styles.progressFill, { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: performanceColor }]} />
                         </View>
-
                         <View style={styles.expandRow}>
                             <Text style={styles.perfLabel}>{item.examBreakdown.length} Exams Recorded</Text>
                             <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={COLORS.textSub} />
@@ -461,21 +521,21 @@ const StudentPerformance = () => {
                     </View>
                 </TouchableOpacity>
 
-                {/* Expanded Details */}
                 {isExpanded && (
                     <View style={styles.expandedSection}>
+                        {/* Attendance Info in Card View */}
+                        <View style={styles.attRow}>
+                             <Text style={styles.attLabel}>Overall Attendance:</Text>
+                             <Text style={[styles.attValue, { color: attendanceColor }]}>{item.attendancePercentage}%</Text>
+                        </View>
+
                         <View style={styles.detailHeader}>
                             <Text style={styles.detailTitle}>Exam Breakdown</Text>
-                            <TouchableOpacity 
-                                style={styles.iconButton} 
-                                onPress={() => handleOpenGraph(item.full_name, item.examBreakdown)}
-                            >
+                            <TouchableOpacity style={styles.iconButton} onPress={() => handleOpenGraph(item.full_name, item.examBreakdown)}>
                                 <Icon name="chart-bar" size={16} color="#fff" />
                                 <Text style={styles.btnText}>GRAPH</Text>
                             </TouchableOpacity>
                         </View>
-
-                        {/* Breakdown Table */}
                         <View style={styles.breakdownContainer}>
                             <View style={styles.bdHeader}>
                                 <Text style={[styles.bdHeaderTxt, { flex: 1.5 }]}>Exam</Text>
@@ -490,7 +550,6 @@ const StudentPerformance = () => {
                                             {Math.round(exam.total_obtained)} / {Math.round(exam.total_possible)}
                                         </Text>
                                         <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
-                                            {/* exam.percentage is already custom rounded integer */}
                                             <View style={[styles.percentagePill, { backgroundColor: getStatusColor(exam.percentage) }]}>
                                                 <Text style={styles.pillText}>{exam.percentage}%</Text>
                                             </View>
@@ -512,13 +571,28 @@ const StudentPerformance = () => {
             {/* Header */}
             <View style={styles.headerContainer}>
                 <View style={styles.headerTitleRow}>
-                    <Text style={styles.headerTitle}>Class Performance</Text>
-                    <TouchableOpacity style={styles.compareBtn} onPress={() => setIsCompareVisible(true)}>
-                        <Icon name="scale-balance" size={16} color="#fff" />
-                        <Text style={styles.compareBtnText}>COMPARE</Text>
-                    </TouchableOpacity>
+                    <Text style={[styles.headerTitle, {flex: 1}]} numberOfLines={1}>Class Performance</Text>
+                    
+                    {/* BUTTON ROW: TABLE Toggle & Compare */}
+                    <View style={{flexDirection: 'row'}}>
+                        {/* Table View Toggle */}
+                        <TouchableOpacity 
+                            style={[styles.compareBtn, { backgroundColor: isTableView ? COLORS.success : '#546E7A', marginRight: 8 }]} 
+                            onPress={() => setIsTableView(!isTableView)}
+                        >
+                            <Icon name={isTableView ? "card-bulleted-outline" : "table-large"} size={14} color="#fff" />
+                            <Text style={styles.compareBtnText}>{isTableView ? "CARDS" : "TABLE"}</Text>
+                        </TouchableOpacity>
+
+                        {/* Compare Button */}
+                        <TouchableOpacity style={styles.compareBtn} onPress={() => setIsCompareVisible(true)}>
+                            <Icon name="scale-balance" size={14} color="#fff" />
+                            <Text style={styles.compareBtnText}>COMPARE</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
+                {/* Class & Sort Filters */}
                 <View style={styles.filterContainer}>
                     <View style={styles.filterBox}>
                         <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
@@ -539,14 +613,21 @@ const StudentPerformance = () => {
             {loading ? (
                 <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>
             ) : (
-                <FlatList
-                    data={studentList}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={renderStudentItem}
-                    contentContainerStyle={styles.listPadding}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No student data found.</Text>}
-                />
+                // Conditional Rendering: Table vs List
+                isTableView ? (
+                    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+                        {renderTableView()}
+                    </View>
+                ) : (
+                    <FlatList
+                        data={studentList}
+                        keyExtractor={(item) => item.id.toString()}
+                        renderItem={renderStudentItem}
+                        contentContainerStyle={styles.listPadding}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+                        ListEmptyComponent={<Text style={styles.emptyText}>No student data found.</Text>}
+                    />
+                )
             )}
 
             {/* --- MODAL: INDIVIDUAL GRAPH --- */}
@@ -559,9 +640,7 @@ const StudentPerformance = () => {
                                 <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
                             </TouchableOpacity>
                         </View>
-                        
                         <Text style={styles.graphSubTitle}>{graphData?.title}</Text>
-
                         <View style={styles.graphViewArea}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
                                 {graphData?.exams && graphData.exams.length > 0 ? graphData.exams.map((exam: any, idx: number) => (
@@ -576,8 +655,6 @@ const StudentPerformance = () => {
                                 )) : <Text style={styles.noDataTxt}>No exams completed.</Text>}
                             </ScrollView>
                         </View>
-
-                        {/* UPDATED LEGEND FOR NEW RANGES */}
                         <View style={styles.legendRow}>
                             <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>85-100% (Topper)</Text></View>
                             <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>50-85% (Avg)</Text></View>
@@ -596,17 +673,13 @@ const StudentPerformance = () => {
                             <Icon name="close" size={24} color="#333" />
                         </TouchableOpacity>
                     </View>
-
                     <View style={styles.compareControls}>
-                        {/* 1. Exam Filter */}
                         <Text style={styles.controlLabel}>Select Comparison Criterion:</Text>
                         <View style={styles.controlPicker}>
                             <Picker selectedValue={compareExam} onValueChange={setCompareExam}>
                                 {availableExams.map(t => <Picker.Item key={t} label={t} value={t} />)}
                             </Picker>
                         </View>
-
-                        {/* 2. Subject Filter */}
                         <View style={{ marginTop: 15 }}>
                             <Text style={styles.controlLabel}>Select Subject:</Text>
                             <View style={styles.controlPicker}>
@@ -619,7 +692,6 @@ const StudentPerformance = () => {
                             </View>
                         </View>
                     </View>
-
                     <View style={styles.compareGraphArea}>
                         <Text style={styles.compareGraphTitle}>Ranking by {compareExam} ({compareSubject})</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end' }}>
@@ -653,18 +725,28 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     listPadding: { padding: 15, paddingBottom: 40 },
-    emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30 },
+    emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30, fontStyle: 'italic' },
 
     // Header
-    headerContainer: { backgroundColor: '#FFF', padding: 15, paddingBottom: 10, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, elevation: 4 },
+    headerContainer: { backgroundColor: '#FFF', padding: 15, paddingBottom: 15, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 4 },
     headerTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-    headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
-    compareBtn: { flexDirection: 'row', backgroundColor: '#D81B60', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 25, alignItems: 'center', elevation: 3 },
-    compareBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, marginLeft: 6 },
+    headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.primary, letterSpacing: 0.5 },
+    
+    // UPDATED BUTTON STYLES
+    compareBtn: { flexDirection: 'row', backgroundColor: '#a13815ff', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 25, alignItems: 'center', elevation: 3 },
+    compareBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 10, marginLeft: 5, letterSpacing: 0.5 },
     
     filterContainer: { flexDirection: 'row', gap: 12 },
-    filterBox: { flex: 1, backgroundColor: '#F0F2F5', borderRadius: 10, borderWidth: 1, borderColor: '#E0E0E0', height: 45, justifyContent: 'center' },
+    filterBox: { flex: 1, backgroundColor: '#F0F2F5', borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E0E0E0', height: 45, justifyContent: 'center' },
     picker: { width: '100%', color: COLORS.textMain },
+
+    // --- TABLE STYLES ---
+    tableContainer: { padding: 10 },
+    tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 5, marginBottom: 5 },
+    tableHeaderCell: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textAlign: 'center' },
+    tableRow: { flexDirection: 'row', backgroundColor: '#FFF', paddingVertical: 0, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#EEE', alignItems: 'center', minHeight: 50 },
+    tableRowAlt: { backgroundColor: '#F9FAFB' },
+    tableCell: { fontSize: 12, color: COLORS.textMain, textAlign: 'center' },
 
     // Card
     card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
@@ -672,19 +754,15 @@ const styles = StyleSheet.create({
     rankStrip: { width: 36, justifyContent: 'center', alignItems: 'center' },
     rankText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, transform: [{ rotate: '-90deg' }], width: 60, textAlign: 'center' },
     cardBody: { flex: 1, padding: 15 },
-    
     cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
     studentName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
     rollNo: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
-    
     circleBadge: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
     circleText: { fontSize: 13, fontWeight: 'bold' },
-
     marksLabel: { fontSize: 12, color: COLORS.textSub, marginTop: 8, marginBottom: 4 },
     marksValue: { fontWeight: 'bold', color: COLORS.textMain },
     progressTrack: { height: 6, backgroundColor: COLORS.track, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
     progressFill: { height: '100%', borderRadius: 3 },
-    
     expandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     perfLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
 
@@ -694,7 +772,6 @@ const styles = StyleSheet.create({
     detailTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
     iconButton: { flexDirection: 'row', backgroundColor: '#FB8C00', padding: 6, borderRadius: 6, alignItems: 'center' },
     btnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
-
     breakdownContainer: { paddingHorizontal: 4 },
     bdHeader: { flexDirection: 'row', marginBottom: 6, backgroundColor: '#F9FAFB', paddingVertical: 6, borderRadius: 4 },
     bdHeaderTxt: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
@@ -703,6 +780,11 @@ const styles = StyleSheet.create({
     percentagePill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 },
     pillText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
+    // Attendance Row in Expanded Card
+    attRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#EEE' },
+    attLabel: { fontSize: 14, fontWeight: '600', color: COLORS.textMain },
+    attValue: { fontSize: 16, fontWeight: 'bold' },
+
     // Modals
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     graphModalCard: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 10 },
@@ -710,7 +792,6 @@ const styles = StyleSheet.create({
     modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
     graphSubTitle: { textAlign: 'center', color: COLORS.textSub, marginBottom: 15, fontSize: 14, fontWeight: '500' },
     graphViewArea: { height: 250, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: 10 },
-
     fullScreenContainer: { flex: 1, backgroundColor: COLORS.background },
     fsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', elevation: 3 },
     fsTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
@@ -726,14 +807,11 @@ const styles = StyleSheet.create({
     // Animated Bar
     barWrapper: { width: 55, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 8 },
     barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
-    // MODIFIED: Reduced borderRadius to 4 for rectangular look
     barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
-    // MODIFIED: Reduced borderRadius to 4 for rectangular look
     barFill: { width: '100%', borderRadius: 4 },
     barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#455A64', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
+    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#0e0e0eff', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
     barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', color: COLORS.textMain, textAlign: 'center', width: '100%' },
-
     legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
     dot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
