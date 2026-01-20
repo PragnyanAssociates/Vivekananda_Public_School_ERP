@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView,
-    TouchableOpacity, TextInput, ActivityIndicator, Alert, Dimensions
+    TouchableOpacity, TextInput, ActivityIndicator, Alert
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -10,11 +10,12 @@ import { useAuth } from '../../context/AuthContext';
 
 // --- CONSTANTS ---
 const COL_WIDTHS = {
-    ROLL: 60,      
-    NAME: 180,     
-    STATUS: 160,   
-    REMARKS: 200   
+    ROLL: 50,      
+    NAME: 160,     
+    STATUS: 150,   
+    REMARKS: 320   
 };
+
 const TABLE_MIN_WIDTH = COL_WIDTHS.ROLL + COL_WIDTHS.NAME + COL_WIDTHS.STATUS + COL_WIDTHS.REMARKS; 
 
 interface StudentFeedbackRow {
@@ -51,21 +52,30 @@ const StudentFeedback = () => {
     // --- 1. Initial Setup ---
     useEffect(() => {
         if (!user) return;
-        fetchClasses(); // Step 1: Load Classes
+        fetchClasses(); 
     }, [user]);
 
     // --- 2. API Calls for Filters ---
 
-    // Step 1: Fetch Classes (based on role)
+    // Step 1: Fetch Classes (UPDATED to set default)
     const fetchClasses = async () => {
         try {
+            let classesData = [];
             if (user?.role === 'admin') {
                 const response = await apiClient.get('/feedback/classes');
-                setAllClasses(response.data);
+                classesData = response.data;
             } else if (user?.role === 'teacher') {
-                // For teacher, get only their assigned classes
                 const response = await apiClient.get(`/teacher-classes/${user.id}`);
-                setAllClasses(response.data);
+                classesData = response.data;
+            }
+            
+            setAllClasses(classesData);
+
+            // --- UPDATE: Set Default Class ---
+            if (classesData.length > 0) {
+                // If "Class 10" exists in the list, select it. Otherwise, select the first one.
+                const defaultClass = classesData.includes("Class 10") ? "Class 10" : classesData[0];
+                setSelectedClass(defaultClass);
             }
         } catch (error) { console.error('Error fetching classes', error); }
     };
@@ -81,7 +91,6 @@ const StudentFeedback = () => {
         const fetchSubjects = async () => {
             try {
                 const params: any = { class_group: selectedClass };
-                // If teacher logged in, filter subjects by their ID
                 if (user?.role === 'teacher') params.teacher_id = user.id;
 
                 const response = await apiClient.get('/feedback/subjects', { params });
@@ -96,7 +105,7 @@ const StudentFeedback = () => {
         fetchSubjects();
     }, [selectedClass, user]);
 
-    // Step 3: When Subject Changes -> Fetch Teachers (Admin Only) OR Set Teacher ID (Teacher Only)
+    // Step 3: When Subject Changes -> Fetch Teachers
     useEffect(() => {
         if (!selectedClass || !selectedSubject) {
             setAvailableTeachers([]);
@@ -105,7 +114,7 @@ const StudentFeedback = () => {
         }
 
         if (user?.role === 'teacher') {
-            setSelectedTeacherId(user.id); // Teacher ID is fixed for logged-in teacher
+            setSelectedTeacherId(user.id);
         } else if (user?.role === 'admin') {
             const fetchTeachersForSubject = async () => {
                 try {
@@ -114,7 +123,6 @@ const StudentFeedback = () => {
                     });
                     setAvailableTeachers(response.data);
                     
-                    // Auto-select first teacher
                     if (response.data.length > 0) setSelectedTeacherId(response.data[0].id);
                     else setSelectedTeacherId(null);
 
@@ -125,7 +133,7 @@ const StudentFeedback = () => {
     }, [selectedClass, selectedSubject, user]);
 
 
-    // --- 3. Fetch Student Data (Final Step) ---
+    // --- 3. Fetch Student Data ---
     const fetchStudentData = useCallback(async () => {
         if (!selectedClass || !selectedTeacherId) {
             setStudents([]);
@@ -293,7 +301,7 @@ const StudentFeedback = () => {
                         
                         {/* Table Header */}
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.th, { width: COL_WIDTHS.ROLL, paddingLeft: 10 }]}>Roll</Text>
+                            <Text style={[styles.th, { width: COL_WIDTHS.ROLL, textAlign: 'center' }]}>Roll</Text>
                             <Text style={[styles.th, { width: COL_WIDTHS.NAME }]}>Student Name</Text>
                             <Text style={[styles.th, { width: COL_WIDTHS.STATUS, textAlign: 'center' }]}>Status</Text>
                             <Text style={[styles.th, { width: COL_WIDTHS.REMARKS, paddingLeft: 10 }]}>Remarks</Text>
@@ -307,7 +315,7 @@ const StudentFeedback = () => {
                                 {students.length > 0 ? (
                                     students.map((item, index) => (
                                         <View key={item.student_id} style={[styles.row, index % 2 === 1 && styles.rowAlt]}>
-                                            <Text style={[styles.td, { width: COL_WIDTHS.ROLL, paddingLeft: 10, fontWeight: '700', color: '#111' }]}>
+                                            <Text style={[styles.td, { width: COL_WIDTHS.ROLL, textAlign: 'center', fontWeight: '700', color: '#111' }]}>
                                                 {item.roll_no ? item.roll_no.toString().padStart(2, '0') : '-'}
                                             </Text>
                                             <Text style={[styles.td, { width: COL_WIDTHS.NAME, color: '#444' }]} numberOfLines={1}>
@@ -320,7 +328,7 @@ const StudentFeedback = () => {
                                                 <StatusButton label="P" targetStatus="Poor" currentStatus={item.behavior_status} color="#ef4444" disabled={user?.role === 'admin'} onPress={() => updateStudentFeedback(item.student_id, 'behavior_status', 'Poor')} />
                                             </View>
 
-                                            <View style={{ width: COL_WIDTHS.REMARKS, paddingLeft: 10 }}>
+                                            <View style={{ width: COL_WIDTHS.REMARKS, paddingLeft: 10, paddingRight: 10 }}>
                                                 <TextInput 
                                                     style={styles.input}
                                                     placeholder="..."
@@ -431,7 +439,15 @@ const styles = StyleSheet.create({
     statusBtnText: { fontWeight: 'bold', fontSize: 14 },
     
     // Input
-    input: { borderBottomWidth: 1, borderBottomColor: '#cbd5e1', height: 40, fontSize: 13, padding: 0, color: '#374151' },
+    input: { 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#cbd5e1', 
+        height: 40, 
+        fontSize: 13, 
+        paddingVertical: 5,
+        color: '#374151',
+        width: '100%' 
+    },
     
     // Floating Save
     floatingSaveContainer: {

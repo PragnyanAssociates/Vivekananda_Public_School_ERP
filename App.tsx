@@ -144,6 +144,7 @@ import PerformanceFilter from './src/screens/report/PerformanceFilter';
 import TeacherFilter from './src/screens/report/TeacherFilter';
 
 import StudentFeedback from './src/screens/Feedbacks/StudentFeedback';
+import TeacherFeedback from './src/screens/Feedbacks/TeacherFeedback';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -339,6 +340,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="MyBooksScreen" component={MyBooksScreen} />
 
       <Stack.Screen name="StudentFeedback" component={StudentFeedback} />
+      <Stack.Screen name="TeacherFeedback" component={TeacherFeedback} />
 
       <Stack.Screen name="TeacherPerformanceScreen" component={TeacherPerformanceScreen} />
       <Stack.Screen name="StudentPerformance" component={StudentPerformance} />

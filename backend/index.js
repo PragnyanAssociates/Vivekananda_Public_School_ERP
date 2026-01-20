@@ -10022,6 +10022,96 @@ app.post('/api/feedback', async (req, res) => {
 
 
 
+// ==========================================================
+// --- TEACHER FEEDBACK API ROUTES ---
+// ==========================================================
+
+// 1. [STUDENT VIEW] Get Assigned Teachers + My Existing Feedback
+// Fetches teachers from the timetable for the student's class group.
+app.get('/api/student/assigned-teachers', async (req, res) => {
+    const { student_id, class_group } = req.query;
+    try {
+        const sql = `
+            SELECT 
+                u.id as teacher_id,
+                u.full_name as teacher_name,
+                tf.rating,
+                tf.remarks
+            FROM timetables t
+            JOIN users u ON t.teacher_id = u.id
+            LEFT JOIN teacher_feedback tf 
+                ON t.teacher_id = tf.teacher_id 
+                AND tf.student_id = ?
+            WHERE t.class_group = ?
+            GROUP BY u.id
+        `;
+        const [rows] = await db.query(sql, [student_id, class_group]);
+        res.json(rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching assigned teachers' });
+    }
+});
+
+// 2. [STUDENT ACTION] Save/Update Feedback
+app.post('/api/teacher-feedback', async (req, res) => {
+    const { student_id, teacher_id, class_group, rating, remarks } = req.body;
+    
+    if (!student_id || !teacher_id || !rating) {
+        return res.status(400).json({ message: "Rating is required." });
+    }
+
+    try {
+        const sql = `
+            INSERT INTO teacher_feedback 
+            (student_id, teacher_id, class_group, rating, remarks)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+            rating = VALUES(rating),
+            remarks = VALUES(remarks)
+        `;
+        await db.query(sql, [student_id, teacher_id, class_group, rating, remarks]);
+        res.json({ message: 'Feedback submitted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error saving feedback' });
+    }
+});
+
+// 3. [ADMIN VIEW] Get Feedback for a specific Teacher in a specific Class
+app.get('/api/admin/teacher-feedback', async (req, res) => {
+    const { teacher_id, class_group } = req.query;
+    try {
+        const sql = `
+            SELECT 
+                u.full_name as student_name,
+                p.roll_no,
+                tf.rating,
+                tf.remarks
+            FROM teacher_feedback tf
+            JOIN users u ON tf.student_id = u.id
+            LEFT JOIN user_profiles p ON u.id = p.user_id
+            WHERE tf.teacher_id = ? AND tf.class_group = ?
+            ORDER BY tf.rating DESC
+        `;
+        const [rows] = await db.query(sql, [teacher_id, class_group]);
+        
+        // Calculate average
+        let avg = 0;
+        if(rows.length > 0) {
+            const sum = rows.reduce((acc, curr) => acc + (curr.rating || 0), 0);
+            avg = (sum / rows.length).toFixed(1);
+        }
+
+        res.json({ reviews: rows, average: avg, total: rows.length });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching feedback details' });
+    }
+});
+
+
+
 
 // By using "server.listen", you enable both your API routes and the real-time chat.
 server.listen(PORT, '0.0.0.0', () => {

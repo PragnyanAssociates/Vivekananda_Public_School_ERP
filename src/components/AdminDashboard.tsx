@@ -68,6 +68,7 @@ import PerformanceFilter from '../screens/report/PerformanceFilter';
 import TeacherFilter from '../screens/report/TeacherFilter';
 
 import StudentFeedback from '../screens/Feedbacks/StudentFeedback';
+import TeacherFeedback from '../screens/Feedbacks/TeacherFeedback';
 
 const { width: windowWidth } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -156,6 +157,7 @@ const AdminDashboard = ({ navigation }) => {
     { id: 'qa30', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
     { id: 'qa31', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
     { id: 'qa33', title: 'Student Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
+    { id: 'qa60', title: 'Teacher Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/11871/11871051.png', navigateToTab: 'TeacherFeedback' },
     // { id: 'qa-ads-manage', title: 'Ads Management', imageSource: 'https://cdn-icons-png.flaticon.com/128/19006/19006038.png', navigateTo: 'AdminAdDashboardScreen' },
     // { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
 
@@ -247,6 +249,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'PerformanceFilter': return ( <><ContentScreenHeader title="Student Status Report" onBack={handleBack} /><PerformanceFilter /></> );
         case 'TeacherFilter': return ( <><ContentScreenHeader title="Teacher Status Report" onBack={handleBack} /><TeacherFilter /></> );
         case 'StudentFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleBack} /><StudentFeedback /></> );
+        case 'TeacherFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleBack} /><TeacherFeedback /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={styles.fallbackText}>Content for '{activeTab}' is not available.</Text><TouchableOpacity onPress={handleBack}><Text style={styles.fallbackLink}>Go to Home</Text></TouchableOpacity></View> );
       }
