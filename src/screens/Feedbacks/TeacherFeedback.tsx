@@ -14,6 +14,7 @@ interface TeacherRow {
     teacher_name: string;
     rating: number; // 1-5
     remarks: string;
+    isSubmitted?: boolean; // Track if saved in DB
 }
 
 interface AdminReviewRow {
@@ -57,11 +58,13 @@ const TeacherFeedback = () => {
             const response = await apiClient.get('/student/assigned-teachers', {
                 params: { student_id: user?.id, class_group: user?.class_group }
             });
-            // Ensure rating is number, remarks string
+            // Ensure rating is number, remarks string, and check if already submitted
             const formatted = response.data.map((t: any) => ({
                 ...t,
                 rating: t.rating || 0,
-                remarks: t.remarks || ''
+                remarks: t.remarks || '',
+                // If rating or remarks exist, it's considered submitted/saved
+                isSubmitted: (t.rating > 0 || (t.remarks && t.remarks.trim().length > 0))
             }));
             setMyTeachers(formatted);
         } catch (error) {
@@ -92,6 +95,15 @@ const TeacherFeedback = () => {
                 rating: teacher.rating,
                 remarks: teacher.remarks
             });
+            
+            // Mark as submitted locally to change icon
+            setMyTeachers(prev => prev.map(t => {
+                if (t.teacher_id === teacher.teacher_id) {
+                    return { ...t, isSubmitted: true };
+                }
+                return t;
+            }));
+
             Alert.alert("Success", `Feedback for ${teacher.teacher_name} saved!`);
         } catch (error) {
             Alert.alert("Error", "Could not save feedback.");
@@ -113,9 +125,6 @@ const TeacherFeedback = () => {
         if (user?.role === 'admin' && selectedClass) {
             const loadTeachers = async () => {
                 try {
-                    // Reuse existing endpoint or use specific one
-                    // We need all teachers who teach this class. 
-                    // Let's use the timetable endpoint which gives subjects+teachers, we extract unique teachers.
                     const res = await apiClient.get(`/timetable/${selectedClass}`);
                     const uniqueTeachers = new Map();
                     res.data.forEach((slot: any) => {
@@ -213,7 +222,7 @@ const TeacherFeedback = () => {
                                     />
                                 </View>
                                 
-                                {/* Row Bottom: Remarks Input & Save Button */}
+                                {/* Row Bottom: Remarks Input & Button */}
                                 <View style={styles.rowBottom}>
                                     <TextInput 
                                         style={styles.remarksInput}
@@ -222,8 +231,16 @@ const TeacherFeedback = () => {
                                         value={item.remarks}
                                         onChangeText={(text) => updateMyFeedback(item.teacher_id, 'remarks', text)}
                                     />
-                                    <TouchableOpacity style={styles.iconSaveBtn} onPress={() => handleStudentSave(item)}>
-                                        <MaterialIcons name="save" size={20} color="#FFF" />
+                                    {/* DYNAMIC BUTTON: SAVE vs EDIT */}
+                                    <TouchableOpacity 
+                                        style={[styles.iconSaveBtn, item.isSubmitted && styles.iconEditBtn]} 
+                                        onPress={() => handleStudentSave(item)}
+                                    >
+                                        <MaterialIcons 
+                                            name={item.isSubmitted ? "edit" : "save"} 
+                                            size={20} 
+                                            color="#FFF" 
+                                        />
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -353,9 +370,14 @@ const styles = StyleSheet.create({
         flex: 1, backgroundColor: '#F5F5F5', borderRadius: 6, paddingHorizontal: 10,
         height: 40, marginRight: 10, color: '#333', fontSize: 13
     },
+    // Default Save Button (Teal)
     iconSaveBtn: {
         backgroundColor: '#008080', width: 40, height: 40, borderRadius: 20,
         justifyContent: 'center', alignItems: 'center', elevation: 2
+    },
+    // Edit Button Style (Blue)
+    iconEditBtn: {
+        backgroundColor: '#2196F3', 
     },
 
     // --- Admin View Styles ---
