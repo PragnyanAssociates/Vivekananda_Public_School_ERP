@@ -8,6 +8,12 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
+// --- CONSTANTS ---
+const TEACHER_COL_WIDTH = 130; 
+const NAME_COL_WIDTH = 150;
+const ROLL_COL_WIDTH = 50;
+const FIXED_COLS_WIDTH = NAME_COL_WIDTH + ROLL_COL_WIDTH;
+
 // --- Types ---
 interface TeacherRow {
     teacher_id: number;
@@ -44,7 +50,7 @@ const TeacherFeedback = () => {
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [classTeachers, setClassTeachers] = useState<{id: number | string, full_name: string}[]>([]);
-    const [selectedTeacherId, setSelectedTeacherId] = useState<string>(''); // string to handle "all"
+    const [selectedTeacherId, setSelectedTeacherId] = useState<string>(''); 
     
     // Admin Data Holders
     const [adminReviews, setAdminReviews] = useState<AdminReviewRow[]>([]); // List View
@@ -131,6 +137,12 @@ const TeacherFeedback = () => {
         try {
             const res = await apiClient.get('/feedback/classes');
             setAllClasses(res.data);
+
+            // --- SET DEFAULT CLASS TO "Class 10" ---
+            if (res.data.length > 0) {
+                const defaultClass = res.data.includes("Class 10") ? "Class 10" : res.data[0];
+                setSelectedClass(defaultClass);
+            }
         } catch (e) { console.error(e); }
     };
 
@@ -176,11 +188,11 @@ const TeacherFeedback = () => {
                     
                     if (res.data.mode === 'matrix') {
                         setMatrixData({ teachers: res.data.teachers, students: res.data.students });
-                        setAdminReviews([]); // Clear list view
+                        setAdminReviews([]); 
                     } else {
                         setAdminReviews(res.data.reviews);
                         setStats({ average: res.data.average, total: res.data.total });
-                        setMatrixData(null); // Clear matrix view
+                        setMatrixData(null); 
                     }
                 } catch (e) { console.error(e); }
                 finally { setLoading(false); }
@@ -352,7 +364,7 @@ const TeacherFeedback = () => {
                                         </View>
                                     </View>
 
-                                    <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
+                                    <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
                                         <View style={styles.tableHeader}>
                                             <Text style={[styles.th, { width: 50 }]}>Roll</Text>
                                             <Text style={[styles.th, { flex: 1 }]}>Student</Text>
@@ -379,22 +391,24 @@ const TeacherFeedback = () => {
                                 <ScrollView horizontal contentContainerStyle={{flexGrow: 1}}>
                                     <View>
                                         {/* Matrix Header */}
-                                        <View style={[styles.matrixHeaderRow, { minWidth: 200 + (matrixData.teachers.length * 100) }]}>
-                                            <View style={{width: 50, justifyContent:'center'}}><Text style={styles.th}>Roll</Text></View>
-                                            <View style={{width: 150, justifyContent:'center'}}><Text style={styles.th}>Student Name</Text></View>
+                                        <View style={[styles.matrixHeaderRow, { minWidth: FIXED_COLS_WIDTH + (matrixData.teachers.length * TEACHER_COL_WIDTH) }]}>
+                                            <View style={{width: ROLL_COL_WIDTH, justifyContent:'center', alignItems:'center'}}><Text style={styles.th}>Roll</Text></View>
+                                            <View style={{width: NAME_COL_WIDTH, justifyContent:'center'}}><Text style={styles.th}>Student Name</Text></View>
                                             {matrixData.teachers.map((t) => (
-                                                <View key={t.id} style={{width: 100, justifyContent:'center', alignItems:'center'}}>
-                                                    <Text style={styles.th} numberOfLines={2}>{t.full_name.split(' ')[0]}</Text>
+                                                <View key={t.id} style={{width: TEACHER_COL_WIDTH, justifyContent:'center', alignItems:'center', paddingHorizontal: 2}}>
+                                                    <Text style={[styles.th, { textAlign: 'center' }]} numberOfLines={2}>
+                                                        {t.full_name.split(' ')[0]}
+                                                    </Text>
                                                 </View>
                                             ))}
                                         </View>
 
                                         {/* Matrix Rows */}
-                                        <ScrollView contentContainerStyle={{paddingBottom: 50}}>
+                                        <ScrollView contentContainerStyle={{paddingBottom: 60}}>
                                             {matrixData.students.map((stu) => (
-                                                <View key={stu.id} style={[styles.matrixRow, { minWidth: 200 + (matrixData.teachers.length * 100) }]}>
-                                                    <View style={{width: 50}}><Text style={styles.rollNo}>{stu.roll_no || '-'}</Text></View>
-                                                    <View style={{width: 150}}><Text style={styles.studentName} numberOfLines={1}>{stu.full_name}</Text></View>
+                                                <View key={stu.id} style={[styles.matrixRow, { minWidth: FIXED_COLS_WIDTH + (matrixData.teachers.length * TEACHER_COL_WIDTH) }]}>
+                                                    <View style={{width: ROLL_COL_WIDTH, justifyContent:'center', alignItems:'center'}}><Text style={styles.rollNo}>{stu.roll_no || '-'}</Text></View>
+                                                    <View style={{width: NAME_COL_WIDTH}}><Text style={styles.studentName} numberOfLines={1}>{stu.full_name}</Text></View>
                                                     
                                                     {matrixData.teachers.map((t) => {
                                                         const fb = stu.feedback_map[t.id];
@@ -425,6 +439,24 @@ const TeacherFeedback = () => {
                     )}
                 </View>
             )}
+
+            {/* --- FOOTER LEGEND --- */}
+            <View style={styles.footerContainer}>
+                <View style={styles.legendGroup}>
+                    <Text style={styles.legendLabel}>Scale: </Text>
+                    <MaterialIcons name="star" size={14} color="#FFC107" />
+                    <Text style={styles.legendText}> (1-5)</Text>
+                </View>
+
+                <View style={styles.verticalDivider} />
+
+                <View style={styles.legendGroup}>
+                    <Text style={styles.legendLabel}>Note: </Text>
+                    <Text style={[styles.legendText, { color: '#10b981', fontWeight:'bold' }]}>G</Text><Text style={styles.legendText}>=Good, </Text>
+                    <Text style={[styles.legendText, { color: '#3b82f6', fontWeight:'bold' }]}>A</Text><Text style={styles.legendText}>=Avg, </Text>
+                    <Text style={[styles.legendText, { color: '#ef4444', fontWeight:'bold' }]}>P</Text><Text style={styles.legendText}>=Poor</Text>
+                </View>
+            </View>
 
         </SafeAreaView>
     );
@@ -488,10 +520,22 @@ const styles = StyleSheet.create({
     // Matrix View
     matrixHeaderRow: { flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#ccc' },
     matrixRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 10, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    matrixCell: { width: 100, alignItems: 'center', justifyContent: 'center' },
+    matrixCell: { width: TEACHER_COL_WIDTH, alignItems: 'center', justifyContent: 'center' },
     miniBadge: { marginTop: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden', color: '#fff', fontSize: 10, fontWeight: 'bold' },
 
-    emptyText: { textAlign: 'center', marginTop: 30, color: '#999' }
+    emptyText: { textAlign: 'center', marginTop: 30, color: '#999' },
+
+    // Footer
+    footerContainer: {
+        position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', 
+        borderTopWidth: 1, borderTopColor: '#f0f0f0', height: 45, 
+        flexDirection: 'row', justifyContent: 'center', alignItems: 'center', 
+        paddingHorizontal: 15, elevation: 10
+    },
+    legendGroup: { flexDirection: 'row', alignItems: 'center' },
+    legendLabel: { fontSize: 12, fontWeight: '700', color: '#333', marginRight: 4 },
+    legendText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
+    verticalDivider: { height: 16, width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 12 },
 });
 
 export default TeacherFeedback;
