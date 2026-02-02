@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView,
-    TouchableOpacity, ActivityIndicator, Alert
+    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -15,41 +15,69 @@ const COL_WIDTHS = {
     STATUS: 180,   
     REMARKS: 200   
 };
-
 const TABLE_MIN_WIDTH = COL_WIDTHS.ROLL + COL_WIDTHS.NAME + COL_WIDTHS.STATUS + COL_WIDTHS.REMARKS; 
 
-interface StudentFeedbackRow {
-    student_id: number;
-    full_name: string;
-    roll_no: string;
-    status_marks: number | null; // 1 to 5
-    remarks_category: 'Good' | 'Average' | 'Poor' | null;
-}
+// --- ANIMATED BAR COMPONENT ---
+const AnimatedBar = ({ percentage, rating, label, color }) => {
+    const animatedHeight = useRef(new Animated.Value(0)).current;
 
-interface Teacher {
-    id: number;
-    full_name: string;
-}
+    useEffect(() => {
+        Animated.timing(animatedHeight, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false,
+            easing: Easing.out(Easing.poly(4)),
+        }).start();
+    }, [percentage]);
+
+    const heightStyle = animatedHeight.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0%', `${percentage}%`]
+    });
+
+    return (
+        <View style={styles.barWrapper}>
+            <Text style={styles.barLabelTop}>{Math.round(percentage)}%</Text>
+            <View style={styles.barTrack}>
+                <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
+            </View>
+            <Text style={styles.barLabelBottom} numberOfLines={1}>
+                {label.split(' ')[0]} 
+            </Text>
+            <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
+                 <Text style={{fontSize:10, fontWeight:'bold', color:'#555'}}>{rating}</Text>
+                 <MaterialIcons name="star" size={10} color="#FFC107" />
+            </View>
+        </View>
+    );
+};
 
 const StudentFeedback = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     
-    // --- Filters State ---
-    const [allClasses, setAllClasses] = useState<string[]>([]);
-    const [selectedClass, setSelectedClass] = useState<string>('');
+    // --- Main Screen Filters ---
+    const [allClasses, setAllClasses] = useState([]);
+    const [selectedClass, setSelectedClass] = useState('');
     
-    const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
-    const [selectedSubject, setSelectedSubject] = useState<string>('');
+    const [availableSubjects, setAvailableSubjects] = useState([]);
+    const [selectedSubject, setSelectedSubject] = useState('');
     
-    const [availableTeachers, setAvailableTeachers] = useState<Teacher[]>([]);
-    const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null);
+    const [availableTeachers, setAvailableTeachers] = useState([]);
+    const [selectedTeacherId, setSelectedTeacherId] = useState(null);
 
-    // Data
-    const [students, setStudents] = useState<StudentFeedbackRow[]>([]);
+    // --- Data ---
+    const [students, setStudents] = useState([]);
     const [hasChanges, setHasChanges] = useState(false);
 
-    // Helper: Check if looking at overall view
+    // --- Compare Modal State ---
+    const [showCompareModal, setShowCompareModal] = useState(false);
+    const [compareSubject, setCompareSubject] = useState('All Subjects'); 
+    const [sortOrder, setSortOrder] = useState('desc'); 
+    const [analyticsData, setAnalyticsData] = useState([]);
+    const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+    // Helper
     const isOverallView = selectedSubject === 'All Subjects';
 
     // --- 1. Initial Setup ---
@@ -71,8 +99,8 @@ const StudentFeedback = () => {
             }
             setAllClasses(classesData);
             if (classesData.length > 0) {
-                const defaultClass = classesData.includes("Class 10") ? "Class 10" : classesData[0];
-                setSelectedClass(defaultClass);
+                // Auto-select first class if available
+                setSelectedClass(classesData[0]);
             }
         } catch (error) { console.error('Error fetching classes', error); }
     };
@@ -86,19 +114,16 @@ const StudentFeedback = () => {
         }
         const fetchSubjects = async () => {
             try {
-                const params: any = { class_group: selectedClass };
+                const params = { class_group: selectedClass };
                 if (user?.role === 'teacher') params.teacher_id = user.id;
 
                 const response = await apiClient.get('/feedback/subjects', { params });
                 
                 let subjectsList = response.data;
-                // Add "All Subjects" option for Admin
                 if (user?.role === 'admin') {
                     subjectsList = ['All Subjects', ...subjectsList];
                 }
-
                 setAvailableSubjects(subjectsList);
-                
                 if (subjectsList.length > 0) setSelectedSubject(subjectsList[0]);
                 else setSelectedSubject('');
 
@@ -107,7 +132,7 @@ const StudentFeedback = () => {
         fetchSubjects();
     }, [selectedClass, user]);
 
-    // Fetch Teachers when Subject changes
+    // Fetch Teachers (For Admin List View Editing)
     useEffect(() => {
         if (!selectedClass || !selectedSubject || isOverallView) {
             setAvailableTeachers([]);
@@ -132,28 +157,28 @@ const StudentFeedback = () => {
         }
     }, [selectedClass, selectedSubject, user]);
 
-    // --- 3. Fetch Student Data ---
+    // --- 3. Fetch List Data (Main Screen) ---
     const fetchStudentData = useCallback(async () => {
-        // Validation: Need Class. 
-        // Need TeacherID unless it's "All Subjects" mode.
-        if (!selectedClass || (!isOverallView && !selectedTeacherId)) {
-            setStudents([]);
-            return;
+        if (!selectedClass) { setStudents([]); return; }
+        
+        // Validation: Don't fetch if detailed view is selected but no teacher/subject is ready
+        if (!isOverallView && (!selectedTeacherId || !selectedSubject)) {
+            setStudents([]); return;
         }
 
         setLoading(true);
         try {
-            const params: any = { class_group: selectedClass };
+            const params = { class_group: selectedClass };
 
             if (isOverallView) {
-                params.mode = 'overall'; // Tell API to aggregate
+                params.mode = 'overall';
             } else {
                 params.teacher_id = selectedTeacherId;
+                params.subject = selectedSubject;
             }
 
             const response = await apiClient.get('/feedback/students', { params });
-            
-            const formattedData = response.data.map((s: any) => ({
+            const formattedData = response.data.map((s) => ({
                 ...s,
                 status_marks: s.status_marks || 0, 
                 remarks_category: s.remarks_category || null
@@ -161,33 +186,77 @@ const StudentFeedback = () => {
             setStudents(formattedData);
             setHasChanges(false);
         } catch (error) {
-            console.error(error);
             Alert.alert('Error', 'Failed to load student list.');
+            console.error(error);
         } finally {
             setLoading(false);
         }
-    }, [selectedClass, selectedTeacherId, isOverallView]);
+    }, [selectedClass, selectedTeacherId, selectedSubject, isOverallView]);
 
     useEffect(() => {
-        // Trigger fetch if:
-        // 1. Overall view + Class selected
-        // 2. OR Normal view + Class + Subject + Teacher selected
         if ((isOverallView && selectedClass) || (selectedClass && selectedSubject && selectedTeacherId)) {
             fetchStudentData();
         }
-    }, [selectedClass, selectedSubject, selectedTeacherId, isOverallView, fetchStudentData]);
+    }, [fetchStudentData]);
 
 
-    // --- 4. Save Logic (Disabled for All Subjects) ---
+    // --- 4. Analytics Data (Modal) ---
+    useEffect(() => {
+        if (showCompareModal && selectedClass) {
+            fetchAnalytics();
+        }
+    }, [showCompareModal, compareSubject, sortOrder, selectedClass]);
+
+    const fetchAnalytics = async () => {
+        setLoadingAnalytics(true);
+        try {
+            const params = { 
+                class_group: selectedClass,
+                mode: 'analytics',
+                subject: compareSubject 
+            };
+
+            const response = await apiClient.get('/feedback/students', { params });
+            
+            let data = response.data.map(s => ({
+                id: s.student_id,
+                name: s.full_name,
+                roll_no: s.roll_no,
+                avg_rating: parseFloat(s.avg_rating || 0),
+                percentage: parseFloat(s.percentage || 0)
+            }));
+
+            // Filter out empty data
+            data = data.filter(s => s.avg_rating > 0);
+
+            // Sort logic
+            if (sortOrder === 'desc') {
+                data.sort((a, b) => b.percentage - a.percentage);
+            } else if (sortOrder === 'asc') {
+                data.sort((a, b) => a.percentage - b.percentage);
+            } else if (sortOrder === 'roll') {
+                data.sort((a, b) => parseInt(a.roll_no || 0) - parseInt(b.roll_no || 0));
+            }
+
+            setAnalyticsData(data);
+        } catch (error) {
+            console.error("Analytics Error", error);
+        } finally {
+            setLoadingAnalytics(false);
+        }
+    };
+
+    // --- 5. Save Logic ---
     const handleSave = async () => {
-        if (isOverallView) return; // Cannot save in overall view
-        if (!selectedTeacherId || !selectedClass) return;
+        if (isOverallView) return; 
+        if (!selectedTeacherId || !selectedClass || !selectedSubject) return;
         
         setLoading(true);
         try {
             const payload = {
                 teacher_id: selectedTeacherId,
                 class_group: selectedClass,
+                subject_name: selectedSubject, // Sending correct subject name
                 feedback_data: students.map(s => ({
                     student_id: s.student_id,
                     status_marks: s.status_marks === 0 ? null : s.status_marks, 
@@ -197,6 +266,8 @@ const StudentFeedback = () => {
             await apiClient.post('/feedback', payload);
             Alert.alert("Success", "Student behavior updated!");
             setHasChanges(false);
+            // Optional: Refresh data
+            fetchStudentData();
         } catch (error) {
             console.error(error);
             Alert.alert("Error", "Failed to save feedback.");
@@ -205,9 +276,9 @@ const StudentFeedback = () => {
         }
     };
 
-    const updateStudentFeedback = (id: number, field: keyof StudentFeedbackRow, value: any) => {
+    const updateStudentFeedback = (id, field, value) => {
         if (user?.role === 'admin') return; 
-        if (isOverallView) return; // Read only
+        if (isOverallView) return; 
         
         setStudents(prev => prev.map(s => {
             if (s.student_id === id) return { ...s, [field]: value };
@@ -217,29 +288,15 @@ const StudentFeedback = () => {
     };
 
     // --- Sub-Components ---
-    const RemarkButton = ({ label, targetValue, currentValue, color, onPress, disabled }: any) => {
+    const RemarkButton = ({ label, targetValue, currentValue, color, onPress, disabled }) => {
         const isSelected = currentValue === targetValue;
-        // In "Overall" view, reduce opacity if not selected to make the average stand out
         const opacity = isOverallView && !isSelected ? 0.3 : 1;
-        
         return (
             <TouchableOpacity 
-                style={[
-                    styles.remarkBtn, 
-                    { opacity },
-                    isSelected 
-                        ? { backgroundColor: color, borderColor: color } 
-                        : { borderColor: '#E0E0E0', backgroundColor: '#FFF' }
-                ]}
-                onPress={onPress}
-                disabled={disabled}
+                style={[styles.remarkBtn, { opacity }, isSelected ? { backgroundColor: color, borderColor: color } : { borderColor: '#E0E0E0', backgroundColor: '#FFF' }]}
+                onPress={onPress} disabled={disabled}
             >
-                <Text style={[
-                    styles.remarkBtnText, 
-                    isSelected ? { color: '#FFF' } : { color: '#9e9e9e' }
-                ]}>
-                    {label}
-                </Text>
+                <Text style={[styles.remarkBtnText, isSelected ? { color: '#FFF' } : { color: '#9e9e9e' }]}>{label}</Text>
             </TouchableOpacity>
         );
     };
@@ -258,7 +315,6 @@ const StudentFeedback = () => {
                         <Text style={styles.headerSubtitle}>Student Tracking</Text>
                     </View>
                 </View>
-                {/* Visual Indicator for Overall View */}
                 {isOverallView && (
                     <View style={styles.overallBadge}>
                         <Text style={styles.overallBadgeText}>Overall View</Text>
@@ -268,18 +324,38 @@ const StudentFeedback = () => {
 
             {/* FILTERS */}
             <View style={styles.filterContainer}>
-                <View style={styles.pickerWrapper}>
-                    <Picker
-                        selectedValue={selectedClass}
-                        onValueChange={setSelectedClass}
-                        style={styles.picker}
-                        dropdownIconColor="#008080"
+                {/* Row 1: Class + COM Button */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <View style={[styles.pickerWrapper, { flex: 1, marginBottom: 0 }]}>
+                        <Picker
+                            selectedValue={selectedClass}
+                            onValueChange={setSelectedClass}
+                            style={styles.picker}
+                        >
+                            <Picker.Item label="Select Class" value="" color="#999" />
+                            {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                        </Picker>
+                    </View>
+
+                    {/* COM BUTTON */}
+                    <TouchableOpacity 
+                        style={styles.comButton}
+                        onPress={() => {
+                            if(selectedClass) {
+                                // Default the modal subject to current view subject, or All Subjects
+                                setCompareSubject(selectedSubject || 'All Subjects');
+                                setShowCompareModal(true);
+                            } else {
+                                Alert.alert("Select Class", "Please select a class first.");
+                            }
+                        }}
                     >
-                        <Picker.Item label="Select Class" value="" color="#94a3b8" />
-                        {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
-                    </Picker>
+                        <Text style={styles.comBtnText}>COM</Text>
+                        <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
+                    </TouchableOpacity>
                 </View>
 
+                {/* Row 2: Subject */}
                 {selectedClass !== '' && (
                     <View style={styles.pickerWrapper}>
                         <Picker
@@ -287,15 +363,14 @@ const StudentFeedback = () => {
                             onValueChange={setSelectedSubject}
                             enabled={availableSubjects.length > 0}
                             style={styles.picker}
-                            dropdownIconColor="#008080"
                         >
-                            <Picker.Item label="Select Subject" value="" color="#94a3b8" />
+                            <Picker.Item label="Select Subject" value="" color="#999" />
                             {availableSubjects.map(s => <Picker.Item key={s} label={s} value={s} />)}
                         </Picker>
                     </View>
                 )}
 
-                {/* Hide Teacher Picker if "All Subjects" is selected */}
+                {/* Row 3: Teacher (Admin only) */}
                 {user?.role === 'admin' && selectedSubject !== '' && !isOverallView && (
                     <View style={styles.pickerWrapper}>
                         <Picker
@@ -303,16 +378,15 @@ const StudentFeedback = () => {
                             onValueChange={(val) => val && setSelectedTeacherId(parseInt(val))}
                             enabled={availableTeachers.length > 0}
                             style={styles.picker}
-                            dropdownIconColor="#008080"
                         >
-                            <Picker.Item label="Select Teacher" value="" color="#94a3b8" />
+                            <Picker.Item label="Select Teacher" value="" color="#999" />
                             {availableTeachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} />)}
                         </Picker>
                     </View>
                 )}
             </View>
 
-            {/* TABLE */}
+            {/* TABLE CONTENT */}
             <View style={{flex: 1}}>
                 <ScrollView 
                     horizontal 
@@ -321,7 +395,6 @@ const StudentFeedback = () => {
                 >
                     <View style={{ minWidth: TABLE_MIN_WIDTH }}>
                         
-                        {/* Table Header */}
                         <View style={styles.tableHeader}>
                             <Text style={[styles.th, { width: COL_WIDTHS.ROLL, textAlign: 'center' }]}>Roll</Text>
                             <Text style={[styles.th, { width: COL_WIDTHS.NAME }]}>Student Name</Text>
@@ -333,7 +406,6 @@ const StudentFeedback = () => {
                             </Text>
                         </View>
 
-                        {/* List */}
                         {loading ? (
                             <ActivityIndicator size="large" color="#008080" style={{ marginTop: 40 }} />
                         ) : (
@@ -348,12 +420,10 @@ const StudentFeedback = () => {
                                                 {item.full_name}
                                             </Text>
                                             
-                                            {/* STATUS COLUMN (STARS) */}
                                             <View style={{ width: COL_WIDTHS.STATUS, flexDirection: 'row', justifyContent: 'center', gap: 2 }}>
                                                 {[1, 2, 3, 4, 5].map((star) => (
                                                     <TouchableOpacity 
                                                         key={star}
-                                                        // Disable editing if Admin or Overall View
                                                         onPress={() => !isOverallView && !user?.role?.includes('admin') && updateStudentFeedback(item.student_id, 'status_marks', star)}
                                                         disabled={user?.role === 'admin' || isOverallView}
                                                         style={{ padding: 2 }}
@@ -367,26 +437,10 @@ const StudentFeedback = () => {
                                                 ))}
                                             </View>
 
-                                            {/* REMARKS COLUMN (G/A/P) */}
                                             <View style={{ width: COL_WIDTHS.REMARKS, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
-                                                <RemarkButton 
-                                                    label="G" targetValue="Good" currentValue={item.remarks_category} 
-                                                    color="#10b981" 
-                                                    disabled={user?.role === 'admin' || isOverallView} 
-                                                    onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Good')} 
-                                                />
-                                                <RemarkButton 
-                                                    label="A" targetValue="Average" currentValue={item.remarks_category} 
-                                                    color="#3b82f6" 
-                                                    disabled={user?.role === 'admin' || isOverallView} 
-                                                    onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Average')} 
-                                                />
-                                                <RemarkButton 
-                                                    label="P" targetValue="Poor" currentValue={item.remarks_category} 
-                                                    color="#ef4444" 
-                                                    disabled={user?.role === 'admin' || isOverallView} 
-                                                    onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Poor')} 
-                                                />
+                                                <RemarkButton label="G" targetValue="Good" currentValue={item.remarks_category} color="#10b981" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Good')} />
+                                                <RemarkButton label="A" targetValue="Average" currentValue={item.remarks_category} color="#3b82f6" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Average')} />
+                                                <RemarkButton label="P" targetValue="Poor" currentValue={item.remarks_category} color="#ef4444" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Poor')} />
                                             </View>
                                         </View>
                                     ))
@@ -404,7 +458,7 @@ const StudentFeedback = () => {
                 </ScrollView>
             </View>
 
-            {/* SAVE BUTTON - Hide in Overall View */}
+            {/* SAVE BUTTON */}
             {!isOverallView && user?.role === 'teacher' && hasChanges && (
                 <View style={styles.floatingSaveContainer}>
                     <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
@@ -431,74 +485,171 @@ const StudentFeedback = () => {
                 </View>
             </View>
 
+            {/* ========================================================== */}
+            {/* COMPARISON MODAL */}
+            {/* ========================================================== */}
+            <Modal
+                visible={showCompareModal}
+                animationType="slide"
+                onRequestClose={() => setShowCompareModal(false)}
+            >
+                <SafeAreaView style={{flex:1, backgroundColor:'#FFF'}}>
+                    
+                    {/* MODAL HEADER */}
+                    <View style={styles.modalHeader}>
+                        <TouchableOpacity onPress={() => setShowCompareModal(false)} style={{padding:5}}>
+                            <MaterialIcons name="close" size={26} color="#333" />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Performance Analytics</Text>
+                        <View style={{width:30}}/>
+                    </View>
+
+                    {/* MODAL FILTERS */}
+                    <View style={styles.modalFilterContainer}>
+                        {/* Subject Filter inside Modal */}
+                        <View style={{marginBottom: 10}}>
+                            <Text style={styles.modalLabel}>Comparing Subject:</Text>
+                            <View style={styles.modalPickerWrap}>
+                                <Picker
+                                    selectedValue={compareSubject}
+                                    onValueChange={setCompareSubject}
+                                    style={{width:'100%'}}
+                                >
+                                    <Picker.Item label="All Subjects" value="All Subjects" />
+                                    {availableSubjects
+                                        .filter(s => s !== "All Subjects")
+                                        .map(s => <Picker.Item key={s} label={s} value={s} />)
+                                    }
+                                </Picker>
+                            </View>
+                        </View>
+
+                        {/* Sort Filter */}
+                        <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                            <Text style={styles.modalLabel}>Sort Order:</Text>
+                            <View style={{flexDirection:'row', backgroundColor:'#F5F5F5', borderRadius:8}}>
+                                <TouchableOpacity 
+                                    style={[styles.sortBtn, sortOrder==='roll' && styles.sortBtnActive]}
+                                    onPress={() => setSortOrder('roll')}
+                                >
+                                    <Text style={[styles.sortBtnText, sortOrder==='roll' && {color:'#008080', fontWeight:'bold'}]}>Roll No</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.sortBtn, sortOrder==='desc' && styles.sortBtnActive]}
+                                    onPress={() => setSortOrder('desc')}
+                                >
+                                    <Text style={[styles.sortBtnText, sortOrder==='desc' && {color:'#008080', fontWeight:'bold'}]}>High to Low</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.sortBtn, sortOrder==='asc' && styles.sortBtnActive]}
+                                    onPress={() => setSortOrder('asc')}
+                                >
+                                    <Text style={[styles.sortBtnText, sortOrder==='asc' && {color:'#008080', fontWeight:'bold'}]}>Low to High</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* GRAPH CONTENT */}
+                    <View style={styles.graphContainer}>
+                        {loadingAnalytics ? (
+                            <ActivityIndicator size="large" color="#008080" />
+                        ) : analyticsData.length > 0 ? (
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false} 
+                                contentContainerStyle={{paddingHorizontal: 10, alignItems:'flex-end'}}
+                            >
+                                {analyticsData.map((item, idx) => {
+                                    let color = '#3b82f6';
+                                    if(item.percentage >= 85) color = '#10b981';
+                                    else if(item.percentage < 50) color = '#ef4444';
+
+                                    return (
+                                        <AnimatedBar 
+                                            key={idx}
+                                            percentage={item.percentage}
+                                            rating={item.avg_rating}
+                                            label={item.name}
+                                            color={color}
+                                        />
+                                    );
+                                })}
+                            </ScrollView>
+                        ) : (
+                            <View style={{alignItems:'center'}}>
+                                <MaterialIcons name="bar-chart" size={50} color="#ddd" />
+                                <Text style={{color:'#999', marginTop: 10}}>No student data found.</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {/* MODAL LEGEND */}
+                    <View style={styles.modalFooter}>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#10b981'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>85-100%</Text>
+                         </View>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#3b82f6'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>50-85%</Text>
+                         </View>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#ef4444'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>0-50%</Text>
+                         </View>
+                    </View>
+
+                </SafeAreaView>
+            </Modal>
+
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F2F5F8' }, 
-    
-    // Header
     headerCard: {
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+        backgroundColor: '#FFFFFF', paddingHorizontal: 15, paddingVertical: 12,
+        width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10,
+        borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1',
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
+        backgroundColor: '#E0F2F1', borderRadius: 30, width: 45, height: 45,
+        justifyContent: 'center', alignItems: 'center', marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
     headerSubtitle: { fontSize: 13, color: '#666666' },
     overallBadge: { backgroundColor: '#FFEDD5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#FED7AA' },
     overallBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#F97316' },
-
-    // Filters
     filterContainer: { paddingHorizontal: 20, marginBottom: 5 },
     pickerWrapper: {
         borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 10,
         backgroundColor: '#fff', overflow: 'hidden', height: 45, justifyContent: 'center'
     },
     picker: { width: '100%', color: '#1f2937' },
-    
-    // Table
+    comButton: {
+        backgroundColor: '#ef4444', height: 45, paddingHorizontal: 15, borderRadius: 8,
+        justifyContent: 'center', alignItems: 'center', flexDirection: 'row', elevation: 2
+    },
+    comBtnText: { color:'#fff', fontWeight:'bold', fontSize: 12 },
     tableHeader: {
         flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12,
         borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#c7d2fe',
         borderTopLeftRadius: 8, borderTopRightRadius: 8
     },
     th: { fontWeight: '700', color: '#4338ca', fontSize: 13 },
-    
-    // Rows
     row: {
         flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#FFF', minHeight: 65
     },
     rowAlt: { backgroundColor: '#f8fafc' },
     td: { fontSize: 13, color: '#374151' },
-    
-    // Remark Buttons
     remarkBtn: { width: 36, height: 36, borderRadius: 6, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
     remarkBtnText: { fontWeight: 'bold', fontSize: 14 },
-    
-    // Save
     floatingSaveContainer: {
         position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', paddingBottom: 10, zIndex: 10,
     },
@@ -507,8 +658,6 @@ const styles = StyleSheet.create({
         elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: {width: 0, height: 2}
     },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, letterSpacing: 0.5 },
-
-    // Footer
     footerContainer: {
         position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', 
         borderTopWidth: 1, borderTopColor: '#f0f0f0', height: 45, 
@@ -519,9 +668,26 @@ const styles = StyleSheet.create({
     legendLabel: { fontSize: 12, fontWeight: '700', color: '#333', marginRight: 4 },
     legendText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
     verticalDivider: { height: 16, width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 12 },
-    
     emptyContainer: { alignItems: 'center', marginTop: 50, width: '100%' },
     emptyText: { textAlign: 'center', marginTop: 10, color: '#94a3b8', fontSize: 14 },
+    modalHeader: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        padding: 15, backgroundColor: '#fff', elevation: 2
+    },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+    modalFilterContainer: { padding: 15, backgroundColor: '#FAFAFA', borderBottomWidth: 1, borderBottomColor: '#eee' },
+    modalLabel: { fontSize: 12, fontWeight: 'bold', color: '#666', marginBottom: 5 },
+    modalPickerWrap: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, backgroundColor: '#fff', height: 45, justifyContent: 'center' },
+    sortBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+    sortBtnActive: { backgroundColor: '#fff', elevation: 1 },
+    sortBtnText: { fontSize: 11, color: '#666' },
+    graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+    modalFooter: { flexDirection: 'row', justifyContent: 'space-evenly', padding: 15, borderTopWidth: 1, borderTopColor: '#eee' },
+    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 8, height: 280, justifyContent: 'flex-end' },
+    barLabelTop: { fontSize: 10, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+    barTrack: { width: 30, height: 220, backgroundColor: '#F0F0F0', borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
+    barFill: { width: '100%', borderRadius: 0 },
+    barLabelBottom: { fontSize: 11, fontWeight: '600', color: '#333', marginTop: 6, textAlign:'center', width: '100%' },
 });
 
 export default StudentFeedback;

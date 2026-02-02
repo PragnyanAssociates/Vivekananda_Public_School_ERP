@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
- * Purpose: View class-wise student performance with Marks and Attendance.
- * Updated: Header Card Design Implementation.
+ * Purpose: View class-wise student performance.
+ * Updated: Moved Attendance Graph to a Pop-up button next to Overall Attendance.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -22,6 +22,7 @@ if (Platform.OS === 'android') {
 
 // --- Constants ---
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const CLASS_SUBJECTS: any = {
     'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 
@@ -53,8 +54,8 @@ const EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4
 
 // --- COLORS ---
 const COLORS = {
-    primary: '#008080',    // Teal (Updated)
-    background: '#F2F5F8', // Light Grey-Blue (Updated)
+    primary: '#008080',    // Teal
+    background: '#F2F5F8', // Light Grey-Blue
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
@@ -63,7 +64,7 @@ const COLORS = {
     average: '#1E88E5',    // Blue
     poor: '#E53935',       // Red
     
-    track: '#ECEFF1',
+    track: '#F0F0F0',      // Light Gray for Bar Background
     border: '#CFD8DC'
 };
 
@@ -82,15 +83,15 @@ const getStatusColor = (perc: number | string) => {
     return COLORS.poor; 
 };
 
-// --- COMPONENT: ANIMATED BAR ---
-const AnimatedBar = ({ percentage, marks, label, color, height = 200 }: any) => {
+// --- COMPONENT: ANIMATED BAR (For both Exams and Attendance) ---
+const AnimatedBar = ({ percentage, marks, label, color, height = 220 }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
     const displayPercentage = getRoundedPercentage(percentage);
 
     useEffect(() => {
         Animated.timing(animatedHeight, {
             toValue: 1,
-            duration: 1200,
+            duration: 1000,
             useNativeDriver: false,
             easing: Easing.out(Easing.poly(4)),
         }).start();
@@ -103,13 +104,21 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }: any) => 
 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
-            <Text style={[styles.barLabelTop, { color: COLORS.textMain }]}>{displayPercentage}%</Text>
+            {/* Percentage on Top */}
+            <Text style={styles.barLabelTop}>{displayPercentage}%</Text>
+            
+            {/* Bar Track */}
             <View style={styles.barBackground}>
+                {/* Colored Fill */}
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
+                
+                {/* Marks Text (Rotated and Centered over the track) */}
                 <View style={styles.barTextContainer}>
                     <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
                 </View>
             </View>
+            
+            {/* Label Bottom */}
             <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
         </View>
     );
@@ -130,13 +139,21 @@ const StudentPerformance = () => {
     const [students, setStudents] = useState<any[]>([]);
     const [marksData, setMarksData] = useState<any[]>([]);
     const [attendanceMap, setAttendanceMap] = useState<any>({}); 
+
+    // Specific Student Attendance Data (for graph)
+    const [studentMonthlyAtt, setStudentMonthlyAtt] = useState<any[]>([]);
+    const [loadingAttGraph, setLoadingAttGraph] = useState(false);
     
     // Filter State
     const [sortBy, setSortBy] = useState('roll_no');
 
     // Modals
-    const [isGraphVisible, setIsGraphVisible] = useState(false);
+    const [isGraphVisible, setIsGraphVisible] = useState(false); // For Exams
     const [graphData, setGraphData] = useState<any>(null);
+    
+    const [isAttGraphVisible, setIsAttGraphVisible] = useState(false); // For Attendance
+    const [attGraphData, setAttGraphData] = useState<any>(null);
+
     const [isCompareVisible, setIsCompareVisible] = useState(false);
     
     // Comparison State
@@ -211,6 +228,59 @@ const StudentPerformance = () => {
         }
     };
 
+    const fetchStudentAttendanceHistory = async (studentId: number) => {
+        setLoadingAttGraph(true);
+        try {
+            const currentYear = new Date().getFullYear();
+            const response = await apiClient.get(`/attendance/student-history-admin/${studentId}`, {
+                params: { viewMode: 'yearly', targetYear: currentYear }
+            });
+            
+            const history = response.data.history || [];
+            
+            const monthsData: any = {};
+            
+            history.forEach((record: any) => {
+                const dateObj = new Date(record.attendance_date);
+                const monthIndex = dateObj.getMonth();
+                const monthName = dateObj.toLocaleString('default', { month: 'short' });
+                const year = dateObj.getFullYear();
+                const key = `${year}-${monthIndex}`;
+                
+                if (!monthsData[key]) {
+                    monthsData[key] = {
+                        name: monthName,
+                        total: 0,
+                        present: 0,
+                        sortTime: dateObj.getTime()
+                    };
+                }
+                
+                monthsData[key].total += 1;
+                if (record.status === 'Present') {
+                    monthsData[key].present += 1;
+                }
+            });
+
+            const processedArr = Object.values(monthsData)
+                .sort((a: any, b: any) => a.sortTime - b.sortTime)
+                .map((m: any) => ({
+                    month: m.name,
+                    percentage: (m.present / m.total) * 100,
+                    present: m.present,
+                    total: m.total
+                }));
+
+            setStudentMonthlyAtt(processedArr);
+
+        } catch (error) {
+            console.error("Error fetching student history", error);
+            setStudentMonthlyAtt([]);
+        } finally {
+            setLoadingAttGraph(false);
+        }
+    };
+
     const onRefresh = () => {
         setRefreshing(true);
         if (selectedClass) fetchAllData(selectedClass);
@@ -218,12 +288,25 @@ const StudentPerformance = () => {
 
     const toggleExpand = (id: number) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setExpandedId(expandedId === id ? null : id);
+        if (expandedId === id) {
+            setExpandedId(null);
+            setStudentMonthlyAtt([]);
+        } else {
+            setExpandedId(id);
+            fetchStudentAttendanceHistory(id);
+        }
     };
 
-    const handleOpenGraph = (title: string, exams: any[]) => {
-        setGraphData({ title, exams });
+    // Open Exam Graph
+    const handleOpenGraph = (studentName: string, exams: any[]) => {
+        setGraphData({ title: studentName.toUpperCase(), exams });
         setIsGraphVisible(true);
+    };
+
+    // Open Attendance Graph
+    const handleOpenAttGraph = (studentName: string) => {
+        setAttGraphData({ title: studentName.toUpperCase(), data: studentMonthlyAtt });
+        setIsAttGraphVisible(true);
     };
 
     // --- PROCESS DATA ---
@@ -486,10 +569,23 @@ const StudentPerformance = () => {
 
                 {isExpanded && (
                     <View style={styles.expandedSection}>
+                        {/* Overall Attendance with Graph Button */}
                         <View style={styles.attRow}>
                              <Text style={styles.attLabel}>Overall Attendance:</Text>
-                             <Text style={[styles.attValue, { color: attendanceColor }]}>{item.attendancePercentage}%</Text>
+                             <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                <Text style={[styles.attValue, { color: attendanceColor, marginRight: 10 }]}>{item.attendancePercentage}%</Text>
+                                <TouchableOpacity 
+                                    style={styles.iconButton} 
+                                    onPress={() => handleOpenAttGraph(item.full_name)}
+                                    disabled={loadingAttGraph}
+                                >
+                                    {loadingAttGraph ? <ActivityIndicator size="small" color="#fff"/> : <Icon name="chart-bar" size={16} color="#fff" />}
+                                    <Text style={styles.btnText}>GRAPH</Text>
+                                </TouchableOpacity>
+                             </View>
                         </View>
+
+                        {/* Exam Breakdown */}
                         <View style={styles.detailHeader}>
                             <Text style={styles.detailTitle}>Exam Breakdown</Text>
                             <TouchableOpacity style={styles.iconButton} onPress={() => handleOpenGraph(item.full_name, item.examBreakdown)}>
@@ -539,8 +635,6 @@ const StudentPerformance = () => {
                         <Text style={styles.headerSubtitle}>Analytics & Reports</Text>
                     </View>
                 </View>
-                
-                {/* Actions inside Header */}
                 <View style={{flexDirection: 'row', gap: 10}}>
                      <TouchableOpacity style={styles.headerActionBtn} onPress={() => setIsTableView(!isTableView)}>
                         <Icon name={isTableView ? "card-bulleted-outline" : "table-large"} size={22} color="#008080" />
@@ -591,14 +685,14 @@ const StudentPerformance = () => {
                 )
             )}
 
-            {/* --- MODAL: GRAPH --- */}
+            {/* --- MODAL: EXAM GRAPH --- */}
             <Modal visible={isGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsGraphVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.graphModalCard}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalHeaderTitle}>Performance Stats</Text>
                             <TouchableOpacity onPress={() => setIsGraphVisible(false)}>
-                                <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
+                                <Icon name="close-circle-outline" size={26} color={COLORS.textSub} />
                             </TouchableOpacity>
                         </View>
                         <Text style={styles.graphSubTitle}>{graphData?.title}</Text>
@@ -611,9 +705,43 @@ const StudentPerformance = () => {
                                         marks={`${Math.round(exam.total_obtained)}/${Math.round(exam.total_possible)}`}
                                         label={exam.exam_type} 
                                         color={getStatusColor(exam.percentage)}
-                                        height={240}
+                                        height={260}
                                     />
                                 )) : <Text style={styles.noDataTxt}>No exams completed.</Text>}
+                            </ScrollView>
+                        </View>
+                        <View style={styles.legendRow}>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>85-100%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>50-85%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>0-50%</Text></View>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* --- MODAL: ATTENDANCE GRAPH (NEW) --- */}
+            <Modal visible={isAttGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsAttGraphVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.graphModalCard}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalHeaderTitle}>Attendance Stats</Text>
+                            <TouchableOpacity onPress={() => setIsAttGraphVisible(false)}>
+                                <Icon name="close-circle-outline" size={26} color={COLORS.textSub} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.graphSubTitle}>{attGraphData?.title}</Text>
+                        <View style={styles.graphViewArea}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
+                                {attGraphData?.data && attGraphData.data.length > 0 ? attGraphData.data.map((att: any, idx: number) => (
+                                    <AnimatedBar 
+                                        key={idx} 
+                                        percentage={att.percentage} 
+                                        marks={`${att.present}/${att.total}`}
+                                        label={att.month} 
+                                        color={getStatusColor(att.percentage)}
+                                        height={260}
+                                    />
+                                )) : <Text style={styles.noDataTxt}>No attendance records found.</Text>}
                             </ScrollView>
                         </View>
                         <View style={styles.legendRow}>
@@ -765,7 +893,7 @@ const styles = StyleSheet.create({
     circleText: { fontSize: 13, fontWeight: 'bold' },
     marksLabel: { fontSize: 12, color: COLORS.textSub, marginTop: 8, marginBottom: 4 },
     marksValue: { fontWeight: 'bold', color: COLORS.textMain },
-    progressTrack: { height: 6, backgroundColor: COLORS.track, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+    progressTrack: { height: 6, backgroundColor: '#EDF2F7', borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
     progressFill: { height: '100%', borderRadius: 3 },
     expandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     perfLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
@@ -774,7 +902,7 @@ const styles = StyleSheet.create({
     expandedSection: { backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#EEE', padding: 15 },
     detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
     detailTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
-    iconButton: { flexDirection: 'row', backgroundColor: '#FB8C00', padding: 6, borderRadius: 6, alignItems: 'center' },
+    iconButton: { flexDirection: 'row', backgroundColor: '#FB8C00', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center' },
     btnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
     breakdownContainer: { paddingHorizontal: 4 },
     bdHeader: { flexDirection: 'row', marginBottom: 6, backgroundColor: '#F9FAFB', paddingVertical: 6, borderRadius: 4 },
@@ -790,12 +918,29 @@ const styles = StyleSheet.create({
     attValue: { fontSize: 16, fontWeight: 'bold' },
 
     // Modals
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-    graphModalCard: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 10 },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
-    graphSubTitle: { textAlign: 'center', color: COLORS.textSub, marginBottom: 15, fontSize: 14, fontWeight: '500' },
-    graphViewArea: { height: 250, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: 10 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+    graphModalCard: { width: '90%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 15, maxHeight: SCREEN_HEIGHT * 0.8 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: '#263238' },
+    graphSubTitle: { textAlign: 'center', color: '#546E7A', marginBottom: 25, fontSize: 14, fontWeight: '600', textTransform: 'uppercase' },
+    graphViewArea: { height: 300, borderBottomWidth: 1, borderBottomColor: '#ECEFF1', paddingBottom: 10 },
+    
+    // Bar Graph
+    barWrapper: { width: 45, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 12 },
+    barLabelTop: { marginBottom: 6, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: '#263238' },
+    barBackground: { width: 34, height: '80%', backgroundColor: '#F5F5F5', borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
+    barFill: { width: '100%', borderRadius: 6 },
+    barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#000', transform: [{ rotate: '-90deg' }], width: 200, textAlign: 'center' },
+    barLabelBottom: { marginTop: 10, fontSize: 12, fontWeight: 'bold', color: '#263238', textAlign: 'center' },
+
+    // Legend
+    legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
+    legendItem: { flexDirection: 'row', alignItems: 'center' },
+    dot: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
+    legendTxt: { fontSize: 12, color: '#546E7A', fontWeight: '500' },
+
+    // Full Screen Compare
     fullScreenContainer: { flex: 1, backgroundColor: COLORS.background },
     fsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', elevation: 3 },
     fsTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
@@ -807,19 +952,6 @@ const styles = StyleSheet.create({
     compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginBottom: 20 },
     noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', width: SCREEN_WIDTH },
     noDataTxt: { marginTop: 10, color: COLORS.textSub },
-
-    // Bar Graph
-    barWrapper: { width: 55, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 8 },
-    barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-    barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
-    barFill: { width: '100%', borderRadius: 4 },
-    barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#0e0e0eff', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
-    barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', color: COLORS.textMain, textAlign: 'center', width: '100%' },
-    legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
-    legendItem: { flexDirection: 'row', alignItems: 'center' },
-    dot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-    legendTxt: { fontSize: 12, color: COLORS.textSub }
 });
 
 export default StudentPerformance;

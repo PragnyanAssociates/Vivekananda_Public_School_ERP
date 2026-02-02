@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView,
-    TouchableOpacity, ActivityIndicator, Alert
+    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -39,6 +39,49 @@ interface MatrixStudent {
     };
 }
 
+interface AnalyticsItem {
+    teacher_id: number;
+    teacher_name: string;
+    avg_rating: number;
+    percentage: number;
+    total_reviews: number;
+}
+
+// --- ANIMATED BAR COMPONENT (For the Compare Modal) ---
+const AnimatedBar = ({ percentage, rating, label, color }: any) => {
+    const animatedHeight = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(animatedHeight, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false,
+            easing: Easing.out(Easing.poly(4)),
+        }).start();
+    }, [percentage]);
+
+    const heightStyle = animatedHeight.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0%', `${percentage}%`]
+    });
+
+    return (
+        <View style={styles.barWrapper}>
+            <Text style={styles.barLabelTop}>{Math.round(percentage)}%</Text>
+            <View style={styles.barTrack}>
+                <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
+            </View>
+            <Text style={styles.barLabelBottom} numberOfLines={1}>
+                {label.split(' ')[0]}
+            </Text>
+            <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
+                 <Text style={{fontSize:10, fontWeight:'bold', color:'#555'}}>{rating}</Text>
+                 <MaterialIcons name="star" size={10} color="#FFC107" />
+            </View>
+        </View>
+    );
+};
+
 const TeacherFeedback = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
@@ -46,7 +89,7 @@ const TeacherFeedback = () => {
     // --- STUDENT STATE ---
     const [myTeachers, setMyTeachers] = useState<TeacherRow[]>([]);
     
-    // --- ADMIN STATE ---
+    // --- ADMIN STATE (Main Screen) ---
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [classTeachers, setClassTeachers] = useState<{id: number | string, full_name: string}[]>([]);
@@ -56,6 +99,13 @@ const TeacherFeedback = () => {
     const [adminReviews, setAdminReviews] = useState<AdminReviewRow[]>([]); // List View
     const [matrixData, setMatrixData] = useState<{teachers: any[], students: MatrixStudent[]} | null>(null); // Matrix View
     const [stats, setStats] = useState({ average: '0.0', total: 0 });
+
+    // --- COMPARE MODAL STATE ---
+    const [showCompareModal, setShowCompareModal] = useState(false);
+    const [compareClass, setCompareClass] = useState('All Classes');
+    const [analyticsData, setAnalyticsData] = useState<AnalyticsItem[]>([]);
+    const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+    const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
     // --- INITIAL LOAD ---
     useEffect(() => {
@@ -131,14 +181,13 @@ const TeacherFeedback = () => {
     };
 
     // ==========================================
-    // ADMIN LOGIC
+    // ADMIN LOGIC (MAIN SCREEN)
     // ==========================================
     const fetchClasses = async () => {
         try {
             const res = await apiClient.get('/feedback/classes');
             setAllClasses(res.data);
-
-            // --- SET DEFAULT CLASS TO "Class 10" ---
+            // Default select first class or 'Class 10'
             if (res.data.length > 0) {
                 const defaultClass = res.data.includes("Class 10") ? "Class 10" : res.data[0];
                 setSelectedClass(defaultClass);
@@ -146,7 +195,7 @@ const TeacherFeedback = () => {
         } catch (e) { console.error(e); }
     };
 
-    // When Class Changes -> Fetch Teachers
+    // When Class Changes (Main Screen)
     useEffect(() => {
         if (user?.role === 'admin' && selectedClass) {
             const loadTeachers = async () => {
@@ -158,8 +207,6 @@ const TeacherFeedback = () => {
                     });
                     
                     let tList: any[] = Array.from(uniqueTeachers, ([id, full_name]) => ({ id, full_name }));
-                    
-                    // ADD "ALL TEACHERS" OPTION
                     tList = [{ id: 'all', full_name: 'All Teachers' }, ...tList];
                     
                     setClassTeachers(tList);
@@ -170,7 +217,7 @@ const TeacherFeedback = () => {
         }
     }, [selectedClass, user]);
 
-    // When Teacher Changes -> Fetch Data (List or Matrix)
+    // When Teacher Changes (Main Screen Data Fetch)
     useEffect(() => {
         if (user?.role === 'admin' && selectedClass && selectedTeacherId) {
             const loadReviews = async () => {
@@ -179,7 +226,7 @@ const TeacherFeedback = () => {
                     const params: any = { class_group: selectedClass };
                     
                     if (selectedTeacherId === 'all') {
-                        params.mode = 'all';
+                        params.mode = 'all'; // Matrix mode
                     } else {
                         params.teacher_id = selectedTeacherId;
                     }
@@ -203,7 +250,43 @@ const TeacherFeedback = () => {
 
 
     // ==========================================
-    // HELPER COMPONENTS
+    // COMPARE MODAL LOGIC
+    // ==========================================
+    useEffect(() => {
+        if (showCompareModal) {
+            fetchAnalytics();
+        }
+    }, [showCompareModal, compareClass, sortOrder]);
+
+    const fetchAnalytics = async () => {
+        setLoadingAnalytics(true);
+        try {
+            const params: any = { mode: 'analytics' };
+            if (compareClass === 'All Classes') params.class_group = 'all';
+            else params.class_group = compareClass;
+
+            const res = await apiClient.get('/admin/teacher-feedback', { params });
+            
+            let data = res.data.data || [];
+            
+            // Client-side Sort
+            data.sort((a: AnalyticsItem, b: AnalyticsItem) => {
+                return sortOrder === 'desc' 
+                    ? b.percentage - a.percentage
+                    : a.percentage - b.percentage;
+            });
+            
+            setAnalyticsData(data);
+        } catch (error) {
+            console.error("Analytics Error", error);
+        } finally {
+            setLoadingAnalytics(false);
+        }
+    };
+
+
+    // ==========================================
+    // HELPER COMPONENTS (STARS & BUTTONS)
     // ==========================================
     const StarRating = ({ rating, setRating, readOnly = false, size=24 }: any) => {
         return (
@@ -289,8 +372,6 @@ const TeacherFeedback = () => {
                                         <MaterialIcons name={item.isSubmitted ? "check" : "save"} size={20} color="#FFF" />
                                     </TouchableOpacity>
                                 </View>
-
-                                {/* Rating Area */}
                                 <View style={styles.inputArea}>
                                     <Text style={styles.label}>Rate:</Text>
                                     <StarRating 
@@ -299,8 +380,6 @@ const TeacherFeedback = () => {
                                         size={30}
                                     />
                                 </View>
-
-                                {/* Remarks Buttons */}
                                 <View style={styles.inputArea}>
                                     <Text style={styles.label}>Remarks:</Text>
                                     <RemarksButtons 
@@ -321,16 +400,30 @@ const TeacherFeedback = () => {
                 <View style={{flex: 1}}>
                     {/* Filters */}
                     <View style={styles.filterContainer}>
-                        <View style={styles.pickerWrapper}>
-                            <Picker
-                                selectedValue={selectedClass}
-                                onValueChange={setSelectedClass}
-                                style={styles.picker}
+                        
+                        {/* CLASS SELECTION ROW + COMPARE BUTTON */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <View style={[styles.pickerWrapper, { flex: 1, marginBottom: 0 }]}>
+                                <Picker
+                                    selectedValue={selectedClass}
+                                    onValueChange={setSelectedClass}
+                                    style={styles.picker}
+                                >
+                                    {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                                </Picker>
+                            </View>
+
+                            {/* --- THE COM BUTTON --- */}
+                            <TouchableOpacity 
+                                style={styles.comButton}
+                                onPress={() => setShowCompareModal(true)}
                             >
-                                <Picker.Item label="Select Class" value="" color="#999" />
-                                {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
-                            </Picker>
+                                <Text style={styles.comBtnText}>COM</Text>
+                                <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
+                            </TouchableOpacity>
                         </View>
+
+                        {/* TEACHER SELECTION ROW */}
                         {selectedClass !== '' && (
                             <View style={styles.pickerWrapper}>
                                 <Picker
@@ -440,7 +533,115 @@ const TeacherFeedback = () => {
                 </View>
             )}
 
-            {/* --- FOOTER LEGEND --- */}
+            {/* ========================================================== */}
+            {/* COMPARISON MODAL - SEPARATE SCREEN OVERLAY */}
+            {/* ========================================================== */}
+            <Modal
+                visible={showCompareModal}
+                animationType="slide"
+                onRequestClose={() => setShowCompareModal(false)}
+            >
+                <SafeAreaView style={{flex:1, backgroundColor:'#FFF'}}>
+                    
+                    {/* MODAL HEADER */}
+                    <View style={styles.modalHeader}>
+                        <TouchableOpacity onPress={() => setShowCompareModal(false)} style={{padding:5}}>
+                            <MaterialIcons name="close" size={26} color="#333" />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Performance Analytics</Text>
+                        <View style={{width:30}}/>
+                    </View>
+
+                    {/* MODAL FILTERS */}
+                    <View style={styles.modalFilterContainer}>
+                        {/* Class Filter */}
+                        <View style={{marginBottom: 10}}>
+                            <Text style={styles.modalLabel}>Select Class:</Text>
+                            <View style={styles.modalPickerWrap}>
+                                <Picker
+                                    selectedValue={compareClass}
+                                    onValueChange={setCompareClass}
+                                    style={{width:'100%'}}
+                                >
+                                    <Picker.Item label="All Classes" value="All Classes" />
+                                    {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                                </Picker>
+                            </View>
+                        </View>
+
+                        {/* Sort Filter */}
+                        <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                            <Text style={styles.modalLabel}>Sort Order:</Text>
+                            <View style={{flexDirection:'row', backgroundColor:'#F5F5F5', borderRadius:8}}>
+                                <TouchableOpacity 
+                                    style={[styles.sortBtn, sortOrder==='desc' && styles.sortBtnActive]}
+                                    onPress={() => setSortOrder('desc')}
+                                >
+                                    <Text style={[styles.sortBtnText, sortOrder==='desc' && {color:'#008080', fontWeight:'bold'}]}>High to Low</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.sortBtn, sortOrder==='asc' && styles.sortBtnActive]}
+                                    onPress={() => setSortOrder('asc')}
+                                >
+                                    <Text style={[styles.sortBtnText, sortOrder==='asc' && {color:'#008080', fontWeight:'bold'}]}>Low to High</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* GRAPH CONTENT (HORIZONTAL SCROLL) */}
+                    <View style={styles.graphContainer}>
+                        {loadingAnalytics ? (
+                            <ActivityIndicator size="large" color="#008080" />
+                        ) : analyticsData.length > 0 ? (
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false} 
+                                contentContainerStyle={{paddingHorizontal: 10, alignItems:'flex-end'}}
+                            >
+                                {analyticsData.map((item, idx) => {
+                                    // Determine Color
+                                    let color = '#3b82f6'; // Avg Blue
+                                    if(item.percentage >= 85) color = '#10b981'; // Green
+                                    else if(item.percentage < 50) color = '#ef4444'; // Red
+
+                                    return (
+                                        <AnimatedBar 
+                                            key={idx}
+                                            percentage={item.percentage}
+                                            rating={item.avg_rating}
+                                            label={item.teacher_name}
+                                            color={color}
+                                        />
+                                    );
+                                })}
+                            </ScrollView>
+                        ) : (
+                            <Text style={{color:'#999', marginTop: 50}}>No data available.</Text>
+                        )}
+                    </View>
+
+                    {/* MODAL LEGEND */}
+                    <View style={styles.modalFooter}>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#10b981'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>85-100%</Text>
+                         </View>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#3b82f6'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>50-85%</Text>
+                         </View>
+                         <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#ef4444'}}/>
+                             <Text style={{fontSize:12, color:'#555'}}>0-50%</Text>
+                         </View>
+                    </View>
+
+                </SafeAreaView>
+            </Modal>
+
+
+            {/* --- FOOTER LEGEND (MAIN SCREEN) --- */}
             <View style={styles.footerContainer}>
                 <View style={styles.legendGroup}>
                     <Text style={styles.legendLabel}>Scale: </Text>
@@ -504,6 +705,19 @@ const styles = StyleSheet.create({
     },
     picker: { width: '100%', color: '#333' },
     
+    // THE COM BUTTON STYLE
+    comButton: {
+        backgroundColor: '#ef4444', 
+        height: 45, 
+        paddingHorizontal: 12, 
+        borderRadius: 8,
+        justifyContent: 'center', 
+        alignItems: 'center',
+        flexDirection: 'row',
+        elevation: 2
+    },
+    comBtnText: { color:'#fff', fontWeight:'bold', fontSize: 12 },
+
     // List View
     statsContainer: { flexDirection: 'row', marginHorizontal: 10, marginBottom: 10 },
     statBox: { flex: 1, backgroundColor: '#FFF', marginHorizontal: 5, padding: 10, borderRadius: 8, alignItems: 'center', elevation: 1 },
@@ -536,6 +750,29 @@ const styles = StyleSheet.create({
     legendLabel: { fontSize: 12, fontWeight: '700', color: '#333', marginRight: 4 },
     legendText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
     verticalDivider: { height: 16, width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 12 },
+
+    // --- MODAL STYLES ---
+    modalHeader: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        padding: 15, backgroundColor: '#fff', elevation: 2
+    },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+    modalFilterContainer: { padding: 15, backgroundColor: '#FAFAFA', borderBottomWidth: 1, borderBottomColor: '#eee' },
+    modalLabel: { fontSize: 12, fontWeight: 'bold', color: '#666', marginBottom: 5 },
+    modalPickerWrap: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, backgroundColor: '#fff', height: 45, justifyContent: 'center' },
+    sortBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 8 },
+    sortBtnActive: { backgroundColor: '#fff', elevation: 1 },
+    sortBtnText: { fontSize: 12, color: '#666' },
+    graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+    modalFooter: { flexDirection: 'row', justifyContent: 'space-evenly', padding: 15, borderTopWidth: 1, borderTopColor: '#eee' },
+    
+    // --- ANIMATED BAR STYLES ---
+    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 8, height: 280, justifyContent: 'flex-end' },
+    barLabelTop: { fontSize: 10, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+    barTrack: { width: 30, height: 220, backgroundColor: '#F0F0F0', borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
+    barFill: { width: '100%', borderRadius: 0 },
+    barLabelBottom: { fontSize: 11, fontWeight: '600', color: '#333', marginTop: 6, textAlign:'center', width: '100%' },
+
 });
 
 export default TeacherFeedback;

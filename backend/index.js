@@ -9893,8 +9893,9 @@ app.put('/api/library/digital/:id', verifyToken, isAdmin, libraryUpload.fields([
 
 
 // ==========================================================
-// --- STUDENT BEHAVIOUR / FEEDBACK API ROUTES ---
+// --- STUDENT FEEDBACK API ROUTES (FIXED) ---
 // ==========================================================
+
 
 // 1. Get Distinct Classes
 app.get('/api/feedback/classes', async (req, res) => {
@@ -9913,12 +9914,10 @@ app.get('/api/feedback/subjects', async (req, res) => {
     try {
         let sql = "SELECT DISTINCT subject_name FROM timetables WHERE class_group = ?";
         const params = [class_group];
-
         if (teacher_id) {
             sql += " AND teacher_id = ?";
             params.push(teacher_id);
         }
-        
         sql += " ORDER BY subject_name";
         const [rows] = await db.query(sql, params);
         res.json(rows.map(r => r.subject_name));
@@ -9932,12 +9931,10 @@ app.get('/api/feedback/subjects', async (req, res) => {
 app.get('/api/feedback/teachers', async (req, res) => {
     const { class_group, subject } = req.query;
     try {
-        const sql = `
-            SELECT DISTINCT u.id, u.full_name 
-            FROM timetables t
-            JOIN users u ON t.teacher_id = u.id
-            WHERE t.class_group = ? AND t.subject_name = ?
-        `;
+        const sql = `SELECT DISTINCT u.id, u.full_name 
+                     FROM timetables t 
+                     JOIN users u ON t.teacher_id = u.id 
+                     WHERE t.class_group = ? AND t.subject_name = ?`;
         const [rows] = await db.query(sql, [class_group, subject]);
         res.json(rows);
     } catch (err) {
@@ -9946,14 +9943,11 @@ app.get('/api/feedback/teachers', async (req, res) => {
     }
 });
 
-// 4. Get classes assigned to a teacher
+// 4. Get assigned classes (for teachers)
 app.get('/api/teacher-classes/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
-        const [rows] = await db.query(
-            "SELECT DISTINCT class_group FROM timetables WHERE teacher_id = ? ORDER BY class_group", 
-            [teacherId]
-        );
+        const [rows] = await db.query("SELECT DISTINCT class_group FROM timetables WHERE teacher_id = ? ORDER BY class_group", [teacherId]);
         res.json(rows.map(r => r.class_group));
     } catch (err) {
         console.error(err);
@@ -9961,66 +9955,79 @@ app.get('/api/teacher-classes/:teacherId', async (req, res) => {
     }
 });
 
-// 5. Get Students + Feedback (MODIFIED for "All Subjects")
+// 5. Get Students + Feedback (FIXED LOGIC)
 app.get('/api/feedback/students', async (req, res) => {
-    const { class_group, teacher_id, mode } = req.query;
-
+    const { class_group, teacher_id, mode, subject } = req.query;
     try {
         let sql = "";
         let params = [];
 
-        if (mode === 'overall') {
-            // --- ALL SUBJECTS VIEW (AGGREGATION) ---
-            // Calculates Average Stars and "Average" Remark (mapped to 1-3)
+        // --- A. ANALYTICS / COMPARE MODE ---
+        if (mode === 'analytics') {
+            let subjectFilter = "";
+            let sqlParams = [class_group];
+
+            if (subject && subject !== 'All Subjects') {
+                subjectFilter = " AND f.subject_name = ? ";
+                sqlParams.push(subject);
+            }
+
             sql = `
-                SELECT 
-                    u.id as student_id, 
-                    u.full_name, 
-                    p.roll_no,
-                    ROUND(AVG(f.status_marks)) as status_marks,
-                    CASE ROUND(AVG(
-                        CASE f.remarks_category 
-                            WHEN 'Good' THEN 3 
-                            WHEN 'Average' THEN 2 
-                            WHEN 'Poor' THEN 1 
-                            ELSE NULL 
-                        END
-                    ))
-                        WHEN 3 THEN 'Good'
-                        WHEN 2 THEN 'Average'
-                        WHEN 1 THEN 'Poor'
-                        ELSE NULL
-                    END as remarks_category
+                SELECT u.id as student_id, u.full_name, p.roll_no, 
+                IFNULL(AVG(f.status_marks), 0) as avg_rating
+                FROM users u
+                LEFT JOIN user_profiles p ON u.id = p.user_id
+                LEFT JOIN student_feedback f ON u.id = f.student_id ${subjectFilter}
+                WHERE u.role = 'student' AND u.class_group = ?
+                GROUP BY u.id 
+                ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`;
+            
+            params = sqlParams;
+        } 
+        // --- B. OVERALL LIST VIEW (All Subjects) ---
+        else if (mode === 'overall') {
+            sql = `
+                SELECT u.id as student_id, u.full_name, p.roll_no, 
+                ROUND(AVG(f.status_marks)) as status_marks,
+                CASE ROUND(AVG(CASE f.remarks_category WHEN 'Good' THEN 3 WHEN 'Average' THEN 2 WHEN 'Poor' THEN 1 END))
+                    WHEN 3 THEN 'Good' WHEN 2 THEN 'Average' WHEN 1 THEN 'Poor' ELSE NULL
+                END as remarks_category
                 FROM users u
                 LEFT JOIN user_profiles p ON u.id = p.user_id
                 LEFT JOIN student_feedback f ON u.id = f.student_id
                 WHERE u.role = 'student' AND u.class_group = ?
-                GROUP BY u.id
-                ORDER BY CAST(p.roll_no AS UNSIGNED) ASC
-            `;
+                GROUP BY u.id ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`;
             params = [class_group];
-
-        } else {
-            // --- INDIVIDUAL TEACHER VIEW ---
+        } 
+        // --- C. TEACHER / SPECIFIC SUBJECT EDIT VIEW ---
+        else {
+            // FIXED: We strictly filter by subject_name here.
+            // With the DB update, this will now correctly find the row for 'Social'.
             sql = `
-                SELECT 
-                    u.id as student_id, 
-                    u.full_name, 
-                    p.roll_no,
-                    f.status_marks,
-                    f.remarks_category
+                SELECT u.id as student_id, u.full_name, p.roll_no, 
+                f.status_marks, f.remarks_category, f.subject_name
                 FROM users u
                 LEFT JOIN user_profiles p ON u.id = p.user_id
-                LEFT JOIN student_feedback f 
-                    ON u.id = f.student_id 
-                    AND f.teacher_id = ? 
+                LEFT JOIN student_feedback f ON u.id = f.student_id 
+                     AND f.teacher_id = ? 
+                     AND f.subject_name = ?
                 WHERE u.role = 'student' AND u.class_group = ?
-                ORDER BY CAST(p.roll_no AS UNSIGNED) ASC
-            `;
-            params = [teacher_id, class_group];
+                ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`;
+            params = [teacher_id, subject, class_group];
         }
 
         const [rows] = await db.query(sql, params);
+        
+        // Post-process for analytics
+        if (mode === 'analytics') {
+            const result = rows.map(r => ({
+                ...r,
+                avg_rating: parseFloat(r.avg_rating),
+                percentage: r.avg_rating > 0 ? ((r.avg_rating / 5) * 100).toFixed(1) : 0
+            }));
+            return res.json(result);
+        }
+
         res.json(rows);
     } catch (err) {
         console.error(err);
@@ -10028,29 +10035,33 @@ app.get('/api/feedback/students', async (req, res) => {
     }
 });
 
-// 6. Save Feedback
+// 6. Save Feedback (FIXED)
 app.post('/api/feedback', async (req, res) => {
-    const { teacher_id, class_group, feedback_data } = req.body;
+    const { teacher_id, class_group, subject_name, feedback_data } = req.body;
+    
+    if (!subject_name || !teacher_id || !class_group) {
+        return res.status(400).json({ message: 'Missing subject, teacher, or class' });
+    }
+
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
         for (const item of feedback_data) {
-            // Only save if marks or remarks exist
+            // Only insert/update if there is actual data (marks or remarks)
             if (item.status_marks || item.remarks_category) {
                 const sql = `
-                    INSERT INTO student_feedback 
-                    (student_id, teacher_id, class_group, status_marks, remarks_category)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                    status_marks = VALUES(status_marks),
-                    remarks_category = VALUES(remarks_category)
-                `;
+                    INSERT INTO student_feedback (student_id, teacher_id, class_group, subject_name, status_marks, remarks_category)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE 
+                        status_marks = VALUES(status_marks), 
+                        remarks_category = VALUES(remarks_category)
+                    `; 
+                    // Note: We rely on the new UNIQUE KEY (student, teacher, subject)
+                    // so we don't need to update subject_name in ON DUPLICATE, 
+                    // because the INSERT ensures the subject is correct for this row.
+
                 await connection.query(sql, [
-                    item.student_id, 
-                    teacher_id, 
-                    class_group, 
-                    item.status_marks, 
-                    item.remarks_category
+                    item.student_id, teacher_id, class_group, subject_name, item.status_marks, item.remarks_category
                 ]);
             }
         }
@@ -10058,7 +10069,7 @@ app.post('/api/feedback', async (req, res) => {
         res.json({ message: 'Saved successfully' });
     } catch (err) {
         await connection.rollback();
-        console.error(err);
+        console.error("Save Error:", err);
         res.status(500).json({ message: 'Error saving feedback' });
     } finally {
         connection.release();
@@ -10101,7 +10112,6 @@ app.get('/api/student/assigned-teachers', async (req, res) => {
 app.post('/api/teacher-feedback', async (req, res) => {
     const { student_id, teacher_id, class_group, rating, remarks } = req.body;
     
-    // Validate that remarks is one of the allowed ENUM values or null
     if (!student_id || !teacher_id || !rating) {
         return res.status(400).json({ message: "Rating is required." });
     }
@@ -10124,15 +10134,50 @@ app.post('/api/teacher-feedback', async (req, res) => {
 });
 
 // 3. [ADMIN VIEW] Get Feedback 
-// Mode 1: specific teacher (list students)
-// Mode 2: "all" teachers (matrix view)
 app.get('/api/admin/teacher-feedback', async (req, res) => {
     const { teacher_id, class_group, mode } = req.query;
 
     try {
-        // --- CASE A: ALL TEACHERS (MATRIX VIEW) ---
+        // --- CASE A: ANALYTICS (BAR GRAPH DATA) ---
+        if (mode === 'analytics') {
+            let sql = `
+                SELECT 
+                    u.id as teacher_id,
+                    u.full_name as teacher_name,
+                    COUNT(tf.rating) as total_reviews,
+                    IFNULL(AVG(tf.rating), 0) as avg_rating
+                FROM users u
+                LEFT JOIN teacher_feedback tf ON u.id = tf.teacher_id
+            `;
+            
+            const params = [];
+
+            // If a specific class is selected, filter data by that class
+            // If 'all' (or undefined), we get global average
+            if (class_group && class_group !== 'all') {
+                sql += ` AND tf.class_group = ? `;
+                params.push(class_group);
+            }
+
+            // Only get users who are teachers
+            sql += ` WHERE u.role = 'teacher' GROUP BY u.id HAVING total_reviews > 0`;
+
+            const [rows] = await db.query(sql, params);
+
+            // Format data
+            const analytics = rows.map(row => ({
+                teacher_id: row.teacher_id,
+                teacher_name: row.teacher_name,
+                avg_rating: parseFloat(row.avg_rating).toFixed(1),
+                percentage: ((parseFloat(row.avg_rating) / 5) * 100).toFixed(1), // Convert 5-star to %
+                total_reviews: row.total_reviews
+            }));
+
+            return res.json({ mode: 'analytics', data: analytics });
+        }
+
+        // --- CASE B: ALL TEACHERS (MATRIX VIEW) ---
         if (mode === 'all') {
-            // 1. Get all students in the class
             const [students] = await db.query(`
                 SELECT u.id, u.full_name, p.roll_no 
                 FROM users u 
@@ -10141,7 +10186,6 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
                 ORDER BY CAST(p.roll_no AS UNSIGNED) ASC
             `, [class_group]);
 
-            // 2. Get all teachers assigned to this class
             const [teachers] = await db.query(`
                 SELECT DISTINCT u.id, u.full_name 
                 FROM timetables t 
@@ -10149,14 +10193,12 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
                 WHERE t.class_group = ?
             `, [class_group]);
 
-            // 3. Get all feedback for this class
             const [feedbacks] = await db.query(`
                 SELECT student_id, teacher_id, rating, remarks 
                 FROM teacher_feedback 
                 WHERE class_group = ?
             `, [class_group]);
 
-            // 4. Structure data: Map feedbacks to student objects
             const matrix = students.map(student => {
                 const studentFeedback = {};
                 feedbacks.forEach(fb => {
@@ -10167,20 +10209,14 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
                         };
                     }
                 });
-                return {
-                    ...student,
-                    feedback_map: studentFeedback
-                };
+                return { ...student, feedback_map: studentFeedback };
             });
 
-            return res.json({ 
-                mode: 'matrix',
-                teachers: teachers, 
-                students: matrix 
-            });
+            return res.json({ mode: 'matrix', teachers: teachers, students: matrix });
         }
 
-        // --- CASE B: SPECIFIC TEACHER (LIST VIEW) ---
+        // --- CASE C: SPECIFIC TEACHER (LIST VIEW) ---
+        // Used when a specific teacher is selected from dropdown
         const sql = `
             SELECT 
                 u.full_name as student_name,
@@ -10195,7 +10231,6 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
         `;
         const [rows] = await db.query(sql, [teacher_id, class_group]);
         
-        // Calculate average
         let avg = 0;
         if(rows.length > 0) {
             const sum = rows.reduce((acc, curr) => acc + (curr.rating || 0), 0);
