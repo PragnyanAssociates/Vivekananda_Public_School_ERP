@@ -10091,7 +10091,8 @@ app.get('/api/student/assigned-teachers', async (req, res) => {
                 u.id as teacher_id,
                 u.full_name as teacher_name,
                 tf.rating,
-                tf.remarks
+                tf.teaching_quality,
+                tf.suggestions
             FROM timetables t
             JOIN users u ON t.teacher_id = u.id
             LEFT JOIN teacher_feedback tf 
@@ -10110,7 +10111,8 @@ app.get('/api/student/assigned-teachers', async (req, res) => {
 
 // 2. [STUDENT ACTION] Save/Update Feedback
 app.post('/api/teacher-feedback', async (req, res) => {
-    const { student_id, teacher_id, class_group, rating, remarks } = req.body;
+    // remarks is now teaching_quality, added suggestions
+    const { student_id, teacher_id, class_group, rating, teaching_quality, suggestions } = req.body;
     
     if (!student_id || !teacher_id || !rating) {
         return res.status(400).json({ message: "Rating is required." });
@@ -10119,13 +10121,14 @@ app.post('/api/teacher-feedback', async (req, res) => {
     try {
         const sql = `
             INSERT INTO teacher_feedback 
-            (student_id, teacher_id, class_group, rating, remarks)
-            VALUES (?, ?, ?, ?, ?)
+            (student_id, teacher_id, class_group, rating, teaching_quality, suggestions)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
             rating = VALUES(rating),
-            remarks = VALUES(remarks)
+            teaching_quality = VALUES(teaching_quality),
+            suggestions = VALUES(suggestions)
         `;
-        await db.query(sql, [student_id, teacher_id, class_group, rating, remarks]);
+        await db.query(sql, [student_id, teacher_id, class_group, rating, teaching_quality, suggestions]);
         res.json({ message: 'Feedback submitted successfully' });
     } catch (err) {
         console.error(err);
@@ -10152,24 +10155,20 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
             
             const params = [];
 
-            // If a specific class is selected, filter data by that class
-            // If 'all' (or undefined), we get global average
             if (class_group && class_group !== 'all') {
                 sql += ` AND tf.class_group = ? `;
                 params.push(class_group);
             }
 
-            // Only get users who are teachers
             sql += ` WHERE u.role = 'teacher' GROUP BY u.id HAVING total_reviews > 0`;
 
             const [rows] = await db.query(sql, params);
 
-            // Format data
             const analytics = rows.map(row => ({
                 teacher_id: row.teacher_id,
                 teacher_name: row.teacher_name,
                 avg_rating: parseFloat(row.avg_rating).toFixed(1),
-                percentage: ((parseFloat(row.avg_rating) / 5) * 100).toFixed(1), // Convert 5-star to %
+                percentage: ((parseFloat(row.avg_rating) / 5) * 100).toFixed(1),
                 total_reviews: row.total_reviews
             }));
 
@@ -10194,7 +10193,7 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
             `, [class_group]);
 
             const [feedbacks] = await db.query(`
-                SELECT student_id, teacher_id, rating, remarks 
+                SELECT student_id, teacher_id, rating, teaching_quality, suggestions
                 FROM teacher_feedback 
                 WHERE class_group = ?
             `, [class_group]);
@@ -10205,7 +10204,8 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
                     if (fb.student_id === student.id) {
                         studentFeedback[fb.teacher_id] = {
                             rating: fb.rating,
-                            remarks: fb.remarks
+                            teaching_quality: fb.teaching_quality,
+                            suggestions: fb.suggestions
                         };
                     }
                 });
@@ -10216,13 +10216,13 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
         }
 
         // --- CASE C: SPECIFIC TEACHER (LIST VIEW) ---
-        // Used when a specific teacher is selected from dropdown
         const sql = `
             SELECT 
                 u.full_name as student_name,
                 p.roll_no,
                 tf.rating,
-                tf.remarks
+                tf.teaching_quality,
+                tf.suggestions
             FROM teacher_feedback tf
             JOIN users u ON tf.student_id = u.id
             LEFT JOIN user_profiles p ON u.id = p.user_id

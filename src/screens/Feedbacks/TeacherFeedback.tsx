@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView,
-    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing
+    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing, TextInput
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -19,7 +19,8 @@ interface TeacherRow {
     teacher_id: number;
     teacher_name: string;
     rating: number; // 1-5
-    remarks: 'Good' | 'Average' | 'Poor' | '';
+    teaching_quality: 'Good' | 'Average' | 'Poor' | ''; // Renamed from remarks
+    suggestions: string; // Added
     isSubmitted?: boolean; 
 }
 
@@ -27,7 +28,8 @@ interface AdminReviewRow {
     student_name: string;
     roll_no: string;
     rating: number;
-    remarks: string;
+    teaching_quality: string;
+    suggestions: string;
 }
 
 interface MatrixStudent {
@@ -35,7 +37,7 @@ interface MatrixStudent {
     full_name: string;
     roll_no: string;
     feedback_map: {
-        [teacherId: number]: { rating: number, remarks: string }
+        [teacherId: number]: { rating: number, teaching_quality: string, suggestions: string }
     };
 }
 
@@ -47,7 +49,7 @@ interface AnalyticsItem {
     total_reviews: number;
 }
 
-// --- ANIMATED BAR COMPONENT (For the Compare Modal) ---
+// --- ANIMATED BAR COMPONENT ---
 const AnimatedBar = ({ percentage, rating, label, color }: any) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
@@ -82,6 +84,73 @@ const AnimatedBar = ({ percentage, rating, label, color }: any) => {
     );
 };
 
+// --- EXPANDABLE ADMIN LIST ITEM COMPONENT ---
+const AdminReviewItem = ({ review }: { review: AdminReviewRow }) => {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <View style={styles.adminRow}>
+            <View style={styles.adminRowMain}>
+                <Text style={styles.rollNo}>{review.roll_no || '-'}</Text>
+                <Text style={styles.studentName} numberOfLines={1}>{review.student_name}</Text>
+                <View style={{alignItems:'flex-end'}}>
+                    {/* Just Show Rating Initially */}
+                    <StarRating rating={review.rating} readOnly size={18} />
+                    
+                    {/* View More Button */}
+                    <TouchableOpacity onPress={() => setExpanded(!expanded)} style={styles.viewMoreBtn}>
+                        <Text style={styles.viewMoreText}>{expanded ? "Show Less" : "View More"}</Text>
+                        <MaterialIcons name={expanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={14} color="#008080" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* Expanded Content */}
+            {expanded && (
+                <View style={styles.adminRowDetails}>
+                    <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Quality of teaching:</Text>
+                        <View style={[
+                            styles.miniBadgeLarge, 
+                            { backgroundColor: review.teaching_quality === 'Good' ? '#10b981' : review.teaching_quality === 'Poor' ? '#ef4444' : '#3b82f6' }
+                        ]}>
+                            <Text style={styles.badgeText}>{review.teaching_quality || 'Not Selected'}</Text>
+                        </View>
+                    </View>
+                    <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Student Suggestion:</Text>
+                        <Text style={styles.suggestionText}>
+                            {review.suggestions ? review.suggestions : "No suggestions provided."}
+                        </Text>
+                    </View>
+                </View>
+            )}
+        </View>
+    );
+};
+
+// --- STAR RATING COMPONENT ---
+const StarRating = ({ rating, setRating, readOnly = false, size=24 }: any) => {
+    return (
+        <View style={{ flexDirection: 'row' }}>
+            {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                    key={star}
+                    disabled={readOnly}
+                    onPress={() => setRating && setRating(star)}
+                >
+                    <MaterialIcons
+                        name={star <= rating ? "star" : "star-border"}
+                        size={size}
+                        color={star <= rating ? "#FFC107" : "#E0E0E0"}
+                        style={{ marginHorizontal: 1 }}
+                    />
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
+};
+
 const TeacherFeedback = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
@@ -95,7 +164,6 @@ const TeacherFeedback = () => {
     const [classTeachers, setClassTeachers] = useState<{id: number | string, full_name: string}[]>([]);
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>(''); 
     
-    // Admin Data Holders
     const [adminReviews, setAdminReviews] = useState<AdminReviewRow[]>([]); // List View
     const [matrixData, setMatrixData] = useState<{teachers: any[], students: MatrixStudent[]} | null>(null); // Matrix View
     const [stats, setStats] = useState({ average: '0.0', total: 0 });
@@ -129,8 +197,9 @@ const TeacherFeedback = () => {
             const formatted = response.data.map((t: any) => ({
                 ...t,
                 rating: t.rating || 0,
-                remarks: t.remarks || '',
-                isSubmitted: (t.rating > 0 || t.remarks)
+                teaching_quality: t.teaching_quality || '',
+                suggestions: t.suggestions || '',
+                isSubmitted: (t.rating > 0)
             }));
             setMyTeachers(formatted);
         } catch (error) {
@@ -153,8 +222,8 @@ const TeacherFeedback = () => {
             Alert.alert("Rating Required", "Please give at least 1 star.");
             return;
         }
-        if (!teacher.remarks) {
-            Alert.alert("Remarks Required", "Please select Good, Average, or Poor.");
+        if (!teacher.teaching_quality) {
+            Alert.alert("Input Required", "Please select Quality of Teaching.");
             return;
         }
 
@@ -164,7 +233,8 @@ const TeacherFeedback = () => {
                 class_group: user?.class_group,
                 teacher_id: teacher.teacher_id,
                 rating: teacher.rating,
-                remarks: teacher.remarks
+                teaching_quality: teacher.teaching_quality,
+                suggestions: teacher.suggestions
             });
             
             setMyTeachers(prev => prev.map(t => {
@@ -187,7 +257,6 @@ const TeacherFeedback = () => {
         try {
             const res = await apiClient.get('/feedback/classes');
             setAllClasses(res.data);
-            // Default select first class or 'Class 10'
             if (res.data.length > 0) {
                 const defaultClass = res.data.includes("Class 10") ? "Class 10" : res.data[0];
                 setSelectedClass(defaultClass);
@@ -195,7 +264,6 @@ const TeacherFeedback = () => {
         } catch (e) { console.error(e); }
     };
 
-    // When Class Changes (Main Screen)
     useEffect(() => {
         if (user?.role === 'admin' && selectedClass) {
             const loadTeachers = async () => {
@@ -217,16 +285,14 @@ const TeacherFeedback = () => {
         }
     }, [selectedClass, user]);
 
-    // When Teacher Changes (Main Screen Data Fetch)
     useEffect(() => {
         if (user?.role === 'admin' && selectedClass && selectedTeacherId) {
             const loadReviews = async () => {
                 setLoading(true);
                 try {
                     const params: any = { class_group: selectedClass };
-                    
                     if (selectedTeacherId === 'all') {
-                        params.mode = 'all'; // Matrix mode
+                        params.mode = 'all'; 
                     } else {
                         params.teacher_id = selectedTeacherId;
                     }
@@ -248,7 +314,6 @@ const TeacherFeedback = () => {
         }
     }, [selectedTeacherId, selectedClass, user]);
 
-
     // ==========================================
     // COMPARE MODAL LOGIC
     // ==========================================
@@ -266,16 +331,13 @@ const TeacherFeedback = () => {
             else params.class_group = compareClass;
 
             const res = await apiClient.get('/admin/teacher-feedback', { params });
-            
             let data = res.data.data || [];
             
-            // Client-side Sort
             data.sort((a: AnalyticsItem, b: AnalyticsItem) => {
                 return sortOrder === 'desc' 
                     ? b.percentage - a.percentage
                     : a.percentage - b.percentage;
             });
-            
             setAnalyticsData(data);
         } catch (error) {
             console.error("Analytics Error", error);
@@ -284,36 +346,11 @@ const TeacherFeedback = () => {
         }
     };
 
-
-    // ==========================================
-    // HELPER COMPONENTS (STARS & BUTTONS)
-    // ==========================================
-    const StarRating = ({ rating, setRating, readOnly = false, size=24 }: any) => {
-        return (
-            <View style={{ flexDirection: 'row' }}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <TouchableOpacity
-                        key={star}
-                        disabled={readOnly}
-                        onPress={() => setRating && setRating(star)}
-                    >
-                        <MaterialIcons
-                            name={star <= rating ? "star" : "star-border"}
-                            size={size}
-                            color={star <= rating ? "#FFC107" : "#E0E0E0"}
-                            style={{ marginHorizontal: 1 }}
-                        />
-                    </TouchableOpacity>
-                ))}
-            </View>
-        );
-    };
-
-    const RemarksButtons = ({ selected, onSelect, readOnly=false }: any) => {
+    // Helper for Quality Selection Buttons
+    const QualityButtons = ({ selected, onSelect, readOnly=false }: any) => {
         const options = ['Good', 'Average', 'Poor'];
         const colors: any = { 'Good': '#10b981', 'Average': '#3b82f6', 'Poor': '#ef4444' };
-        const shortLabels: any = { 'Good': 'G', 'Average': 'A', 'Poor': 'P' };
-
+        
         return (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                 {options.map(opt => (
@@ -332,7 +369,7 @@ const TeacherFeedback = () => {
                             styles.remarkBtnText,
                             selected === opt ? { color: '#fff' } : { color: '#999' }
                         ]}>
-                            {readOnly ? shortLabels[opt] : opt}
+                            {opt}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -372,6 +409,8 @@ const TeacherFeedback = () => {
                                         <MaterialIcons name={item.isSubmitted ? "check" : "save"} size={20} color="#FFF" />
                                     </TouchableOpacity>
                                 </View>
+                                
+                                {/* 1. RATING */}
                                 <View style={styles.inputArea}>
                                     <Text style={styles.label}>Rate:</Text>
                                     <StarRating 
@@ -380,11 +419,27 @@ const TeacherFeedback = () => {
                                         size={30}
                                     />
                                 </View>
+
+                                {/* 2. QUALITY OF TEACHING */}
                                 <View style={styles.inputArea}>
-                                    <Text style={styles.label}>Remarks:</Text>
-                                    <RemarksButtons 
-                                        selected={item.remarks} 
-                                        onSelect={(val: string) => updateMyFeedback(item.teacher_id, 'remarks', val)}
+                                    <Text style={styles.label}>Quality of teaching:</Text>
+                                    <QualityButtons 
+                                        selected={item.teaching_quality} 
+                                        onSelect={(val: string) => updateMyFeedback(item.teacher_id, 'teaching_quality', val)}
+                                    />
+                                </View>
+
+                                {/* 3. SUGGESTIONS */}
+                                <View style={styles.inputArea}>
+                                    <Text style={styles.label}>Student suggestion:</Text>
+                                    <TextInput 
+                                        style={styles.textInput}
+                                        multiline
+                                        numberOfLines={2}
+                                        placeholder="Write your suggestions here..."
+                                        placeholderTextColor="#999"
+                                        value={item.suggestions}
+                                        onChangeText={(text) => updateMyFeedback(item.teacher_id, 'suggestions', text)}
                                     />
                                 </View>
                             </View>
@@ -400,8 +455,6 @@ const TeacherFeedback = () => {
                 <View style={{flex: 1}}>
                     {/* Filters */}
                     <View style={styles.filterContainer}>
-                        
-                        {/* CLASS SELECTION ROW + COMPARE BUTTON */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                             <View style={[styles.pickerWrapper, { flex: 1, marginBottom: 0 }]}>
                                 <Picker
@@ -412,8 +465,6 @@ const TeacherFeedback = () => {
                                     {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
                                 </Picker>
                             </View>
-
-                            {/* --- THE COM BUTTON --- */}
                             <TouchableOpacity 
                                 style={styles.comButton}
                                 onPress={() => setShowCompareModal(true)}
@@ -422,8 +473,6 @@ const TeacherFeedback = () => {
                                 <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
                             </TouchableOpacity>
                         </View>
-
-                        {/* TEACHER SELECTION ROW */}
                         {selectedClass !== '' && (
                             <View style={styles.pickerWrapper}>
                                 <Picker
@@ -461,19 +510,10 @@ const TeacherFeedback = () => {
                                         <View style={styles.tableHeader}>
                                             <Text style={[styles.th, { width: 50 }]}>Roll</Text>
                                             <Text style={[styles.th, { flex: 1 }]}>Student</Text>
-                                            <Text style={[styles.th, { width: 100 }]}>Feedback</Text>
+                                            <Text style={[styles.th, { width: 100 }]}>Rating</Text>
                                         </View>
                                         {adminReviews.map((review, idx) => (
-                                            <View key={idx} style={styles.adminRow}>
-                                                <Text style={styles.rollNo}>{review.roll_no || '-'}</Text>
-                                                <Text style={styles.studentName} numberOfLines={1}>{review.student_name}</Text>
-                                                <View style={{alignItems:'flex-end'}}>
-                                                    <StarRating rating={review.rating} readOnly size={18} />
-                                                    <Text style={[styles.adminRemarks, { color: review.remarks === 'Good' ? '#10b981' : review.remarks === 'Poor' ? '#ef4444' : '#3b82f6' }]}>
-                                                        {review.remarks}
-                                                    </Text>
-                                                </View>
-                                            </View>
+                                            <AdminReviewItem key={idx} review={review} />
                                         ))}
                                     </ScrollView>
                                 </>
@@ -508,14 +548,27 @@ const TeacherFeedback = () => {
                                                         return (
                                                             <View key={t.id} style={styles.matrixCell}>
                                                                 {fb ? (
-                                                                    <>
+                                                                    <TouchableOpacity 
+                                                                        style={{alignItems:'center'}}
+                                                                        onPress={() => {
+                                                                             Alert.alert(
+                                                                                 `${t.full_name}`,
+                                                                                 `Quality: ${fb.teaching_quality || 'N/A'}\n\nSuggestion: ${fb.suggestions || 'None'}`
+                                                                             );
+                                                                        }}
+                                                                    >
                                                                        <StarRating rating={fb.rating} readOnly size={12} /> 
-                                                                       <Text style={[styles.miniBadge, {
-                                                                           backgroundColor: fb.remarks === 'Good' ? '#10b981' : fb.remarks === 'Poor' ? '#ef4444' : '#3b82f6'
-                                                                       }]}>
-                                                                           {fb.remarks ? fb.remarks.charAt(0) : '-'}
-                                                                       </Text>
-                                                                    </>
+                                                                       <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
+                                                                           <Text style={[styles.miniBadge, {
+                                                                               backgroundColor: fb.teaching_quality === 'Good' ? '#10b981' : fb.teaching_quality === 'Poor' ? '#ef4444' : '#3b82f6'
+                                                                           }]}>
+                                                                               {fb.teaching_quality ? fb.teaching_quality.charAt(0) : '-'}
+                                                                           </Text>
+                                                                           <View style={styles.viewMoreMini}>
+                                                                                <Text style={{fontSize:8, color:'#fff'}}>View</Text>
+                                                                           </View>
+                                                                       </View>
+                                                                    </TouchableOpacity>
                                                                 ) : (
                                                                     <Text style={{color:'#ccc'}}>-</Text>
                                                                 )}
@@ -533,17 +586,13 @@ const TeacherFeedback = () => {
                 </View>
             )}
 
-            {/* ========================================================== */}
-            {/* COMPARISON MODAL - SEPARATE SCREEN OVERLAY */}
-            {/* ========================================================== */}
+            {/* COMPARE MODAL */}
             <Modal
                 visible={showCompareModal}
                 animationType="slide"
                 onRequestClose={() => setShowCompareModal(false)}
             >
                 <SafeAreaView style={{flex:1, backgroundColor:'#FFF'}}>
-                    
-                    {/* MODAL HEADER */}
                     <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={() => setShowCompareModal(false)} style={{padding:5}}>
                             <MaterialIcons name="close" size={26} color="#333" />
@@ -552,9 +601,7 @@ const TeacherFeedback = () => {
                         <View style={{width:30}}/>
                     </View>
 
-                    {/* MODAL FILTERS */}
                     <View style={styles.modalFilterContainer}>
-                        {/* Class Filter */}
                         <View style={{marginBottom: 10}}>
                             <Text style={styles.modalLabel}>Select Class:</Text>
                             <View style={styles.modalPickerWrap}>
@@ -568,8 +615,6 @@ const TeacherFeedback = () => {
                                 </Picker>
                             </View>
                         </View>
-
-                        {/* Sort Filter */}
                         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
                             <Text style={styles.modalLabel}>Sort Order:</Text>
                             <View style={{flexDirection:'row', backgroundColor:'#F5F5F5', borderRadius:8}}>
@@ -589,7 +634,6 @@ const TeacherFeedback = () => {
                         </View>
                     </View>
 
-                    {/* GRAPH CONTENT (HORIZONTAL SCROLL) */}
                     <View style={styles.graphContainer}>
                         {loadingAnalytics ? (
                             <ActivityIndicator size="large" color="#008080" />
@@ -600,10 +644,9 @@ const TeacherFeedback = () => {
                                 contentContainerStyle={{paddingHorizontal: 10, alignItems:'flex-end'}}
                             >
                                 {analyticsData.map((item, idx) => {
-                                    // Determine Color
-                                    let color = '#3b82f6'; // Avg Blue
-                                    if(item.percentage >= 85) color = '#10b981'; // Green
-                                    else if(item.percentage < 50) color = '#ef4444'; // Red
+                                    let color = '#3b82f6';
+                                    if(item.percentage >= 85) color = '#10b981';
+                                    else if(item.percentage < 50) color = '#ef4444';
 
                                     return (
                                         <AnimatedBar 
@@ -621,7 +664,6 @@ const TeacherFeedback = () => {
                         )}
                     </View>
 
-                    {/* MODAL LEGEND */}
                     <View style={styles.modalFooter}>
                          <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
                              <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#10b981'}}/>
@@ -636,21 +678,16 @@ const TeacherFeedback = () => {
                              <Text style={{fontSize:12, color:'#555'}}>0-50%</Text>
                          </View>
                     </View>
-
                 </SafeAreaView>
             </Modal>
 
-
-            {/* --- FOOTER LEGEND (MAIN SCREEN) --- */}
             <View style={styles.footerContainer}>
                 <View style={styles.legendGroup}>
                     <Text style={styles.legendLabel}>Scale: </Text>
                     <MaterialIcons name="star" size={14} color="#FFC107" />
                     <Text style={styles.legendText}> (1-5)</Text>
                 </View>
-
                 <View style={styles.verticalDivider} />
-
                 <View style={styles.legendGroup}>
                     <Text style={styles.legendLabel}>Note: </Text>
                     <Text style={[styles.legendText, { color: '#10b981', fontWeight:'bold' }]}>G</Text><Text style={styles.legendText}>=Good, </Text>
@@ -692,10 +729,14 @@ const styles = StyleSheet.create({
     iconSaveBtn: { backgroundColor: '#008080', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
     iconEditBtn: { backgroundColor: '#10b981' },
     
-    inputArea: { marginBottom: 10 },
-    label: { fontSize: 12, color: '#666', marginBottom: 5, fontWeight: '600' },
-    remarkBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, minWidth: 70, alignItems: 'center' },
-    remarkBtnText: { fontSize: 12, fontWeight: '600' },
+    inputArea: { marginBottom: 15 },
+    label: { fontSize: 14, color: '#333', marginBottom: 6, fontWeight: '600' },
+    remarkBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1, minWidth: 80, alignItems: 'center' },
+    remarkBtnText: { fontSize: 13, fontWeight: '600' },
+    textInput: {
+        borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10,
+        backgroundColor: '#FAFAFA', textAlignVertical: 'top', height: 60, color: '#333'
+    },
 
     // --- Admin View Styles ---
     filterContainer: { paddingHorizontal: 10, marginBottom: 5 },
@@ -705,7 +746,6 @@ const styles = StyleSheet.create({
     },
     picker: { width: '100%', color: '#333' },
     
-    // THE COM BUTTON STYLE
     comButton: {
         backgroundColor: '#ef4444', 
         height: 45, 
@@ -726,16 +766,27 @@ const styles = StyleSheet.create({
 
     tableHeader: { flexDirection: 'row', backgroundColor: '#e0e7ff', padding: 10, marginHorizontal: 10, borderRadius: 8, marginBottom: 5 },
     th: { fontWeight: 'bold', color: '#4338ca', fontSize: 13 },
-    adminRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 10, marginBottom: 8, borderRadius: 8, padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    
+    adminRow: { backgroundColor: '#FFF', marginHorizontal: 10, marginBottom: 8, borderRadius: 8, borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 5 },
+    adminRowMain: { flexDirection: 'row', alignItems: 'center', padding: 10 },
     rollNo: { width: 50, fontWeight: 'bold', color: '#333' },
     studentName: { flex: 1, color: '#444' },
-    adminRemarks: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+    viewMoreBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 4, padding: 2 },
+    viewMoreText: { fontSize: 10, color: '#008080', marginRight: 2, fontWeight:'600' },
+
+    adminRowDetails: { backgroundColor: '#F9FAFB', padding: 10, borderTopWidth: 1, borderTopColor: '#EEE', marginHorizontal: 5, borderRadius: 4 },
+    detailItem: { marginBottom: 8 },
+    detailLabel: { fontSize: 11, fontWeight: 'bold', color: '#555', marginBottom: 2 },
+    badgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
+    miniBadgeLarge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start' },
+    suggestionText: { fontSize: 12, color: '#444', fontStyle: 'italic', backgroundColor: '#FFF', padding: 5, borderRadius: 4, borderWidth: 1, borderColor: '#EEE' },
 
     // Matrix View
     matrixHeaderRow: { flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#ccc' },
     matrixRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 10, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
     matrixCell: { width: TEACHER_COL_WIDTH, alignItems: 'center', justifyContent: 'center' },
-    miniBadge: { marginTop: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden', color: '#fff', fontSize: 10, fontWeight: 'bold' },
+    miniBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden', color: '#fff', fontSize: 10, fontWeight: 'bold' },
+    viewMoreMini: { marginLeft: 4, backgroundColor: '#444', borderRadius: 3, paddingHorizontal: 3 },
 
     emptyText: { textAlign: 'center', marginTop: 30, color: '#999' },
 
