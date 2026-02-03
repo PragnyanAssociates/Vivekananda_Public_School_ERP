@@ -19,8 +19,8 @@ interface TeacherRow {
     teacher_id: number;
     teacher_name: string;
     rating: number; // 1-5
-    teaching_quality: 'Good' | 'Average' | 'Poor' | ''; // Renamed from remarks
-    suggestions: string; // Added
+    teaching_quality: 'Good' | 'Average' | 'Poor' | ''; 
+    suggestions: string; 
     isSubmitted?: boolean; 
 }
 
@@ -84,7 +84,7 @@ const AnimatedBar = ({ percentage, rating, label, color }: any) => {
     );
 };
 
-// --- EXPANDABLE ADMIN LIST ITEM COMPONENT ---
+// --- EXPANDABLE ADMIN LIST ITEM (For List View) ---
 const AdminReviewItem = ({ review }: { review: AdminReviewRow }) => {
     const [expanded, setExpanded] = useState(false);
 
@@ -94,18 +94,14 @@ const AdminReviewItem = ({ review }: { review: AdminReviewRow }) => {
                 <Text style={styles.rollNo}>{review.roll_no || '-'}</Text>
                 <Text style={styles.studentName} numberOfLines={1}>{review.student_name}</Text>
                 <View style={{alignItems:'flex-end'}}>
-                    {/* Just Show Rating Initially */}
                     <StarRating rating={review.rating} readOnly size={18} />
-                    
-                    {/* View More Button */}
                     <TouchableOpacity onPress={() => setExpanded(!expanded)} style={styles.viewMoreBtn}>
-                        <Text style={styles.viewMoreText}>{expanded ? "Show Less" : "View More"}</Text>
+                        <Text style={styles.viewMoreText}>{expanded ? "Show Less" : "view more"}</Text>
                         <MaterialIcons name={expanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={14} color="#008080" />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Expanded Content */}
             {expanded && (
                 <View style={styles.adminRowDetails}>
                     <View style={styles.detailItem}>
@@ -118,7 +114,7 @@ const AdminReviewItem = ({ review }: { review: AdminReviewRow }) => {
                         </View>
                     </View>
                     <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Student Suggestion:</Text>
+                        <Text style={styles.detailLabel}>Student suggestion:</Text>
                         <Text style={styles.suggestionText}>
                             {review.suggestions ? review.suggestions : "No suggestions provided."}
                         </Text>
@@ -158,14 +154,14 @@ const TeacherFeedback = () => {
     // --- STUDENT STATE ---
     const [myTeachers, setMyTeachers] = useState<TeacherRow[]>([]);
     
-    // --- ADMIN STATE (Main Screen) ---
+    // --- ADMIN STATE ---
     const [allClasses, setAllClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [classTeachers, setClassTeachers] = useState<{id: number | string, full_name: string}[]>([]);
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>(''); 
     
-    const [adminReviews, setAdminReviews] = useState<AdminReviewRow[]>([]); // List View
-    const [matrixData, setMatrixData] = useState<{teachers: any[], students: MatrixStudent[]} | null>(null); // Matrix View
+    const [adminReviews, setAdminReviews] = useState<AdminReviewRow[]>([]); 
+    const [matrixData, setMatrixData] = useState<{teachers: any[], students: MatrixStudent[]} | null>(null); 
     const [stats, setStats] = useState({ average: '0.0', total: 0 });
 
     // --- COMPARE MODAL STATE ---
@@ -175,7 +171,10 @@ const TeacherFeedback = () => {
     const [loadingAnalytics, setLoadingAnalytics] = useState(false);
     const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
-    // --- INITIAL LOAD ---
+    // --- DETAIL MODAL STATE (For Matrix View More) ---
+    const [detailModalVisible, setDetailModalVisible] = useState(false);
+    const [selectedDetail, setSelectedDetail] = useState<any>(null);
+
     useEffect(() => {
         if (!user) return;
         if (user.role === 'student') {
@@ -251,7 +250,7 @@ const TeacherFeedback = () => {
     };
 
     // ==========================================
-    // ADMIN LOGIC (MAIN SCREEN)
+    // ADMIN LOGIC
     // ==========================================
     const fetchClasses = async () => {
         try {
@@ -346,33 +345,48 @@ const TeacherFeedback = () => {
         }
     };
 
-    // Helper for Quality Selection Buttons
+    // Helper: Matrix Modal Handler
+    const handleMatrixViewMore = (studentName: string, rollNo: string, teacherName: string, fb: any) => {
+        setSelectedDetail({
+            studentName,
+            rollNo,
+            teacherName,
+            rating: fb.rating,
+            teaching_quality: fb.teaching_quality,
+            suggestions: fb.suggestions
+        });
+        setDetailModalVisible(true);
+    };
+
     const QualityButtons = ({ selected, onSelect, readOnly=false }: any) => {
         const options = ['Good', 'Average', 'Poor'];
         const colors: any = { 'Good': '#10b981', 'Average': '#3b82f6', 'Poor': '#ef4444' };
         
         return (
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                {options.map(opt => (
-                    <TouchableOpacity
-                        key={opt}
-                        disabled={readOnly}
-                        onPress={() => onSelect(opt)}
-                        style={[
-                            styles.remarkBtn,
-                            selected === opt 
-                                ? { backgroundColor: colors[opt], borderColor: colors[opt] }
-                                : { borderColor: '#ccc', backgroundColor: '#fff' }
-                        ]}
-                    >
-                        <Text style={[
-                            styles.remarkBtnText,
-                            selected === opt ? { color: '#fff' } : { color: '#999' }
-                        ]}>
-                            {opt}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
+                {options.map(opt => {
+                    const isSelected = selected === opt;
+                    return (
+                        <TouchableOpacity
+                            key={opt}
+                            disabled={readOnly}
+                            onSelect={() => onSelect(opt)}
+                            style={[
+                                styles.remarkBtn,
+                                isSelected 
+                                    ? { backgroundColor: colors[opt], borderColor: colors[opt] }
+                                    : { borderColor: '#E0E0E0', backgroundColor: '#FFF' }
+                            ]}
+                        >
+                            <Text style={[
+                                styles.remarkBtnText,
+                                isSelected ? { color: '#fff' } : { color: '#9e9e9e' }
+                            ]}>
+                                {opt}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
         );
     };
@@ -382,15 +396,27 @@ const TeacherFeedback = () => {
             
             {/* --- HEADER --- */}
             <View style={styles.headerCard}>
-                <View style={styles.headerIconContainer}>
-                     <MaterialIcons name="rate-review" size={24} color="#008080" />
+                <View style={styles.headerLeft}>
+                    <View style={styles.headerIconContainer}>
+                        <MaterialIcons name="rate-review" size={24} color="#008080" />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerTitle}>Teacher Feedback</Text>
+                        <Text style={styles.headerSubtitle}>
+                            {user?.role === 'student' ? 'Rate your teachers' : 'View Student Ratings'}
+                        </Text>
+                    </View>
                 </View>
-                <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>Teacher Feedback</Text>
-                    <Text style={styles.headerSubtitle}>
-                        {user?.role === 'student' ? 'Rate your teachers' : 'View Student Ratings'}
-                    </Text>
-                </View>
+                {/* Compare Button moved here for Admin */}
+                {user?.role === 'admin' && (
+                    <TouchableOpacity 
+                        style={styles.comButton}
+                        onPress={() => setShowCompareModal(true)}
+                    >
+                        <Text style={styles.comBtnText}>COM</Text>
+                        <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* ======================= STUDENT VIEW ======================= */}
@@ -410,9 +436,8 @@ const TeacherFeedback = () => {
                                     </TouchableOpacity>
                                 </View>
                                 
-                                {/* 1. RATING */}
                                 <View style={styles.inputArea}>
-                                    <Text style={styles.label}>Rate:</Text>
+                                    <Text style={styles.label}>Feedback:</Text>
                                     <StarRating 
                                         rating={item.rating} 
                                         setRating={(r: number) => updateMyFeedback(item.teacher_id, 'rating', r)} 
@@ -420,7 +445,6 @@ const TeacherFeedback = () => {
                                     />
                                 </View>
 
-                                {/* 2. QUALITY OF TEACHING */}
                                 <View style={styles.inputArea}>
                                     <Text style={styles.label}>Quality of teaching:</Text>
                                     <QualityButtons 
@@ -429,7 +453,6 @@ const TeacherFeedback = () => {
                                     />
                                 </View>
 
-                                {/* 3. SUGGESTIONS */}
                                 <View style={styles.inputArea}>
                                     <Text style={styles.label}>Student suggestion:</Text>
                                     <TextInput 
@@ -455,24 +478,18 @@ const TeacherFeedback = () => {
                 <View style={{flex: 1}}>
                     {/* Filters */}
                     <View style={styles.filterContainer}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                            <View style={[styles.pickerWrapper, { flex: 1, marginBottom: 0 }]}>
-                                <Picker
-                                    selectedValue={selectedClass}
-                                    onValueChange={setSelectedClass}
-                                    style={styles.picker}
-                                >
-                                    {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
-                                </Picker>
-                            </View>
-                            <TouchableOpacity 
-                                style={styles.comButton}
-                                onPress={() => setShowCompareModal(true)}
+                        {/* Class Filter - Now Full Width */}
+                        <View style={styles.pickerWrapper}>
+                            <Picker
+                                selectedValue={selectedClass}
+                                onValueChange={setSelectedClass}
+                                style={styles.picker}
                             >
-                                <Text style={styles.comBtnText}>COM</Text>
-                                <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
-                            </TouchableOpacity>
+                                {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                            </Picker>
                         </View>
+                        
+                        {/* Teacher Filter */}
                         {selectedClass !== '' && (
                             <View style={styles.pickerWrapper}>
                                 <Picker
@@ -508,9 +525,9 @@ const TeacherFeedback = () => {
 
                                     <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
                                         <View style={styles.tableHeader}>
-                                            <Text style={[styles.th, { width: 50 }]}>Roll</Text>
+                                            <Text style={[styles.th, { width: 50, textAlign:'center' }]}>Roll</Text>
                                             <Text style={[styles.th, { flex: 1 }]}>Student</Text>
-                                            <Text style={[styles.th, { width: 100 }]}>Rating</Text>
+                                            <Text style={[styles.th, { width: 100 }]}>Feedback</Text>
                                         </View>
                                         {adminReviews.map((review, idx) => (
                                             <AdminReviewItem key={idx} review={review} />
@@ -521,7 +538,11 @@ const TeacherFeedback = () => {
 
                             {/* CASE 2: ALL TEACHERS (Matrix View) */}
                             {selectedTeacherId === 'all' && matrixData && (
-                                <ScrollView horizontal contentContainerStyle={{flexGrow: 1}}>
+                                <ScrollView 
+                                    horizontal 
+                                    contentContainerStyle={{flexGrow: 1, paddingHorizontal: 20}}
+                                    showsHorizontalScrollIndicator={false}
+                                >
                                     <View>
                                         {/* Matrix Header */}
                                         <View style={[styles.matrixHeaderRow, { minWidth: FIXED_COLS_WIDTH + (matrixData.teachers.length * TEACHER_COL_WIDTH) }]}>
@@ -548,27 +569,18 @@ const TeacherFeedback = () => {
                                                         return (
                                                             <View key={t.id} style={styles.matrixCell}>
                                                                 {fb ? (
-                                                                    <TouchableOpacity 
-                                                                        style={{alignItems:'center'}}
-                                                                        onPress={() => {
-                                                                             Alert.alert(
-                                                                                 `${t.full_name}`,
-                                                                                 `Quality: ${fb.teaching_quality || 'N/A'}\n\nSuggestion: ${fb.suggestions || 'None'}`
-                                                                             );
-                                                                        }}
-                                                                    >
+                                                                    <View style={{alignItems:'center'}}>
+                                                                       {/* Row 1: Stars */}
                                                                        <StarRating rating={fb.rating} readOnly size={12} /> 
-                                                                       <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
-                                                                           <Text style={[styles.miniBadge, {
-                                                                               backgroundColor: fb.teaching_quality === 'Good' ? '#10b981' : fb.teaching_quality === 'Poor' ? '#ef4444' : '#3b82f6'
-                                                                           }]}>
-                                                                               {fb.teaching_quality ? fb.teaching_quality.charAt(0) : '-'}
-                                                                           </Text>
-                                                                           <View style={styles.viewMoreMini}>
-                                                                                <Text style={{fontSize:8, color:'#fff'}}>View</Text>
-                                                                           </View>
-                                                                       </View>
-                                                                    </TouchableOpacity>
+                                                                       
+                                                                       {/* Row 2: View More Link */}
+                                                                       <TouchableOpacity 
+                                                                            style={{marginTop: 4}}
+                                                                            onPress={() => handleMatrixViewMore(stu.full_name, stu.roll_no, t.full_name, fb)}
+                                                                       >
+                                                                            <Text style={styles.matrixViewMoreLink}>view more</Text>
+                                                                       </TouchableOpacity>
+                                                                    </View>
                                                                 ) : (
                                                                     <Text style={{color:'#ccc'}}>-</Text>
                                                                 )}
@@ -586,7 +598,68 @@ const TeacherFeedback = () => {
                 </View>
             )}
 
-            {/* COMPARE MODAL */}
+            {/* --- MATRIX DETAIL MODAL --- */}
+            <Modal
+                visible={detailModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setDetailModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.detailPopup}>
+                        {selectedDetail && (
+                            <>
+                                {/* Popup Header: Student Info */}
+                                <View style={styles.popupHeaderContainer}>
+                                    <Text style={styles.popupStudentName}>{selectedDetail.studentName}</Text>
+                                    <Text style={styles.popupRoll}>Roll: {selectedDetail.rollNo || '-'}</Text>
+                                    <View style={styles.popupDivider} />
+                                    <Text style={styles.popupTeacher}>Feedback for: {selectedDetail.teacherName}</Text>
+                                </View>
+
+                                {/* Popup Body */}
+                                <View style={styles.popupBody}>
+                                    {/* 1. Rating */}
+                                    <View style={styles.popupRow}>
+                                        <Text style={styles.popupLabel}>Feedback:</Text>
+                                        <StarRating rating={selectedDetail.rating} readOnly size={20} />
+                                    </View>
+
+                                    {/* 2. Quality - COLORED BADGE */}
+                                    <View style={styles.popupRow}>
+                                        <Text style={styles.popupLabel}>Quality of teaching:</Text>
+                                        <View style={[
+                                            styles.miniBadgeLarge, 
+                                            { backgroundColor: selectedDetail.teaching_quality === 'Good' ? '#10b981' : selectedDetail.teaching_quality === 'Poor' ? '#ef4444' : '#3b82f6' }
+                                        ]}>
+                                            <Text style={styles.badgeText}>{selectedDetail.teaching_quality || 'Not Selected'}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* 3. Suggestion */}
+                                    <View style={{marginTop: 10}}>
+                                        <Text style={styles.popupLabel}>Student suggestion:</Text>
+                                        <Text style={styles.suggestionTextFull}>
+                                            {selectedDetail.suggestions ? selectedDetail.suggestions : "No suggestions provided."}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Footer */}
+                                <TouchableOpacity 
+                                    style={styles.closePopupBtn} 
+                                    onPress={() => setDetailModalVisible(false)}
+                                >
+                                    <Text style={{color:'#fff', fontWeight:'bold'}}>Close</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+
+            {/* --- COMPARE MODAL --- */}
             <Modal
                 visible={showCompareModal}
                 animationType="slide"
@@ -660,7 +733,10 @@ const TeacherFeedback = () => {
                                 })}
                             </ScrollView>
                         ) : (
-                            <Text style={{color:'#999', marginTop: 50}}>No data available.</Text>
+                            <View style={{alignItems:'center'}}>
+                                <MaterialIcons name="bar-chart" size={50} color="#ddd" />
+                                <Text style={{color:'#999', marginTop: 10}}>No data available.</Text>
+                            </View>
                         )}
                     </View>
 
@@ -707,21 +783,22 @@ const styles = StyleSheet.create({
     headerCard: {
         backgroundColor: '#FFFFFF', paddingHorizontal: 15, paddingVertical: 12,
         width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10,
-        borderRadius: 12, flexDirection: 'row', alignItems: 'center',
+        borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
+    headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
         backgroundColor: '#E0F2F1', borderRadius: 30, width: 45, height: 45,
         justifyContent: 'center', alignItems: 'center', marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-    headerSubtitle: { fontSize: 13, color: '#666' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
+    headerSubtitle: { fontSize: 13, color: '#666666' },
 
     // --- Student View Styles ---
     cardRow: {
-        backgroundColor: '#FFF', marginHorizontal: 10, marginBottom: 10, borderRadius: 12,
-        padding: 15, elevation: 1, borderLeftWidth: 5, borderLeftColor: '#008080'
+        backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 15, borderRadius: 12,
+        padding: 15, elevation: 2, borderLeftWidth: 5, borderLeftColor: '#008080'
     },
     rowHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 10 },
     serialNo: { width: 30, fontWeight: 'bold', color: '#555', fontSize: 16 },
@@ -739,17 +816,17 @@ const styles = StyleSheet.create({
     },
 
     // --- Admin View Styles ---
-    filterContainer: { paddingHorizontal: 10, marginBottom: 5 },
+    filterContainer: { paddingHorizontal: 20, marginBottom: 5 },
     pickerWrapper: {
-        borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 8,
+        borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 10,
         backgroundColor: '#fff', overflow: 'hidden', height: 45, justifyContent: 'center'
     },
-    picker: { width: '100%', color: '#333' },
+    picker: { width: '100%', color: '#1f2937' },
     
     comButton: {
         backgroundColor: '#ef4444', 
         height: 45, 
-        paddingHorizontal: 12, 
+        paddingHorizontal: 15, 
         borderRadius: 8,
         justifyContent: 'center', 
         alignItems: 'center',
@@ -759,17 +836,21 @@ const styles = StyleSheet.create({
     comBtnText: { color:'#fff', fontWeight:'bold', fontSize: 12 },
 
     // List View
-    statsContainer: { flexDirection: 'row', marginHorizontal: 10, marginBottom: 10 },
+    statsContainer: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 10 },
     statBox: { flex: 1, backgroundColor: '#FFF', marginHorizontal: 5, padding: 10, borderRadius: 8, alignItems: 'center', elevation: 1 },
     statLabel: { fontSize: 11, color: '#666', textTransform: 'uppercase' },
     statValue: { fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 2 },
 
-    tableHeader: { flexDirection: 'row', backgroundColor: '#e0e7ff', padding: 10, marginHorizontal: 10, borderRadius: 8, marginBottom: 5 },
-    th: { fontWeight: 'bold', color: '#4338ca', fontSize: 13 },
+    tableHeader: {
+        flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12, paddingHorizontal: 10,
+        marginHorizontal: 20, borderRadius: 8, marginBottom: 5,
+        borderWidth: 1, borderColor: '#c7d2fe'
+    },
+    th: { fontWeight: '700', color: '#4338ca', fontSize: 13 },
     
-    adminRow: { backgroundColor: '#FFF', marginHorizontal: 10, marginBottom: 8, borderRadius: 8, borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 5 },
+    adminRow: { backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 8, borderRadius: 8, borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 5, elevation: 1 },
     adminRowMain: { flexDirection: 'row', alignItems: 'center', padding: 10 },
-    rollNo: { width: 50, fontWeight: 'bold', color: '#333' },
+    rollNo: { width: 50, fontWeight: 'bold', color: '#333', textAlign:'center' },
     studentName: { flex: 1, color: '#444' },
     viewMoreBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 4, padding: 2 },
     viewMoreText: { fontSize: 10, color: '#008080', marginRight: 2, fontWeight:'600' },
@@ -782,11 +863,14 @@ const styles = StyleSheet.create({
     suggestionText: { fontSize: 12, color: '#444', fontStyle: 'italic', backgroundColor: '#FFF', padding: 5, borderRadius: 4, borderWidth: 1, borderColor: '#EEE' },
 
     // Matrix View
-    matrixHeaderRow: { flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#ccc' },
+    matrixHeaderRow: { 
+        flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12, paddingHorizontal: 5, 
+        borderBottomWidth: 1, borderBottomColor: '#c7d2fe', borderTopWidth: 1, borderTopColor: '#c7d2fe',
+        borderTopLeftRadius: 8, borderTopRightRadius: 8,
+    },
     matrixRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 10, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
     matrixCell: { width: TEACHER_COL_WIDTH, alignItems: 'center', justifyContent: 'center' },
-    miniBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden', color: '#fff', fontSize: 10, fontWeight: 'bold' },
-    viewMoreMini: { marginLeft: 4, backgroundColor: '#444', borderRadius: 3, paddingHorizontal: 3 },
+    matrixViewMoreLink: { fontSize: 12, color: '#56bff8', textDecorationLine: 'none', fontWeight: '500' },
 
     emptyText: { textAlign: 'center', marginTop: 30, color: '#999' },
 
@@ -801,6 +885,29 @@ const styles = StyleSheet.create({
     legendLabel: { fontSize: 12, fontWeight: '700', color: '#333', marginRight: 4 },
     legendText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
     verticalDivider: { height: 16, width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 12 },
+
+    // --- POPUP MODAL STYLES ---
+    modalOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+    },
+    detailPopup: {
+        width: '85%', backgroundColor: '#fff', borderRadius: 12, padding: 0, elevation: 10, overflow: 'hidden'
+    },
+    popupHeaderContainer: {
+        backgroundColor: '#008080', padding: 15, alignItems: 'center'
+    },
+    popupStudentName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+    popupRoll: { fontSize: 12, color: '#e0f2f1', marginTop: 2 },
+    popupDivider: { width: '40%', height: 1, backgroundColor: '#ffffff50', marginVertical: 8 },
+    popupTeacher: { fontSize: 14, color: '#e0f2f1', fontStyle: 'italic' },
+    popupBody: { padding: 20 },
+    popupRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
+    popupLabel: { fontSize: 14, color: '#555', fontWeight: '600' },
+    suggestionTextFull: { 
+        fontSize: 14, color: '#333', marginTop: 5, fontStyle: 'italic', 
+        backgroundColor: '#F5F5F5', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#eee' 
+    },
+    closePopupBtn: { backgroundColor: '#5583d8', padding: 12, alignItems: 'center', justifyContent: 'center' },
 
     // --- MODAL STYLES ---
     modalHeader: {
@@ -822,7 +929,7 @@ const styles = StyleSheet.create({
     barLabelTop: { fontSize: 10, fontWeight: 'bold', color: '#333', marginBottom: 4 },
     barTrack: { width: 30, height: 220, backgroundColor: '#F0F0F0', borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 0 },
-    barLabelBottom: { fontSize: 11, fontWeight: '600', color: '#333', marginTop: 6, textAlign:'center', width: '100%' },
+    barLabelBottom: { fontSize: 11, fontWeight: '600', color: '#333333', marginTop: 6, textAlign:'center', width: '100%' },
 
 });
 

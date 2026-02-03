@@ -256,7 +256,7 @@ const StudentFeedback = () => {
             const payload = {
                 teacher_id: selectedTeacherId,
                 class_group: selectedClass,
-                subject_name: selectedSubject, // Sending correct subject name
+                subject_name: selectedSubject, 
                 feedback_data: students.map(s => ({
                     student_id: s.student_id,
                     status_marks: s.status_marks === 0 ? null : s.status_marks, 
@@ -266,7 +266,6 @@ const StudentFeedback = () => {
             await apiClient.post('/feedback', payload);
             Alert.alert("Success", "Student behavior updated!");
             setHasChanges(false);
-            // Optional: Refresh data
             fetchStudentData();
         } catch (error) {
             console.error(error);
@@ -315,34 +314,13 @@ const StudentFeedback = () => {
                         <Text style={styles.headerSubtitle}>Student Tracking</Text>
                     </View>
                 </View>
-                {isOverallView && (
-                    <View style={styles.overallBadge}>
-                        <Text style={styles.overallBadgeText}>Overall View</Text>
-                    </View>
-                )}
-            </View>
 
-            {/* FILTERS */}
-            <View style={styles.filterContainer}>
-                {/* Row 1: Class + COM Button */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                    <View style={[styles.pickerWrapper, { flex: 1, marginBottom: 0 }]}>
-                        <Picker
-                            selectedValue={selectedClass}
-                            onValueChange={setSelectedClass}
-                            style={styles.picker}
-                        >
-                            <Picker.Item label="Select Class" value="" color="#999" />
-                            {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
-                        </Picker>
-                    </View>
-
-                    {/* COM BUTTON */}
+                {/* Right Side: Compare Button (Badge Removed) */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity 
                         style={styles.comButton}
                         onPress={() => {
                             if(selectedClass) {
-                                // Default the modal subject to current view subject, or All Subjects
                                 setCompareSubject(selectedSubject || 'All Subjects');
                                 setShowCompareModal(true);
                             } else {
@@ -353,6 +331,21 @@ const StudentFeedback = () => {
                         <Text style={styles.comBtnText}>COM</Text>
                         <MaterialIcons name="bar-chart" size={18} color="#fff" style={{marginLeft: 4}} />
                     </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* FILTERS */}
+            <View style={styles.filterContainer}>
+                {/* Row 1: Class (Full Width) */}
+                <View style={styles.pickerWrapper}>
+                    <Picker
+                        selectedValue={selectedClass}
+                        onValueChange={setSelectedClass}
+                        style={styles.picker}
+                    >
+                        <Picker.Item label="Select Class" value="" color="#999" />
+                        {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                    </Picker>
                 </View>
 
                 {/* Row 2: Subject */}
@@ -623,8 +616,6 @@ const styles = StyleSheet.create({
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
     headerSubtitle: { fontSize: 13, color: '#666666' },
-    overallBadge: { backgroundColor: '#FFEDD5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#FED7AA' },
-    overallBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#F97316' },
     filterContainer: { paddingHorizontal: 20, marginBottom: 5 },
     pickerWrapper: {
         borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 10,
