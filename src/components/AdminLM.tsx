@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   SafeAreaView, View, Text, TextInput, TouchableOpacity, Modal, StyleSheet,
-  Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, LayoutAnimation, UIManager
+  Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  LayoutAnimation, UIManager, Dimensions
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -11,6 +12,8 @@ import apiClient from '../api/client';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const { width } = Dimensions.get('window');
 
 const CLASS_CATEGORIES = [ 'Admins', 'Teachers', 'Others', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10' ];
 
@@ -72,7 +75,6 @@ const AdminLM = () => {
   }, []);
 
   const groupedUsers = useMemo(() => {
-    // 1. Filter logic
     const query = searchQuery.toLowerCase().trim();
     const filteredUsers = users.filter(user => {
         if (!query) return true;
@@ -84,7 +86,6 @@ const AdminLM = () => {
         );
     });
 
-    // 2. Group logic
     const groups: { [key: string]: User[] } = {};
     CLASS_CATEGORIES.forEach(category => {
         if (category === 'Admins') {
@@ -114,37 +115,74 @@ const AdminLM = () => {
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    // Initialize formData with the user's existing data
     setFormData({ ...user, subjects_taught: user.subjects_taught || [], password: '' });
     setIsPasswordVisible(false);
     setCurrentSubjectInput('');
     setIsModalVisible(true);
   };
 
-  // Helper function to detect changes
+  // --- VALIDATION & SANITIZATION LOGIC ---
+  const validateInput = (key: string, value: string) => {
+    let sanitized = value;
+
+    switch (key) {
+      // 1. Numeric Only Fields
+      case 'roll_no':
+      case 'admission_no':
+      case 'aadhar_no':
+      case 'pen_no':
+      case 'previous_salary':
+      case 'present_salary':
+        sanitized = value.replace(/[^0-9]/g, '');
+        break;
+
+      // 2. Alphabetical Only (A-Z, a-z, spaces)
+      case 'parent_name':
+        sanitized = value.replace(/[^a-zA-Z\s]/g, '');
+        break;
+
+      // 3. Full Name (Alpha + spaces, hyphens, apostrophes)
+      case 'full_name':
+        sanitized = value.replace(/[^a-zA-Z\s\-']/g, '');
+        break;
+      
+      // 4. Username (AlphaNumeric + dots, underscores, hyphens - No emojis)
+      case 'username':
+        sanitized = value.replace(/[^a-zA-Z0-9._-]/g, '');
+        break;
+
+      // 5. General Text (No Emojis, allow basic punctuation)
+      // This regex allows alphanumerics, spaces, and standard punctuation, blocking emojis/special symbols
+      case 'experience':
+      case 'subjects_taught':
+        sanitized = value.replace(/[^\w\s.,\-()]/g, ''); 
+        break;
+
+      default:
+        // Default blocker for emojis/special chars on unspecified fields
+        if(key !== 'password' && key !== 'admission_date' && key !== 'joining_date') {
+           sanitized = value.replace(/[^\w\s\-@.]/g, ''); 
+        }
+        break;
+    }
+
+    setFormData({ ...formData, [key]: sanitized });
+  };
+
   const getChangedFields = (original: User, current: any) => {
     const changes: any = {};
-    
-    // Iterate over current form data keys
     Object.keys(current).forEach(key => {
-        // Skip array comparison here, handled below
         if (key === 'subjects_taught') return;
-        // Skip password here, handled below
         if (key === 'password') return;
-        
-        // Use loose equality (==) to handle potential type mismatches (e.g. string vs number from inputs)
-        // Check if key exists in original user object (or if it's a new field being added)
         if (original[key as keyof User] != current[key]) {
             changes[key] = current[key];
         }
     });
 
-    // Handle Password specifically
     if (current.password && current.password.trim() !== '') {
         changes.password = current.password;
     }
 
-    // Special handling for subjects array (Teacher)
     if (original.role === 'teacher') {
         const originalSubjects = JSON.stringify(original.subjects_taught || []);
         const currentSubjects = JSON.stringify(current.subjects_taught || []);
@@ -152,7 +190,6 @@ const AdminLM = () => {
             changes.subjects_taught = current.subjects_taught;
         }
     }
-
     return changes;
   };
 
@@ -160,6 +197,14 @@ const AdminLM = () => {
     if (!formData.username || !formData.full_name) {
       Alert.alert('Error', 'Username and Full Name are required.');
       return;
+    }
+
+    // Roll No Validation Logic
+    if (formData.role === 'student') {
+        if(!formData.roll_no || !formData.class_group) {
+             Alert.alert('Error', 'Class and Roll Number are mandatory for students.');
+             return;
+        }
     }
     
     const isEditing = !!editingUser;
@@ -171,17 +216,13 @@ const AdminLM = () => {
 
     try {
       if (isEditing) {
-        // --- CONCURRENCY FIX: Only send changed fields ---
         const changes = getChangedFields(editingUser!, formData);
-        
         if (Object.keys(changes).length === 0) {
             Alert.alert('Info', 'No changes detected.');
             return;
         }
-
         await apiClient.put(`/users/${editingUser!.id}`, changes);
       } else {
-        // Creating new user: Send everything
         const payload = { ...formData };
         if (payload.role !== 'teacher') {
             delete payload.subjects_taught;
@@ -232,6 +273,12 @@ const AdminLM = () => {
 
   const handleAddSubject = () => {
       const subjectToAdd = currentSubjectInput.trim();
+      // Basic alpha check for subjects
+      if(/[^a-zA-Z0-9\s]/.test(subjectToAdd)) {
+           Alert.alert("Invalid Input", "Subject names should not contain special characters.");
+           return;
+      }
+
       if (subjectToAdd && !formData.subjects_taught?.includes(subjectToAdd)) {
           const updatedSubjects = [...(formData.subjects_taught || []), subjectToAdd];
           setFormData({ ...formData, subjects_taught: updatedSubjects });
@@ -325,7 +372,10 @@ const AdminLM = () => {
                 placeholder="Search by name or roll number..."
                 placeholderTextColor="#90A4AE"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(val) => {
+                     // Sanitize Search Input
+                     setSearchQuery(val.replace(/[^\w\s]/g, ''));
+                }}
             />
              {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -364,12 +414,12 @@ const AdminLM = () => {
       <Modal animationType="fade" transparent={true} visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <Animatable.View animation="zoomIn" duration={400} style={styles.modalContainer}>
-                <ScrollView contentContainerStyle={styles.modalContent}>
+                <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
                     <Text style={styles.modalTitle}>{isEditing ? 'Edit User' : 'Add New User'}</Text>
                     <View style={styles.modalDivider} />
 
-                    <Text style={styles.inputLabel}>Username</Text>
-                    <TextInput style={styles.input} placeholder="e.g. john.doe" value={formData.username} onChangeText={(val) => setFormData({ ...formData, username: val })} autoCapitalize="none" />
+                    <Text style={styles.inputLabel}>Username (AlphaNumeric only)</Text>
+                    <TextInput style={styles.input} placeholder="e.g. john.doe" value={formData.username} onChangeText={(val) => validateInput('username', val)} autoCapitalize="none" />
 
                     <Text style={styles.inputLabel}>Password</Text>
                     <View style={styles.passwordContainer}>
@@ -385,8 +435,8 @@ const AdminLM = () => {
                       </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.inputLabel}>Full Name</Text>
-                    <TextInput style={styles.input} placeholder="Full Name" value={formData.full_name} onChangeText={(val) => setFormData({ ...formData, full_name: val })} />
+                    <Text style={styles.inputLabel}>Full Name (Letters, spaces, hyphens only)</Text>
+                    <TextInput style={styles.input} placeholder="Full Name" value={formData.full_name} onChangeText={(val) => validateInput('full_name', val)} />
 
                     <Text style={styles.inputLabel}>Role</Text>
                     <View style={styles.pickerWrapper}>
@@ -414,7 +464,7 @@ const AdminLM = () => {
                                     style={styles.subjectInput}
                                     placeholder="Subject"
                                     value={currentSubjectInput}
-                                    onChangeText={setCurrentSubjectInput}
+                                    onChangeText={(val) => setCurrentSubjectInput(val.replace(/[^a-zA-Z0-9\s]/g, ''))}
                                     onSubmitEditing={handleAddSubject}
                                 />
                                 <TouchableOpacity style={styles.subjectAddButton} onPress={handleAddSubject}>
@@ -442,29 +492,37 @@ const AdminLM = () => {
                               {CLASS_CATEGORIES.filter(c => !['Admins', 'Teachers', 'Others'].includes(c)).map((level) => ( <Picker.Item key={level} label={level} value={level} /> ))}
                               </Picker>
                           </View>
-                          <Text style={styles.inputLabel}>Roll No.</Text>
-                          <TextInput style={styles.input} placeholder="Roll Number" value={formData.roll_no} onChangeText={(val) => setFormData({ ...formData, roll_no: val })} keyboardType="numeric" />
-                          <Text style={styles.inputLabel}>Admission No.</Text>
-                          <TextInput style={styles.input} placeholder="Admission No" value={formData.admission_no} onChangeText={(val) => setFormData({ ...formData, admission_no: val })} />
-                          <Text style={styles.inputLabel}>Parent Name</Text>
-                          <TextInput style={styles.input} placeholder="Parent Name" value={formData.parent_name} onChangeText={(val) => setFormData({ ...formData, parent_name: val })} />
-                          <Text style={styles.inputLabel}>Aadhar No.</Text>
-                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
-                          <Text style={styles.inputLabel}>PEN No.</Text>
-                          <TextInput style={styles.input} placeholder="PEN Number" value={formData.pen_no} onChangeText={(val) => setFormData({ ...formData, pen_no: val })} />
+                          <Text style={styles.inputLabel}>Roll No. (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Roll Number" value={formData.roll_no} onChangeText={(val) => validateInput('roll_no', val)} keyboardType="numeric" />
+                          
+                          <Text style={styles.inputLabel}>Admission No. (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Admission No" value={formData.admission_no} onChangeText={(val) => validateInput('admission_no', val)} keyboardType="numeric" />
+                          
+                          <Text style={styles.inputLabel}>Parent Name (Letters Only)</Text>
+                          <TextInput style={styles.input} placeholder="Parent Name" value={formData.parent_name} onChangeText={(val) => validateInput('parent_name', val)} />
+                          
+                          <Text style={styles.inputLabel}>Aadhar No. (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
+                          
+                          <Text style={styles.inputLabel}>PEN No. (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="PEN Number" value={formData.pen_no} onChangeText={(val) => validateInput('pen_no', val)} keyboardType="numeric" />
                         </>
                     ) : (
                         <>
-                          <Text style={styles.inputLabel}>Aadhar No.</Text>
-                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => setFormData({ ...formData, aadhar_no: val })} keyboardType="numeric" maxLength={12} />
+                          <Text style={styles.inputLabel}>Aadhar No. (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Aadhar Number" value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
+                          
                           <Text style={styles.inputLabel}>Joining Date</Text>
                           <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={formData.joining_date} onChangeText={(val) => setFormData({ ...formData, joining_date: val })} />
-                          <Text style={styles.inputLabel}>Previous Salary</Text>
-                          <TextInput style={styles.input} placeholder="Amount" value={formData.previous_salary} onChangeText={(val) => setFormData({ ...formData, previous_salary: val })} keyboardType="numeric" />
-                          <Text style={styles.inputLabel}>Present Salary</Text>
-                          <TextInput style={styles.input} placeholder="Amount" value={formData.present_salary} onChangeText={(val) => setFormData({ ...formData, present_salary: val })} keyboardType="numeric" />
+                          
+                          <Text style={styles.inputLabel}>Previous Salary (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Amount" value={formData.previous_salary} onChangeText={(val) => validateInput('previous_salary', val)} keyboardType="numeric" />
+                          
+                          <Text style={styles.inputLabel}>Present Salary (Numeric Only)</Text>
+                          <TextInput style={styles.input} placeholder="Amount" value={formData.present_salary} onChangeText={(val) => validateInput('present_salary', val)} keyboardType="numeric" />
+                          
                           <Text style={styles.inputLabel}>Experience</Text>
-                          <TextInput style={styles.input} placeholder="Years of experience" value={formData.experience} onChangeText={(val) => setFormData({ ...formData, experience: val })} />
+                          <TextInput style={styles.input} placeholder="Years of experience" value={formData.experience} onChangeText={(val) => validateInput('experience', val)} />
                         </>
                     )}
 
@@ -493,10 +551,10 @@ const styles = StyleSheet.create({
   headerCard: {
     backgroundColor: '#FFFFFF',
     padding: 15,
-    width: '96%', // Full Width with margin
+    width: '96%',
     alignSelf: 'center',
     marginTop: 10,
-    marginBottom: 8, // Reduced Gap
+    marginBottom: 8,
     borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -520,6 +578,7 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     justifyContent: 'center',
+    flex: 1,
   },
   headerTitle: {
     fontSize: 18,
@@ -533,9 +592,9 @@ const styles = StyleSheet.create({
   },
   
   headerAddBtn: {
-    backgroundColor: '#008080', // Teal instead of Green
-    paddingHorizontal: 12,      // Reduced padding
-    paddingVertical: 6,         // Reduced padding
+    backgroundColor: '#008080',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
@@ -545,21 +604,21 @@ const styles = StyleSheet.create({
   },
   headerAddBtnText: {
     color: '#FFFFFF',
-    fontWeight: '600',          // Semi-bold instead of bold
-    fontSize: 12,               // Smaller font
+    fontWeight: '600',
+    fontSize: 12,
   },
 
   // --- Search Bar Card Style ---
   searchCard: {
       backgroundColor: '#FFFFFF',
       borderRadius: 12,
-      width: '96%', // Matches header width perfectly
+      width: '96%',
       alignSelf: 'center',
-      marginBottom: 8, // Reduced Gap
+      marginBottom: 8,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 15,
-      height: 55, // Slightly taller
+      height: 55,
       elevation: 2,
       shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
   },
@@ -568,7 +627,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
       flex: 1,
-      fontSize: 16, // Increased Font Size
+      fontSize: 16,
       color: '#333333',
       height: '100%',
   },
@@ -577,9 +636,9 @@ const styles = StyleSheet.create({
   accordionCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    width: '96%', // Matches other cards
+    width: '96%',
     alignSelf: 'center',
-    marginBottom: 6, // Significantly Reduced Gap for "Attractive" look
+    marginBottom: 6,
     overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
@@ -588,7 +647,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center',
-    paddingVertical: 18, // Taller header for larger text
+    paddingVertical: 18,
     paddingHorizontal: 16,
   },
   accordionLeft: { 
@@ -596,8 +655,8 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   accordionTitle: { 
-    fontSize: 18, // Increased Font Size (Admins, Teachers, etc.)
-    fontWeight: '700', // Bolder
+    fontSize: 18,
+    fontWeight: '700',
     color: '#2C3E50' 
   },
   badgeContainer: {
@@ -610,7 +669,7 @@ const styles = StyleSheet.create({
       alignItems: 'center'
   },
   badgeText: { 
-    fontSize: 14, // Increased Badge Text Size
+    fontSize: 14,
     color: '#333333', 
     fontWeight: 'bold' 
   },
@@ -675,8 +734,13 @@ const styles = StyleSheet.create({
   // --- Modal Styles ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: {
-    width: '90%', maxHeight: '85%', backgroundColor: '#fff', borderRadius: 15,
-    elevation: 10, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, overflow: 'hidden'
+    width: width > 400 ? '80%' : '92%', 
+    maxHeight: '85%', 
+    backgroundColor: '#fff', 
+    borderRadius: 15,
+    elevation: 10, 
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, 
+    overflow: 'hidden'
   },
   modalContent: { padding: 25 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#008080', textAlign: 'center' },

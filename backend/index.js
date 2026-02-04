@@ -236,6 +236,25 @@ const adsUpload = multer({ storage: adsStorage });
 // --- USER, PROFILE & PASSWORD API ROUTES ---
 // ==========================================================
 
+// Helper for Regex Validation
+const validateFormat = (field, value, type) => {
+    if (!value) return true; // Skip if empty (unless required)
+    
+    switch(type) {
+        case 'numeric':
+            return /^[0-9]+$/.test(value);
+        case 'alpha':
+            return /^[a-zA-Z\s]+$/.test(value);
+        case 'name':
+            return /^[a-zA-Z\s'-]+$/.test(value);
+        case 'general':
+            // No emojis, allow basic punctuations
+            return !/[\u{1F600}-\u{1F6FF}]/u.test(value);
+        default:
+            return true;
+    }
+};
+
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -292,10 +311,33 @@ app.post('/api/users', async (req, res) => {
         roll_no, admission_no, parent_name, aadhar_no, pen_no, admission_date,
         joining_date, previous_salary, present_salary, experience
     } = req.body;
+
+    // --- 1. SERVER-SIDE VALIDATION ---
+    if (!validateFormat('full_name', full_name, 'name')) return res.status(400).json({ message: 'Full name contains invalid characters.' });
+    if (!validateFormat('parent_name', parent_name, 'alpha')) return res.status(400).json({ message: 'Parent name must contain alphabet characters only.' });
+    if (!validateFormat('roll_no', roll_no, 'numeric')) return res.status(400).json({ message: 'Roll No must be numeric.' });
+    if (!validateFormat('admission_no', admission_no, 'numeric')) return res.status(400).json({ message: 'Admission No must be numeric.' });
+    if (!validateFormat('aadhar_no', aadhar_no, 'numeric')) return res.status(400).json({ message: 'Aadhar No must be numeric.' });
+    if (!validateFormat('pen_no', pen_no, 'numeric')) return res.status(400).json({ message: 'PEN No must be numeric.' });
+
     const subjectsJson = (role === 'teacher' && Array.isArray(subjects_taught)) ? JSON.stringify(subjects_taught) : null;
     const connection = await db.getConnection();
+    
     try {
         await connection.beginTransaction();
+
+        // --- 2. COMPOSITE KEY CONSTRAINT CHECK (Manual Enforcement) ---
+        if (role === 'student' && roll_no && class_group) {
+            const [existing] = await connection.query(
+                `SELECT u.id FROM users u JOIN user_profiles p ON u.id = p.user_id 
+                 WHERE u.class_group = ? AND p.roll_no = ?`, 
+                [class_group, roll_no]
+            );
+            if (existing.length > 0) {
+                await connection.rollback();
+                return res.status(409).json({ message: `Roll Number ${roll_no} already exists in ${class_group}.` });
+            }
+        }
 
         const [userResult] = await connection.query(
             'INSERT INTO users (username, password, full_name, role, class_group, subjects_taught) VALUES (?, ?, ?, ?, ?, ?)',
@@ -335,11 +377,48 @@ app.put('/api/users/:id', async (req, res) => {
         joining_date, previous_salary, present_salary, experience
     } = req.body;
 
+    // --- 1. SERVER-SIDE VALIDATION ---
+    if (full_name && !validateFormat('full_name', full_name, 'name')) return res.status(400).json({ message: 'Full name contains invalid characters.' });
+    if (parent_name && !validateFormat('parent_name', parent_name, 'alpha')) return res.status(400).json({ message: 'Parent name must contain alphabet characters only.' });
+    if (roll_no && !validateFormat('roll_no', roll_no, 'numeric')) return res.status(400).json({ message: 'Roll No must be numeric.' });
+    if (admission_no && !validateFormat('admission_no', admission_no, 'numeric')) return res.status(400).json({ message: 'Admission No must be numeric.' });
+
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // --- 1. Update USERS Table (Dynamic) ---
+        // --- 2. COMPOSITE KEY CONSTRAINT CHECK (Manual Enforcement on Edit) ---
+        // If changing class or roll_no, ensure no conflict
+        if (role === 'student' && (roll_no || class_group)) {
+             // Fetch current values if not provided in body
+             let targetClass = class_group;
+             let targetRoll = roll_no;
+             
+             if (!targetClass || !targetRoll) {
+                 const [currData] = await connection.query(
+                     `SELECT u.class_group, p.roll_no FROM users u JOIN user_profiles p ON u.id = p.user_id WHERE u.id = ?`,
+                     [id]
+                 );
+                 if (currData.length > 0) {
+                     if (!targetClass) targetClass = currData[0].class_group;
+                     if (!targetRoll) targetRoll = currData[0].roll_no;
+                 }
+             }
+
+             if (targetClass && targetRoll) {
+                 const [conflict] = await connection.query(
+                     `SELECT u.id FROM users u JOIN user_profiles p ON u.id = p.user_id 
+                      WHERE u.class_group = ? AND p.roll_no = ? AND u.id != ?`, 
+                     [targetClass, targetRoll, id]
+                 );
+                 if (conflict.length > 0) {
+                     await connection.rollback();
+                     return res.status(409).json({ message: `Roll Number ${targetRoll} already exists in ${targetClass}.` });
+                 }
+             }
+        }
+
+        // --- 3. Update USERS Table (Dynamic) ---
         let userQueryFields = [];
         let userQueryParams = [];
 
@@ -360,19 +439,17 @@ app.put('/api/users/:id', async (req, res) => {
             await connection.query(userSql, userQueryParams);
         }
 
-        // --- 2. Determine Role for Profile Update ---
-        // If role wasn't sent in body, fetch it from DB to know which profile fields to check
+        // --- 4. Determine Role for Profile Update ---
         let targetRole = role;
         if (!targetRole) {
             const [existingUser] = await connection.query('SELECT role FROM users WHERE id = ?', [id]);
             targetRole = existingUser[0]?.role;
         }
 
-        // --- 3. Update USER_PROFILES Table (Dynamic) ---
+        // --- 5. Update USER_PROFILES Table (Dynamic) ---
         let profileFields = [];
         let profileParams = [];
 
-        // Helper to check if a field exists in req.body specifically
         const addField = (field, val) => {
             if (val !== undefined) {
                 profileFields.push(`${field} = ?`);
@@ -388,7 +465,7 @@ app.put('/api/users/:id', async (req, res) => {
             addField('pen_no', pen_no);
             addField('admission_date', admission_date);
         } else {
-            addField('email', req.body.email); // Ensure email is handled if passed
+            addField('email', req.body.email); 
             addField('aadhar_no', aadhar_no);
             addField('joining_date', joining_date);
             addField('previous_salary', previous_salary);
@@ -397,19 +474,12 @@ app.put('/api/users/:id', async (req, res) => {
         }
 
         if (profileFields.length > 0) {
-            // First check if profile exists
             const [profileCheck] = await connection.query('SELECT id FROM user_profiles WHERE user_id = ?', [id]);
             
             if (profileCheck.length > 0) {
-                // UPDATE existing profile
                 profileParams.push(id);
                 const profileSql = `UPDATE user_profiles SET ${profileFields.join(', ')} WHERE user_id = ?`;
                 await connection.query(profileSql, profileParams);
-            } else {
-                // INSERT new profile (Edge case: User exists but profile doesn't)
-                // For insert, we need to map values explicitly, but for this specific concurrent fix, 
-                // we assume profile exists. If not, we fall back to a standard insert logic or skip.
-                // Keeping it simple: If valid fields provided, try update.
             }
         }
 
@@ -427,15 +497,9 @@ app.put('/api/users/:id', async (req, res) => {
     }
 });
 
-
-// ==========================================================
-// --- THIS IS THE CORRECTED ROUTE ---
-// ==========================================================
 app.get('/api/profiles/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        // CORRECTED: Explicitly select columns to prevent the 'id' field from being overwritten.
-        // This ensures u.id is the primary id in the response.
         const sql = `
             SELECT
                 u.id,
@@ -473,9 +537,6 @@ app.get('/api/profiles/:userId', async (req, res) => {
         res.status(500).json({ message: 'Database error fetching profile' });
     }
 });
-// ==========================================================
-// --- END OF CORRECTION ---
-// ==========================================================
 
 app.put('/api/profiles/:userId', upload.single('profileImage'), async (req, res) => {
     const userId = parseInt(req.params.userId, 10);
@@ -484,6 +545,11 @@ app.put('/api/profiles/:userId', upload.single('profileImage'), async (req, res)
         admission_date, roll_no, admission_no, parent_name, pen_no,
         aadhar_no, joining_date, previous_salary, present_salary, experience
     } = req.body;
+    
+    // VALIDATE INPUTS
+    if (full_name && !validateFormat('full_name', full_name, 'name')) return res.status(400).json({ message: 'Invalid characters in Name.' });
+    if (parent_name && !validateFormat('parent_name', parent_name, 'alpha')) return res.status(400).json({ message: 'Invalid characters in Parent Name.' });
+
     const connection = await db.getConnection();
 
     try {
