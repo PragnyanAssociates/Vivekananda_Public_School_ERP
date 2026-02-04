@@ -1,9 +1,10 @@
-// 📂 File: src/screens/Online_Class/OnlineClassScreen.tsx (DESIGN UPDATED)
+// 📂 File: src/screens/Online_Class/OnlineClassScreen.tsx (DESIGN & FUNCTIONALITY UPDATED)
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
-  ActivityIndicator, Modal, TextInput, FlatList, Platform, SafeAreaView
+  ActivityIndicator, Modal, TextInput, FlatList, Platform, SafeAreaView,
+  Dimensions
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -15,17 +16,19 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Video from 'react-native-video';
 import * as Animatable from 'react-native-animatable';
 
-// --- COLORS ---
+// --- COLORS (Fixed for Light/Dark Consistency) ---
 const COLORS = {
     primary: '#008080',    // Teal
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
-    textMain: '#263238',
+    textMain: '#263238',   // Always dark grey
     textSub: '#546E7A',
     border: '#CFD8DC',
     success: '#28a745',
     danger: '#dc3545',
-    blue: '#007bff'
+    blue: '#007bff',
+    inputBg: '#FFFFFF',
+    placeholder: '#888888'
 };
 
 // --- TYPE DEFINITIONS ---
@@ -149,7 +152,8 @@ const OnlineClassScreen: React.FC = () => {
         if (classItem) {
             setIsEditing(true); setCurrentClass(classItem); setModalClassType(classItem.class_type);
             setFormData({ title: classItem.title, class_group: classItem.class_group, subject: classItem.subject, teacher_id: classItem.teacher_id, meet_link: classItem.meet_link || '', description: classItem.description || '', topic: classItem.topic || '', });
-            setDate(new Date(classItem.class_datetime)); setSelectedVideo(null);
+            setDate(new Date(classItem.class_datetime)); 
+            setSelectedVideo(null); // Reset video so we don't accidentally send one unless selected
         } else {
             setIsEditing(false); setCurrentClass(null); setFormData(initialFormState); setSelectedVideo(null); setModalClassType('live'); setDate(new Date());
         }
@@ -163,35 +167,67 @@ const OnlineClassScreen: React.FC = () => {
     
     const handleSave = async () => {
         if (!user) return Alert.alert("Error", "User not found.");
-        if (isEditing) {
-            if (!formData.title) return Alert.alert("Validation Error", "Title is required.");
-            setIsSaving(true);
-            const updatedData = { title: formData.title, meet_link: formData.meet_link, description: formData.description, topic: formData.topic, };
-            try { await apiClient.put(`/online-classes/${currentClass?.id}`, updatedData); Alert.alert("Success", "Class updated."); } 
-            catch (error: any) { Alert.alert("Error", "Failed to update."); } 
-            finally { setIsSaving(false); setModalVisible(false); fetchInitialData(); }
-            return;
-        }
         
-        if (!formData.title || !formData.class_group || !formData.subject || !formData.teacher_id) {
-            setIsSaving(false); return Alert.alert("Validation Error", "Please fill all required fields.");
+        // Basic Validation
+        if (!formData.title) return Alert.alert("Validation Error", "Title is required.");
+        
+        if (!isEditing) {
+            if (!formData.class_group || !formData.subject || !formData.teacher_id) {
+                return Alert.alert("Validation Error", "Please fill all required fields.");
+            }
+        }
+
+        if (modalClassType === 'live' && !formData.meet_link) {
+            return Alert.alert("Validation Error", "Meeting Link required for live class.");
+        }
+        if (modalClassType === 'recorded' && !isEditing && !selectedVideo) {
+            return Alert.alert("Validation Error", "Video File required for new recorded class.");
         }
 
         setIsSaving(true);
         const data = new FormData();
-        data.append('title', formData.title); data.append('class_group', formData.class_group); data.append('subject', formData.subject); data.append('teacher_id', String(formData.teacher_id)); data.append('class_datetime', date.toISOString()); data.append('description', formData.description); data.append('class_type', modalClassType); data.append('topic', formData.topic);
+        data.append('title', formData.title);
+        data.append('description', formData.description);
+        data.append('topic', formData.topic);
+        data.append('class_type', modalClassType);
 
-        if (modalClassType === 'live') {
-            if (!formData.meet_link) { setIsSaving(false); return Alert.alert("Validation Error", "Meeting Link required."); }
-            data.append('meet_link', formData.meet_link);
-        } else {
-            if (!selectedVideo) { setIsSaving(false); return Alert.alert("Validation Error", "Video File required."); }
-            data.append('videoFile', { uri: selectedVideo.uri, type: selectedVideo.type, name: selectedVideo.fileName, } as any);
+        // Fields only needed for creation or if you allow editing them (API depends)
+        if (!isEditing) {
+            data.append('class_group', formData.class_group);
+            data.append('subject', formData.subject);
+            data.append('teacher_id', String(formData.teacher_id));
+            data.append('class_datetime', date.toISOString());
         }
 
-        try { await apiClient.post('/online-classes', data, { headers: { 'Content-Type': 'multipart/form-data' } }); Alert.alert("Success", "Class saved."); } 
-        catch (error: any) { Alert.alert("Error", "Failed to save."); } 
-        finally { setIsSaving(false); setModalVisible(false); fetchInitialData(); }
+        if (modalClassType === 'live') {
+            data.append('meet_link', formData.meet_link);
+        } else {
+            // IF a new video is selected, append it (works for Create and Edit)
+            if (selectedVideo) {
+                data.append('videoFile', { uri: selectedVideo.uri, type: selectedVideo.type, name: selectedVideo.fileName, } as any);
+            }
+        }
+
+        try { 
+            if (isEditing && currentClass) {
+                // PUT Request
+                await apiClient.put(`/online-classes/${currentClass.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }); 
+                Alert.alert("Success", "Class updated successfully."); 
+            } else {
+                // POST Request
+                await apiClient.post('/online-classes', data, { headers: { 'Content-Type': 'multipart/form-data' } }); 
+                Alert.alert("Success", "Class created successfully."); 
+            }
+        } 
+        catch (error: any) { 
+            console.error("Save Error", error);
+            Alert.alert("Error", "Failed to save class. Please try again."); 
+        } 
+        finally { 
+            setIsSaving(false); 
+            setModalVisible(false); 
+            fetchInitialData(); 
+        }
     };
 
     const handleDelete = (classId: number) => {
@@ -265,59 +301,92 @@ const OnlineClassScreen: React.FC = () => {
                             )}
 
                             <Text style={styles.label}>Title</Text>
-                            <TextInput style={styles.input} placeholder="e.g. Algebra Review" value={formData.title} onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}/>
+                            <TextInput 
+                                style={styles.input} 
+                                placeholder="e.g. Algebra Review" 
+                                placeholderTextColor={COLORS.placeholder}
+                                value={formData.title} 
+                                onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                            />
                             
                             <Text style={styles.label}>Class</Text>
                             <View style={styles.pickerContainer}>
-                                <Picker enabled={!isEditing} selectedValue={formData.class_group} onValueChange={(itemValue) => handleClassChange(itemValue)}>
-                                    <Picker.Item label="-- Select Class --" value="" />
-                                    {classGroups.map((c, i) => <Picker.Item key={i} label={c} value={c} />)}
+                                <Picker enabled={!isEditing} selectedValue={formData.class_group} onValueChange={(itemValue) => handleClassChange(itemValue)} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                    <Picker.Item label="-- Select Class --" value="" color={COLORS.textMain} />
+                                    {classGroups.map((c, i) => <Picker.Item key={i} label={c} value={c} color={COLORS.textMain} />)}
                                 </Picker>
                             </View>
 
                             <Text style={styles.label}>Subject</Text>
                             <View style={styles.pickerContainer}>
-                                <Picker enabled={!isEditing} selectedValue={formData.subject} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, subject: itemValue }))}>
-                                    <Picker.Item label="-- Select Subject --" value="" />
-                                    {subjects.map((s, i) => <Picker.Item key={i} label={s} value={s} />)}
+                                <Picker enabled={!isEditing} selectedValue={formData.subject} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, subject: itemValue }))} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                    <Picker.Item label="-- Select Subject --" value="" color={COLORS.textMain} />
+                                    {subjects.map((s, i) => <Picker.Item key={i} label={s} value={s} color={COLORS.textMain} />)}
                                 </Picker>
                             </View>
 
                             <Text style={styles.label}>Teacher</Text>
                             <View style={styles.pickerContainer}>
-                                <Picker enabled={!isEditing} selectedValue={String(formData.teacher_id)} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, teacher_id: Number(itemValue) }))}>
-                                    <Picker.Item label="-- Select Person --" value="" />
-                                    {teachers.map((t) => <Picker.Item key={t.id} label={t.full_name} value={String(t.id)} />)}
+                                <Picker enabled={!isEditing} selectedValue={String(formData.teacher_id)} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, teacher_id: Number(itemValue) }))} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                    <Picker.Item label="-- Select Person --" value="" color={COLORS.textMain} />
+                                    {teachers.map((t) => <Picker.Item key={t.id} label={t.full_name} value={String(t.id)} color={COLORS.textMain} />)}
                                 </Picker>
                             </View>
                             
                             <Text style={styles.label}>Date & Time</Text>
-                            <TouchableOpacity disabled={isEditing} onPress={() => setPickerMode('date')} style={styles.input}><Text style={{ color: '#333' }}>{formatDateTime(date.toISOString())}</Text></TouchableOpacity>
+                            <TouchableOpacity disabled={isEditing} onPress={() => setPickerMode('date')} style={styles.input}>
+                                <Text style={{ color: COLORS.textMain }}>{formatDateTime(date.toISOString())}</Text>
+                            </TouchableOpacity>
                             {pickerMode && <DateTimePicker value={date} mode={pickerMode} is24Hour={true} display="default" onChange={onPickerChange}/>}
                             
                             <Text style={styles.label}>Topic</Text>
-                            <TextInput style={styles.input} placeholder="e.g. Linear Equations" value={formData.topic} onChangeText={(text) => setFormData(prev => ({ ...prev, topic: text }))}/>
+                            <TextInput 
+                                style={styles.input} 
+                                placeholder="e.g. Linear Equations" 
+                                placeholderTextColor={COLORS.placeholder}
+                                value={formData.topic} 
+                                onChangeText={(text) => setFormData(prev => ({ ...prev, topic: text }))}
+                            />
 
                             {modalClassType === 'live' ? (
                                 <>
                                     <Text style={styles.label}>Meeting Link</Text>
-                                    <TextInput style={styles.input} placeholder="https://meet.google.com/xyz" value={formData.meet_link} onChangeText={(text) => setFormData(prev => ({ ...prev, meet_link: text }))}/>
+                                    <TextInput 
+                                        style={styles.input} 
+                                        placeholder="https://meet.google.com/xyz" 
+                                        placeholderTextColor={COLORS.placeholder}
+                                        value={formData.meet_link} 
+                                        onChangeText={(text) => setFormData(prev => ({ ...prev, meet_link: text }))}
+                                    />
                                 </>
                             ) : (
                                 <>
                                     <Text style={styles.label}>Video File</Text>
-                                    <TouchableOpacity style={styles.filePickerButton} onPress={handleSelectVideo} disabled={isEditing}>
-                                        <MaterialIcons name="cloud-upload" size={20} color={COLORS.blue} />
-                                        <Text style={styles.filePickerText} numberOfLines={1}>{selectedVideo ? selectedVideo.fileName : (isEditing ? 'Cannot change video' : 'Select Video File')}</Text>
+                                    {/* This section now allows editing/replacing video */}
+                                    <TouchableOpacity style={styles.filePickerButton} onPress={handleSelectVideo}>
+                                        <MaterialIcons name={selectedVideo ? "check-circle" : "cloud-upload"} size={20} color={COLORS.blue} />
+                                        <Text style={styles.filePickerText} numberOfLines={1}>
+                                            {selectedVideo ? selectedVideo.fileName : (isEditing ? 'Change Existing Video' : 'Select Video File')}
+                                        </Text>
                                     </TouchableOpacity>
+                                    {isEditing && !selectedVideo && <Text style={{fontSize:11, color: COLORS.textSub, marginTop: -10, marginBottom: 10, marginLeft: 5}}>Current video will be kept if you don't select a new one.</Text>}
                                 </>
                             )}
                             
                             <Text style={styles.label}>Description</Text>
-                            <TextInput style={[styles.input, {height: 80, textAlignVertical: 'top'}]} placeholder="Notes..." value={formData.description} onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))} multiline/>
+                            <TextInput 
+                                style={[styles.input, {height: 80, textAlignVertical: 'top'}]} 
+                                placeholder="Notes..." 
+                                placeholderTextColor={COLORS.placeholder}
+                                value={formData.description} 
+                                onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))} 
+                                multiline
+                            />
                             
                             <View style={styles.modalActions}>
-                                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setModalVisible(false)}><Text style={{color: '#333'}}>Cancel</Text></TouchableOpacity>
+                                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setModalVisible(false)}>
+                                    <Text style={{color: COLORS.textMain}}>Cancel</Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSave} disabled={isSaving}>
                                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
                                 </TouchableOpacity>
@@ -344,6 +413,7 @@ const OnlineClassScreen: React.FC = () => {
 
 const ClassCard = ({ classItem, onEdit, onDelete, onJoinOrWatch, userRole }) => {
     const isFutureClass = new Date(classItem.class_datetime) >= new Date();
+    // Logic for who can join: Admins/Teachers always, Students only if future/present
     const canJoin = (userRole === 'admin' || userRole === 'teacher') || (userRole === 'student' && isFutureClass);
 
     return (
@@ -391,11 +461,14 @@ const ClassCard = ({ classItem, onEdit, onDelete, onJoinOrWatch, userRole }) => 
 };
 
 const InfoRow: React.FC<{icon: string, text: string}> = ({ icon, text }) => (
-    <View style={styles.infoRow}><MaterialIcons name={icon} size={18} color="#555" style={styles.icon} /><Text style={styles.infoText} numberOfLines={2}>{text}</Text></View>
+    <View style={styles.infoRow}>
+        <MaterialIcons name={icon} size={18} color={COLORS.textSub} style={styles.icon} />
+        <Text style={styles.infoText} numberOfLines={2}>{text}</Text>
+    </View>
 );
 
 const styles = StyleSheet.create({ 
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }, 
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: COLORS.background }, 
     container: { flex: 1, backgroundColor: COLORS.background }, 
     listContentContainer: { paddingBottom: 20, paddingHorizontal: 15 }, 
     
@@ -418,7 +491,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: {
         backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
@@ -428,7 +501,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
     headerSubtitle: { fontSize: 13, color: COLORS.textSub },
     headerBtn: {
@@ -450,12 +523,12 @@ const styles = StyleSheet.create({
     tabButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.textSub },
     tabButtonTextActive: { color: COLORS.primary },
 
-    emptyText: { textAlign: 'center', marginTop: 30, fontSize: 16, color: '#999' }, 
+    emptyText: { textAlign: 'center', marginTop: 30, fontSize: 16, color: COLORS.textSub }, 
     
     // Card
-    card: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 }, 
+    card: { backgroundColor: COLORS.cardBg, borderRadius: 12, padding: 15, marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 }, 
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 10, marginBottom: 10 }, 
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain }, 
+    cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain, flexWrap: 'wrap' }, 
     cardSubtitle: { fontSize: 13, color: COLORS.textSub, marginTop: 4 }, 
     buttonGroup: { flexDirection: 'row', gap: 8 }, 
     iconButton: { padding: 6, backgroundColor: '#e0f2f1', borderRadius: 8 }, 
@@ -469,11 +542,11 @@ const styles = StyleSheet.create({
     
     // Modal
     modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }, 
-    modalContent: { backgroundColor: 'white', borderRadius: 12, padding: 20, width: '90%', maxHeight: '85%' }, 
-    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#333' }, 
-    label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 5, marginTop: 10 }, 
-    input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 8, marginBottom: 10, backgroundColor: '#f9f9f9', fontSize: 16, color: '#333' }, 
-    pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 10, backgroundColor: '#f9f9f9', justifyContent: 'center' }, 
+    modalContent: { backgroundColor: COLORS.cardBg, borderRadius: 12, padding: 20, width: '90%', maxHeight: '85%' }, 
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: COLORS.textMain }, 
+    label: { fontSize: 14, fontWeight: '600', color: COLORS.textSub, marginBottom: 5, marginTop: 10 }, 
+    input: { borderWidth: 1, borderColor: COLORS.border, padding: 10, borderRadius: 8, marginBottom: 10, backgroundColor: COLORS.inputBg, fontSize: 16, color: COLORS.textMain }, 
+    pickerContainer: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, marginBottom: 10, backgroundColor: COLORS.inputBg, justifyContent: 'center' }, 
     modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20 }, 
     modalButton: { paddingVertical: 12, paddingHorizontal: 25, borderRadius: 8, marginLeft: 10, alignItems: 'center' }, 
     cancelButton: { backgroundColor: '#e0e0e0' }, 

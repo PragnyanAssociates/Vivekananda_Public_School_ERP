@@ -5958,7 +5958,7 @@ app.put('/api/notifications/:notificationId/read', verifyToken, async (req, res)
 // ★★★ START: ONLINE CLASS MODULE API ROUTES (CORRECTED & FINAL) ★★★
 // ==========================================================
 
-// GET all online classes (NOW WITH FULL VIDEO URL)
+// GET all online classes
 app.get('/api/online-classes', verifyToken, async (req, res) => {
     try {
         let query = 'SELECT * FROM online_classes';
@@ -5996,12 +5996,11 @@ app.get('/api/online-classes', verifyToken, async (req, res) => {
 });
 
 
-// POST a new online class (HANDLES VIDEO FILE UPLOAD)
+// POST a new online class
 app.post('/api/online-classes', verifyToken, videoUpload.single('videoFile'), async (req, res) => {
     const { title, class_group, subject, teacher_id, class_datetime, meet_link, description, class_type, topic } = req.body;
-    const created_by = req.user.id; // This value will now be saved
+    const created_by = req.user.id;
 
-    // Validation
     if (!title || !class_group || !subject || !teacher_id || !class_datetime || !class_type) {
         return res.status(400).json({ message: 'Core fields are required.' });
     }
@@ -6026,7 +6025,6 @@ app.post('/api/online-classes', verifyToken, videoUpload.single('videoFile'), as
             return res.status(404).json({ message: 'Selected teacher not found.' });
         }
 
-        // MODIFIED: Added `created_by` to the query and parameters
         const query = `INSERT INTO online_classes (title, class_group, subject, teacher_id, teacher_name, class_datetime, meet_link, description, class_type, topic, video_url, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         await connection.query(query, [title, class_group, subject, teacher_id, teacher.full_name, formattedMysqlDatetime, meet_link || null, description || null, class_type, topic || null, video_url_path, created_by]);
 
@@ -6064,25 +6062,69 @@ app.post('/api/online-classes', verifyToken, videoUpload.single('videoFile'), as
 });
 
 
-// PUT (update) an existing class (Does not handle file change for simplicity)
-app.put('/api/online-classes/:id', verifyToken, async (req, res) => {
+// PUT (Update) - NOW HANDLES VIDEO REPLACEMENT
+app.put('/api/online-classes/:id', verifyToken, videoUpload.single('videoFile'), async (req, res) => {
     const { id } = req.params;
     const { title, meet_link, description, topic } = req.body;
+    
+    // We only update fields that are provided. 
+    // If a file is provided, we process it.
 
+    const connection = await db.getConnection();
     try {
-        const query = `UPDATE online_classes SET title = ?, meet_link = ?, description = ?, topic = ? WHERE id = ?`;
-        const [result] = await db.query(query, [title, meet_link || null, description || null, topic || null, id]);
+        await connection.beginTransaction();
 
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Class not found.' });
+        // 1. Check if class exists and get old video info
+        const [[existingClass]] = await connection.query('SELECT * FROM online_classes WHERE id = ?', [id]);
+        if (!existingClass) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Class not found.' });
+        }
+
+        let newVideoUrl = existingClass.video_url;
+
+        // 2. If a new file is uploaded, replace the old one
+        if (req.file) {
+            // Delete old file if it exists
+            if (existingClass.video_url) {
+                const oldFilename = path.basename(existingClass.video_url);
+                // Ensure the path is correct relative to your server root
+                const oldFilePath = path.join(__dirname, '../data/uploads', oldFilename); // ADJUST PATH IF NEEDED
+                
+                fs.unlink(oldFilePath, (err) => {
+                    if (err) console.log("Old video file not found or could not be deleted:", err.message);
+                    else console.log("Old video file deleted:", oldFilePath);
+                });
+            }
+            // Set new path
+            newVideoUrl = `/uploads/${req.file.filename}`;
+        }
+
+        // 3. Update Database
+        const query = `UPDATE online_classes SET title = ?, meet_link = ?, description = ?, topic = ?, video_url = ? WHERE id = ?`;
+        await connection.query(query, [
+            title || existingClass.title, 
+            meet_link || existingClass.meet_link, 
+            description || existingClass.description, 
+            topic || existingClass.topic, 
+            newVideoUrl, 
+            id
+        ]);
+
+        await connection.commit();
         res.status(200).json({ message: 'Class updated successfully!' });
+
     } catch (error) {
+        await connection.rollback();
         console.error(`PUT /api/online-classes/${id} Error:`, error);
         res.status(500).json({ message: 'Failed to update class.' });
+    } finally {
+        connection.release();
     }
 });
 
 
-// DELETE a class (Now also deletes the associated video file)
+// DELETE a class
 app.delete('/api/online-classes/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
@@ -6101,7 +6143,8 @@ app.delete('/api/online-classes/:id', verifyToken, async (req, res) => {
         
         if (classToDelete && classToDelete.video_url) {
             const filename = path.basename(classToDelete.video_url);
-            const filePath = path.join('/data/uploads', filename);
+            // Ensure path matches your server structure
+            const filePath = path.join(__dirname, '../data/uploads', filename); 
             
             fs.unlink(filePath, (err) => {
                 if (err) console.error("Error deleting video file:", err);
@@ -6120,6 +6163,7 @@ app.delete('/api/online-classes/:id', verifyToken, async (req, res) => {
     }
 });
 
+// Helper Routes
 app.get('/api/student-classes', verifyToken, async (req, res) => {
     try {
         const query = "SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group ASC";
@@ -6127,8 +6171,7 @@ app.get('/api/student-classes', verifyToken, async (req, res) => {
         const classes = results.map(item => item.class_group);
         res.status(200).json(classes);
     } catch (error) {
-        console.error("GET /api/student-classes Error:", error);
-        res.status(500).json({ message: 'Could not fetch student classes.' });
+        res.status(500).json({ message: 'Error fetching classes.' });
     }
 });
 app.get('/api/subjects-for-class/:classGroup', async (req, res) => {
@@ -6139,27 +6182,20 @@ app.get('/api/subjects-for-class/:classGroup', async (req, res) => {
         const subjects = results.map(item => item.subject_name);
         res.status(200).json(subjects);
     } catch (error) {
-        console.error("GET /api/subjects-for-class Error:", error);
-        res.status(500).json({ message: 'Could not fetch subjects for the selected class.' });
+        res.status(500).json({ message: 'Error fetching subjects.' });
     }
 });
 app.get('/api/teachers-for-class/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
     try {
-        const query = `
-            SELECT DISTINCT u.id, u.full_name 
-            FROM users u
-            JOIN timetables t ON u.id = t.teacher_id
-            WHERE t.class_group = ? AND u.role IN ('teacher', 'admin')
-            ORDER BY u.full_name ASC
-        `;
+        const query = `SELECT DISTINCT u.id, u.full_name FROM users u JOIN timetables t ON u.id = t.teacher_id WHERE t.class_group = ? AND u.role IN ('teacher', 'admin') ORDER BY u.full_name ASC`;
         const [teachers] = await db.query(query, [classGroup]);
         res.status(200).json(teachers);
     } catch (error) {
-        console.error("GET /api/teachers-for-class Error:", error);
-        res.status(500).json({ message: 'Could not fetch teachers for the selected class.' });
+        res.status(500).json({ message: 'Error fetching teachers.' });
     }
 });
+
 app.get('/api/all-teachers-and-admins', verifyToken, async (req, res) => {
     try {
         const query = "SELECT id, full_name FROM users WHERE role IN ('teacher', 'admin') ORDER BY full_name ASC";
