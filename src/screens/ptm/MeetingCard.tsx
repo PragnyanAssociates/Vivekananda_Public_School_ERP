@@ -2,8 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, useColorScheme, Dimensions } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-const { width } = Dimensions.get('window');
-
 export interface Meeting {
   id: number;
   meeting_datetime: string;
@@ -24,22 +22,19 @@ interface MeetingCardProps {
   onJoin?: (link: string) => void; 
 }
 
-// --- TIMEZONE FIX ---
+// --- DISPLAY FORMATTER ---
 const formatMeetingDate = (isoDate: string): string => {
   if (!isoDate) return 'Invalid Date';
-  const date = new Date(isoDate);
   
-  // NOTE: Removed "timeZone: 'UTC'". 
-  // By removing it, the app will automatically convert the saved UTC time 
-  // to the user's Local Time (IST) based on their phone settings.
+  // Backend now returns "YYYY-MM-DDTHH:mm:ss" string.
+  // We ensure "T" is present so new Date() treats it as ISO-8601 Local Time (Node/Browser standard).
+  // This avoids any timezone offset calculation.
+  const dateStr = isoDate.includes("T") ? isoDate : isoDate.replace(" ", "T");
+  const date = new Date(dateStr);
+  
   return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    // timeZone: 'UTC' <--- REMOVED TO ALLOW LOCAL CONVERSION
+    year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true
   }).format(date);
 };
 
@@ -47,12 +42,11 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
 
-  // Dynamic colors for Dark/Light mode
   const theme = {
     cardBg: isDark ? '#1E1E1E' : '#ffffff',
     textMain: isDark ? '#E0E0E0' : '#2d3748',
     textSub: isDark ? '#B0BEC5' : '#718096',
-    icon: isDark ? '#80CBC4' : '#008080', // Teal tint
+    icon: isDark ? '#80CBC4' : '#008080', 
     noteBg: isDark ? '#2C2C2C' : '#f7f9fc',
     noteBorder: isDark ? '#424242' : '#e2e8f0',
     borderColor: isDark ? '#333' : '#e2e8f0',
@@ -126,17 +120,7 @@ export const MeetingCard = ({ meeting, isAdmin, onEdit, onDelete, onJoin }: Meet
 };
 
 const styles = StyleSheet.create({
-    cardContainer: {
-        borderRadius: 12,
-        padding: 16,
-        width: '95%', // Responsive Width
-        alignSelf: 'center',
-        marginVertical: 8,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 3,
-    },
+    cardContainer: { borderRadius: 12, padding: 16, width: '95%', alignSelf: 'center', marginVertical: 8, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 3 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 5 },
     cardActions: { flexDirection: 'row', gap: 6 },
@@ -161,14 +145,6 @@ const styles = StyleSheet.create({
     notesTitle: { fontSize: 12, fontWeight: '600', marginBottom: 5 },
     notesBox: { borderWidth: 1, borderRadius: 8, padding: 10 },
     notesText: { fontSize: 14, lineHeight: 20 },
-    joinButton: {
-      flexDirection: 'row',
-      backgroundColor: '#5a67d8',
-      paddingVertical: 10,
-      borderRadius: 8,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: 15, 
-    },
+    joinButton: { flexDirection: 'row', backgroundColor: '#5a67d8', paddingVertical: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 15 },
     joinButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 8, fontSize: 14 }
 });

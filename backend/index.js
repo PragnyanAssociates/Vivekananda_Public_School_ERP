@@ -2055,14 +2055,19 @@ app.put('/api/admin/donor-query/status', async (req, res) => {
 // --- PARENT-TEACHER MEETING (PTM) API ROUTES ---
 // ==========================================================
 
-// GET meetings (role-aware filtering)
+// GET meetings (FIXED: Uses DATE_FORMAT to lock the time)
 app.get('/api/ptm', verifyToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
     try {
+        // ★★★ THE FIX IS HERE ★★★
+        // We use DATE_FORMAT to force the output to be a string like "2024-02-04T12:00:00"
+        // This prevents the Node.js server from converting it to UTC or shifting it by 30 mins.
         const columnsToSelect = `
-            id, meeting_datetime, teacher_id, teacher_name, class_group, 
+            id, 
+            DATE_FORMAT(meeting_datetime, '%Y-%m-%dT%H:%i:%s') as meeting_datetime, 
+            teacher_id, teacher_name, class_group, 
             subject_focus, status, notes, meeting_link
         `;
 
@@ -2099,7 +2104,7 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// GET list of all teachers and admins
+// GET teachers
 app.get('/api/ptm/teachers', verifyToken, async (req, res) => {
     try {
         const [users] = await db.query("SELECT id, full_name FROM users WHERE role IN ('teacher', 'admin') ORDER BY full_name ASC");
@@ -2110,7 +2115,7 @@ app.get('/api/ptm/teachers', verifyToken, async (req, res) => {
     }
 });
 
-// GET unique classes
+// GET classes
 app.get('/api/ptm/classes', verifyToken, async (req, res) => {
     try {
         const query = "SELECT DISTINCT class_group FROM users WHERE class_group IS NOT NULL AND class_group != '' ORDER BY class_group ASC";
@@ -2123,12 +2128,10 @@ app.get('/api/ptm/classes', verifyToken, async (req, res) => {
     }
 });
 
-
-// POST a new meeting (FIXED FOR 500 ERROR)
+// POST new meeting
 app.post('/api/ptm', verifyToken, async (req, res) => {
     const { meeting_datetime, teacher_id, class_group, subject_focus, notes, meeting_link } = req.body; 
     
-    // Basic Validation
     if (!meeting_datetime || !teacher_id || !subject_focus || !class_group) {
         return res.status(400).json({ message: 'Meeting Date, Teacher, Class, and Subject are required.' });
     }
@@ -2143,11 +2146,11 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
             return res.status(404).json({ message: 'Selected teacher not found.' });
         }
         
-        // Insert query
+        // We save exactly what the frontend sends (the SQL formatted string)
         const query = `INSERT INTO ptm_meetings (meeting_datetime, teacher_id, teacher_name, class_group, subject_focus, notes, meeting_link) VALUES (?, ?, ?, ?, ?, ?, ?)`;
         await connection.query(query, [meeting_datetime, teacher_id, teacher.full_name, class_group, subject_focus, notes || null, meeting_link || null]);
 
-        // --- SIMPLIFIED NOTIFICATION LOGIC ---
+        // --- Notification Logic ---
         let recipientQuery = "";
         let queryParams = [];
 
@@ -2158,44 +2161,30 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
         } else if (class_group === 'Admins') {
             recipientQuery = "SELECT id FROM users WHERE role = 'admin'";
         } else {
-            // Specific Class
             recipientQuery = "SELECT id FROM users WHERE role = 'student' AND class_group = ?";
             queryParams = [class_group];
         }
 
-        // Fetch recipients safely
         const [users] = await connection.query(recipientQuery, queryParams);
         let recipientIds = users.map(u => u.id);
         
-        // Add the specific teacher involved
-        if (teacher_id) {
-            recipientIds.push(parseInt(teacher_id));
-        }
+        if (teacher_id) recipientIds.push(parseInt(teacher_id));
 
-        // Deduplicate
         const allRecipientIds = [...new Set(recipientIds)]; 
 
         if (allRecipientIds.length > 0) {
             const senderName = req.user.full_name || "School Administration";
             const displayClass = class_group === 'All' ? 'all classes' : class_group;
             
-            // Format Date for Notification Text
-            const dateObj = new Date(meeting_datetime);
+            // Safe Date Formatting for Notification text
+            const dateObj = new Date(meeting_datetime.replace(" ", "T")); // Ensure ISO format for parser
             const eventDate = isNaN(dateObj.getTime()) ? meeting_datetime : dateObj.toLocaleDateString();
 
             const notificationTitle = `New PTM: ${class_group === 'All' ? 'All Classes' : class_group}`;
             const notificationMessage = `A PTM for ${displayClass} regarding "${subject_focus}" with ${teacher.full_name} has been scheduled for ${eventDate}.`;
 
-            // Ensure createBulkNotifications exists in your project scope, or this catches the error
             if (typeof createBulkNotifications === 'function') {
-                await createBulkNotifications(
-                    connection,
-                    allRecipientIds,
-                    senderName,
-                    notificationTitle,
-                    notificationMessage,
-                    '/ptm'
-                );
+                await createBulkNotifications(connection, allRecipientIds, senderName, notificationTitle, notificationMessage, '/ptm');
             }
         }
         
@@ -2211,21 +2200,17 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// PUT (update) meeting
+// PUT update meeting
 app.put('/api/ptm/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { status, notes, meeting_link } = req.body;
 
-    if (status === undefined) {
-         return res.status(400).json({ message: 'Status must be provided.' });
-    }
+    if (status === undefined) return res.status(400).json({ message: 'Status must be provided.' });
 
     try {
         const query = 'UPDATE ptm_meetings SET status = ?, notes = ?, meeting_link = ? WHERE id = ?';
         const [result] = await db.query(query, [status, notes || null, meeting_link || null, id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Meeting not found.' });
-        }
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Meeting not found.' });
         res.status(200).json({ message: 'Meeting updated successfully!' });
     } catch (error) {
         console.error("PUT /api/ptm/:id Error:", error);
@@ -2239,9 +2224,7 @@ app.delete('/api/ptm/:id', verifyToken, async (req, res) => {
     try {
         const query = 'DELETE FROM ptm_meetings WHERE id = ?';
         const [result] = await db.query(query, [id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Meeting not found.' });
-        }
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Meeting not found.' });
         res.status(200).json({ message: 'Meeting deleted successfully.' });
     } catch (error) {
         console.error("DELETE /api/ptm/:id Error:", error);
