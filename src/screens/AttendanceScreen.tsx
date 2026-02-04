@@ -12,11 +12,12 @@ import {
   TextInput,
   UIManager,
   LayoutAnimation,
-  Dimensions
+  Dimensions,
+  StatusBar
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; // Added for consistent icons
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { useNavigation } from '@react-navigation/native';
@@ -28,6 +29,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // --- Constants ---
+const { width } = Dimensions.get('window');
 const PRIMARY_COLOR = '#008080'; // Teal
 const BACKGROUND_COLOR = '#F2F5F8';
 const CARD_BG = '#FFFFFF';
@@ -39,7 +41,6 @@ const RED = '#E53935';
 const BLUE = '#1E88E5';
 const YELLOW = '#FDD835';
 const WHITE = '#FFFFFF';
-const ORANGE = '#FB8C00';
 
 const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
@@ -55,10 +56,11 @@ const formatDate = (date) => {
 
 const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
+// --- Responsive Summary Card ---
 const SummaryCard = ({ label, value, color, delay }) => (
     <Animatable.View animation="zoomIn" duration={500} delay={delay} style={styles.summaryBox}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
-        <Text style={styles.summaryLabel}>{label}</Text>
+        <Text style={styles.summaryLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </Animatable.View>
 );
 
@@ -94,9 +96,8 @@ const AttendanceScreen = ({ route }) => {
   }
 };
 
-// --- MODIFIED: Generic Student History Component ---
+// --- Student View (UPDATED with No Record Animation) ---
 const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
-    // UPDATED: Default set to 'daily'
     const [viewMode, setViewMode] = useState('daily');
     const [data, setData] = useState({ summary: {}, history: [] });
     const [isLoading, setIsLoading] = useState(true);
@@ -126,8 +127,8 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
 
             const response = await apiClient.get(url);
             setData(response.data);
-        } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.message || 'Could not load attendance history.');
+        } catch (error) {
+            // Silent catch
         } finally {
             setIsLoading(false);
         }
@@ -137,19 +138,9 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
         if (viewMode !== 'custom') fetchHistory();
     }, [studentId, viewMode, selectedDate]);
 
-    const onMainDateChange = (event: any, date?: Date) => {
+    const onMainDateChange = (event, date) => {
         setShowMainPicker(Platform.OS === 'ios');
         if (date) setSelectedDate(date);
-    };
-
-    const onFromDateChange = (event: any, date?: Date) => {
-        setShowFromPicker(Platform.OS === 'ios');
-        if (date) setFromDate(date);
-    };
-
-    const onToDateChange = (event: any, date?: Date) => {
-        setShowToPicker(Platform.OS === 'ios');
-        if (date) setToDate(date);
     };
 
     const percentage = useMemo(() => {
@@ -157,15 +148,18 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
         return ((data.summary.present_days / data.summary.total_days) * 100).toFixed(1);
     }, [data.summary]);
 
-    // Subtitle Logic
     let subTitle = '';
     if (viewMode === 'daily') subTitle = `Date: ${formatDate(selectedDate)}`;
     else if (viewMode === 'monthly') subTitle = selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     else if (viewMode === 'yearly') subTitle = `Year: ${selectedDate.getFullYear()}`;
     else subTitle = 'Custom Range';
 
+    // CHECK FOR NO RECORD CONDITION (Same as Teacher View)
+    const isDailyNoRecord = viewMode === 'daily' && (!data.history || data.history.length === 0);
+
     return (
         <SafeAreaView style={styles.container}>
+            <StatusBar backgroundColor={BACKGROUND_COLOR} barStyle="dark-content" />
             
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
@@ -184,7 +178,6 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                     </View>
                 </View>
                 
-                {/* Date Picker Button in Header */}
                 {viewMode !== 'custom' && (
                     <TouchableOpacity style={styles.headerActionBtn} onPress={() => setShowMainPicker(true)}>
                         <MaterialIcons name="calendar-today" size={20} color="#008080" />
@@ -211,12 +204,10 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={styles.rangeContainer}>
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowFromPicker(true)}>
-                        <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
                         <Text style={styles.dateInputText}>{formatDate(fromDate)}</Text>
                     </TouchableOpacity>
                     <Icon name="arrow-right" size={20} color={TEXT_COLOR_MEDIUM} />
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowToPicker(true)}>
-                        <Icon name="calendar-today" size={18} color={TEXT_COLOR_MEDIUM} style={{marginRight:5}}/>
                         <Text style={styles.dateInputText}>{formatDate(toDate)}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.goButton} onPress={fetchHistory}>
@@ -225,26 +216,39 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                 </Animatable.View>
             )}
 
-            {/* Pickers */}
             {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
-            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={onFromDateChange} />}
-            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={onToDateChange} />}
+            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
+            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
 
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} /> : (
-                <>
-                    <View style={styles.summaryContainer}>
-                        <SummaryCard label="Overall" value={`${percentage}%`} color={BLUE} delay={100} />
-                        <SummaryCard label="Present" value={data.summary.present_days || 0} color={GREEN} delay={200} />
-                        <SummaryCard label="Absent" value={data.summary.absent_days || 0} color={RED} delay={300} />
-                    </View>
-                    <FlatList
-                        data={data.history}
-                        keyExtractor={(item) => item.attendance_date}
-                        renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} />}
-                        ListEmptyComponent={<Text style={styles.noDataText}>No records found.</Text>}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    />
-                </>
+                <FlatList
+                    data={data.history}
+                    keyExtractor={(item) => item.attendance_date}
+                    ListHeaderComponent={
+                        <>
+                            {isDailyNoRecord ? (
+                                <Animatable.View animation="zoomIn" duration={400} style={styles.noRecordCard}>
+                                    <Icon name="help-circle-outline" size={70} color="#B0BEC5" style={{marginBottom: 10}} />
+                                    <Text style={styles.noRecordTitle}>NO RECORD</Text>
+                                    <Text style={styles.noRecordDate}>{formatDate(selectedDate)}</Text>
+                                </Animatable.View>
+                            ) : (
+                                <View style={styles.summaryContainer}>
+                                    <SummaryCard label="Overall" value={`${percentage}%`} color={BLUE} delay={100} />
+                                    <SummaryCard label="Present" value={data.summary.present_days || 0} color={GREEN} delay={200} />
+                                    <SummaryCard label="Absent" value={data.summary.absent_days || 0} color={RED} delay={300} />
+                                </View>
+                            )}
+                        </>
+                    }
+                    renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} />}
+                    ListEmptyComponent={
+                        <View style={{ marginTop: 20, alignItems: 'center' }}>
+                             <Text style={styles.noDataText}>No records found.</Text>
+                        </View>
+                    }
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                />
             )}
         </SafeAreaView>
     );
@@ -271,35 +275,45 @@ const GenericSummaryView = ({
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredListData = useMemo(() => {
+        if (!listData) return [];
         if (!searchQuery) return listData;
         return listData.filter(student => student.full_name.toLowerCase().includes(searchQuery.toLowerCase()));
     }, [listData, searchQuery]);
 
-    const handleMainDateChange = (event, date) => {
+    const handleDateChange = (event, date) => {
         setShowMainPicker(Platform.OS === 'ios');
-        if (date && onDateChange) onDateChange(date);
+        if (date) onDateChange(date);
     };
 
-    const handleFromDateChange = (event, date) => {
-        setShowFromPicker(Platform.OS === 'ios');
-        if (date && setFromDate) setFromDate(date);
-    };
+    const valOverall = viewMode === 'daily' 
+        ? `${Number(summary.overall_percentage ?? 0).toFixed(1)}%` 
+        : `${Number(summary.overall_percentage ?? 0).toFixed(1)}%`;
+    
+    const valGreen = viewMode === 'daily' 
+        ? (summary.students_present ?? 0) 
+        : `${Number(summary.avg_daily_attendance ?? 0).toFixed(1)}%`;
+        
+    const labelGreen = viewMode === 'daily' ? 'Present' : 'Avg Daily';
 
-    const handleToDateChange = (event, date) => {
-        setShowToPicker(Platform.OS === 'ios');
-        if (date && setToDate) setToDate(date);
-    };
+    const valRed = viewMode === 'daily' 
+        ? (summary.students_absent ?? 0) 
+        : (summary.students_below_threshold ?? 0);
+        
+    const labelRed = viewMode === 'daily' ? 'Absent' : '< 75%';
 
-    // Subtitle
     let subTitle = '';
     if (viewMode === 'daily') subTitle = `Date: ${formatDate(selectedDate)}`;
     else if (viewMode === 'monthly') subTitle = selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     else if (viewMode === 'yearly') subTitle = `Year: ${selectedDate.getFullYear()}`;
     else subTitle = 'Custom Range';
 
+    // CHECK FOR NO RECORD CONDITION IN DAILY MODE
+    const isDailyNoRecord = viewMode === 'daily' && (!listData || listData.length === 0);
+
     return (
         <SafeAreaView style={styles.container}>
-            
+            <StatusBar backgroundColor={BACKGROUND_COLOR} barStyle="dark-content" />
+
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
@@ -318,7 +332,7 @@ const GenericSummaryView = ({
                 )}
             </View>
 
-            {/* Pickers & Search */}
+            {/* Pickers & Filters */}
             <View style={styles.pickerContainer}>
                 <View style={styles.pickerWrapper}>{picker1}</View>
                 {picker2 && <View style={styles.pickerWrapper}>{picker2}</View>} 
@@ -354,9 +368,9 @@ const GenericSummaryView = ({
                 </Animatable.View>
             )}
 
-            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={handleMainDateChange} />}
-            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={handleFromDateChange} />}
-            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={handleToDateChange} />}
+            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={handleDateChange} />}
+            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
+            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
 
             {isLoading ? <ActivityIndicator size="large" color={PRIMARY_COLOR} style={styles.loaderContainer} /> : (
                 <FlatList
@@ -364,24 +378,35 @@ const GenericSummaryView = ({
                     keyExtractor={(item) => item.student_id.toString()}
                     ListHeaderComponent={
                         <>
-                            <View style={styles.summaryContainer}>
-                                <SummaryCard label="Attendance %" value={`${Number(summary.overall_percentage ?? 0).toFixed(1)}%`} color={BLUE} delay={100} />
-                                <SummaryCard label={viewMode === 'daily' ? 'Present' : 'Avg Daily'} value={viewMode === 'daily' ? (summary.students_present ?? 0) : `${Number(summary.avg_daily_attendance ?? 0).toFixed(1)}%`} color={GREEN} delay={200} />
-                                <SummaryCard label={viewMode === 'daily' ? 'Absent' : '< 75%'} value={viewMode === 'daily' ? (summary.students_absent ?? 0) : (summary.students_below_threshold ?? 0)} color={RED} delay={300} />
-                            </View>
-                            <View style={styles.searchBarContainer}>
-                                <Icon name="magnify" size={20} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
-                                <TextInput
-                                    style={styles.searchBar}
-                                    placeholder="Search student..."
-                                    value={searchQuery}
-                                    onChangeText={(text) => {
-                                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                                        setSearchQuery(text);
-                                    }}
-                                    placeholderTextColor="#999"
-                                />
-                            </View>
+                            {isDailyNoRecord ? (
+                                <Animatable.View animation="zoomIn" duration={400} style={styles.noRecordCard}>
+                                    <Icon name="help-circle-outline" size={70} color="#B0BEC5" style={{marginBottom: 10}} />
+                                    <Text style={styles.noRecordTitle}>NO RECORD</Text>
+                                    <Text style={styles.noRecordDate}>{formatDate(selectedDate)}</Text>
+                                </Animatable.View>
+                            ) : (
+                                <>
+                                    <View style={styles.summaryContainer}>
+                                        <SummaryCard label="Attendance %" value={valOverall} color={BLUE} delay={100} />
+                                        <SummaryCard label={labelGreen} value={valGreen} color={GREEN} delay={200} />
+                                        <SummaryCard label={labelRed} value={valRed} color={RED} delay={300} />
+                                    </View>
+                                    
+                                    <View style={styles.searchBarContainer}>
+                                        <Icon name="magnify" size={20} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
+                                        <TextInput
+                                            style={styles.searchBar}
+                                            placeholder="Search student..."
+                                            value={searchQuery}
+                                            onChangeText={(text) => {
+                                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                                setSearchQuery(text);
+                                            }}
+                                            placeholderTextColor="#999"
+                                        />
+                                    </View>
+                                </>
+                            )}
                         </>
                     }
                     renderItem={({ item, index }) => {
@@ -406,7 +431,9 @@ const GenericSummaryView = ({
                         );
                     }}
                     ListEmptyComponent={
-                        <Text style={styles.noDataText}>No data found.</Text>
+                        <View style={{ marginTop: 20, alignItems: 'center' }}>
+                             <Text style={styles.noDataText}>No records found.</Text>
+                        </View>
                     }
                     contentContainerStyle={{ paddingBottom: 20 }}
                 />
@@ -420,9 +447,8 @@ const TeacherSummaryView = ({ teacher }) => {
     const [assignments, setAssignments] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
-    const [summaryData, setSummaryData] = useState(null);
+    const [summaryData, setSummaryData] = useState(null); 
     const [isLoading, setIsLoading] = useState(true);
-    // UPDATED: Default set to 'daily'
     const [viewMode, setViewMode] = useState('daily');
     const [selectedDate, setSelectedDate] = useState(new Date());
     
@@ -442,7 +468,6 @@ const TeacherSummaryView = ({ teacher }) => {
                     setIsLoading(false);
                 }
             } catch (error) {
-                Alert.alert('Error', 'Could not fetch assignments.');
                 setIsLoading(false);
             }
         };
@@ -451,7 +476,7 @@ const TeacherSummaryView = ({ teacher }) => {
 
     const fetchSummary = async () => {
         if (!teacher?.id || !selectedClass || !selectedSubject) {
-            setSummaryData(null);
+            setSummaryData({ overallSummary: {}, studentDetails: [] });
             return;
         }
         setIsLoading(true);
@@ -465,8 +490,7 @@ const TeacherSummaryView = ({ teacher }) => {
             const response = await apiClient.get(url);
             setSummaryData(response.data);
         } catch (error) {
-            Alert.alert('Error', 'Could not retrieve data.');
-            setSummaryData(null);
+            setSummaryData({ overallSummary: {}, studentDetails: [] });
         } finally {
             setIsLoading(false);
         }
@@ -487,13 +511,13 @@ const TeacherSummaryView = ({ teacher }) => {
 
     const picker1 = (
         <Picker selectedValue={selectedClass} onValueChange={handleClassChange} enabled={uniqueClasses.length > 0} style={styles.picker}>
-            {uniqueClasses.length > 0 ? uniqueClasses.map(c => <Picker.Item key={c} label={c} value={c} />) : <Picker.Item label="No classes..." value="" enabled={false} />}
+            {uniqueClasses.length > 0 ? uniqueClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />) : <Picker.Item label="No classes" value="" enabled={false} />}
         </Picker>
     );
 
     const picker2 = (
         <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} enabled={subjectsForSelectedClass.length > 0} style={styles.picker}>
-             {subjectsForSelectedClass.length > 0 ? subjectsForSelectedClass.map(s => <Picker.Item key={s} label={s} value={s} />) : <Picker.Item label="No subjects..." value="" enabled={false} />}
+             {subjectsForSelectedClass.length > 0 ? subjectsForSelectedClass.map(s => <Picker.Item key={s} label={s} value={s} style={{fontSize: 14}} />) : <Picker.Item label="No subjects" value="" enabled={false} />}
         </Picker>
     );
 
@@ -520,7 +544,6 @@ const AdminAttendanceView = () => {
   const [selectedClass, setSelectedClass] = useState(CLASS_GROUPS[0]);
   const [summaryData, setSummaryData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  // UPDATED: Default set to 'daily'
   const [viewMode, setViewMode] = useState('daily');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -541,8 +564,7 @@ const AdminAttendanceView = () => {
         const response = await apiClient.get(url);
         setSummaryData(response.data);
       } catch (error) {
-        Alert.alert('Error', 'Could not fetch summary.');
-        setSummaryData(null);
+        setSummaryData({ overallSummary: {}, studentDetails: [] });
       } finally {
         setIsLoading(false);
       }
@@ -558,7 +580,7 @@ const AdminAttendanceView = () => {
 
   const picker1 = (
     <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
-        {CLASS_GROUPS.map(c => <Picker.Item key={c} label={c} value={c} />)}
+        {CLASS_GROUPS.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
     </Picker>
   );
 
@@ -716,43 +738,69 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BACKGROUND_COLOR },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: BACKGROUND_COLOR },
-  noDataText: { textAlign: 'center', marginTop: 20, color: TEXT_COLOR_MEDIUM, fontSize: 16 },
+  container: { 
+      flex: 1, 
+      backgroundColor: BACKGROUND_COLOR 
+  },
+  loaderContainer: { 
+      flex: 1, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      backgroundColor: BACKGROUND_COLOR 
+  },
+  noDataText: { 
+      textAlign: 'center', 
+      marginTop: 20, 
+      color: TEXT_COLOR_MEDIUM, 
+      fontSize: 16 
+  },
   
   // --- HEADER CARD STYLES ---
   headerCard: {
       backgroundColor: CARD_BG,
       paddingHorizontal: 15,
       paddingVertical: 12,
-      width: '96%', 
+      width: '95%', 
       alignSelf: 'center',
-      marginTop: 15,
+      marginTop: 10,
       marginBottom: 10,
       borderRadius: 12,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      elevation: 3,
+      elevation: 2,
       shadowColor: '#000', 
       shadowOpacity: 0.1, 
-      shadowRadius: 4, 
-      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 3, 
+      shadowOffset: { width: 0, height: 1 },
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerLeft: { 
+      flexDirection: 'row', 
+      alignItems: 'center',
+      flex: 1 
+  },
   headerIconContainer: {
       backgroundColor: '#E0F2F1', // Teal bg
-      borderRadius: 30,
+      borderRadius: 25,
       width: 45,
       height: 45,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: 10,
   },
-  headerTextContainer: { justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK },
-  headerSubtitle: { fontSize: 13, color: TEXT_COLOR_MEDIUM },
-  headerSubtitleSmall: { fontSize: 12, color: TEXT_COLOR_MEDIUM, fontWeight: '500' },
+  headerTextContainer: { 
+      justifyContent: 'center',
+      flex: 1
+  },
+  headerTitle: { 
+      fontSize: 18, 
+      fontWeight: 'bold', 
+      color: TEXT_COLOR_DARK 
+  },
+  headerSubtitle: { 
+      fontSize: 12, 
+      color: TEXT_COLOR_MEDIUM 
+  },
   headerActionBtn: {
       padding: 8,
       backgroundColor: '#f0fdfa',
@@ -762,57 +810,279 @@ const styles = StyleSheet.create({
   },
 
   // Pickers & Filters
-  pickerContainer: { flexDirection: 'row', paddingHorizontal: 15, marginBottom: 5, gap: 10 },
-  pickerWrapper: { flex: 1, borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 8, backgroundColor: '#FFF', height: 45, justifyContent: 'center' },
-  picker: { width: '100%', color: TEXT_COLOR_DARK },
+  pickerContainer: { 
+      flexDirection: 'row', 
+      paddingHorizontal: '2.5%', 
+      marginBottom: 5, 
+      width: '100%',
+      justifyContent: 'space-between'
+  },
+  pickerWrapper: { 
+      flex: 1, 
+      borderWidth: 1, 
+      borderColor: BORDER_COLOR, 
+      borderRadius: 8, 
+      backgroundColor: '#FFF', 
+      height: 45, 
+      justifyContent: 'center',
+      marginHorizontal: 2 
+  },
+  picker: { 
+      width: '100%', 
+      color: TEXT_COLOR_DARK 
+  },
   
   // Summary Cards
-  summaryContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 15, marginHorizontal: 15, marginBottom: 10, backgroundColor: CARD_BG, borderRadius: 12, elevation: 2 },
-  summaryBox: { alignItems: 'center', flex: 1 },
-  summaryValue: { fontSize: 18, fontWeight: 'bold' },
-  summaryLabel: { fontSize: 11, color: TEXT_COLOR_MEDIUM, marginTop: 4, fontWeight: '500', textAlign: 'center' },
+  summaryContainer: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      paddingVertical: 15, 
+      width: '95%',
+      alignSelf: 'center',
+      marginBottom: 10, 
+      backgroundColor: CARD_BG, 
+      borderRadius: 12, 
+      elevation: 2,
+      paddingHorizontal: 5
+  },
+  summaryBox: { 
+      alignItems: 'center', 
+      flex: 1,
+      paddingHorizontal: 2
+  },
+  summaryValue: { 
+      fontSize: 18, 
+      fontWeight: 'bold' 
+  },
+  summaryLabel: { 
+      fontSize: 11, 
+      color: TEXT_COLOR_MEDIUM, 
+      marginTop: 4, 
+      fontWeight: '500', 
+      textAlign: 'center' 
+  },
   
   // Search Bar
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, marginHorizontal: 15, marginBottom: 10, borderRadius: 8, borderWidth: 1, borderColor: BORDER_COLOR, paddingHorizontal: 10, height: 45 },
-  searchBar: { flex: 1, fontSize: 14, color: TEXT_COLOR_DARK },
-  searchIcon: { marginRight: 8 },
+  searchBarContainer: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: CARD_BG, 
+      width: '95%',
+      alignSelf: 'center',
+      marginBottom: 10, 
+      borderRadius: 8, 
+      borderWidth: 1, 
+      borderColor: BORDER_COLOR, 
+      paddingHorizontal: 10, 
+      height: 45 
+  },
+  searchBar: { 
+      flex: 1, 
+      fontSize: 14, 
+      color: TEXT_COLOR_DARK 
+  },
+  searchIcon: { 
+      marginRight: 8 
+  },
 
   // List Rows
-  summaryStudentRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, padding: 15, marginHorizontal: 15, marginVertical: 5, borderRadius: 10, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
-  studentName: { fontSize: 15, color: TEXT_COLOR_DARK, fontWeight: '600' },
-  studentDetailText: { fontSize: 12, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
-  percentageBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 1 },
-  percentageText: { fontSize: 12, fontWeight: 'bold' },
+  summaryStudentRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: CARD_BG, 
+      padding: 15, 
+      width: '95%',
+      alignSelf: 'center',
+      marginVertical: 5, 
+      borderRadius: 10, 
+      elevation: 1 
+  },
+  studentName: { 
+      fontSize: 15, 
+      color: TEXT_COLOR_DARK, 
+      fontWeight: '600' 
+  },
+  studentDetailText: { 
+      fontSize: 12, 
+      color: TEXT_COLOR_MEDIUM, 
+      marginTop: 2 
+  },
+  percentageBadge: { 
+      paddingHorizontal: 8, 
+      paddingVertical: 2, 
+      borderRadius: 12, 
+      borderWidth: 1,
+      minWidth: 50,
+      alignItems: 'center'
+  },
+  percentageText: { 
+      fontSize: 12, 
+      fontWeight: 'bold' 
+  },
   
   // Toggles
-  toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 5, marginBottom: 10 },
-  toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 4, backgroundColor: '#E0E0E0' },
-  toggleButtonActive: { backgroundColor: PRIMARY_COLOR },
-  toggleButtonText: { color: TEXT_COLOR_DARK, fontWeight: '600', fontSize: 12 },
-  toggleButtonTextActive: { color: WHITE },
-  calendarButton: { padding: 5, marginLeft: 5 },
+  toggleContainer: { 
+      flexDirection: 'row', 
+      justifyContent: 'center', 
+      paddingVertical: 5, 
+      marginBottom: 10,
+      flexWrap: 'wrap'
+  },
+  toggleButton: { 
+      paddingVertical: 6, 
+      paddingHorizontal: 12, 
+      borderRadius: 20, 
+      marginHorizontal: 3,
+      marginVertical: 2, 
+      backgroundColor: '#E0E0E0' 
+  },
+  toggleButtonActive: { 
+      backgroundColor: PRIMARY_COLOR 
+  },
+  toggleButtonText: { 
+      color: TEXT_COLOR_DARK, 
+      fontWeight: '600', 
+      fontSize: 12 
+  },
+  toggleButtonTextActive: { 
+      color: WHITE 
+  },
   
   // Range
-  rangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 10 },
-  dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 8, borderRadius: 6, marginHorizontal: 5, borderWidth: 1, borderColor: BORDER_COLOR, justifyContent: 'center' },
-  dateInputText: { color: TEXT_COLOR_DARK, fontSize: 12, fontWeight: '500' },
-  goButton: { backgroundColor: GREEN, paddingVertical: 8, paddingHorizontal: 15, borderRadius: 6, marginLeft: 5 },
-  goButtonText: { color: WHITE, fontWeight: 'bold', fontSize: 12 },
+  rangeContainer: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      width: '95%',
+      alignSelf: 'center',
+      marginBottom: 10 
+  },
+  dateInputBox: { 
+      flex: 1, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: '#FFF', 
+      padding: 8, 
+      borderRadius: 6, 
+      marginHorizontal: 5, 
+      borderWidth: 1, 
+      borderColor: BORDER_COLOR, 
+      justifyContent: 'center' 
+  },
+  dateInputText: { 
+      color: TEXT_COLOR_DARK, 
+      fontSize: 12, 
+      fontWeight: '500' 
+  },
+  goButton: { 
+      backgroundColor: GREEN, 
+      paddingVertical: 8, 
+      paddingHorizontal: 15, 
+      borderRadius: 6, 
+      marginLeft: 5 
+  },
+  goButtonText: { 
+      color: WHITE, 
+      fontWeight: 'bold', 
+      fontSize: 12 
+  },
 
   // History List
-  historyDayCard: { backgroundColor: CARD_BG, marginHorizontal: 15, marginVertical: 6, borderRadius: 8, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
-  historyDate: { fontSize: 14, fontWeight: '600', color: TEXT_COLOR_DARK },
-  historyStatus: { fontSize: 14, fontWeight: 'bold' },
+  historyDayCard: { 
+      backgroundColor: CARD_BG, 
+      width: '95%',
+      alignSelf: 'center',
+      marginVertical: 6, 
+      borderRadius: 8, 
+      padding: 15, 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      elevation: 1 
+  },
+  historyDate: { 
+      fontSize: 14, 
+      fontWeight: '600', 
+      color: TEXT_COLOR_DARK 
+  },
+  historyStatus: { 
+      fontSize: 14, 
+      fontWeight: 'bold' 
+  },
+
+  // --- NO RECORD CARD STYLES ---
+  noRecordCard: {
+      backgroundColor: '#fff',
+      width: '95%',
+      alignSelf: 'center',
+      paddingVertical: 40,
+      alignItems: 'center',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#ECEFF1',
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      shadowOffset: { width: 0, height: 1 },
+      marginTop: 15,
+      marginBottom: 5
+  },
+  noRecordTitle: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#B0BEC5', 
+      marginBottom: 5
+  },
+  noRecordDate: {
+      fontSize: 16,
+      color: '#546E7A',
+      fontWeight: '500'
+  },
 
   // Success View
-  successCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: GREEN, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  successTitle: { fontSize: 20, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginBottom: 8 },
-  successSubtitle: { fontSize: 14, color: TEXT_COLOR_MEDIUM, textAlign: 'center', marginBottom: 25 },
-  editButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 10, paddingHorizontal: 30, borderRadius: 8 },
-  editButtonText: { color: WHITE, fontSize: 14, fontWeight: 'bold' },
+  successCircle: { 
+      width: 80, 
+      height: 80, 
+      borderRadius: 40, 
+      backgroundColor: GREEN, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 20 
+  },
+  successTitle: { 
+      fontSize: 20, 
+      fontWeight: 'bold', 
+      color: TEXT_COLOR_DARK, 
+      marginBottom: 8 
+  },
+  successSubtitle: { 
+      fontSize: 14, 
+      color: TEXT_COLOR_MEDIUM, 
+      textAlign: 'center', 
+      marginBottom: 25 
+  },
+  editButton: { 
+      backgroundColor: PRIMARY_COLOR, 
+      paddingVertical: 10, 
+      paddingHorizontal: 30, 
+      borderRadius: 8 
+  },
+  editButtonText: { 
+      color: WHITE, 
+      fontSize: 14, 
+      fontWeight: 'bold' 
+  },
 
   // Live Marking Buttons
-  statusBtn: { width: 36, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  statusBtn: { 
+      width: 36, 
+      height: 36, 
+      borderRadius: 8, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      borderWidth: 1 
+  },
   btnPresent: { backgroundColor: GREEN, borderColor: GREEN },
   btnAbsent: { backgroundColor: RED, borderColor: RED },
   btnInactive: { backgroundColor: '#fff', borderColor: '#E0E0E0' },
