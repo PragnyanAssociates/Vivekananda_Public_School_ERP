@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     fileItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', padding: 12, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
     fileInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
     fileName: { marginLeft: 10, fontSize: 14, color: COLORS.textMain, flex: 1 },
-    removeFileBtn: { backgroundColor: '#ffebee', borderRadius: 15, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
+    removeFileBtn: { backgroundColor: '#f37b8d', borderRadius: 15, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
     addMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderStyle: 'dashed', borderWidth: 1, borderColor: COLORS.primary, borderRadius: 8, marginTop: 5 },
     addMoreText: { color: COLORS.primary, fontWeight: 'bold', marginLeft: 5 },
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
