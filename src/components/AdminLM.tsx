@@ -75,6 +75,7 @@ const AdminLM = () => {
   }, []);
 
   const groupedUsers = useMemo(() => {
+    // 1. Filter logic
     const query = searchQuery.toLowerCase().trim();
     const filteredUsers = users.filter(user => {
         if (!query) return true;
@@ -86,16 +87,32 @@ const AdminLM = () => {
         );
     });
 
+    // 2. Group logic
     const groups: { [key: string]: User[] } = {};
     CLASS_CATEGORIES.forEach(category => {
+        let categoryUsers: User[] = [];
+
         if (category === 'Admins') {
-             groups[category] = filteredUsers.filter(user => user.role === 'admin');
+             categoryUsers = filteredUsers.filter(user => user.role === 'admin');
         } else if (category === 'Others') {
-             groups[category] = filteredUsers.filter(user => user.role === 'others');
+             categoryUsers = filteredUsers.filter(user => user.role === 'others');
+        } else {
+            categoryUsers = filteredUsers.filter(user => user.class_group === category);
         }
-        else {
-            groups[category] = filteredUsers.filter(user => user.class_group === category);
-        }
+
+        // 3. Sorting Logic (Fix for sequential display)
+        groups[category] = categoryUsers.sort((a, b) => {
+            // If both represent students with roll numbers, sort numerically (1, 2, 10) instead of string (1, 10, 2)
+            const rollA = a.roll_no ? parseInt(a.roll_no, 10) : 0;
+            const rollB = b.roll_no ? parseInt(b.roll_no, 10) : 0;
+
+            if (rollA > 0 || rollB > 0) {
+                return rollA - rollB;
+            }
+
+            // Fallback: Sort alphabetically by name (for Teachers/Admins)
+            return a.full_name.localeCompare(b.full_name);
+        });
     });
     return groups;
   }, [users, searchQuery]);
@@ -115,7 +132,8 @@ const AdminLM = () => {
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    setFormData({ ...user, subjects_taught: user.subjects_taught || [], password: '' });
+    // Initialize formData with the user's existing data INCLUDING PASSWORD
+    setFormData({ ...user, subjects_taught: user.subjects_taught || [] }); 
     setIsPasswordVisible(false);
     setCurrentSubjectInput('');
     setIsModalVisible(true);
@@ -152,14 +170,13 @@ const AdminLM = () => {
         break;
 
       // 5. General Text (No Emojis, allow basic punctuation)
-      // This regex allows alphanumerics, spaces, and standard punctuation, blocking emojis/special symbols
       case 'experience':
       case 'subjects_taught':
         sanitized = value.replace(/[^\w\s.,\-()]/g, ''); 
         break;
 
       default:
-        // Default blocker for emojis/special chars on unspecified fields
+        // Default blocker for emojis/special chars
         if(key !== 'password' && key !== 'admission_date' && key !== 'joining_date') {
            sanitized = value.replace(/[^\w\s\-@.]/g, ''); 
         }
@@ -171,15 +188,18 @@ const AdminLM = () => {
 
   const getChangedFields = (original: User, current: any) => {
     const changes: any = {};
+    
     Object.keys(current).forEach(key => {
         if (key === 'subjects_taught') return;
-        if (key === 'password') return;
+        if (key === 'password') return; // Handled specifically below
+        
         if (original[key as keyof User] != current[key]) {
             changes[key] = current[key];
         }
     });
 
-    if (current.password && current.password.trim() !== '') {
+    // Handle Password: Only add if it is different from the original
+    if (current.password && current.password !== original.password) {
         changes.password = current.password;
     }
 
@@ -190,6 +210,7 @@ const AdminLM = () => {
             changes.subjects_taught = current.subjects_taught;
         }
     }
+
     return changes;
   };
 
@@ -199,7 +220,6 @@ const AdminLM = () => {
       return;
     }
 
-    // Roll No Validation Logic
     if (formData.role === 'student') {
         if(!formData.roll_no || !formData.class_group) {
              Alert.alert('Error', 'Class and Roll Number are mandatory for students.');
@@ -217,10 +237,12 @@ const AdminLM = () => {
     try {
       if (isEditing) {
         const changes = getChangedFields(editingUser!, formData);
+        
         if (Object.keys(changes).length === 0) {
             Alert.alert('Info', 'No changes detected.');
             return;
         }
+
         await apiClient.put(`/users/${editingUser!.id}`, changes);
       } else {
         const payload = { ...formData };
@@ -273,7 +295,6 @@ const AdminLM = () => {
 
   const handleAddSubject = () => {
       const subjectToAdd = currentSubjectInput.trim();
-      // Basic alpha check for subjects
       if(/[^a-zA-Z0-9\s]/.test(subjectToAdd)) {
            Alert.alert("Invalid Input", "Subject names should not contain special characters.");
            return;
@@ -373,7 +394,6 @@ const AdminLM = () => {
                 placeholderTextColor="#90A4AE"
                 value={searchQuery}
                 onChangeText={(val) => {
-                     // Sanitize Search Input
                      setSearchQuery(val.replace(/[^\w\s]/g, ''));
                 }}
             />
@@ -425,7 +445,7 @@ const AdminLM = () => {
                     <View style={styles.passwordContainer}>
                       <TextInput
                         style={styles.passwordInput}
-                        placeholder={isEditing ? "Leave blank to keep current" : "Enter password"}
+                        placeholder="Enter password"
                         value={formData.password}
                         onChangeText={(val) => setFormData({ ...formData, password: val })}
                         secureTextEntry={!isPasswordVisible}
