@@ -2467,9 +2467,8 @@ app.delete('/api/labs/:id', async (req, res) => {
 
 
 
-
 // ==========================================================
-// --- HOMEWORK & ASSIGNMENTS API ROUTES (CORRECTED & FINAL) ---
+// --- HOMEWORK & ASSIGNMENTS API ROUTES (UPDATED) ---
 // ==========================================================
 
 // --- UTILITY ROUTES (FOR HOMEWORK FORMS) ---
@@ -2521,8 +2520,9 @@ app.get('/api/homework/teacher/:teacherId', async (req, res) => {
     }
 });
 
-// Create a new homework assignment
-app.post('/api/homework', upload.single('attachment'), async (req, res) => {
+// Create a new homework assignment (UPDATED for Multiple Files)
+// Note: 'attachments' matches the key in Frontend FormData
+app.post('/api/homework', upload.array('attachments'), async (req, res) => {
     const { title, description, class_group, subject, due_date, teacher_id, homework_type } = req.body;
     
     // 1. Validate Homework Type
@@ -2533,13 +2533,21 @@ app.post('/api/homework', upload.single('attachment'), async (req, res) => {
     // 2. Validate Date (Prevent Past Dates)
     const selectedDate = new Date(due_date);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today to midnight
+    today.setHours(0, 0, 0, 0); 
     
     if (selectedDate < today) {
         return res.status(400).json({ message: 'Due date cannot be in the past.' });
     }
 
-    const attachment_path = req.file ? `/uploads/${req.file.filename}` : null;
+    // Handle Multiple Files
+    let attachment_path = null;
+    if (req.files && req.files.length > 0) {
+        // Create an array of paths
+        const filePaths = req.files.map(file => `/uploads/${file.filename}`);
+        // Serialize to JSON string to store in single column
+        attachment_path = JSON.stringify(filePaths);
+    }
+
     const connection = await db.getConnection();
     
     try {
@@ -2577,8 +2585,8 @@ app.post('/api/homework', upload.single('attachment'), async (req, res) => {
 });
 
 
-// Update an existing homework assignment
-app.post('/api/homework/update/:assignmentId', upload.single('attachment'), async (req, res) => {
+// Update an existing homework assignment (UPDATED for Multiple Files)
+app.post('/api/homework/update/:assignmentId', upload.array('attachments'), async (req, res) => {
     const { assignmentId } = req.params;
     const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type } = req.body;
     
@@ -2586,7 +2594,7 @@ app.post('/api/homework/update/:assignmentId', upload.single('attachment'), asyn
         return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
     }
 
-    // Validate Date (Prevent Past Dates)
+    // Validate Date
     const selectedDate = new Date(due_date);
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
@@ -2597,8 +2605,12 @@ app.post('/api/homework/update/:assignmentId', upload.single('attachment'), asyn
 
     try {
         let attachment_path = existing_attachment_path || null;
-        if (req.file) { 
-            attachment_path = `/uploads/${req.file.filename}`; 
+
+        // If new files are uploaded, they replace the old ones (or you can logic to merge)
+        // For simplicity in this update, new uploads override old ones if present.
+        if (req.files && req.files.length > 0) {
+            const filePaths = req.files.map(file => `/uploads/${file.filename}`);
+            attachment_path = JSON.stringify(filePaths);
         }
 
         const query = `UPDATE homework_assignments SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ? WHERE id = ?`;
@@ -2847,6 +2859,7 @@ app.delete('/api/homework/submission/:submissionId', async (req, res) => {
         connection.release();
     }
 });
+
 
 
 

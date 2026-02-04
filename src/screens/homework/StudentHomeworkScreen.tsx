@@ -1,5 +1,3 @@
-// 📂 File: StudentHomeworkScreen.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
@@ -161,7 +159,23 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
     };
 
     const status = getStatusInfo();
-    const handleViewAttachment = () => { if(item.attachment_path) Linking.openURL(`${SERVER_URL}${item.attachment_path}`); };
+    
+    // --- UPDATED: Handle Multiple Attachments parsing ---
+    const getAttachments = () => {
+        if (!item.attachment_path) return [];
+        try {
+            // Check if it's a JSON array string
+            if (item.attachment_path.trim().startsWith('[')) {
+                return JSON.parse(item.attachment_path);
+            }
+            // Legacy single file support
+            return [item.attachment_path];
+        } catch (e) {
+            return [item.attachment_path];
+        }
+    };
+
+    const attachments = getAttachments();
 
     const renderSubmissionContent = () => {
         if (item.submission_id) {
@@ -229,11 +243,18 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
                 </Animatable.View>
             )}
 
-            {item.attachment_path && (
-                <TouchableOpacity style={styles.attachmentButton} onPress={handleViewAttachment}>
-                    <MaterialIcons name="attachment" size={18} color={COLORS.info} />
-                    <Text style={styles.detailsButtonText}>View Teacher's Attachment</Text>
-                </TouchableOpacity>
+            {/* --- UPDATED: Attachment Rendering for Lists --- */}
+            {attachments.length > 0 && (
+                <View style={{marginTop: 10}}>
+                    {attachments.map((path, idx) => (
+                        <TouchableOpacity key={idx} style={styles.attachmentButton} onPress={() => Linking.openURL(`${SERVER_URL}${path}`)}>
+                            <MaterialIcons name="attachment" size={18} color={COLORS.info} />
+                            <Text style={styles.detailsButtonText}>
+                                {attachments.length > 1 ? `Attachment ${idx + 1}` : "View Teacher's Attachment"}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
             )}
 
             {renderSubmissionContent()}
@@ -253,7 +274,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // --- HEADER CARD STYLES ---
+    // Header
     headerCard: {
         backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
@@ -274,7 +295,7 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
+        backgroundColor: '#E0F2F1',
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -301,33 +322,24 @@ const styles = StyleSheet.create({
     },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
     cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain, flex: 1, marginRight: 10 },
-    
     statusBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12 },
     statusText: { color: '#fff', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
-    
     description: { fontSize: 14, color: COLORS.textSub, marginBottom: 15, lineHeight: 20 },
-    
     detailsGrid: { borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 10 },
     detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
     detailLabel: { marginLeft: 8, fontSize: 14, color: COLORS.textSub, fontWeight: '500' },
     detailValue: { fontSize: 14, color: COLORS.textMain, flexShrink: 1, marginLeft: 5 },
-    
     gradedSection: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     remarksText: { marginTop: 5, fontStyle: 'italic', color: COLORS.textMain, backgroundColor: '#f9f9f9', padding: 8, borderRadius: 4, fontSize: 13 },
-    
     buttonRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-    
-    attachmentButton: { flexDirection: 'row', alignItems: 'center', padding: 8, marginTop: 10, alignSelf: 'flex-start' },
+    attachmentButton: { flexDirection: 'row', alignItems: 'center', padding: 8, marginTop: 5, alignSelf: 'flex-start', backgroundColor: '#f0f8ff', borderRadius: 8 },
     detailsButtonText: { color: COLORS.info, marginLeft: 5, fontWeight: 'bold', fontSize: 13 },
-    
     submitButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.success, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, elevation: 2 },
     deleteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.danger, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, elevation: 2 },
     submitButtonText: { color: '#fff', marginLeft: 8, fontWeight: 'bold', fontSize: 13 },
-    
     submittedAnswerContainer: { marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
     submittedAnswerLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.textSub, marginBottom: 5 },
     submittedAnswerText: { fontSize: 14, color: COLORS.textMain, backgroundColor: '#f1f8e9', padding: 12, borderRadius: 6, lineHeight: 20 },
-    
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: COLORS.textSub },
 });
 

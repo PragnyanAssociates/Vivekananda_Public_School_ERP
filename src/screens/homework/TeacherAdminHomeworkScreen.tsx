@@ -1,11 +1,9 @@
-// 📂 File: TeacherAdminHomeworkScreen.js (DESIGN UPDATED & DATE PICKER ADDED)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation, UIManager, Platform, SafeAreaView } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
-import DateTimePicker from '@react-native-community/datetimepicker'; // INSTALLED LIBRARY
+import DateTimePicker from '@react-native-community/datetimepicker'; 
 import * as Animatable from 'react-native-animatable';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
@@ -67,7 +65,9 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
-    const [attachment, setAttachment] = useState(null);
+    
+    // --- UPDATED: Attachment State is now an Array ---
+    const [attachments, setAttachments] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
 
     // Helper to format date to DD/MM/YYYY for Display
@@ -124,12 +124,11 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     // Date Picker Handler
     const handleDateChange = (event, selectedDate) => {
-        setShowDatePicker(Platform.OS === 'ios'); // Keep open on iOS, close on Android
+        setShowDatePicker(Platform.OS === 'ios'); 
         if (selectedDate) {
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+            today.setHours(0, 0, 0, 0); 
             
-            // Check if selected date is in the past
             if (selectedDate < today) {
                 setShowDatePicker(false);
                 Alert.alert("Invalid Date", "You cannot select a past date.");
@@ -138,7 +137,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
             setShowDatePicker(false);
             setDateObject(selectedDate);
-            // Store as YYYY-MM-DD for backend consistency, format in UI separately
             const formattedForBackend = selectedDate.toISOString().split('T')[0]; 
             setNewAssignment({ ...newAssignment, due_date: formattedForBackend });
         } else {
@@ -152,15 +150,15 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setSelectedClass('');
         setSelectedSubject('');
         setSubjects([]);
-        setAttachment(null);
-        setDateObject(new Date()); // Reset calendar to today
+        setAttachments([]); // Reset attachments
+        setDateObject(new Date()); 
         setIsModalVisible(true);
     };
 
     const openEditModal = async (assignment) => {
         setEditingAssignment(assignment);
         const date = new Date(assignment.due_date);
-        setDateObject(date); // Set calendar to existing due date
+        setDateObject(date); 
         const formattedDate = date.toISOString().split('T')[0];
         
         setNewAssignment({ 
@@ -170,7 +168,12 @@ const AssignmentList = ({ onSelectAssignment }) => {
             homework_type: assignment.homework_type || 'PDF' 
         });
         
-        setAttachment(assignment.attachment_path ? { name: assignment.attachment_path.split('/').pop() } : null);
+        // Handle existing attachments (If backend sends JSON path, or simple string)
+        // For simplicity in edit mode, we clear previous frontend file objects,
+        // The user can add NEW files. Backend logic handles "replace" or "keep" based on your preference.
+        // Here we start empty for uploads, but preserve existing path in backend logic if nothing new is uploaded.
+        setAttachments([]); 
+
         const fetchedSubjects = await handleClassChange(assignment.class_group);
         if (fetchedSubjects.includes(assignment.subject)) {
             setSelectedSubject(assignment.subject);
@@ -195,6 +198,37 @@ const AssignmentList = ({ onSelectAssignment }) => {
         },]);
     };
 
+    // --- UPDATED: File Selection with Multi-Select ---
+    const selectAttachment = async () => {
+        try {
+            const results = await pick({ 
+                type: [types.allFiles], 
+                allowMultiSelection: true // Allow multiple files
+            });
+            
+            if (results && results.length > 0) {
+                setAttachments(prev => [...prev, ...results]);
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            }
+        } catch (err) {
+            if (!isCancel(err)) {
+                Alert.alert('Error', 'An unknown error occurred while picking files.');
+            }
+        }
+    };
+
+    // --- NEW: Remove Single Attachment ---
+    const removeAttachment = (indexToRemove) => {
+        setAttachments(prev => prev.filter((_, index) => index !== indexToRemove));
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    };
+
+    // --- NEW: Clear All Attachments ---
+    const clearAllAttachments = () => {
+        setAttachments([]);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    };
+
     const handleSave = async () => {
         if (!user || !selectedClass || !selectedSubject || !newAssignment.title || !newAssignment.due_date) {
             return Alert.alert("Validation Error", "Title, Class, Subject, and Due Date are required.");
@@ -210,11 +244,23 @@ const AssignmentList = ({ onSelectAssignment }) => {
         if (!editingAssignment) {
             formData.append('teacher_id', user.id);
         }
-        if (attachment && attachment.uri) {
-            formData.append('attachment', { uri: attachment.uri, type: attachment.type, name: attachment.name, });
-        } else if (editingAssignment && editingAssignment.attachment_path) {
+
+        // --- UPDATED: Append all attachments ---
+        if (attachments.length > 0) {
+            attachments.forEach((file) => {
+                formData.append('attachments', { // Key MUST match backend upload.array('attachments')
+                    uri: file.uri,
+                    type: file.type,
+                    name: file.name,
+                });
+            });
+        } 
+        
+        // Pass existing path for edit logic if needed (handled in backend)
+        if (editingAssignment && editingAssignment.attachment_path) {
             formData.append('existing_attachment_path', editingAssignment.attachment_path);
         }
+
         try {
             const url = editingAssignment ? `/homework/update/${editingAssignment.id}` : '/homework';
             await apiClient.post(url, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -225,19 +271,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
             Alert.alert("Error", e.response?.data?.message || "An error occurred while saving.");
         } finally {
             setIsSaving(false);
-        }
-    };
-
-    const selectAttachment = async () => {
-        try {
-            const result = await pick({ type: [types.allFiles], allowMultiSelection: false, });
-            if (result && result.length > 0) {
-                setAttachment(result[0]);
-            }
-        } catch (err) {
-            if (!isCancel(err)) {
-                Alert.alert('Error', 'An unknown error occurred while picking the file.');
-            }
         }
     };
 
@@ -269,7 +302,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
@@ -323,7 +355,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                         <Text style={styles.label}>Description</Text>
                         <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} placeholder="Instructions for students..." multiline value={newAssignment.description} onChangeText={text => setNewAssignment({ ...newAssignment, description: text })} />
                         
-                        {/* --- DUE DATE SELECTOR (CALENDAR) --- */}
+                        {/* --- DUE DATE SELECTOR --- */}
                         <Text style={styles.label}>Due Date (DD/MM/YYYY) *</Text>
                         <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePickerInput}>
                             <Text style={newAssignment.due_date ? styles.dateText : styles.placeholderText}>
@@ -338,15 +370,39 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                 mode="date"
                                 display="default"
                                 onChange={handleDateChange}
-                                minimumDate={new Date()} // Native restriction for past dates
+                                minimumDate={new Date()} 
                             />
                         )}
                         
-                        <TouchableOpacity style={styles.uploadButton} onPress={selectAttachment}>
-                            <MaterialIcons name="attach-file" size={20} color="#fff" />
-                            <Text style={styles.uploadButtonText}>Attach Question Paper</Text>
-                        </TouchableOpacity>
-                        {attachment && <Text style={styles.attachmentText}>Selected: {attachment.name}</Text>}
+                        {/* --- UPDATED: Multi-File Selection Area --- */}
+                        <View style={styles.attachmentSection}>
+                            <View style={styles.attachmentHeader}>
+                                <Text style={styles.label}>Attachments</Text>
+                                {attachments.length > 0 && (
+                                    <TouchableOpacity onPress={clearAllAttachments}>
+                                        <Text style={{color: COLORS.danger, fontWeight: 'bold'}}>Clear All</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <TouchableOpacity style={styles.uploadButton} onPress={selectAttachment}>
+                                <MaterialIcons name="attach-file" size={20} color="#fff" />
+                                <Text style={styles.uploadButtonText}>Add Files (PDF, Images)</Text>
+                            </TouchableOpacity>
+
+                            {/* List of Selected Files */}
+                            {attachments.map((file, index) => (
+                                <View key={index} style={styles.fileItem}>
+                                    <View style={styles.fileInfo}>
+                                        <MaterialIcons name="description" size={20} color={COLORS.textSub} />
+                                        <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                                    </View>
+                                    <TouchableOpacity onPress={() => removeAttachment(index)} style={styles.removeFileBtn}>
+                                        <MaterialIcons name="close" size={18} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </View>
                         
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}><Text style={styles.modalButtonText}>Cancel</Text></TouchableOpacity>
@@ -557,7 +613,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     
-    // --- HEADER CARD STYLES ---
+    // Header
     headerCard: {
         backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
@@ -578,7 +634,7 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
+        backgroundColor: '#E0F2F1', 
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -609,11 +665,9 @@ const styles = StyleSheet.create({
     cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textMain, flex: 1, marginRight: 10 },
     cardSubtitle: { fontSize: 13, color: COLORS.textSub, marginTop: 2, marginBottom: 4 },
     cardDetail: { fontSize: 13, color: '#777', fontStyle: 'italic' },
-    
     footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
     viewSubmissionsBtn: { flexDirection: 'row', backgroundColor: COLORS.blue, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', gap: 5 },
     viewSubmissionsBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-    
     badge: { backgroundColor: '#fff3cd', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: '#ffecb5' },
     badgeMuted: { backgroundColor: '#f8f9fa', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: '#e9ecef' },
     badgeText: { color: '#856404', fontSize: 11, fontWeight: 'bold' },
@@ -622,24 +676,22 @@ const styles = StyleSheet.create({
     modalView: { flex: 1, padding: 20, backgroundColor: '#f9f9f9' },
     modalFormTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' },
     pickerContainer: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, backgroundColor: '#fff', overflow: 'hidden' },
+    
+    // Updated Attachment Styles
+    attachmentSection: { marginTop: 10, marginBottom: 20 },
+    attachmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     uploadButton: { flexDirection: 'row', backgroundColor: COLORS.blue, padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginVertical: 10 },
     uploadButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 },
-    attachmentText: { textAlign: 'center', marginBottom: 15, fontStyle: 'italic', color: '#555' },
+    fileItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 10, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#e0e0e0' },
+    fileInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    fileName: { marginLeft: 10, fontSize: 14, color: COLORS.textMain, flex: 1 },
+    removeFileBtn: { backgroundColor: COLORS.danger, borderRadius: 15, width: 24, height: 24, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+    
     modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 },
     cancelBtn: { backgroundColor: '#6c757d', marginRight: 10 },
     
-    // --- DATE PICKER STYLE ---
-    datePickerInput: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#ccc',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 10
-    },
+    // Date Picker
+    datePickerInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 10 },
     dateText: { fontSize: 15, color: '#000' },
     placeholderText: { fontSize: 15, color: '#aaa' },
 
@@ -647,7 +699,6 @@ const styles = StyleSheet.create({
     searchContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginBottom: 15, alignItems: 'center', elevation: 2, paddingHorizontal: 10, borderWidth: 1, borderColor: COLORS.border },
     searchIcon: { marginRight: 8 },
     searchInput: { flex: 1, height: 45, fontSize: 15, color: COLORS.textMain },
-    
     submissionCard: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 10, padding: 15, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2 },
     gradeBadge: { flexDirection: 'row', backgroundColor: COLORS.blue, borderRadius: 12, paddingVertical: 2, paddingHorizontal: 8, alignItems: 'center' },
     gradeBadgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
