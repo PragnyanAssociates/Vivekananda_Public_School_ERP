@@ -1,4 +1,4 @@
-// 📂 File: WrittenAnswerScreen.js (NO CHANGES, VERIFIED)
+// 📂 File: WrittenAnswerScreen.js (NO CHANGES NEEDED, VERIFIED)
 
 import React, { useState } from 'react';
 import {
@@ -46,7 +46,7 @@ const WrittenAnswerScreen = ({ route }) => {
       Alert.alert('Success', 'Your answer has been submitted!', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
-    } catch (err: any) {
+    } catch (err) {
       Alert.alert('Error', err.response?.data?.message || 'Failed to submit your answer.');
     } finally {
       setIsSubmitting(false);
@@ -59,7 +59,7 @@ const WrittenAnswerScreen = ({ route }) => {
         <View style={styles.header}>
           <Text style={styles.title}>{assignment.title}</Text>
           <Text style={styles.subject}>
-            {assignment.subject} | Due: {new Date(assignment.due_date).toLocaleDateString()}
+            {assignment.subject} | Due: {new Date(assignment.due_date).toLocaleDateString('en-GB')}
           </Text>
         </View>
 

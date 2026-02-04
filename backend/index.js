@@ -2534,8 +2534,18 @@ app.get('/api/homework/teacher/:teacherId', async (req, res) => {
 app.post('/api/homework', upload.single('attachment'), async (req, res) => {
     const { title, description, class_group, subject, due_date, teacher_id, homework_type } = req.body;
     
+    // 1. Validate Homework Type
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
         return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
+    }
+
+    // 2. Validate Date (Prevent Past Dates)
+    const selectedDate = new Date(due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today to midnight
+    
+    if (selectedDate < today) {
+        return res.status(400).json({ message: 'Due date cannot be in the past.' });
     }
 
     const attachment_path = req.file ? `/uploads/${req.file.filename}` : null;
@@ -2585,6 +2595,15 @@ app.post('/api/homework/update/:assignmentId', upload.single('attachment'), asyn
         return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
     }
 
+    // Validate Date (Prevent Past Dates)
+    const selectedDate = new Date(due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); 
+    
+    if (selectedDate < today) {
+        return res.status(400).json({ message: 'Due date cannot be in the past.' });
+    }
+
     try {
         let attachment_path = existing_attachment_path || null;
         if (req.file) { 
@@ -2612,13 +2631,10 @@ app.delete('/api/homework/:assignmentId', async (req, res) => {
     }
 });
 
-// ★★★ CRITICAL CHANGE IS HERE ★★★
-// Get all submissions for an assignment, now with Roll Number and sorted correctly.
+// Get all submissions for an assignment
 app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
-        // This query now JOINS user_profiles to get the roll_no
-        // and sorts by roll_no numerically.
         const query = `
             SELECT 
                 u.id as student_id,

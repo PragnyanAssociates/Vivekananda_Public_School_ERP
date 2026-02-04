@@ -1,10 +1,11 @@
-// 📂 File: TeacherAdminHomeworkScreen.js (DESIGN UPDATED)
+// 📂 File: TeacherAdminHomeworkScreen.js (DESIGN UPDATED & DATE PICKER ADDED)
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation, UIManager, Platform, SafeAreaView } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
+import DateTimePicker from '@react-native-community/datetimepicker'; // INSTALLED LIBRARY
 import * as Animatable from 'react-native-animatable';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
@@ -59,10 +60,22 @@ const AssignmentList = ({ onSelectAssignment }) => {
     const [subjects, setSubjects] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
+    
+    // Date Picker State
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [dateObject, setDateObject] = useState(new Date());
+
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
     const [attachment, setAttachment] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Helper to format date to DD/MM/YYYY for Display
+    const formatDateDisplay = (isoDateString) => {
+        if (!isoDateString) return '';
+        const d = new Date(isoDateString);
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    };
 
     const fetchTeacherAssignments = useCallback(async () => {
         if (!user) return;
@@ -109,6 +122,30 @@ const AssignmentList = ({ onSelectAssignment }) => {
         return [];
     };
 
+    // Date Picker Handler
+    const handleDateChange = (event, selectedDate) => {
+        setShowDatePicker(Platform.OS === 'ios'); // Keep open on iOS, close on Android
+        if (selectedDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+            
+            // Check if selected date is in the past
+            if (selectedDate < today) {
+                setShowDatePicker(false);
+                Alert.alert("Invalid Date", "You cannot select a past date.");
+                return;
+            }
+
+            setShowDatePicker(false);
+            setDateObject(selectedDate);
+            // Store as YYYY-MM-DD for backend consistency, format in UI separately
+            const formattedForBackend = selectedDate.toISOString().split('T')[0]; 
+            setNewAssignment({ ...newAssignment, due_date: formattedForBackend });
+        } else {
+            setShowDatePicker(false);
+        }
+    };
+
     const openCreateModal = () => {
         setEditingAssignment(null);
         setNewAssignment(initialAssignmentState);
@@ -116,14 +153,23 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setSelectedSubject('');
         setSubjects([]);
         setAttachment(null);
+        setDateObject(new Date()); // Reset calendar to today
         setIsModalVisible(true);
     };
 
     const openEditModal = async (assignment) => {
         setEditingAssignment(assignment);
         const date = new Date(assignment.due_date);
+        setDateObject(date); // Set calendar to existing due date
         const formattedDate = date.toISOString().split('T')[0];
-        setNewAssignment({ title: assignment.title, description: assignment.description, due_date: formattedDate, homework_type: assignment.homework_type || 'PDF' });
+        
+        setNewAssignment({ 
+            title: assignment.title, 
+            description: assignment.description, 
+            due_date: formattedDate, 
+            homework_type: assignment.homework_type || 'PDF' 
+        });
+        
         setAttachment(assignment.attachment_path ? { name: assignment.attachment_path.split('/').pop() } : null);
         const fetchedSubjects = await handleClassChange(assignment.class_group);
         if (fetchedSubjects.includes(assignment.subject)) {
@@ -206,7 +252,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                     </View>
                 </View>
                 <Text style={styles.cardSubtitle}>Type: {item.homework_type || 'PDF'} | For: {item.class_group} - {item.subject}</Text>
-                <Text style={styles.cardDetail}>Due: {new Date(item.due_date).toLocaleDateString()}</Text>
+                <Text style={styles.cardDetail}>Due: {formatDateDisplay(item.due_date)}</Text>
                 
                 <View style={styles.footerRow}>
                     <View style={item.submission_count > 0 ? styles.badge : styles.badgeMuted}>
@@ -277,8 +323,24 @@ const AssignmentList = ({ onSelectAssignment }) => {
                         <Text style={styles.label}>Description</Text>
                         <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} placeholder="Instructions for students..." multiline value={newAssignment.description} onChangeText={text => setNewAssignment({ ...newAssignment, description: text })} />
                         
-                        <Text style={styles.label}>Due Date (YYYY-MM-DD) *</Text>
-                        <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={newAssignment.due_date} onChangeText={text => setNewAssignment({ ...newAssignment, due_date: text })} />
+                        {/* --- DUE DATE SELECTOR (CALENDAR) --- */}
+                        <Text style={styles.label}>Due Date (DD/MM/YYYY) *</Text>
+                        <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePickerInput}>
+                            <Text style={newAssignment.due_date ? styles.dateText : styles.placeholderText}>
+                                {newAssignment.due_date ? formatDateDisplay(newAssignment.due_date) : "Select Date from Calendar"}
+                            </Text>
+                            <MaterialIcons name="event" size={20} color={COLORS.textSub} />
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={dateObject}
+                                mode="date"
+                                display="default"
+                                onChange={handleDateChange}
+                                minimumDate={new Date()} // Native restriction for past dates
+                            />
+                        )}
                         
                         <TouchableOpacity style={styles.uploadButton} onPress={selectAttachment}>
                             <MaterialIcons name="attach-file" size={20} color="#fff" />
@@ -566,6 +628,21 @@ const styles = StyleSheet.create({
     modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 },
     cancelBtn: { backgroundColor: '#6c757d', marginRight: 10 },
     
+    // --- DATE PICKER STYLE ---
+    datePickerInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ccc',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 10
+    },
+    dateText: { fontSize: 15, color: '#000' },
+    placeholderText: { fontSize: 15, color: '#aaa' },
+
     // Submission List
     searchContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, marginHorizontal: 15, marginBottom: 15, alignItems: 'center', elevation: 2, paddingHorizontal: 10, borderWidth: 1, borderColor: COLORS.border },
     searchIcon: { marginRight: 8 },

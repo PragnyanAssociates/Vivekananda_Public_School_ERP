@@ -51,7 +51,7 @@ const StudentHomeworkScreen = () => {
                 return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
             });
             setAssignments(data);
-        } catch (e: any) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch assignments."); } 
+        } catch (e) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch assignments."); } 
         finally { setIsLoading(false); }
     }, [user]);
 
@@ -79,7 +79,7 @@ const StudentHomeworkScreen = () => {
             Alert.alert("Success", "Homework submitted!");
             fetchAssignments();
 
-        } catch (err: any) {
+        } catch (err) {
             if (!isCancel(err)) { console.error("Submission Error:", err); Alert.alert("Error", err.response?.data?.message || "Could not submit file."); }
         } finally { setIsSubmitting(null); }
     };
@@ -94,7 +94,7 @@ const StudentHomeworkScreen = () => {
                     await apiClient.delete(`/homework/submission/${submissionId}`, { data: { student_id: user.id } });
                     Alert.alert("Success", "Your submission has been deleted.");
                     fetchAssignments(); 
-                } catch (err: any) {
+                } catch (err) {
                     Alert.alert("Error", err.response?.data?.message || "Could not delete submission.");
                 } finally { setIsSubmitting(null); }
             },
@@ -144,6 +144,13 @@ const StudentHomeworkScreen = () => {
 
 const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, navigation }) => {
     
+    // Helper to format date to DD/MM/YYYY
+    const formatDateDisplay = (isoDateString) => {
+        if (!isoDateString) return '';
+        const d = new Date(isoDateString);
+        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    };
+
     const getStatusInfo = () => {
         const statusText = item.submission_id ? (item.status || 'Submitted') : 'Pending';
         switch (statusText) {
@@ -211,8 +218,8 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
             <View style={styles.detailsGrid}>
                 <DetailRow icon="category" label="Type" value={item.homework_type || 'PDF'} />
                 <DetailRow icon="book" label="Subject" value={item.subject} />
-                <DetailRow icon="event" label="Due Date" value={new Date(item.due_date).toLocaleDateString()} />
-                {item.submitted_at && <DetailRow icon="event-available" label="Submitted" value={new Date(item.submitted_at).toLocaleDateString()} />}
+                <DetailRow icon="event" label="Due Date" value={formatDateDisplay(item.due_date)} />
+                {item.submitted_at && <DetailRow icon="event-available" label="Submitted" value={formatDateDisplay(item.submitted_at)} />}
             </View>
             
             {status.text === 'Graded' && item.grade && (
