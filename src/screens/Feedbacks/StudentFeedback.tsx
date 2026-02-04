@@ -315,11 +315,21 @@ const StudentFeedback = () => {
                     </View>
                 </View>
 
-                {/* Right Side: Compare Button (Badge Removed) */}
+                {/* Right Side: Compare Button */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity 
                         style={styles.comButton}
                         onPress={() => {
+                            // --- FIX: Check for unsaved changes first ---
+                            if (hasChanges) {
+                                Alert.alert(
+                                    "Unsaved Changes",
+                                    "You have unsaved ratings. Please click 'Save Changes' at the bottom before viewing the comparison.",
+                                    [{ text: "OK" }]
+                                );
+                                return;
+                            }
+                            
                             if(selectedClass) {
                                 setCompareSubject(selectedSubject || 'All Subjects');
                                 setShowCompareModal(true);

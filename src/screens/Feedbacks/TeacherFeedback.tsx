@@ -370,7 +370,8 @@ const TeacherFeedback = () => {
                         <TouchableOpacity
                             key={opt}
                             disabled={readOnly}
-                            onSelect={() => onSelect(opt)}
+                            // --- FIX: onSelect changed to onPress ---
+                            onPress={() => onSelect(opt)}
                             style={[
                                 styles.remarkBtn,
                                 isSelected 

@@ -9893,9 +9893,8 @@ app.put('/api/library/digital/:id', verifyToken, isAdmin, libraryUpload.fields([
 
 
 // ==========================================================
-// --- STUDENT FEEDBACK API ROUTES (FIXED) ---
+// --- STUDENT FEEDBACK API ROUTES ---
 // ==========================================================
-
 
 // 1. Get Distinct Classes
 app.get('/api/feedback/classes', async (req, res) => {
@@ -9955,29 +9954,31 @@ app.get('/api/teacher-classes/:teacherId', async (req, res) => {
     }
 });
 
-// 5. Get Students + Feedback (FIXED LOGIC)
+// 5. Get Students + Feedback
 app.get('/api/feedback/students', async (req, res) => {
     const { class_group, teacher_id, mode, subject } = req.query;
     try {
         let sql = "";
         let params = [];
 
-        // --- A. ANALYTICS / COMPARE MODE ---
+        // --- A. ANALYTICS / COMPARE MODE (UPDATED) ---
         if (mode === 'analytics') {
             let subjectFilter = "";
-            let sqlParams = [class_group];
+            let sqlParams = [class_group]; // First param for JOIN
 
             if (subject && subject !== 'All Subjects') {
                 subjectFilter = " AND f.subject_name = ? ";
                 sqlParams.push(subject);
             }
 
+            sqlParams.push(class_group); // Second param for WHERE
+
             sql = `
                 SELECT u.id as student_id, u.full_name, p.roll_no, 
                 IFNULL(AVG(f.status_marks), 0) as avg_rating
                 FROM users u
                 LEFT JOIN user_profiles p ON u.id = p.user_id
-                LEFT JOIN student_feedback f ON u.id = f.student_id ${subjectFilter}
+                LEFT JOIN student_feedback f ON u.id = f.student_id AND f.class_group = ? ${subjectFilter}
                 WHERE u.role = 'student' AND u.class_group = ?
                 GROUP BY u.id 
                 ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`;
@@ -10001,8 +10002,6 @@ app.get('/api/feedback/students', async (req, res) => {
         } 
         // --- C. TEACHER / SPECIFIC SUBJECT EDIT VIEW ---
         else {
-            // FIXED: We strictly filter by subject_name here.
-            // With the DB update, this will now correctly find the row for 'Social'.
             sql = `
                 SELECT u.id as student_id, u.full_name, p.roll_no, 
                 f.status_marks, f.remarks_category, f.subject_name
@@ -10035,7 +10034,7 @@ app.get('/api/feedback/students', async (req, res) => {
     }
 });
 
-// 6. Save Feedback (FIXED)
+// 6. Save Feedback
 app.post('/api/feedback', async (req, res) => {
     const { teacher_id, class_group, subject_name, feedback_data } = req.body;
     
@@ -10056,10 +10055,6 @@ app.post('/api/feedback', async (req, res) => {
                         status_marks = VALUES(status_marks), 
                         remarks_category = VALUES(remarks_category)
                     `; 
-                    // Note: We rely on the new UNIQUE KEY (student, teacher, subject)
-                    // so we don't need to update subject_name in ON DUPLICATE, 
-                    // because the INSERT ensures the subject is correct for this row.
-
                 await connection.query(sql, [
                     item.student_id, teacher_id, class_group, subject_name, item.status_marks, item.remarks_category
                 ]);
