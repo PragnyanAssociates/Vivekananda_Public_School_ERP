@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
-  Dimensions, TouchableOpacity, Modal, ActivityIndicator, Alert
+  Dimensions, TouchableOpacity, Modal, ActivityIndicator, Alert,
+  StatusBar
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as Animatable from 'react-native-animatable';
@@ -22,9 +23,12 @@ type Day = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturda
 const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 const DAYS: Day[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PERIOD_DEFINITIONS: PeriodDefinition[] = [ { period: 1, time: '09:00-09:45' }, { period: 2, time: '09:45-10:30' }, { period: 3, time: '10:30-10:45', isBreak: true }, { period: 4, time: '10:45-11:30' }, { period: 5, time: '11:30-12:15' }, { period: 6, time: '12:15-01:00', }, { period: 7, time: '01:00-01:45', isBreak: true }, { period: 8, time: '01:45-02:30' }, { period: 9, time: '02:30-03:15' }, { period: 10, time: '03:15-04:00' }, ];
+
+// Responsive Dimensions
 const { width } = Dimensions.get('window');
 const TABLE_HORIZONTAL_MARGIN = 10;
 const tableContentWidth = width - TABLE_HORIZONTAL_MARGIN * 2;
+// Dynamic column sizing
 const timeColumnWidth = Math.floor(tableContentWidth * 0.20);
 const dayColumnWidth = Math.floor((tableContentWidth * 0.80) / 6);
 
@@ -42,12 +46,52 @@ const getSubjectColor = (subject?: string): string => { if (!subject) return '#F
 const EditSlotModal = ({ isVisible, onClose, onSave, slotInfo, teachers, currentData, selectedClass }: { isVisible: boolean; onClose: () => void; onSave: (slot: { subject_name?: string; teacher_id?: number }) => void; slotInfo: { day: Day; period: number; class_group?: string }; teachers: Teacher[]; currentData?: TimetableSlotFromAPI; selectedClass: string; }) => {
     const [selectedTeacherId, setSelectedTeacherId] = useState<number | undefined>(currentData?.teacher_id);
     const [selectedSubject, setSelectedSubject] = useState<string | undefined>(currentData?.subject_name);
+    
     useEffect(() => { setSelectedTeacherId(currentData?.teacher_id); setSelectedSubject(currentData?.subject_name); }, [currentData, isVisible]);
+    
     const availableSubjects = useMemo(() => { if (!selectedTeacherId) return []; const teacher = teachers.find(t => t.id === selectedTeacherId); return teacher?.subjects_taught || []; }, [selectedTeacherId, teachers]);
     const className = slotInfo.class_group || selectedClass;
+    
     return (
         <Modal visible={isVisible} transparent animationType="fade" onRequestClose={onClose}>
-            <View style={styles.modalOverlay}><Animatable.View animation="zoomIn" duration={400} style={styles.modalContent}><Text style={styles.modalTitle}>Edit Slot</Text><Text style={styles.modalSubtitle}>{className} - {slotInfo.day} - Period {slotInfo.period}</Text><Text style={styles.inputLabel}>Teacher</Text><View style={styles.modalPickerStyle}><Picker selectedValue={selectedTeacherId?.toString() || 'none'} onValueChange={(itemValue: string) => { const teacherId = itemValue === 'none' ? undefined : parseInt(itemValue); setSelectedTeacherId(teacherId); setSelectedSubject(undefined); }} style={styles.picker} itemStyle={styles.pickerItem} dropdownIconColor="#333"><Picker.Item label="-- Select Teacher --" value="none" />{teachers.map(t => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} />))}</Picker></View><Text style={styles.inputLabel}>Subject</Text><View style={styles.modalPickerStyle}><Picker selectedValue={selectedSubject || 'none'} onValueChange={(itemValue: string) => setSelectedSubject(itemValue === 'none' ? undefined : itemValue)} style={styles.picker} itemStyle={styles.pickerItem} enabled={!!selectedTeacherId && availableSubjects.length > 0} dropdownIconColor="#333"><Picker.Item label="-- Select Subject --" value="none" />{availableSubjects.map(s => (<Picker.Item key={s} label={s} value={s} />))}</Picker></View><View style={styles.modalButtonContainer}><TouchableOpacity style={[styles.modalButton, styles.clearButton]} onPress={() => onSave({})}><Text style={styles.modalButtonText}>Clear Slot</Text></TouchableOpacity><TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={() => onSave({ teacher_id: selectedTeacherId, subject_name: selectedSubject })}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity></View><TouchableOpacity style={styles.closeButton} onPress={onClose}><Text style={styles.closeButtonText}>Cancel</Text></TouchableOpacity></Animatable.View></View>
+            <View style={styles.modalOverlay}>
+                <Animatable.View animation="zoomIn" duration={400} style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Edit Slot</Text>
+                    <Text style={styles.modalSubtitle}>{className} - {slotInfo.day} - Period {slotInfo.period}</Text>
+                    
+                    <Text style={styles.inputLabel}>Teacher</Text>
+                    <View style={styles.modalPickerStyle}>
+                        <Picker selectedValue={selectedTeacherId?.toString() || 'none'} 
+                            onValueChange={(itemValue: string) => { const teacherId = itemValue === 'none' ? undefined : parseInt(itemValue); setSelectedTeacherId(teacherId); setSelectedSubject(undefined); }} 
+                            style={styles.picker} 
+                            itemStyle={styles.pickerItem} 
+                            dropdownIconColor="#333">
+                            <Picker.Item label="-- Select Teacher --" value="none" color="#333" />
+                            {teachers.map(t => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color="#333" />))}
+                        </Picker>
+                    </View>
+                    
+                    <Text style={styles.inputLabel}>Subject</Text>
+                    <View style={styles.modalPickerStyle}>
+                        <Picker selectedValue={selectedSubject || 'none'} 
+                            onValueChange={(itemValue: string) => setSelectedSubject(itemValue === 'none' ? undefined : itemValue)} 
+                            style={styles.picker} 
+                            itemStyle={styles.pickerItem} 
+                            enabled={!!selectedTeacherId && availableSubjects.length > 0} 
+                            dropdownIconColor="#333">
+                            <Picker.Item label="-- Select Subject --" value="none" color="#333"/>
+                            {availableSubjects.map(s => (<Picker.Item key={s} label={s} value={s} color="#333" />))}
+                        </Picker>
+                    </View>
+                    
+                    <View style={styles.modalButtonContainer}>
+                        <TouchableOpacity style={[styles.modalButton, styles.clearButton]} onPress={() => onSave({})}><Text style={styles.modalButtonText}>Clear Slot</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={() => onSave({ teacher_id: selectedTeacherId, subject_name: selectedSubject })}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity>
+                    </View>
+                    
+                    <TouchableOpacity style={styles.closeButton} onPress={onClose}><Text style={styles.closeButtonText}>Cancel</Text></TouchableOpacity>
+                </Animatable.View>
+            </View>
         </Modal>
     );
 };
@@ -158,9 +202,26 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }) => {
         if (!selectedSlot) return;
         const classGroupToUse = selectedSlot.class_group || selectedClass;
         if (!classGroupToUse) { Alert.alert('Error', 'Class group context missing.'); return; }
-        const payload = { class_group: classGroupToUse, day_of_week: selectedSlot.day, period_number: selectedSlot.period, subject_name: slotToSave.subject_name || null, teacher_id: slotToSave.teacher_id || null, };
-        try { await apiClient.post('/timetable', payload); Alert.alert('Success', 'Timetable updated!'); setIsModalVisible(false); fetchTimetable(); }
-        catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'An error occurred while updating timetable.'); }
+        
+        const payload = { 
+            class_group: classGroupToUse, 
+            day_of_week: selectedSlot.day, 
+            period_number: selectedSlot.period, 
+            subject_name: slotToSave.subject_name || null, 
+            teacher_id: slotToSave.teacher_id || null, 
+        };
+
+        try { 
+            await apiClient.post('/timetable', payload); 
+            Alert.alert('Success', 'Timetable updated!'); 
+            setIsModalVisible(false); 
+            fetchTimetable(); 
+        }
+        catch (error: any) { 
+            // Handle Conflict (Already Assigned) or other errors
+            const errorMessage = error.response?.data?.message || 'An error occurred while updating timetable.';
+            Alert.alert('Unable to Assign', errorMessage); 
+        }
     };
 
     const handleAttendancePress = (slotData: RenderablePeriod, periodNumber: number, dayOfColumn: Day) => {
@@ -222,6 +283,7 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }) => {
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F2F5F8" />
             <ScrollView contentContainerStyle={styles.pageContainer}>
                 
                 {/* --- HEADER CARD --- */}
@@ -257,14 +319,14 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }) => {
                         {(showClassPicker || user?.role === 'student') && (
                             <View style={styles.pickerWrapper}>
                                 <Picker selectedValue={selectedClass} onValueChange={(itemValue: string) => setSelectedClass(itemValue)} style={styles.picker} itemStyle={styles.pickerItem} dropdownIconColor="#333" enabled={user?.role !== 'student'}>
-                                    {CLASS_GROUPS.map(option => (<Picker.Item key={option} label={option} value={option} />))}
+                                    {CLASS_GROUPS.map(option => (<Picker.Item key={option} label={option} value={option} color="#333" />))}
                                 </Picker>
                             </View>
                         )}
                         {showTeacherPicker && (
                             <View style={styles.pickerWrapper}>
                                 <Picker selectedValue={selectedTeacherId?.toString()} onValueChange={(itemValue: string) => setSelectedTeacherId(parseInt(itemValue))} style={styles.picker} itemStyle={styles.pickerItem} dropdownIconColor="#333">
-                                    {displayableTeacherList.map(t => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} />))}
+                                    {displayableTeacherList.map(t => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color="#333" />))}
                                 </Picker>
                             </View>
                         )}
@@ -330,8 +392,8 @@ const styles = StyleSheet.create({
     // Filters
     filterContainer: { marginHorizontal: 15, marginBottom: 15 },
     pickerWrapper: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginVertical: 5, backgroundColor: '#FFFFFF', overflow: 'hidden', height: 45, justifyContent: 'center' },
-    picker: { width: '100%', color: '#333', },
-    pickerItem: { fontSize: 16, color: '#333', textAlign: 'left', },
+    picker: { width: '100%', color: '#333333', },
+    pickerItem: { fontSize: 16, color: '#333333', textAlign: 'left', },
 
     // Table
     tableOuterContainer: { marginHorizontal: TABLE_HORIZONTAL_MARGIN, backgroundColor: '#FFFFFF', borderRadius: 12, overflow: 'hidden', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, borderWidth: 1, borderColor: '#EEE', },
@@ -353,9 +415,9 @@ const styles = StyleSheet.create({
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', },
     modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 15, padding: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, },
     modalPickerStyle: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 10, backgroundColor: '#F9F9F9', },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#333' },
-    modalSubtitle: { fontSize: 16, color: '#555', textAlign: 'center', marginBottom: 20 },
-    inputLabel: { fontSize: 16, marginTop: 15, marginBottom: 5, color: '#333', fontWeight: '500' },
+    modalTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#333333' },
+    modalSubtitle: { fontSize: 16, color: '#555555', textAlign: 'center', marginBottom: 20 },
+    inputLabel: { fontSize: 16, marginTop: 15, marginBottom: 5, color: '#333333', fontWeight: '500' },
     modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 25, },
     modalButton: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', elevation: 2 },
     saveButton: { backgroundColor: '#27AE60', marginLeft: 10 },

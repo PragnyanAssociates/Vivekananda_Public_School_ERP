@@ -873,39 +873,90 @@ app.put('/api/profiles/:userId', upload.single('profileImage'), async (req, res)
 app.get('/api/teachers', async (req, res) => { try { const [teachers] = await db.query("SELECT id, full_name, subjects_taught FROM users WHERE role = 'teacher'"); res.status(200).json(teachers); } catch (error) { console.error("GET /api/teachers Error:", error); res.status(500).json({ message: 'Could not fetch teachers.' }); }});
 app.get('/api/timetable/:class_group', async (req, res) => { try { const { class_group } = req.params; if (!class_group) { return res.status(400).json({ message: 'Class group is required.' }); } const query = `SELECT t.*, u.full_name as teacher_name FROM timetables t LEFT JOIN users u ON t.teacher_id = u.id WHERE t.class_group = ?`; const [slots] = await db.query(query, [class_group]); res.status(200).json(slots); } catch (error) { console.error("GET /api/timetable/:class_group Error:", error); res.status(500).json({ message: 'Could not fetch timetable.' }); }});
 app.get('/api/timetable/teacher/:teacherId', async (req, res) => { try { const { teacherId } = req.params; if (!teacherId || isNaN(parseInt(teacherId))) { return res.status(400).json({ message: 'A valid Teacher ID is required.' }); } const query = `SELECT t.class_group, t.day_of_week, t.period_number, t.subject_name, t.teacher_id, u.full_name as teacher_name FROM timetables t JOIN users u ON t.teacher_id = u.id WHERE t.teacher_id = ? ORDER BY day_of_week, period_number`; const [slots] = await db.query(query, [teacherId]); res.status(200).json(slots); } catch (error) { console.error("GET /api/timetable/teacher/:teacherId Error:", error); res.status(500).json({ message: 'Could not fetch teacher timetable.' }); }});
-app.post('/api/timetable', async (req, res) => { const { class_group, day_of_week, period_number, subject_name, teacher_id } = req.body; const connection = await db.getConnection(); try { await connection.beginTransaction(); await connection.execute('DELETE FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?', [class_group, day_of_week, period_number] ); if (teacher_id && subject_name) { await connection.execute( 'INSERT INTO timetables (class_group, day_of_week, period_number, subject_name, teacher_id) VALUES (?, ?, ?, ?, ?)', [class_group, day_of_week, period_number, subject_name, teacher_id] ); } 
-// ★★★★★ START: NEW NOTIFICATION LOGIC ★★★★★
+app.post('/api/timetable', async (req, res) => {
+    const { class_group, day_of_week, period_number, subject_name, teacher_id } = req.body;
+    const connection = await db.getConnection();
 
-        // Only send notifications if a new class was actually assigned (not just cleared)
+    try {
+        await connection.beginTransaction();
+
+        // ★★★★★ START: DOUBLE-BOOKING CHECK ★★★★★
+        if (teacher_id) {
+            // Check if this teacher is ALREADY assigned to another class for this same day/period
+            const [existingAssignments] = await connection.query(
+                `SELECT class_group FROM timetables 
+                 WHERE teacher_id = ? 
+                 AND day_of_week = ? 
+                 AND period_number = ? 
+                 AND class_group != ?`, // Exclude the class we are currently editing (updating self is fine)
+                [teacher_id, day_of_week, period_number, class_group]
+            );
+
+            if (existingAssignments.length > 0) {
+                // Conflict detected!
+                const conflictClass = existingAssignments[0].class_group;
+                await connection.rollback();
+                
+                // Fetch teacher name for a better error message (optional, but good UX)
+                const [tInfo] = await connection.query("SELECT full_name FROM users WHERE id = ?", [teacher_id]);
+                const tName = tInfo.length ? tInfo[0].full_name : 'The teacher';
+
+                return res.status(409).json({ 
+                    message: `${tName} is already assigned to ${conflictClass} for Period ${period_number} on ${day_of_week}. Please remove that assignment first.` 
+                });
+            }
+        }
+        // ★★★★★ END: DOUBLE-BOOKING CHECK ★★★★★
+
+
+        // Proceed with Delete/Insert logic
+        await connection.execute(
+            'DELETE FROM timetables WHERE class_group = ? AND day_of_week = ? AND period_number = ?',
+            [class_group, day_of_week, period_number]
+        );
+
         if (teacher_id && subject_name) {
-            
-            // 1. Find all students in the affected class group
+            await connection.execute(
+                'INSERT INTO timetables (class_group, day_of_week, period_number, subject_name, teacher_id) VALUES (?, ?, ?, ?, ?)',
+                [class_group, day_of_week, period_number, subject_name, teacher_id]
+            );
+        }
+
+        // ★★★★★ START: NOTIFICATION LOGIC ★★★★★
+        if (teacher_id && subject_name) {
             const [students] = await connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ?", [class_group]);
-
-            // 2. Prepare the list of all recipients (the teacher + all students)
             const studentIds = students.map(s => s.id);
-            const allRecipientIds = [teacher_id, ...studentIds]; 
+            const allRecipientIds = [teacher_id, ...studentIds];
 
-            // 3. Construct an informative notification message
             const notificationTitle = `Timetable Updated for ${class_group}`;
             const notificationMessage = `Your schedule has been updated. You now have ${subject_name} on ${day_of_week} during Period ${period_number}.`;
-            const senderName = "School Administration"; // Generic sender for admin actions
+            const senderName = "School Administration";
 
-            // 4. Send the notifications to everyone in the list
             if (allRecipientIds.length > 0) {
+                // Assuming createBulkNotifications is defined elsewhere in your backend
                 await createBulkNotifications(
-                    connection, // Use the transaction connection
+                    connection,
                     allRecipientIds,
                     senderName,
                     notificationTitle,
                     notificationMessage,
-                    '/timetable' // Generic link to the timetable screen
+                    '/timetable'
                 );
             }
         }
-        // ★★★★★ END: NEW NOTIFICATION LOGIC ★★★★★
-    await connection.commit(); res.status(201).json({ message: 'Timetable updated successfully!' }); } catch (error) { await connection.rollback(); console.error("POST /api/timetable Error:", error); res.status(500).json({ message: error.message || 'Error updating timetable.' }); } finally { connection.release(); }});
+        // ★★★★★ END: NOTIFICATION LOGIC ★★★★★
 
+        await connection.commit();
+        res.status(201).json({ message: 'Timetable updated successfully!' });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("POST /api/timetable Error:", error);
+        res.status(500).json({ message: error.message || 'Error updating timetable.' });
+    } finally {
+        connection.release();
+    }
+});
 
 
 // 📂 File: server.js (CORRECTED & VERIFIED ATTENDANCE MODULE)
