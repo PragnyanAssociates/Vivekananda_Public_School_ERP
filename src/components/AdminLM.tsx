@@ -114,10 +114,46 @@ const AdminLM = () => {
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    setFormData({ ...user, subjects_taught: user.subjects_taught || [] });
+    // Initialize formData with the user's existing data
+    setFormData({ ...user, subjects_taught: user.subjects_taught || [], password: '' });
     setIsPasswordVisible(false);
     setCurrentSubjectInput('');
     setIsModalVisible(true);
+  };
+
+  // Helper function to detect changes
+  const getChangedFields = (original: User, current: any) => {
+    const changes: any = {};
+    
+    // Iterate over current form data keys
+    Object.keys(current).forEach(key => {
+        // Skip array comparison here, handled below
+        if (key === 'subjects_taught') return;
+        // Skip password here, handled below
+        if (key === 'password') return;
+        
+        // Use loose equality (==) to handle potential type mismatches (e.g. string vs number from inputs)
+        // Check if key exists in original user object (or if it's a new field being added)
+        if (original[key as keyof User] != current[key]) {
+            changes[key] = current[key];
+        }
+    });
+
+    // Handle Password specifically
+    if (current.password && current.password.trim() !== '') {
+        changes.password = current.password;
+    }
+
+    // Special handling for subjects array (Teacher)
+    if (original.role === 'teacher') {
+        const originalSubjects = JSON.stringify(original.subjects_taught || []);
+        const currentSubjects = JSON.stringify(current.subjects_taught || []);
+        if (originalSubjects !== currentSubjects) {
+            changes.subjects_taught = current.subjects_taught;
+        }
+    }
+
+    return changes;
   };
 
   const handleSave = async () => {
@@ -125,22 +161,31 @@ const AdminLM = () => {
       Alert.alert('Error', 'Username and Full Name are required.');
       return;
     }
-    if (!editingUser && !formData.password) {
+    
+    const isEditing = !!editingUser;
+
+    if (!isEditing && !formData.password) {
         Alert.alert('Error', 'Password cannot be empty for new users.');
         return;
     }
 
-    const payload = { ...formData };
-    if (payload.role !== 'teacher') {
-        delete payload.subjects_taught;
-    }
-
-    const isEditing = !!editingUser;
-
     try {
       if (isEditing) {
-        await apiClient.put(`/users/${editingUser!.id}`, payload);
+        // --- CONCURRENCY FIX: Only send changed fields ---
+        const changes = getChangedFields(editingUser!, formData);
+        
+        if (Object.keys(changes).length === 0) {
+            Alert.alert('Info', 'No changes detected.');
+            return;
+        }
+
+        await apiClient.put(`/users/${editingUser!.id}`, changes);
       } else {
+        // Creating new user: Send everything
+        const payload = { ...formData };
+        if (payload.role !== 'teacher') {
+            delete payload.subjects_taught;
+        }
         await apiClient.post('/users', payload);
       }
 
@@ -263,9 +308,10 @@ const AdminLM = () => {
             </View>
         </View>
        
+        {/* Add Button */}
         <TouchableOpacity style={styles.headerAddBtn} onPress={openAddModal}>
-            <Icon name="add" size={22} color="#fff" />
-            <Text style={styles.headerAddBtnText}>Add User</Text>
+            <Icon name="add" size={18} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -314,7 +360,7 @@ const AdminLM = () => {
         ))}
       </ScrollView>
 
-      {/* Modal Section (Unchanged style-wise) */}
+      {/* Modal Section */}
       <Modal animationType="fade" transparent={true} visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <Animatable.View animation="zoomIn" duration={400} style={styles.modalContainer}>
@@ -485,21 +531,22 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginTop: 2,
   },
+  
   headerAddBtn: {
-    backgroundColor: '#2ECC71',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
+    backgroundColor: '#008080', // Teal instead of Green
+    paddingHorizontal: 12,      // Reduced padding
+    paddingVertical: 6,         // Reduced padding
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: 10,
+    gap: 4,
     elevation: 2,
   },
   headerAddBtnText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-    marginLeft: 4,
+    fontWeight: '600',          // Semi-bold instead of bold
+    fontSize: 12,               // Smaller font
   },
 
   // --- Search Bar Card Style ---
