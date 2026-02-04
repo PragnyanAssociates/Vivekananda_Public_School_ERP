@@ -2717,15 +2717,18 @@ app.get('/api/homework/student/:studentId/:classGroup', async (req, res) => {
 });
 
 // Student submits a homework file (PDF Type)
-app.post('/api/homework/submit/:assignmentId', upload.single('submission'), async (req, res) => {
+app.post('/api/homework/submit/:assignmentId', upload.array('submissions'), async (req, res) => {
     const { assignmentId } = req.params;
     const { student_id } = req.body;
     
-    if (!req.file) {
-        return res.status(400).json({ message: 'No file was uploaded.' });
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: 'No files were uploaded.' });
     }
     
-    const submission_path = `/uploads/${req.file.filename}`;
+    // Store file paths as a JSON string array
+    const filePaths = req.files.map(file => `/uploads/${file.filename}`);
+    const submission_path = JSON.stringify(filePaths);
+
     const connection = await db.getConnection();
     
     try {

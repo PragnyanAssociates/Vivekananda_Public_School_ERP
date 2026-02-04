@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
-    Alert, Linking, LayoutAnimation, UIManager, Platform, SafeAreaView 
+    Alert, Linking, LayoutAnimation, UIManager, Platform, SafeAreaView, Modal, ScrollView 
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
@@ -33,7 +33,13 @@ const StudentHomeworkScreen = () => {
     const { user } = useAuth();
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(null);
+    
+    // --- NEW: State for Submission Modal ---
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [activeAssignmentId, setActiveAssignmentId] = useState(null);
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false); // Global loading for modal
+    
     const navigation = useNavigation();
     const isFocused = useIsFocused();
 
@@ -59,34 +65,78 @@ const StudentHomeworkScreen = () => {
         }
     }, [fetchAssignments, isFocused]);
 
-    const handleFileSubmission = async (assignmentId) => {
-        if (!user) return;
-        try {
-            const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
-            if (!result || result.length === 0) return;
-            const fileToUpload = result[0];
+    // --- NEW: Open Modal Function ---
+    const openSubmissionModal = (assignmentId) => {
+        setActiveAssignmentId(assignmentId);
+        setSelectedFiles([]); // Reset files
+        setIsModalVisible(true);
+    };
 
-            setIsSubmitting(assignmentId);
+    // --- NEW: Handle Multi-File Picking ---
+    const handlePickFiles = async () => {
+        try {
+            const results = await pick({ 
+                type: [types.allFiles], 
+                allowMultiSelection: true // ALLOW MULTIPLE
+            });
+            if (results && results.length > 0) {
+                setSelectedFiles(prev => [...prev, ...results]);
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            }
+        } catch (err) {
+            if (!isCancel(err)) { 
+                Alert.alert("Error", "Could not select files."); 
+            }
+        }
+    };
+
+    // --- NEW: Remove Single File ---
+    const removeFile = (indexToRemove) => {
+        setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    };
+
+    // --- NEW: Submit All Files ---
+    const confirmSubmission = async () => {
+        if (!user || !activeAssignmentId) return;
+        if (selectedFiles.length === 0) {
+            return Alert.alert("Required", "Please attach at least one file.");
+        }
+
+        setIsSubmitting(true);
+        try {
             const formData = new FormData();
             formData.append('student_id', user.id.toString());
-            formData.append('submission', { uri: fileToUpload.uri, type: fileToUpload.type, name: fileToUpload.name });
-
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            await apiClient.post(`/homework/submit/${assignmentId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             
-            Alert.alert("Success", "Homework submitted!");
+            // Loop through files and append them
+            selectedFiles.forEach((file) => {
+                formData.append('submissions', { // Key must be 'submissions' (plural) to match updated backend
+                    uri: file.uri,
+                    type: file.type,
+                    name: file.name
+                });
+            });
+
+            await apiClient.post(`/homework/submit/${activeAssignmentId}`, formData, { 
+                headers: { 'Content-Type': 'multipart/form-data' } 
+            });
+            
+            Alert.alert("Success", "Homework submitted successfully!");
+            setIsModalVisible(false);
             fetchAssignments();
 
         } catch (err) {
-            if (!isCancel(err)) { console.error("Submission Error:", err); Alert.alert("Error", err.response?.data?.message || "Could not submit file."); }
-        } finally { setIsSubmitting(null); }
+            console.error("Submission Error:", err); 
+            Alert.alert("Error", err.response?.data?.message || "Could not submit files."); 
+        } finally { 
+            setIsSubmitting(false); 
+        }
     };
     
     const handleDeleteSubmission = async (submissionId, assignmentId) => {
         if (!user) return;
         Alert.alert( "Delete Submission", "Are you sure you want to delete your submission? This action cannot be undone.", [ { text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive",
             onPress: async () => {
-                setIsSubmitting(assignmentId); 
                 try {
                     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                     await apiClient.delete(`/homework/submission/${submissionId}`, { data: { student_id: user.id } });
@@ -94,7 +144,7 @@ const StudentHomeworkScreen = () => {
                     fetchAssignments(); 
                 } catch (err) {
                     Alert.alert("Error", err.response?.data?.message || "Could not delete submission.");
-                } finally { setIsSubmitting(null); }
+                }
             },
         }, ]);
     };
@@ -125,9 +175,8 @@ const StudentHomeworkScreen = () => {
                     <AssignmentCard 
                         item={item} 
                         index={index}
-                        onFileSubmit={handleFileSubmission}
+                        onOpenSubmitModal={openSubmissionModal}
                         onDelete={handleDeleteSubmission}
-                        isSubmitting={isSubmitting === item.id}
                         navigation={navigation}
                     />
                 )}
@@ -136,13 +185,49 @@ const StudentHomeworkScreen = () => {
                 refreshing={isLoading}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
             />
+
+            {/* --- NEW: SUBMISSION MODAL --- */}
+            <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide" transparent={true}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Submit Homework</Text>
+                        <Text style={styles.modalSubtitle}>Attach your files below</Text>
+
+                        <ScrollView style={styles.fileListContainer}>
+                            {selectedFiles.map((file, index) => (
+                                <View key={index} style={styles.fileItem}>
+                                    <View style={styles.fileInfo}>
+                                        <MaterialIcons name="insert-drive-file" size={20} color={COLORS.textSub} />
+                                        <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                                    </View>
+                                    <TouchableOpacity onPress={() => removeFile(index)} style={styles.removeFileBtn}>
+                                        <MaterialIcons name="close" size={16} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                            <TouchableOpacity style={styles.addMoreBtn} onPress={handlePickFiles}>
+                                <MaterialIcons name="add" size={20} color={COLORS.primary} />
+                                <Text style={styles.addMoreText}>Add Files</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)} disabled={isSubmitting}>
+                                <Text style={styles.modalButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.modalBtn, styles.confirmBtn]} onPress={confirmSubmission} disabled={isSubmitting}>
+                                {isSubmitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.modalButtonText}>Submit</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
 
-const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, navigation }) => {
+const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation }) => {
     
-    // Helper to format date to DD/MM/YYYY
     const formatDateDisplay = (isoDateString) => {
         if (!isoDateString) return '';
         const d = new Date(isoDateString);
@@ -160,15 +245,12 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
 
     const status = getStatusInfo();
     
-    // --- UPDATED: Handle Multiple Attachments parsing ---
     const getAttachments = () => {
         if (!item.attachment_path) return [];
         try {
-            // Check if it's a JSON array string
             if (item.attachment_path.trim().startsWith('[')) {
                 return JSON.parse(item.attachment_path);
             }
-            // Legacy single file support
             return [item.attachment_path];
         } catch (e) {
             return [item.attachment_path];
@@ -189,8 +271,9 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
                     )}
                     <View style={styles.buttonRow}>
                         {status.text !== 'Graded' && (
-                            <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(item.submission_id, item.id)} disabled={isSubmitting}>
-                                {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialIcons name="delete" size={18} color="#fff" /><Text style={styles.submitButtonText}>Delete Submission</Text></>}
+                            <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(item.submission_id, item.id)}>
+                                <MaterialIcons name="delete" size={18} color="#fff" />
+                                <Text style={styles.submitButtonText}>Delete Submission</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -210,8 +293,10 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
         } else {
             return (
                 <View style={styles.buttonRow}>
-                    <TouchableOpacity style={styles.submitButton} onPress={() => onFileSubmit(item.id)} disabled={isSubmitting}>
-                        {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <><MaterialIcons name="upload-file" size={18} color="#fff" /><Text style={styles.submitButtonText}>Submit Homework</Text></>}
+                    {/* Changed: Calls onOpenSubmitModal instead of direct upload */}
+                    <TouchableOpacity style={styles.submitButton} onPress={() => onOpenSubmitModal(item.id)}>
+                        <MaterialIcons name="upload-file" size={18} color="#fff" />
+                        <Text style={styles.submitButtonText}>Submit Homework</Text>
                     </TouchableOpacity>
                 </View>
             );
@@ -243,7 +328,6 @@ const AssignmentCard = ({ item, onFileSubmit, onDelete, isSubmitting, index, nav
                 </Animatable.View>
             )}
 
-            {/* --- UPDATED: Attachment Rendering for Lists --- */}
             {attachments.length > 0 && (
                 <View style={{marginTop: 10}}>
                     {attachments.map((path, idx) => (
@@ -341,6 +425,24 @@ const styles = StyleSheet.create({
     submittedAnswerLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.textSub, marginBottom: 5 },
     submittedAnswerText: { fontSize: 14, color: COLORS.textMain, backgroundColor: '#f1f8e9', padding: 12, borderRadius: 6, lineHeight: 20 },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: COLORS.textSub },
+
+    // --- NEW: Modal Styles ---
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    modalContent: { width: '90%', backgroundColor: '#fff', borderRadius: 15, padding: 20, maxHeight: '80%' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain, textAlign: 'center', marginBottom: 5 },
+    modalSubtitle: { fontSize: 14, color: COLORS.textSub, textAlign: 'center', marginBottom: 15 },
+    fileListContainer: { maxHeight: 300, marginBottom: 15 },
+    fileItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', padding: 12, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
+    fileInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
+    fileName: { marginLeft: 10, fontSize: 14, color: COLORS.textMain, flex: 1 },
+    removeFileBtn: { backgroundColor: '#ffebee', borderRadius: 15, width: 26, height: 26, justifyContent: 'center', alignItems: 'center' },
+    addMoreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderStyle: 'dashed', borderWidth: 1, borderColor: COLORS.primary, borderRadius: 8, marginTop: 5 },
+    addMoreText: { color: COLORS.primary, fontWeight: 'bold', marginLeft: 5 },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+    modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    cancelBtn: { backgroundColor: '#90A4AE' },
+    confirmBtn: { backgroundColor: COLORS.success },
+    modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
 
 export default StudentHomeworkScreen;
