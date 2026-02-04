@@ -58,7 +58,7 @@ const TeacherAdminPTMScreen = () => {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
-  // --- SAFE LOCAL DATE HANDLER ---
+  // --- TIME CHANGE HANDLER ---
   const onPickerChange = (event: any, selectedValue?: Date) => {
     if (Platform.OS === 'android') setPickerMode(null);
     
@@ -75,16 +75,17 @@ const TeacherAdminPTMScreen = () => {
         finalDate.setMinutes(currentDate.getMinutes());
         setDate(finalDate);
 
-        // FORMAT: YYYY-MM-DD HH:mm:ss (Local String)
+        // Formats to: YYYY-MM-DD HH:mm:ss
         const year = finalDate.getFullYear();
         const month = String(finalDate.getMonth() + 1).padStart(2, '0');
         const day = String(finalDate.getDate()).padStart(2, '0');
         const hours = String(finalDate.getHours()).padStart(2, '0');
         const minutes = String(finalDate.getMinutes()).padStart(2, '0');
-        // We use space here, but backend will ensure it's saved/retrieved consistently
         const sqlDateString = `${year}-${month}-${day} ${hours}:${minutes}:00`;
         
-        setFormData({ ...formData, meeting_datetime: sqlDateString });
+        // Update Form Data State
+        setFormData(prev => ({ ...prev, meeting_datetime: sqlDateString }));
+        
         if (Platform.OS === 'android') setPickerMode(null);
       }
     } else { setPickerMode(null); }
@@ -93,9 +94,11 @@ const TeacherAdminPTMScreen = () => {
   const handleOpenModal = (meeting: Meeting | null = null) => {
     setEditingMeeting(meeting);
     if (meeting) {
-      // Backend now sends "YYYY-MM-DDTHH:mm:ss". new Date() handles this as Local Time correctly.
-      const existingDate = new Date(meeting.meeting_datetime);
+      // Load existing date into Date Object for Picker
+      const existingDate = new Date(meeting.meeting_datetime.replace(' ', 'T'));
       setDate(existingDate);
+      
+      // Load existing data into Form
       setFormData({
           meeting_datetime: meeting.meeting_datetime, 
           teacher_id: meeting.teacher_id.toString(),
@@ -123,13 +126,19 @@ const TeacherAdminPTMScreen = () => {
     if(!formData.meeting_datetime || !formData.teacher_id || !formData.class_group || !formData.subject_focus) {
         return Alert.alert("Required", "Please fill in all required fields.");
     }
+
+    // ★★★ FIX IS HERE: We now send the full formData even when editing ★★★
+    // This ensures the new 'meeting_datetime' is sent to the backend.
     const body = editingMeeting 
-      ? { status: formData.status, notes: formData.notes, meeting_link: formData.meeting_link } 
+      ? { ...formData } 
       : { ...formData, created_by: user.id };
     
     try {
-        if(editingMeeting) await apiClient.put(`/ptm/${editingMeeting.id}`, body);
-        else await apiClient.post('/ptm', body);
+        if(editingMeeting) {
+            await apiClient.put(`/ptm/${editingMeeting.id}`, body);
+        } else {
+            await apiClient.post('/ptm', body);
+        }
       await fetchAllData();
       setIsModalOpen(false);
     } catch (error: any) { Alert.alert("Save Error", error.response?.data?.message || 'Failed to save meeting.'); }
@@ -147,7 +156,6 @@ const TeacherAdminPTMScreen = () => {
 
   const getDisplayDate = () => {
       if (!formData.meeting_datetime) return 'Select Date & Time';
-      // Replace space with T to ensure new Date() parses it as ISO-Local
       const d = new Date(formData.meeting_datetime.replace(" ", "T")); 
       if (isNaN(d.getTime())) return formData.meeting_datetime;
       return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -205,7 +213,7 @@ const TeacherAdminPTMScreen = () => {
                             
                             <Text style={[styles.label, dynamicStyles.label]}>Teacher / Admin:</Text>
                             <View style={dynamicStyles.pickerWrapper}>
-                                <Picker selectedValue={formData.teacher_id} onValueChange={val => setFormData({...formData, teacher_id: val})} enabled={!editingMeeting} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
+                                <Picker selectedValue={formData.teacher_id} onValueChange={val => setFormData({...formData, teacher_id: val})} enabled={true} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
                                     <Picker.Item label="-- Select Person --" value="" color={theme.textSub} />
                                     {teachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color={theme.textMain} />)}
                                 </Picker>
@@ -213,14 +221,14 @@ const TeacherAdminPTMScreen = () => {
 
                             <Text style={[styles.label, dynamicStyles.label]}>Class:</Text>
                             <View style={dynamicStyles.pickerWrapper}>
-                                <Picker selectedValue={formData.class_group} onValueChange={val => setFormData({...formData, class_group: val})} enabled={!editingMeeting} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
+                                <Picker selectedValue={formData.class_group} onValueChange={val => setFormData({...formData, class_group: val})} enabled={true} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
                                     <Picker.Item label="-- Select Class --" value="" color={theme.textSub} />
                                     {classes.map(c => <Picker.Item key={c} label={c} value={c} color={theme.textMain} />)}
                                 </Picker>
                             </View>
 
                             <Text style={[styles.label, dynamicStyles.label]}>Subject Focus:</Text>
-                            <TextInput style={[styles.input, dynamicStyles.input]} placeholderTextColor={theme.textSub} value={formData.subject_focus} onChangeText={t => setFormData({...formData, subject_focus: t})} placeholder="e.g., Math Performance" editable={!editingMeeting} />
+                            <TextInput style={[styles.input, dynamicStyles.input]} placeholderTextColor={theme.textSub} value={formData.subject_focus} onChangeText={t => setFormData({...formData, subject_focus: t})} placeholder="e.g., Math Performance" editable={true} />
                             
                             <Text style={[styles.label, dynamicStyles.label]}>Date & Time:</Text>
                             <TouchableOpacity onPress={() => setPickerMode('date')} style={[styles.input, dynamicStyles.input]}>

@@ -2200,17 +2200,38 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// PUT update meeting
+// PUT (update) meeting - UPDATED TO ALLOW RESCHEDULING
 app.put('/api/ptm/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
-    const { status, notes, meeting_link } = req.body;
+    // We now accept ALL fields, not just status/notes
+    const { meeting_datetime, teacher_id, class_group, subject_focus, status, notes, meeting_link } = req.body;
 
-    if (status === undefined) return res.status(400).json({ message: 'Status must be provided.' });
+    if (!meeting_datetime || !status) {
+         return res.status(400).json({ message: 'Date and Status are required.' });
+    }
 
     try {
-        const query = 'UPDATE ptm_meetings SET status = ?, notes = ?, meeting_link = ? WHERE id = ?';
-        const [result] = await db.query(query, [status, notes || null, meeting_link || null, id]);
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Meeting not found.' });
+        // Update query now includes the Date, Teacher, Class, and Subject
+        const query = `
+            UPDATE ptm_meetings 
+            SET meeting_datetime = ?, teacher_id = ?, class_group = ?, subject_focus = ?, status = ?, notes = ?, meeting_link = ? 
+            WHERE id = ?
+        `;
+        
+        const [result] = await db.query(query, [
+            meeting_datetime, 
+            teacher_id, 
+            class_group, 
+            subject_focus, 
+            status, 
+            notes || null, 
+            meeting_link || null, 
+            id
+        ]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Meeting not found.' });
+        }
         res.status(200).json({ message: 'Meeting updated successfully!' });
     } catch (error) {
         console.error("PUT /api/ptm/:id Error:", error);
