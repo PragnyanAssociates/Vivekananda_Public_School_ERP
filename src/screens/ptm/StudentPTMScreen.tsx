@@ -1,20 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, RefreshControl, Linking, Alert, SafeAreaView } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, RefreshControl, Linking, Alert, SafeAreaView, useColorScheme } from 'react-native';
 import apiClient from '../../api/client';
 import { MeetingCard, Meeting } from './MeetingCard';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', 
-    cardBg: '#FFFFFF',
-    textMain: '#263238',
-    textSub: '#546E7A',
-    border: '#CFD8DC'
+// --- DYNAMIC THEME HELPERS ---
+const getTheme = (scheme: string | null | undefined) => {
+    const isDark = scheme === 'dark';
+    return {
+        isDark,
+        primary: '#008080',    
+        background: isDark ? '#121212' : '#F2F5F8', 
+        cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
+        textMain: isDark ? '#E0E0E0' : '#263238',
+        textSub: isDark ? '#B0BEC5' : '#546E7A',
+        border: isDark ? '#424242' : '#CFD8DC'
+    };
 };
 
 const StudentPTMScreen = () => {
+  const colorScheme = useColorScheme();
+  const theme = getTheme(colorScheme);
+
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,25 +56,36 @@ const StudentPTMScreen = () => {
   };
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    return <View style={[styles.center, {backgroundColor: theme.background}]}><ActivityIndicator size="large" color={theme.primary} /></View>;
   }
 
   if (error) {
-    return <View style={styles.center}><Text style={styles.errorText}>{error}</Text></View>;
+    return <View style={[styles.center, {backgroundColor: theme.background}]}><Text style={[styles.errorText, {color: '#ff5252'}]}>{error}</Text></View>;
   }
 
+  const dynamicStyles = StyleSheet.create({
+      headerCard: {
+          backgroundColor: theme.cardBg,
+          borderColor: theme.border,
+          borderWidth: theme.isDark ? 1 : 0
+      },
+      headerTitle: { color: theme.textMain },
+      headerSubtitle: { color: theme.textSub },
+      emptyText: { color: theme.textSub }
+  });
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, {backgroundColor: theme.background}]}>
         
         {/* --- HEADER CARD --- */}
-        <View style={styles.headerCard}>
+        <View style={[styles.headerCard, dynamicStyles.headerCard]}>
             <View style={styles.headerLeft}>
                 <View style={styles.headerIconContainer}>
-                    <MaterialIcons name="groups" size={24} color="#008080" />
+                    <MaterialIcons name="groups" size={24} color={theme.primary} />
                 </View>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>PTM Schedules</Text>
-                    <Text style={styles.headerSubtitle}>Parent-Teacher Meetings</Text>
+                    <Text style={[styles.headerTitle, dynamicStyles.headerTitle]}>PTM Schedules</Text>
+                    <Text style={[styles.headerSubtitle, dynamicStyles.headerSubtitle]}>Parent-Teacher Meetings</Text>
                 </View>
             </View>
         </View>
@@ -86,11 +104,11 @@ const StudentPTMScreen = () => {
             )}
             ListEmptyComponent={ 
                 <View style={styles.center}>
-                    <MaterialIcons name="event-busy" size={50} color={COLORS.border} />
-                    <Text style={styles.emptyText}>No meetings scheduled.</Text>
+                    <MaterialIcons name="event-busy" size={50} color={theme.border} />
+                    <Text style={[styles.emptyText, dynamicStyles.emptyText]}>No meetings scheduled.</Text>
                 </View> 
             }
-            refreshControl={ <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[COLORS.primary]}/> }
+            refreshControl={ <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[theme.primary]} tintColor={theme.primary}/> }
             contentContainerStyle={{ paddingBottom: 20 }}
         />
     </SafeAreaView>
@@ -98,15 +116,14 @@ const StudentPTMScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, paddingTop: 50 },
     
-    // --- HEADER CARD STYLES ---
+    // Header
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 8,
@@ -122,7 +139,7 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
+        backgroundColor: 'rgba(0, 128, 128, 0.1)',
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -131,18 +148,18 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
 
-    // --- LIST STYLES ---
+    // List
     cardWrapper: {
-        width: '96%',       // Matches Header Width
+        width: '95%',
         alignSelf: 'center',
-        marginBottom: 8,   // Space between cards
+        marginBottom: 8,
     },
     
-    emptyText: { textAlign: 'center', fontSize: 16, color: COLORS.textSub, marginTop: 10 },
-    errorText: { color: COLORS.danger || 'red', fontSize: 16, textAlign: 'center' },
+    emptyText: { textAlign: 'center', fontSize: 16, marginTop: 10 },
+    errorText: { fontSize: 16, textAlign: 'center' },
 });
 
 export default StudentPTMScreen;

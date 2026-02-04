@@ -2052,37 +2052,30 @@ app.put('/api/admin/donor-query/status', async (req, res) => {
 
 
 // ==========================================================
-// --- PARENT-TEACHER MEETING (PTM) API ROUTES (CORRECTED) --
+// --- PARENT-TEACHER MEETING (PTM) API ROUTES ---
 // ==========================================================
 
 // GET meetings (role-aware filtering)
-// ★★★ THIS IS THE CORRECTED CODE WITH THE FIX ★★★
 app.get('/api/ptm', verifyToken, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
     try {
-        // Define the columns to select explicitly. This is the fix.
-        // It ensures 'meeting_link' is always included in the response.
         const columnsToSelect = `
             id, meeting_datetime, teacher_id, teacher_name, class_group, 
             subject_focus, status, notes, meeting_link
         `;
 
-        // Admins and teachers see all meetings
         if (userRole === 'admin' || userRole === 'teacher') {
             const query = `SELECT ${columnsToSelect} FROM ptm_meetings ORDER BY meeting_datetime DESC`;
             const [meetings] = await db.query(query);
             return res.status(200).json(meetings);
         }
 
-        // Students (and parents, if applicable) only see meetings for their class or for 'All' classes
         if (userRole === 'student' || userRole === 'parent') {
-            // First, get the student's class_group from the database using their ID from the token
             const [[user]] = await db.query('SELECT class_group FROM users WHERE id = ?', [userId]);
             
             if (!user || !user.class_group) {
-                 // If a student has no class, they should still see school-wide meetings
                  const query = `SELECT ${columnsToSelect} FROM ptm_meetings WHERE class_group = 'All' ORDER BY meeting_datetime DESC`;
                  const [meetings] = await db.query(query);
                  return res.status(200).json(meetings);
@@ -2098,7 +2091,6 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
             return res.status(200).json(meetings);
         }
         
-        // Deny access for any other roles by default
         res.status(403).json({ message: "You do not have permission to view PTM schedules." });
 
     } catch (error) {
@@ -2107,37 +2099,36 @@ app.get('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// GET list of all teachers and admins for the form
+// GET list of all teachers and admins
 app.get('/api/ptm/teachers', verifyToken, async (req, res) => {
     try {
         const [users] = await db.query("SELECT id, full_name FROM users WHERE role IN ('teacher', 'admin') ORDER BY full_name ASC");
         res.status(200).json(users);
     } catch (error) {
         console.error("GET /api/ptm/teachers Error:", error);
-        res.status(500).json({ message: 'Could not fetch the list of teachers and admins.' });
+        res.status(500).json({ message: 'Could not fetch teachers.' });
     }
 });
 
-// GET a unique list of all classes for the form
+// GET unique classes
 app.get('/api/ptm/classes', verifyToken, async (req, res) => {
     try {
         const query = "SELECT DISTINCT class_group FROM users WHERE class_group IS NOT NULL AND class_group != '' ORDER BY class_group ASC";
         const [results] = await db.query(query);
         const classes = results.map(item => item.class_group);
         res.status(200).json(classes);
-    } catch (error)
-    {
+    } catch (error) {
         console.error("GET /api/ptm/classes Error:", error);
-        res.status(500).json({ message: 'Could not fetch the list of classes.' });
+        res.status(500).json({ message: 'Could not fetch classes.' });
     }
 });
 
 
-// POST a new meeting (CORRECTED NOTIFICATION LOGIC)
+// POST a new meeting (FIXED FOR 500 ERROR)
 app.post('/api/ptm', verifyToken, async (req, res) => {
     const { meeting_datetime, teacher_id, class_group, subject_focus, notes, meeting_link } = req.body; 
-    const created_by = req.user.id; // Get creator's ID securely from the token
     
+    // Basic Validation
     if (!meeting_datetime || !teacher_id || !subject_focus || !class_group) {
         return res.status(400).json({ message: 'Meeting Date, Teacher, Class, and Subject are required.' });
     }
@@ -2152,68 +2143,64 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
             return res.status(404).json({ message: 'Selected teacher not found.' });
         }
         
+        // Insert query
         const query = `INSERT INTO ptm_meetings (meeting_datetime, teacher_id, teacher_name, class_group, subject_focus, notes, meeting_link) VALUES (?, ?, ?, ?, ?, ?, ?)`;
         await connection.query(query, [meeting_datetime, teacher_id, teacher.full_name, class_group, subject_focus, notes || null, meeting_link || null]);
 
-        // --- CORRECTED NOTIFICATION RECIPIENT LOGIC ---
-        
-        const specificTeacherId = parseInt(teacher_id, 10);
-        let recipientIds = [];
-        let recipientQuery = '';
+        // --- SIMPLIFIED NOTIFICATION LOGIC ---
+        let recipientQuery = "";
+        let queryParams = [];
 
         if (class_group === 'All') {
-            // Target: All Students, All Teachers, All Admins
             recipientQuery = "SELECT id FROM users WHERE role IN ('student', 'teacher', 'admin')";
         } else if (class_group === 'Teachers') {
-            // Target: All Teachers
             recipientQuery = "SELECT id FROM users WHERE role = 'teacher'";
         } else if (class_group === 'Admins') {
-            // Target: All Admins (This is uncommon for PTMs, but supported by the UI)
             recipientQuery = "SELECT id FROM users WHERE role = 'admin'";
         } else {
-            // Default case: Specific Class (e.g., 'Class 1', 'LKG')
-            // Get all students in that class
+            // Specific Class
             recipientQuery = "SELECT id FROM users WHERE role = 'student' AND class_group = ?";
-            
-            // Execute the specific class query and initialize recipients
-            const [students] = await connection.query(recipientQuery, [class_group]);
-            recipientIds = students.map(s => s.id);
+            queryParams = [class_group];
         }
 
-        // If a general group query was run, fetch the IDs now
-        if (recipientQuery && class_group !== 'Admins' && class_group !== 'Teachers' && class_group !== 'All') {
-            // recipientIds are already populated for specific classes
-        } else if (recipientQuery) {
-             const [users] = await connection.query(recipientQuery);
-             recipientIds = users.map(u => u.id);
+        // Fetch recipients safely
+        const [users] = await connection.query(recipientQuery, queryParams);
+        let recipientIds = users.map(u => u.id);
+        
+        // Add the specific teacher involved
+        if (teacher_id) {
+            recipientIds.push(parseInt(teacher_id));
         }
-        
-        // Always ensure the specific teacher associated with the meeting is notified (and the creator if they aren't the teacher)
-        recipientIds.push(specificTeacherId);
-        
-        // Use a Set to get unique IDs (deduplicate)
+
+        // Deduplicate
         const allRecipientIds = [...new Set(recipientIds)]; 
 
         if (allRecipientIds.length > 0) {
             const senderName = req.user.full_name || "School Administration";
-
             const displayClass = class_group === 'All' ? 'all classes' : class_group;
+            
+            // Format Date for Notification Text
+            const dateObj = new Date(meeting_datetime);
+            const eventDate = isNaN(dateObj.getTime()) ? meeting_datetime : dateObj.toLocaleDateString();
+
             const notificationTitle = `New PTM: ${class_group === 'All' ? 'All Classes' : class_group}`;
-            const eventDate = new Date(meeting_datetime).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
             const notificationMessage = `A PTM for ${displayClass} regarding "${subject_focus}" with ${teacher.full_name} has been scheduled for ${eventDate}.`;
 
-            await createBulkNotifications(
-                connection,
-                allRecipientIds, // Now includes Teachers, Admins, or All users correctly
-                senderName,
-                notificationTitle,
-                notificationMessage,
-                '/ptm'
-            );
+            // Ensure createBulkNotifications exists in your project scope, or this catches the error
+            if (typeof createBulkNotifications === 'function') {
+                await createBulkNotifications(
+                    connection,
+                    allRecipientIds,
+                    senderName,
+                    notificationTitle,
+                    notificationMessage,
+                    '/ptm'
+                );
+            }
         }
         
         await connection.commit();
-        res.status(201).json({ message: 'Meeting scheduled and users notified successfully!' });
+        res.status(201).json({ message: 'Meeting scheduled successfully!' });
 
     } catch (error) {
         await connection.rollback();
@@ -2224,13 +2211,13 @@ app.post('/api/ptm', verifyToken, async (req, res) => {
     }
 });
 
-// PUT (update) an existing meeting
+// PUT (update) meeting
 app.put('/api/ptm/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { status, notes, meeting_link } = req.body;
 
     if (status === undefined) {
-         return res.status(400).json({ message: 'Status must be provided for an update.' });
+         return res.status(400).json({ message: 'Status must be provided.' });
     }
 
     try {
@@ -2242,11 +2229,11 @@ app.put('/api/ptm/:id', verifyToken, async (req, res) => {
         res.status(200).json({ message: 'Meeting updated successfully!' });
     } catch (error) {
         console.error("PUT /api/ptm/:id Error:", error);
-        res.status(500).json({ message: 'An error occurred while updating the meeting.' });
+        res.status(500).json({ message: 'Error updating meeting.' });
     }
 });
 
-// DELETE a meeting
+// DELETE meeting
 app.delete('/api/ptm/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     try {
@@ -2258,7 +2245,7 @@ app.delete('/api/ptm/:id', verifyToken, async (req, res) => {
         res.status(200).json({ message: 'Meeting deleted successfully.' });
     } catch (error) {
         console.error("DELETE /api/ptm/:id Error:", error);
-        res.status(500).json({ message: 'An error occurred while deleting the meeting.' });
+        res.status(500).json({ message: 'Error deleting meeting.' });
     }
 });
 
