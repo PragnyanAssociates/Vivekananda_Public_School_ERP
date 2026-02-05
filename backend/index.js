@@ -5672,12 +5672,12 @@ app.post('/api/groups', verifyToken, isTeacherOrAdmin, async (req, res) => {
 app.get('/api/groups', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        // FIX: TIMESTAMP FORMATTING TO UTC ISO
+        // FIX: Removed .000Z to prevent double timezone addition
         const query = `
             SELECT
                 g.id, g.name, g.description, g.created_at, g.created_by, g.group_dp_url, g.background_color,
                 lm.message_text AS last_message_text,
-                DATE_FORMAT(lm.timestamp, '%Y-%m-%dT%H:%i:%s.000Z') AS last_message_timestamp,
+                DATE_FORMAT(lm.timestamp, '%Y-%m-%dT%H:%i:%s') AS last_message_timestamp,
                 (SELECT COUNT(*) FROM group_chat_messages unread_m WHERE unread_m.group_id = g.id AND unread_m.timestamp > COALESCE(gls.last_seen_timestamp, '1970-01-01') AND unread_m.user_id != ?) AS unread_count
             FROM \`groups\` g
             JOIN group_members gm ON g.id = gm.group_id
@@ -5785,10 +5785,10 @@ app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res)
 app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
-        // FIX: TIMESTAMP FORMATTING
+        // FIX: Removed .000Z
         const query = `
             SELECT
-                m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s.000Z') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.file_name,
                 m.reply_to_message_id,
                 u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
@@ -5813,6 +5813,7 @@ app.post('/api/groups/media', verifyToken, chatUpload.single('media'), (req, res
 
 
 // ★★★ 5. Real-Time Socket.IO Logic ★★★
+// ★★★ 5. Real-Time Socket.IO Logic (Fixed Timestamp Format) ★★★
 io.on('connection', (socket) => {
     console.log(`🔌 A user connected: ${socket.id}`);
 
@@ -5837,9 +5838,9 @@ io.on('connection', (socket) => {
             );
             const newMessageId = result.insertId;
             
-            // FIX: SELECT with formatted timestamp
+            // FIX: Removed .000Z so frontend treats it as local time
             const [[broadcastMessage]] = await connection.query(`
-                SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s.000Z') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.file_name,
                 m.reply_to_message_id, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
                 reply_m.message_text as reply_text, reply_m.message_type as reply_type, reply_u.full_name as reply_sender_name
@@ -5899,8 +5900,9 @@ io.on('connection', (socket) => {
             }
             await connection.query('UPDATE group_chat_messages SET message_text = ?, is_edited = TRUE WHERE id = ?', [newText, messageId]);
             
+            // FIX: Removed .000Z here as well
             const [[updatedMessage]] = await connection.query(`
-                SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s.000Z') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
+                SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.file_name,
                 m.reply_to_message_id, u.full_name, u.role, u.class_group, p.profile_image_url, p.roll_no,
                 reply_m.message_text as reply_text, reply_m.message_type as reply_type, reply_u.full_name as reply_sender_name

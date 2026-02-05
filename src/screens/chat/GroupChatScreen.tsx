@@ -19,8 +19,16 @@ import ImageViewing from 'react-native-image-viewing';
 
 const THEME = { primary: '#008080', text: '#212529', muted: '#86909c', border: '#dee2e6', myMessageBg: '#dcf8c6', otherMessageBg: '#ffffff', white: '#ffffff', destructive: '#dc3545', background: '#F2F5F8', cardBg: '#FFFFFF' };
 
+// HELPER: Generate Local ISO String (YYYY-MM-DDTHH:mm:ss)
+const getLocalISOString = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+    const localTime = new Date(now.getTime() - offsetMs);
+    return localTime.toISOString().slice(0, 19); // Removes the 'Z'
+};
+
 const formatDateSeparator = (dateString: string) => {
-    const messageDate = new Date(dateString);
+    const messageDate = new Date(dateString); // Parses "YYYY-MM-DDTHH:mm:ss" as local
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -65,7 +73,6 @@ const GroupChatScreen = () => {
     const flatListRef = useRef<FlatList | null>(null);
     const initialLoadDone = useRef(false);
 
-    // FIX: Hide Default Header
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
@@ -111,10 +118,8 @@ const GroupChatScreen = () => {
         socketRef.current.on('newMessage', (msg) => {
             if (msg.group_id === group.id) {
                 setMessages(prev => {
-                    // Check if we have a temporary message with this clientMessageId
                     const tempIndex = prev.findIndex(m => m.clientMessageId === msg.clientMessageId);
                     if (tempIndex !== -1) {
-                        // Replace temp message with server message
                         const newMsgs = [...prev];
                         newMsgs[tempIndex] = msg;
                         return newMsgs;
@@ -143,7 +148,6 @@ const GroupChatScreen = () => {
         const processed = [];
         let lastDate = '';
         messages.forEach(message => {
-            // FIX: Ensure correct date parsing
             const messageDate = new Date(message.timestamp).toDateString();
             if (messageDate !== lastDate) {
                 processed.push({ type: 'date', id: `date-${messageDate}`, date: formatDateSeparator(message.timestamp) });
@@ -157,13 +161,11 @@ const GroupChatScreen = () => {
     const sendMessage = (type: 'text' | 'image' | 'video' | 'file', text: string | null, url: string | null, clientMessageId?: string, fileName?: string) => {
         if (!user || !socketRef.current) return;
         
-        // FIX: OPTIMISTIC UPDATE (REAL TIME INTERACTION)
         const tempId = clientMessageId || uuidv4();
         
-        // Don't duplicate if already added by uploadFile
         if (!clientMessageId) {
             const tempMessage = {
-                id: tempId, // Temporary ID
+                id: tempId,
                 clientMessageId: tempId,
                 user_id: user.id,
                 full_name: user.fullName,
@@ -173,7 +175,8 @@ const GroupChatScreen = () => {
                 file_url: url,
                 file_name: fileName,
                 message_text: text,
-                timestamp: new Date().toISOString(), // Use current time
+                // FIX: Use Local ISO String for instant update
+                timestamp: getLocalISOString(), 
                 status: 'sending',
                 reply_to_message_id: replyingTo ? replyingTo.id : null,
                 reply_sender_name: replyingTo ? replyingTo.full_name : null,
@@ -182,7 +185,6 @@ const GroupChatScreen = () => {
             };
             
             setMessages(prev => [...prev, tempMessage]);
-            // Scroll to bottom immediately
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
         }
 
@@ -202,7 +204,9 @@ const GroupChatScreen = () => {
         const tempMessage = {
             id: clientMessageId, clientMessageId, user_id: user.id, full_name: user.fullName, profile_image_url: user.profileImageUrl,
             group_id: group.id, message_type: type, file_url: null, localUri: file.uri, file_name: file.fileName,
-            message_text: null, timestamp: new Date().toISOString(), status: 'uploading', progress: 0,
+            message_text: null, 
+            timestamp: getLocalISOString(), 
+            status: 'uploading', progress: 0,
         };
         setMessages(prev => [...prev, tempMessage]);
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -325,7 +329,10 @@ const GroupChatScreen = () => {
         if (item.type === 'date') return <View style={styles.dateSeparator}><Text style={styles.dateSeparatorText}>{item.date}</Text></View>;
         
         const isMyMessage = item.user_id === user?.id;
-        // FIX: Ensure timestamp is localized
+        
+        // FIX: Display Time
+        // The backend now sends "YYYY-MM-DDTHH:mm:ss" (No Z).
+        // React Native creates a date object assuming local time from this string.
         const messageTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isSelected = selectedMessage && selectedMessage.id === item.id;
 
