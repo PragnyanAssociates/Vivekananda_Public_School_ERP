@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
- * Updated: Added Back Button in Header.
+ * Updated: Comparison Modal now shows Teacher Name, Class Total & Average for specific subjects.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -10,7 +10,7 @@ import {
     Platform, UIManager, LayoutAnimation, RefreshControl
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native'; // Added for Back Button
+import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -134,6 +134,7 @@ const StudentPerformance = () => {
     // Data
     const [students, setStudents] = useState<any[]>([]);
     const [marksData, setMarksData] = useState<any[]>([]);
+    const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); // Added for assignments
     const [attendanceMap, setAttendanceMap] = useState<any>({}); 
 
     // Specific Student Attendance Data (for graph)
@@ -200,6 +201,7 @@ const StudentPerformance = () => {
             const response = await apiClient.get(`/reports/class-data/${classGroup}`);
             setStudents(response.data.students || []);
             setMarksData(response.data.marks || []);
+            setTeacherAssignments(response.data.assignments || []); // Capture Teacher Assignments
         } catch (error) {
             console.error('Error fetching marks:', error);
         }
@@ -496,6 +498,34 @@ const StudentPerformance = () => {
         return data;
     };
 
+    // --- Helper to get Teacher Info & Class Subject Stats ---
+    const getComparisonSummary = () => {
+        if (compareSubject === 'All Subjects' || studentList.length === 0) return null;
+
+        // 1. Get Teacher Name
+        const assignment = teacherAssignments.find(a => a.subject === compareSubject);
+        const teacherName = assignment ? assignment.teacher_name : 'Not Assigned';
+
+        // 2. Calculate Stats
+        const comparisonList = getComparisonData();
+        let totalObtained = 0;
+        let totalPossible = 0;
+
+        comparisonList.forEach(item => {
+            totalObtained += item.total_obtained;
+            totalPossible += item.total_possible;
+        });
+
+        const classAverage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
+
+        return {
+            teacherName,
+            classTotal: Math.round(totalObtained),
+            classMax: Math.round(totalPossible),
+            classAverage: getRoundedPercentage(classAverage)
+        };
+    };
+
     const getColorForRank = (rank: number) => {
         if (rank === 1) return COLORS.success;
         if (rank === 2) return COLORS.primary;
@@ -666,6 +696,8 @@ const StudentPerformance = () => {
             </View>
         );
     };
+
+    const stats = getComparisonSummary();
 
     return (
         <View style={styles.container}>
@@ -853,6 +885,33 @@ const StudentPerformance = () => {
 
                     </View>
                     <View style={styles.compareGraphArea}>
+                        {/* --- ADDED: SUMMARY CARD FOR SPECIFIC SUBJECT --- */}
+                        {stats && (
+                            <View style={styles.summaryCard}>
+                                <View style={styles.summaryRow}>
+                                    <View style={styles.summaryItem}>
+                                        <Icon name="account-tie" size={18} color={COLORS.primary} />
+                                        <Text style={styles.summaryLabel}>Teacher:</Text>
+                                        <Text style={styles.summaryValue} numberOfLines={1}>{stats.teacherName}</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.summaryRow, { marginTop: 8 }]}>
+                                    <View style={styles.summaryItem}>
+                                        <Icon name="chart-box-outline" size={18} color={COLORS.textSub} />
+                                        <Text style={styles.summaryLabel}>Total Marks:</Text>
+                                        <Text style={styles.summaryValue}>{stats.classTotal} / {stats.classMax}</Text>
+                                    </View>
+                                    <View style={styles.summaryItem}>
+                                        <Icon name="percent" size={16} color={COLORS.textSub} />
+                                        <Text style={styles.summaryLabel}>Average:</Text>
+                                        <Text style={[styles.summaryValue, { color: getStatusColor(stats.classAverage) }]}>
+                                            {stats.classAverage}%
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
                         <Text style={styles.compareGraphTitle}>Ranking by {compareExam} ({compareSubject})</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end' }}>
                             {getComparisonData().length > 0 ? (
@@ -1030,6 +1089,38 @@ const styles = StyleSheet.create({
     compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginBottom: 20 },
     noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', width: SCREEN_WIDTH },
     noDataTxt: { marginTop: 10, color: COLORS.textSub },
+
+    // --- SUMMARY CARD STYLES ---
+    summaryCard: {
+        backgroundColor: '#fdfefe', // Light Lime/Yellow bg to stand out slightly
+        marginHorizontal: 20,
+        marginBottom: 20,
+        borderRadius: 8,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#5243d9'
+    },
+    summaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+    },
+    summaryItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    summaryLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: COLORS.textSub,
+        marginLeft: 6,
+        marginRight: 4
+    },
+    summaryValue: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: COLORS.textMain
+    }
 });
 
 export default StudentPerformance;
