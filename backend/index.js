@@ -5782,10 +5782,14 @@ app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res)
 
 
 // ★★★ 4. API Routes for Chat Messages ★★★
+// ★★★ UPDATED: Get Chat History + Last Seen Timestamp ★★★
 app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
-        // FIX: Removed .000Z
+        const userId = req.user.id;
+
+        // 1. Fetch Messages
+        // FIX: Removed .000Z to match local time fix
         const query = `
             SELECT
                 m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
@@ -5798,8 +5802,21 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
             LEFT JOIN group_chat_messages reply_m ON m.reply_to_message_id = reply_m.id
             LEFT JOIN users reply_u ON reply_m.user_id = reply_u.id
             WHERE m.group_id = ? ORDER BY m.timestamp ASC LIMIT 100;`;
+        
         const [messages] = await db.query(query, [groupId]);
-        res.json(messages);
+
+        // 2. Fetch User's Last Seen Timestamp
+        const [[lastSeenData]] = await db.query(
+            'SELECT last_seen_timestamp FROM group_last_seen WHERE group_id = ? AND user_id = ?', 
+            [groupId, userId]
+        );
+
+        // Return both messages and the timestamp
+        res.json({
+            messages,
+            lastSeen: lastSeenData ? lastSeenData.last_seen_timestamp : null
+        });
+
     } catch (error) {
         console.error("Error fetching chat history:", error);
         res.status(500).json({ message: "Error fetching chat history." });
