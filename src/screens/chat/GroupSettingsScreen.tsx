@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
@@ -21,6 +21,11 @@ const GroupSettingsScreen = () => {
     
     const [isViewerVisible, setViewerVisible] = useState(false);
     const isCreator = user?.id === group.created_by;
+
+    // FIX: Hide Default Header
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     const handlePickImage = () => {
         if (!isCreator) return;
@@ -134,7 +139,7 @@ const styles = StyleSheet.create({
         backgroundColor: THEME.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -175,7 +180,7 @@ const styles = StyleSheet.create({
     },
     fieldContainer: { width: '100%', marginBottom: 20, backgroundColor: '#fff', padding: 20, borderRadius: 12, elevation: 1 },
     label: { fontSize: 14, color: THEME.muted, marginBottom: 8, fontWeight: '600' },
-    input: { backgroundColor: '#f9f9f9', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: THEME.border, width: '100%' },
+    input: { backgroundColor: '#f9f9f9', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: THEME.border, width: '100%', color: THEME.text },
     disabledInput: { backgroundColor: '#f0f0f0', color: THEME.muted },
     saveButton: { backgroundColor: THEME.primary, paddingVertical: 14, borderRadius: 30, alignItems: 'center', width: '100%', elevation: 3 },
     deleteButton: { backgroundColor: THEME.danger, paddingVertical: 14, borderRadius: 30, alignItems: 'center', width: '100%', elevation: 3 },

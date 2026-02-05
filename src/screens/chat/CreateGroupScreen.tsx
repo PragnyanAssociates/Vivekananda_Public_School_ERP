@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useEffect, useMemo, useLayoutEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, FlatList, Alert, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+const { width } = Dimensions.get('window');
 const THEME = { primary: '#008080', background: '#F2F5F8', text: '#212529', muted: '#86909c', border: '#dee2e6', white: '#ffffff', cardBg: '#FFFFFF' };
 const BG_COLORS = ['#e5ddd5', '#fce6e6', '#e6f2fc', '#e6fcf2', '#fcf2e6', '#f2e6fc'];
 
@@ -19,6 +20,13 @@ const CreateGroupScreen = () => {
     const [selectedColor, setSelectedColor] = useState(BG_COLORS[0]);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
+
+    // FIX: Hide the default navigation header
+    useLayoutEffect(() => {
+        navigation.setOptions({
+            headerShown: false,
+        });
+    }, [navigation]);
 
     useEffect(() => {
         const fetchOptions = async () => {
@@ -143,7 +151,7 @@ const styles = StyleSheet.create({
         backgroundColor: THEME.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -170,15 +178,15 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: THEME.text },
     headerSubtitle: { fontSize: 13, color: THEME.muted },
 
-    form: { padding: 16, backgroundColor: THEME.white, borderBottomWidth: 1, borderBottomColor: THEME.border, borderRadius: 12, marginHorizontal: 10, marginBottom: 10, elevation: 1 },
-    input: { backgroundColor: '#f0f0f0', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: THEME.border, marginBottom: 16 },
+    form: { padding: 16, backgroundColor: THEME.white, borderBottomWidth: 1, borderBottomColor: THEME.border, borderRadius: 12, width: '95%', alignSelf:'center', marginBottom: 10, elevation: 1 },
+    input: { backgroundColor: '#f0f0f0', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: THEME.border, marginBottom: 16, color: THEME.text },
     searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 8, borderWidth: 1, borderColor: THEME.border },
     searchIcon: { paddingLeft: 12 },
-    searchInput: { flex: 1, height: 44, paddingHorizontal: 10, fontSize: 16 },
+    searchInput: { flex: 1, height: 44, paddingHorizontal: 10, fontSize: 16, color: THEME.text },
     colorPickerContainer: { marginBottom: 16 },
     colorLabel: { fontSize: 14, color: THEME.muted, marginBottom: 8 },
     colorSwatch: { width: 40, height: 40, borderRadius: 20, marginRight: 10, justifyContent: 'center', alignItems: 'center' },
-    listHeader: { fontSize: 16, fontWeight: '600', color: THEME.text, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
+    listHeader: { fontSize: 16, fontWeight: '600', color: THEME.text, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
     userItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, backgroundColor: THEME.white, borderBottomWidth: 1, borderBottomColor: THEME.border },
     userInfo: { flex: 1 },
     userName: { fontSize: 16, fontWeight: '500', color: THEME.text },

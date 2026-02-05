@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, Keyboard, Modal, Pressable, PermissionsAndroid, Dimensions } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { io, Socket } from 'socket.io-client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; // For Header Icon
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; 
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import { getProfileImageSource } from '../../utils/imageHelpers';
@@ -24,11 +24,9 @@ const formatDateSeparator = (dateString: string) => {
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    messageDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    yesterday.setHours(0, 0, 0, 0);
-    if (messageDate.getTime() === today.getTime()) return 'Today';
-    if (messageDate.getTime() === yesterday.getTime()) return 'Yesterday';
+    
+    if (messageDate.toDateString() === today.toDateString()) return 'Today';
+    if (messageDate.toDateString() === yesterday.toDateString()) return 'Yesterday';
     return messageDate.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
@@ -67,6 +65,11 @@ const GroupChatScreen = () => {
     const flatListRef = useRef<FlatList | null>(null);
     const initialLoadDone = useRef(false);
 
+    // FIX: Hide Default Header
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
+
     const imageMessages = useMemo(() =>
         messages
             .filter(msg => msg.message_type === 'image' && msg.file_url)
@@ -104,15 +107,23 @@ const GroupChatScreen = () => {
 
         socketRef.current = io(SERVER_URL, { transports: ['websocket'] });
         socketRef.current.on('connect', () => socketRef.current?.emit('joinGroup', { groupId: group.id }));
+        
         socketRef.current.on('newMessage', (msg) => {
             if (msg.group_id === group.id) {
                 setMessages(prev => {
-                    const tempMessageExists = prev.some(m => m.clientMessageId === msg.clientMessageId);
-                    if (tempMessageExists) return prev.map(m => m.clientMessageId === msg.clientMessageId ? msg : m);
-                    else return [...prev, msg];
+                    // Check if we have a temporary message with this clientMessageId
+                    const tempIndex = prev.findIndex(m => m.clientMessageId === msg.clientMessageId);
+                    if (tempIndex !== -1) {
+                        // Replace temp message with server message
+                        const newMsgs = [...prev];
+                        newMsgs[tempIndex] = msg;
+                        return newMsgs;
+                    }
+                    return [...prev, msg];
                 });
             }
         });
+        
         socketRef.current.on('messageDeleted', (id) => setMessages(prev => prev.filter(msg => msg.id !== id)));
         socketRef.current.on('messageEdited', (msg) => {
             if (msg.group_id === group.id) setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
@@ -122,7 +133,7 @@ const GroupChatScreen = () => {
 
     useEffect(() => {
         if (!loading && messages.length > 0 && !initialLoadDone.current) {
-            flatListRef.current?.scrollToEnd({ animated: false });
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
             initialLoadDone.current = true;
         }
     }, [loading, messages]);
@@ -132,7 +143,8 @@ const GroupChatScreen = () => {
         const processed = [];
         let lastDate = '';
         messages.forEach(message => {
-            const messageDate = new Date(message.timestamp).toLocaleDateString();
+            // FIX: Ensure correct date parsing
+            const messageDate = new Date(message.timestamp).toDateString();
             if (messageDate !== lastDate) {
                 processed.push({ type: 'date', id: `date-${messageDate}`, date: formatDateSeparator(message.timestamp) });
                 lastDate = messageDate;
@@ -144,11 +156,42 @@ const GroupChatScreen = () => {
 
     const sendMessage = (type: 'text' | 'image' | 'video' | 'file', text: string | null, url: string | null, clientMessageId?: string, fileName?: string) => {
         if (!user || !socketRef.current) return;
+        
+        // FIX: OPTIMISTIC UPDATE (REAL TIME INTERACTION)
+        const tempId = clientMessageId || uuidv4();
+        
+        // Don't duplicate if already added by uploadFile
+        if (!clientMessageId) {
+            const tempMessage = {
+                id: tempId, // Temporary ID
+                clientMessageId: tempId,
+                user_id: user.id,
+                full_name: user.fullName,
+                profile_image_url: user.profileImageUrl,
+                group_id: group.id,
+                message_type: type,
+                file_url: url,
+                file_name: fileName,
+                message_text: text,
+                timestamp: new Date().toISOString(), // Use current time
+                status: 'sending',
+                reply_to_message_id: replyingTo ? replyingTo.id : null,
+                reply_sender_name: replyingTo ? replyingTo.full_name : null,
+                reply_text: replyingTo ? (replyingTo.message_type === 'text' ? replyingTo.message_text : 'Media') : null,
+                reply_type: replyingTo ? replyingTo.message_type : null
+            };
+            
+            setMessages(prev => [...prev, tempMessage]);
+            // Scroll to bottom immediately
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+        }
+
         socketRef.current.emit('sendMessage', {
             userId: user.id, groupId: group.id, messageType: type,
             messageText: text, fileUrl: url, fileName: fileName,
-            replyToMessageId: replyingTo ? replyingTo.id : null, clientMessageId: clientMessageId,
+            replyToMessageId: replyingTo ? replyingTo.id : null, clientMessageId: tempId,
         });
+        
         if (type === 'text') setNewMessage('');
         setReplyingTo(null);
     };
@@ -282,6 +325,7 @@ const GroupChatScreen = () => {
         if (item.type === 'date') return <View style={styles.dateSeparator}><Text style={styles.dateSeparatorText}>{item.date}</Text></View>;
         
         const isMyMessage = item.user_id === user?.id;
+        // FIX: Ensure timestamp is localized
         const messageTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isSelected = selectedMessage && selectedMessage.id === item.id;
 
@@ -350,9 +394,14 @@ const GroupChatScreen = () => {
                             </View>
                         )}
                         {renderContent()}
-                        <Text style={[styles.messageTime, (item.message_type === 'image' || item.message_type === 'video') && !item.status ? styles.mediaTime : {}]}>
-                            {item.is_edited ? 'Edited • ' : ''}{messageTime}
-                        </Text>
+                        <View style={{flexDirection:'row', alignItems:'center', justifyContent: 'flex-end', marginTop: 2}}>
+                             <Text style={[styles.messageTime, (item.message_type === 'image' || item.message_type === 'video') && !item.status ? styles.mediaTime : {}]}>
+                                {item.is_edited ? 'Edited • ' : ''}{messageTime}
+                            </Text>
+                            {isMyMessage && (
+                                <Icon name="check" size={14} color={THEME.muted} style={{marginLeft: 3}} />
+                            )}
+                        </View>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -424,7 +473,7 @@ const GroupChatScreen = () => {
                 {loading ? <ActivityIndicator style={{flex: 1}} size="large" /> :
                 <FlatList
                     ref={flatListRef} data={messagesWithDates} renderItem={renderMessageItem}
-                    keyExtractor={(item) => item.id.toString()}
+                    keyExtractor={(item) => item.id?.toString() || item.clientMessageId}
                     contentContainerStyle={{ paddingVertical: 10, paddingBottom: 20 }}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 />}
@@ -459,7 +508,7 @@ const styles = StyleSheet.create({
         backgroundColor: THEME.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 10,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
         marginTop: 10,
         marginBottom: 10,
@@ -494,12 +543,12 @@ const styles = StyleSheet.create({
     senderName: { fontWeight: 'bold', color: THEME.primary },
     senderDetails: { fontSize: 11, color: THEME.muted, marginLeft: 4 },
     messageText: { fontSize: 16, color: THEME.text },
-    messageTime: { fontSize: 11, color: THEME.muted, alignSelf: 'flex-end', marginTop: 5, marginLeft: 10 },
+    messageTime: { fontSize: 11, color: THEME.muted, marginLeft: 5 },
     mediaTime: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.5)', color: THEME.white, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, fontSize: 10 },
     
     // Inputs
     inputContainer: { flexDirection: 'row', padding: 8, backgroundColor: THEME.white, alignItems: 'center' },
-    input: { flex: 1, backgroundColor: '#f0f0f0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 10 : 8, fontSize: 16, maxHeight: 100 },
+    input: { flex: 1, backgroundColor: '#f0f0f0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 10 : 8, fontSize: 16, maxHeight: 100, color: THEME.text },
     sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
     iconButton: { padding: 8 },
     

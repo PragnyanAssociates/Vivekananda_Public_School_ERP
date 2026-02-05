@@ -51,6 +51,7 @@ const GroupListScreen = () => {
 
     const formatTimestamp = (timestamp: string) => {
         if (!timestamp) return '';
+        // FIX: Ensure correct local time
         const date = new Date(timestamp);
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
@@ -94,7 +95,7 @@ const GroupListScreen = () => {
 
             <View style={styles.searchContainer}>
                 <Icon name="magnify" size={20} color={THEME.muted} />
-                <TextInput style={styles.searchInput} placeholder="Search groups..." value={searchQuery} onChangeText={setSearchQuery} />
+                <TextInput style={styles.searchInput} placeholder="Search groups..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor={THEME.muted} />
             </View>
 
             <FlatList
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
         backgroundColor: THEME.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
