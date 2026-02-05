@@ -1,15 +1,15 @@
 /**
  * File: src/screens/report/TeacherFilter.tsx
  * Purpose: Filter Teachers by Performance (Class & Subject).
- * Updated: Strict Color Logic (0-50 Red, 50-85 Blue, 85-100 Green).
- * Updated: Custom Rounding (94.5 -> 94, 94.6 -> 95).
+ * Updated: Added "All" Tab and Quick Access Navigation Button.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager
+    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager, Image
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native'; // Added for navigation
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -69,6 +69,9 @@ const getRoundedPercentage = (value: number | string): number => {
 };
 
 const TeacherFilter = () => {
+    // Navigation Hook
+    const navigation = useNavigation();
+
     // --- State ---
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -81,8 +84,8 @@ const TeacherFilter = () => {
     const [selectedClass, setSelectedClass] = useState('All Classes');
     const [selectedSubject, setSelectedSubject] = useState('All Subjects');
     
-    // Tabs
-    const [activeTab, setActiveTab] = useState<'Above Average' | 'Average' | 'Below Average'>('Above Average');
+    // Tabs - Default 'All'
+    const [activeTab, setActiveTab] = useState<'All' | 'Above Average' | 'Average' | 'Below Average'>('All');
 
     // --- 1. Fetch Classes ---
     useEffect(() => {
@@ -183,10 +186,12 @@ const TeacherFilter = () => {
         return calculatedTeachers;
     }, [selectedClass, selectedSubject, rawTeacherData]);
 
-    // --- 4. Tab Filtering Logic (Updated Ranges) ---
+    // --- 4. Tab Filtering Logic (Updated Ranges & All Tab) ---
     const filteredList = useMemo(() => {
         if (processedList.length === 0) return [];
         const list = [...processedList];
+
+        if (activeTab === 'All') return list;
 
         // Above Average: 85% to 100%
         if (activeTab === 'Above Average') return list.filter(s => s.percentage >= 85);
@@ -218,6 +223,16 @@ const TeacherFilter = () => {
     const getInitials = (name: string) => {
         if (!name) return 'T';
         return name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase();
+    };
+
+    const getListTitle = () => {
+        switch(activeTab) {
+            case 'All': return 'Teacher Performance';
+            case 'Above Average': return 'Top Teachers';
+            case 'Average': return 'Average Performers';
+            case 'Below Average': return 'Need Attention';
+            default: return 'Teachers';
+        }
     };
 
     // --- RENDER ITEM ---
@@ -264,13 +279,13 @@ const TeacherFilter = () => {
         : ['All Subjects', ...(CLASS_SUBJECTS[selectedClass] || [])];
 
     // Tab Titles
-    const TABS = ['Above Average', 'Average', 'Below Average'];
+    const TABS = ['All', 'Above Average', 'Average', 'Below Average'];
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
             
-            {/* 1. Header Card (Standardized) */}
+            {/* 1. Header Card with Quick Access */}
             <View style={styles.headerCard}>
                 <View style={styles.headerIconContainer}>
                     <Icon name="chart-line" size={28} color={COLORS.primary} />
@@ -279,6 +294,18 @@ const TeacherFilter = () => {
                     <Text style={styles.headerTitle}>Teacher Analytics</Text>
                     <Text style={styles.headerSubtitle}>Monitor staff performance</Text>
                 </View>
+
+                {/* --- QUICK ACCESS BUTTON --- */}
+                <TouchableOpacity 
+                    style={styles.quickAccessBtn} 
+                    onPress={() => navigation.navigate('TeacherPerformanceScreen' as never)}
+                    activeOpacity={0.7}
+                >
+                    <Image 
+                        source={{ uri: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png' }} 
+                        style={styles.quickAccessIcon}
+                    />
+                </TouchableOpacity>
             </View>
 
             <View style={styles.bodyContainer}>
@@ -333,7 +360,8 @@ const TeacherFilter = () => {
                 <View style={styles.tabWrapper}>
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab;
-                        let iconName = 'trophy-variant';
+                        let iconName = 'poll'; // Default for All
+                        if(tab === 'Above Average') iconName = 'trophy-variant';
                         if(tab === 'Average') iconName = 'scale-balance';
                         if(tab === 'Below Average') iconName = 'arrow-down-circle-outline';
 
@@ -345,10 +373,17 @@ const TeacherFilter = () => {
                             >
                                 <Icon 
                                     name={iconName} 
-                                    size={18} 
+                                    size={16} 
                                     color={isActive ? '#FFF' : COLORS.textSub} 
                                 />
-                                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+                                <Text 
+                                    style={[styles.tabText, isActive && styles.tabTextActive]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                >
+                                    {tab}
+                                </Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -362,10 +397,12 @@ const TeacherFilter = () => {
                         <>
                             <View style={styles.listHeader}>
                                 <Text style={styles.listHeaderTitle}>
-                                    {activeTab === 'Above Average' ? 'Top Teachers' : activeTab === 'Below Average' ? 'Need Attention' : 'Average Performers'}
+                                    {getListTitle()}
                                 </Text>
                                 <View style={styles.badgeCount}>
-                                    <Text style={styles.badgeCountText}>{filteredList.length}</Text>
+                                    <Text style={styles.badgeCountText}>
+                                        {filteredList.length} / {processedList.length}
+                                    </Text>
                                 </View>
                             </View>
 
@@ -436,6 +473,28 @@ const styles = StyleSheet.create({
         color: '#666666',
         marginTop: 1,
     },
+    // Quick Access Button Styles
+    quickAccessBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E0F2F1', 
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        marginLeft: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#80CBC4',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    quickAccessIcon: {
+        width: 28,
+        height: 28,
+        resizeMode: 'contain',
+    },
 
     // Main Body Container
     bodyContainer: {
@@ -482,22 +541,29 @@ const styles = StyleSheet.create({
         padding: 4,
         marginBottom: 10,
         width: '96%',
-        alignSelf: 'center'
+        alignSelf: 'center',
+        justifyContent: 'space-between',
     },
     tabButton: {
-        flex: 1,
-        flexDirection: 'row',
-        paddingVertical: 8,
+        flex: 1, 
+        flexDirection: 'column', // Stack for space
+        paddingVertical: 6,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 12,
-        gap: 6
+        marginHorizontal: 2, 
     },
     tabButtonActive: {
         backgroundColor: COLORS.primary,
         elevation: 2,
     },
-    tabText: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
+    tabText: { 
+        fontSize: 10,
+        fontWeight: '700', 
+        color: COLORS.textSub,
+        marginTop: 2,
+        textAlign: 'center'
+    },
     tabTextActive: { color: '#FFF' },
 
     // Content

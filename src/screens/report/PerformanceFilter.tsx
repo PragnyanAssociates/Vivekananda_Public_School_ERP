@@ -1,16 +1,16 @@
 /**
  * File: src/screens/report/PerformanceFilter.tsx
  * Purpose: Filter students by Class, Exam & Subject.
- * Updated: Strict Color Logic (0-50 Red, 50-85 Blue, 85-100 Green).
- * Updated: Custom Rounding (94.5 -> 94, 94.6 -> 95).
+ * Updated: Fixed Ranking & Sorting Logic to use Exact Scores instead of Rounded Percentages.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager
+    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager, Image
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -70,7 +70,6 @@ const EXAM_NAME_TO_CODE: any = {
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
-// Rule: 94.5% -> 94%, 94.6% -> 95%
 const getRoundedPercentage = (value: number | string): number => {
     const floatVal = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(floatVal)) return 0;
@@ -85,6 +84,9 @@ const getRoundedPercentage = (value: number | string): number => {
 };
 
 const PerformanceFilter = () => {
+    // Navigation Hook
+    const navigation = useNavigation();
+
     // --- State ---
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -102,8 +104,8 @@ const PerformanceFilter = () => {
     const [selectedExam, setSelectedExam] = useState('Overall');
     const [selectedSubject, setSelectedSubject] = useState('All Subjects');
     
-    // Active Tab State Name
-    const [activeTab, setActiveTab] = useState<'Above Average' | 'Average' | 'Below Average'>('Above Average');
+    // Active Tab State Name - DEFAULT 'All'
+    const [activeTab, setActiveTab] = useState<'All' | 'Above Average' | 'Average' | 'Below Average'>('All');
 
     // --- 1. Fetch Classes ---
     useEffect(() => {
@@ -159,7 +161,6 @@ const PerformanceFilter = () => {
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
         const subjectsToProcess = selectedSubject === 'All Subjects' ? availableSubjects : [selectedSubject];
 
-        // Create Marks Map
         const marksMap: any = {};
         marksData.forEach(mark => {
             if (!marksMap[mark.student_id]) marksMap[mark.student_id] = {};
@@ -200,25 +201,30 @@ const PerformanceFilter = () => {
             }
 
             const rawPercentage = max > 0 ? (obtained / max) * 100 : 0;
-            // Apply custom rounding here so filtering works on the rounded integer
+            // Use rounded percentage for Display & Filter Groups
             const percentage = getRoundedPercentage(rawPercentage);
 
-            return { ...student, obtained, max, percentage };
+            // Pass rawPercentage for Sorting
+            return { ...student, obtained, max, percentage, rawPercentage };
         });
 
         calculatedStudents = calculatedStudents.filter(s => s.max > 0);
-        // Sort based on the integer percentage
-        calculatedStudents.sort((a, b) => b.percentage - a.percentage); 
+        
+        // FIX: Sort based on Exact Percentage (Raw) to ensure proper Ranking
+        calculatedStudents.sort((a, b) => b.rawPercentage - a.rawPercentage); 
+        
         calculatedStudents = calculatedStudents.map((s, index) => ({ ...s, rank: index + 1 }));
 
         return calculatedStudents;
     }, [selectedClass, selectedExam, selectedSubject, students, marksData]);
 
-    // --- 4. Filtering Logic (Updated Ranges) ---
+    // --- 4. Filtering Logic ---
     const filteredList = useMemo(() => {
         if (processedList.length === 0) return [];
         const list = [...processedList];
 
+        if (activeTab === 'All') return list;
+        
         // Above Average: 85% to 100%
         if (activeTab === 'Above Average') return list.filter(s => s.percentage >= 85);
         
@@ -226,7 +232,12 @@ const PerformanceFilter = () => {
         if (activeTab === 'Average') return list.filter(s => s.percentage >= 50 && s.percentage < 85);
         
         // Below Average: 0% to 50%
-        if (activeTab === 'Below Average') return list.filter(s => s.percentage < 50).sort((a, b) => a.percentage - b.percentage);
+        if (activeTab === 'Below Average') {
+            return list
+                .filter(s => s.percentage < 50)
+                // FIX: Sort by Raw Percentage ASCENDING (Low to High) so Rank 30 comes before Rank 29
+                .sort((a, b) => a.rawPercentage - b.rawPercentage);
+        }
 
         return [];
     }, [activeTab, processedList]);
@@ -238,9 +249,7 @@ const PerformanceFilter = () => {
         return assignment ? assignment.teacher_name : 'Not Assigned';
     }, [selectedSubject, teacherAssignments]);
 
-    // --- Helper for Colors (Updated Logic) ---
     const getStatusColor = (perc: number) => {
-        // perc is already rounded integer
         if (perc >= 85) return COLORS.success;
         if (perc >= 50) return COLORS.average;
         return COLORS.poor;
@@ -255,6 +264,16 @@ const PerformanceFilter = () => {
 
     const getInitials = (name: string) => {
         return name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase();
+    };
+
+    const getListTitle = () => {
+        switch(activeTab) {
+            case 'All': return 'Class Performance';
+            case 'Above Average': return 'Top Performers';
+            case 'Average': return 'Average Performers';
+            case 'Below Average': return 'Need Attention';
+            default: return 'Students';
+        }
     };
 
     // --- RENDER ITEM ---
@@ -281,13 +300,11 @@ const PerformanceFilter = () => {
                         </View>
                     </View>
                     <View style={styles.progressTrack}>
-                        {/* Percentage is already 0-100 integer */}
                         <View style={[styles.progressFill, { width: `${item.percentage}%`, backgroundColor: color }]} />
                     </View>
                 </View>
 
                 <View style={styles.scoreContainer}>
-                    {/* Display integer percentage directly */}
                     <Text style={[styles.percentage, { color: color }]}>{item.percentage}%</Text>
                     <Text style={styles.marks}>{Math.round(item.obtained)}/{Math.round(item.max)}</Text>
                 </View>
@@ -296,13 +313,13 @@ const PerformanceFilter = () => {
     };
 
     const currentSubjects = ['All Subjects', ...(CLASS_SUBJECTS[selectedClass] || [])];
-    const TABS = ['Above Average', 'Average', 'Below Average'];
+    const TABS = ['All', 'Above Average', 'Average', 'Below Average'];
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
             
-            {/* 1. Header Card (Standardized) */}
+            {/* 1. Header Card (Updated Button Style) */}
             <View style={styles.headerCard}>
                 <View style={styles.headerIconContainer}>
                     <Icon name="chart-box-outline" size={28} color={COLORS.primary} />
@@ -311,6 +328,18 @@ const PerformanceFilter = () => {
                     <Text style={styles.headerTitle}>Student Reports</Text>
                     <Text style={styles.headerSubtitle}>Analyze class performance</Text>
                 </View>
+
+                {/* --- QUICK ACCESS BUTTON --- */}
+                <TouchableOpacity 
+                    style={styles.quickAccessBtn} 
+                    onPress={() => navigation.navigate('StudentPerformance' as never)}
+                    activeOpacity={0.7}
+                >
+                    <Image 
+                        source={{ uri: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png' }} 
+                        style={styles.quickAccessIcon}
+                    />
+                </TouchableOpacity>
             </View>
 
             <View style={styles.bodyContainer}>
@@ -374,7 +403,8 @@ const PerformanceFilter = () => {
                 <View style={styles.tabWrapper}>
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab;
-                        let iconName = 'trophy-variant';
+                        let iconName = 'poll';
+                        if(tab === 'Above Average') iconName = 'trophy-variant';
                         if(tab === 'Average') iconName = 'scale-balance';
                         if(tab === 'Below Average') iconName = 'arrow-down-circle-outline';
 
@@ -386,10 +416,17 @@ const PerformanceFilter = () => {
                             >
                                 <Icon 
                                     name={iconName} 
-                                    size={18} 
+                                    size={16} 
                                     color={isActive ? '#FFF' : COLORS.textSub} 
                                 />
-                                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+                                <Text 
+                                    style={[styles.tabText, isActive && styles.tabTextActive]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                >
+                                    {tab}
+                                </Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -401,11 +438,10 @@ const PerformanceFilter = () => {
                         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
                     ) : (
                         <>
-                            {/* LIST HEADER with ORANGE Teacher Badge */}
                             <View style={styles.listHeader}>
                                 <View style={styles.listHeaderLeft}>
                                     <Text style={styles.listHeaderTitle}>
-                                        {activeTab === 'Above Average' ? 'Top Performers' : activeTab === 'Below Average' ? 'Need Attention' : 'Average Performers'}
+                                        {getListTitle()}
                                     </Text>
                                     <View style={styles.badgeCount}>
                                         <Text style={styles.badgeCountText}>
@@ -414,12 +450,12 @@ const PerformanceFilter = () => {
                                     </View>
                                 </View>
 
-                                {/* TEACHER NAME SECTION (Orange) */}
+                                {/* TEACHER NAME SECTION */}
                                 {selectedSubject !== 'All Subjects' && currentTeacherName && (
                                     <View style={styles.teacherBadge}>
                                         <Icon name="account-tie" size={16} color="#EF6C00" />
                                         <Text style={styles.teacherText} numberOfLines={1}>
-                                            Teacher : {currentTeacherName}
+                                            {currentTeacherName}
                                         </Text>
                                     </View>
                                 )}
@@ -492,6 +528,28 @@ const styles = StyleSheet.create({
         color: '#666666',
         marginTop: 1,
     },
+    // Updated Quick Access Button Styles
+    quickAccessBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E0F2F1', 
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        marginLeft: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#80CBC4',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    quickAccessIcon: {
+        width: 28,
+        height: 28,
+        resizeMode: 'contain',
+    },
 
     // Main Body Container
     bodyContainer: {
@@ -549,22 +607,29 @@ const styles = StyleSheet.create({
         padding: 4,
         marginBottom: 10,
         width: '96%',
-        alignSelf: 'center'
+        alignSelf: 'center',
+        justifyContent: 'space-between',
     },
     tabButton: {
-        flex: 1,
-        flexDirection: 'row',
-        paddingVertical: 8,
+        flex: 1, 
+        flexDirection: 'column', 
+        paddingVertical: 6,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 12,
-        gap: 4
+        marginHorizontal: 2, 
     },
     tabButtonActive: {
         backgroundColor: COLORS.primary,
         elevation: 2,
     },
-    tabText: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
+    tabText: { 
+        fontSize: 10,
+        fontWeight: '700', 
+        color: COLORS.textSub,
+        marginTop: 2,
+        textAlign: 'center'
+    },
     tabTextActive: { color: '#FFF' },
 
     // Content
@@ -580,6 +645,7 @@ const styles = StyleSheet.create({
     listHeaderLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
     },
     listHeaderTitle: {
         fontSize: 16,
@@ -600,18 +666,20 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FFF3E0', 
-        paddingHorizontal: 10,
+        paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 20,
         borderWidth: 1,
         borderColor: '#FFE0B2', 
-        maxWidth: '55%',
+        maxWidth: '45%',
+        justifyContent: 'flex-end'
     },
     teacherText: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 'bold',
         color: '#E65100', 
-        marginLeft: 6,
+        marginLeft: 4,
+        flexShrink: 1
     },
 
     listContent: { paddingBottom: 20 },

@@ -1,15 +1,16 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
- * Updated: Moved Attendance Graph to a Pop-up button next to Overall Attendance.
+ * Updated: Added Back Button in Header.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    Alert, TouchableOpacity, Modal, ScrollView, Animated, Easing, Dimensions,
+    TouchableOpacity, Modal, ScrollView, Animated, Easing, Dimensions,
     Platform, UIManager, LayoutAnimation, RefreshControl
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useNavigation } from '@react-navigation/native'; // Added for Back Button
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -64,7 +65,7 @@ const COLORS = {
     average: '#1E88E5',    // Blue
     poor: '#E53935',       // Red
     
-    track: '#F0F0F0',      // Light Gray for Bar Background
+    graphIcon: '#D32F2F',  // Red color for Graph Icon in Table
     border: '#CFD8DC'
 };
 
@@ -104,27 +105,22 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 220 }: any) => 
 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
-            {/* Percentage on Top */}
             <Text style={styles.barLabelTop}>{displayPercentage}%</Text>
-            
-            {/* Bar Track */}
             <View style={styles.barBackground}>
-                {/* Colored Fill */}
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
-                
-                {/* Marks Text (Rotated and Centered over the track) */}
                 <View style={styles.barTextContainer}>
                     <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
                 </View>
             </View>
-            
-            {/* Label Bottom */}
             <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
         </View>
     );
 };
 
 const StudentPerformance = () => {
+    // Navigation Hook
+    const navigation = useNavigation();
+
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -144,7 +140,7 @@ const StudentPerformance = () => {
     const [studentMonthlyAtt, setStudentMonthlyAtt] = useState<any[]>([]);
     const [loadingAttGraph, setLoadingAttGraph] = useState(false);
     
-    // Filter State
+    // Main View Filter State
     const [sortBy, setSortBy] = useState('roll_no');
 
     // Modals
@@ -159,6 +155,7 @@ const StudentPerformance = () => {
     // Comparison State
     const [compareExam, setCompareExam] = useState('Overall');
     const [compareSubject, setCompareSubject] = useState('All Subjects');
+    const [compareSortBy, setCompareSortBy] = useState('desc'); // 'desc' = High to Low, 'asc' = Low to High, 'roll' = Roll No
 
     // --- FETCH DATA ---
     useEffect(() => {
@@ -237,7 +234,6 @@ const StudentPerformance = () => {
             });
             
             const history = response.data.history || [];
-            
             const monthsData: any = {};
             
             history.forEach((record: any) => {
@@ -255,7 +251,6 @@ const StudentPerformance = () => {
                         sortTime: dateObj.getTime()
                     };
                 }
-                
                 monthsData[key].total += 1;
                 if (record.status === 'Present') {
                     monthsData[key].present += 1;
@@ -305,9 +300,25 @@ const StudentPerformance = () => {
 
     // Open Attendance Graph
     const handleOpenAttGraph = (studentName: string) => {
-        setAttGraphData({ title: studentName.toUpperCase(), data: studentMonthlyAtt });
-        setIsAttGraphVisible(true);
+        // Find student details to get data if not loaded
+        // Note: For table view, if we haven't expanded, we need to load history.
+        // For simplicity, we trigger the history load if array is empty, then show modal.
+        const stud = students.find(s => s.full_name === studentName);
+        if(stud) {
+             setAttGraphData({ title: studentName.toUpperCase() });
+             fetchStudentAttendanceHistory(stud.id).then(() => {
+                 setIsAttGraphVisible(true);
+             });
+        }
     };
+
+    // Since fetch is async and updates state, we need to set data when modal opens
+    useEffect(() => {
+        if(isAttGraphVisible && attGraphData) {
+            setAttGraphData(prev => ({ ...prev, data: studentMonthlyAtt }));
+        }
+    }, [studentMonthlyAtt]);
+
 
     // --- PROCESS DATA ---
     const processedData = useMemo(() => {
@@ -382,9 +393,11 @@ const StudentPerformance = () => {
             };
         });
 
+        // Calculate Rank based on total marks
         results.sort((a, b) => b.totalObtained - a.totalObtained);
         results = results.map((item, index) => ({ ...item, performanceRank: index + 1 }));
 
+        // Apply View Filter
         if (sortBy === 'desc') {
             // Already sorted
         } else if (sortBy === 'asc') {
@@ -409,11 +422,12 @@ const StudentPerformance = () => {
     const studentList = processedData.students || [];
     const availableExams = ['Overall', ...(processedData.activeExams || [])];
 
+    // --- COMPARISON LOGIC ---
     const getComparisonData = () => {
         if (studentList.length === 0) return [];
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
 
-        return studentList.map(student => {
+        let data = studentList.map(student => {
             let ob = 0; let max = 0; let rawPerc = 0;
 
             if (compareSubject === 'All Subjects') {
@@ -462,9 +476,24 @@ const StudentPerformance = () => {
                 total_possible: max,
                 percentage: getRoundedPercentage(rawPerc)
             };
-        })
-        .filter(item => item.total_possible > 0)
-        .sort((a, b) => b.percentage - a.percentage);
+        }).filter(item => item.total_possible > 0);
+
+        // Sorting Logic for Comparison View
+        data.sort((a, b) => {
+            if (compareSortBy === 'asc') {
+                return a.percentage - b.percentage;
+            } else if (compareSortBy === 'roll') {
+                const rA = parseInt(a.roll, 10);
+                const rB = parseInt(b.roll, 10);
+                if (!isNaN(rA) && !isNaN(rB)) return rA - rB;
+                return (a.roll || '').localeCompare(b.roll || '');
+            } else {
+                // Default: High to Low (desc)
+                return b.percentage - a.percentage;
+            }
+        });
+
+        return data;
     };
 
     const getColorForRank = (rank: number) => {
@@ -476,16 +505,26 @@ const StudentPerformance = () => {
 
     // --- RENDER TABLE ---
     const renderTableView = () => {
+        // Defined widths for perfect alignment
+        const COL_WIDTHS = {
+            rank: 45,
+            name: 130,
+            roll: 60,
+            marks: 90,
+            perf: 70,
+            att: 100
+        };
+
         return (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
                 <View style={styles.tableContainer}>
                     <View style={styles.tableHeaderRow}>
-                        <Text style={[styles.tableHeaderCell, { width: 45 }]}>Rank</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 140, textAlign: 'left', paddingLeft: 5 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 60 }]}>Roll No</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 100 }]}>Marks</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 80 }]}>Perf %</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 80 }]}>Attend %</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.rank }]}>Rank</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.name, textAlign: 'left', paddingLeft: 5 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.roll }]}>Roll No</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.marks }]}>Marks</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.perf }]}>Perf %</Text>
+                        <Text style={[styles.tableHeaderCell, { width: COL_WIDTHS.att }]}>Attend %</Text>
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
@@ -495,31 +534,38 @@ const StudentPerformance = () => {
 
                             return (
                                 <View key={item.id} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-                                    <View style={{ width: 45, justifyContent: 'center', alignItems: 'center' }}>
+                                    <View style={{ width: COL_WIDTHS.rank, justifyContent: 'center', alignItems: 'center' }}>
                                         <Text style={[styles.tableCell, { fontWeight: 'bold' }]}>{item.performanceRank}</Text>
                                     </View>
-                                    <View style={{ width: 140, justifyContent: 'center', paddingLeft: 5 }}>
+                                    <View style={{ width: COL_WIDTHS.name, justifyContent: 'center', paddingLeft: 5 }}>
                                         <Text style={[styles.tableCell, { fontWeight: 'bold' }]} numberOfLines={2}>
                                             {item.full_name}
                                         </Text>
                                     </View>
-                                    <View style={{ width: 60, justifyContent: 'center', alignItems: 'center' }}>
+                                    <View style={{ width: COL_WIDTHS.roll, justifyContent: 'center', alignItems: 'center' }}>
                                         <Text style={styles.tableCell}>{item.roll_no}</Text>
                                     </View>
-                                    <View style={{ width: 100, justifyContent: 'center', alignItems: 'center' }}>
+                                    <View style={{ width: COL_WIDTHS.marks, justifyContent: 'center', alignItems: 'center' }}>
                                         <Text style={styles.tableCell}>
                                             {Math.round(item.totalObtained)} / {Math.round(item.maxTotal)}
                                         </Text>
                                     </View>
-                                    <View style={{ width: 80, justifyContent: 'center', alignItems: 'center' }}>
-                                        <Text style={{ fontWeight: 'bold', color: performanceColor }}>
+                                    <View style={{ width: COL_WIDTHS.perf, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={{ fontWeight: 'bold', color: performanceColor, fontSize: 12 }}>
                                             {item.percentage}%
                                         </Text>
                                     </View>
-                                    <View style={{ width: 80, justifyContent: 'center', alignItems: 'center' }}>
-                                        <Text style={{ fontWeight: 'bold', color: attendanceColor }}>
+                                    {/* Attendance Column with Graph Button */}
+                                    <View style={{ width: COL_WIDTHS.att, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={{ fontWeight: 'bold', color: attendanceColor, fontSize: 12, marginRight: 8 }}>
                                             {item.attendancePercentage}%
                                         </Text>
+                                        <TouchableOpacity 
+                                            onPress={() => handleOpenAttGraph(item.full_name)}
+                                            style={styles.tableIconBtn}
+                                        >
+                                            <Icon name="chart-bar" size={16} color={COLORS.graphIcon} />
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
                             );
@@ -627,6 +673,14 @@ const StudentPerformance = () => {
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
+                    {/* BACK BUTTON */}
+                    <TouchableOpacity 
+                        style={styles.backButton} 
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Icon name="arrow-left" size={24} color={COLORS.textMain} />
+                    </TouchableOpacity>
+
                     <View style={styles.headerIconContainer}>
                         <Icon name="poll" size={24} color="#008080" />
                     </View>
@@ -645,7 +699,7 @@ const StudentPerformance = () => {
                 </View>
             </View>
 
-            {/* Filter Section */}
+            {/* Filter Section (Main View) */}
             <View style={styles.filterContainer}>
                 <View style={styles.filterBox}>
                     <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
@@ -719,7 +773,7 @@ const StudentPerformance = () => {
                 </View>
             </Modal>
 
-            {/* --- MODAL: ATTENDANCE GRAPH (NEW) --- */}
+            {/* --- MODAL: ATTENDANCE GRAPH --- */}
             <Modal visible={isAttGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsAttGraphVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.graphModalCard}>
@@ -741,7 +795,7 @@ const StudentPerformance = () => {
                                         color={getStatusColor(att.percentage)}
                                         height={260}
                                     />
-                                )) : <Text style={styles.noDataTxt}>No attendance records found.</Text>}
+                                )) : <Text style={styles.noDataTxt}>Loading history...</Text>}
                             </ScrollView>
                         </View>
                         <View style={styles.legendRow}>
@@ -769,17 +823,34 @@ const StudentPerformance = () => {
                                 {availableExams.map(t => <Picker.Item key={t} label={t} value={t} />)}
                             </Picker>
                         </View>
-                        <View style={{ marginTop: 15 }}>
-                            <Text style={styles.controlLabel}>Select Subject:</Text>
-                            <View style={styles.controlPicker}>
-                                <Picker selectedValue={compareSubject} onValueChange={setCompareSubject}>
-                                    <Picker.Item label="All Subjects" value="All Subjects" />
-                                    {(CLASS_SUBJECTS[selectedClass] || []).map((s: string) => (
-                                        <Picker.Item key={s} label={s} value={s} />
-                                    ))}
-                                </Picker>
+                        
+                        <View style={styles.controlRow}>
+                             {/* Subject Selector */}
+                            <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={styles.controlLabel}>Select Subject:</Text>
+                                <View style={styles.controlPicker}>
+                                    <Picker selectedValue={compareSubject} onValueChange={setCompareSubject}>
+                                        <Picker.Item label="All Subjects" value="All Subjects" />
+                                        {(CLASS_SUBJECTS[selectedClass] || []).map((s: string) => (
+                                            <Picker.Item key={s} label={s} value={s} />
+                                        ))}
+                                    </Picker>
+                                </View>
+                            </View>
+                            
+                            {/* Sort Selector (NEW) */}
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.controlLabel}>Sort Order:</Text>
+                                <View style={styles.controlPicker}>
+                                    <Picker selectedValue={compareSortBy} onValueChange={setCompareSortBy}>
+                                        <Picker.Item label="High to Low" value="desc" />
+                                        <Picker.Item label="Low to High" value="asc" />
+                                        <Picker.Item label="Roll No" value="roll" />
+                                    </Picker>
+                                </View>
                             </View>
                         </View>
+
                     </View>
                     <View style={styles.compareGraphArea}>
                         <Text style={styles.compareGraphTitle}>Ranking by {compareExam} ({compareSubject})</Text>
@@ -835,6 +906,11 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    // Back Button Style
+    backButton: {
+        marginRight: 10,
+        padding: 5,
+    },
     headerIconContainer: {
         backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
@@ -879,6 +955,7 @@ const styles = StyleSheet.create({
     tableRow: { flexDirection: 'row', backgroundColor: '#FFF', paddingVertical: 0, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#EEE', alignItems: 'center', minHeight: 50 },
     tableRowAlt: { backgroundColor: '#F9FAFB' },
     tableCell: { fontSize: 12, color: COLORS.textMain, textAlign: 'center' },
+    tableIconBtn: { padding: 4, borderWidth: 1, borderColor: '#FFEBEE', borderRadius: 4, backgroundColor: '#FFEBEE' },
 
     // Card
     card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
@@ -946,6 +1023,7 @@ const styles = StyleSheet.create({
     fsTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
     closeFsBtn: { padding: 4 },
     compareControls: { padding: 16, backgroundColor: '#FFF', marginBottom: 10 },
+    controlRow: { flexDirection: 'row', marginTop: 15, justifyContent: 'space-between' },
     controlLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSub, marginBottom: 6 },
     controlPicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#FAFAFA', height: 45, justifyContent: 'center' },
     compareGraphArea: { flex: 1, paddingVertical: 20 },

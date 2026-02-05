@@ -1,18 +1,19 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
  * Purpose: Teacher Performance Analytics with Table View, Class-wise Max Mark Logic, and Attendance Graph.
- * Updated: Added Overall Attendance Row and Month-wise Graph Pop-up.
+ * Updated: Added Back Button in Header.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, ActivityIndicator,
     FlatList, TouchableOpacity, RefreshControl, LayoutAnimation, 
-    Platform, UIManager, Modal, ScrollView, Animated, Easing, Dimensions, Alert
+    Platform, UIManager, Modal, ScrollView, Animated, Easing, Dimensions, Alert, StatusBar
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native'; // Added for Back Button
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -21,25 +22,36 @@ if (Platform.OS === 'android') {
     }
 }
 
-// --- Constants ---
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+// --- Constants & Dimensions ---
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Define Exact Column Widths for Table Alignment
+const COL_WIDTHS = {
+    no: 50,
+    name: 130,
+    subject: 150,
+    perf: 90,
+    att: 110 
+};
+
 const EXAM_TYPES = ['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4', 'SA1', 'SA2', 'Pre-Final'];
 
-// --- COLORS ---
+// --- COLORS (Fixed for Consistency in Dark/Light Mode) ---
 const COLORS = {
     primary: '#008080',    // Teal
     background: '#F2F5F8', // Light Grey-Blue
     cardBg: '#FFFFFF',
-    textMain: '#263238',
-    textSub: '#546E7A',
+    textMain: '#263238',   // Dark Slate
+    textSub: '#546E7A',    // Muted Blue-Grey
+    white: '#FFFFFF',
     
     success: '#43A047',    // Green
     average: '#1E88E5',    // Blue
     poor: '#E53935',       // Red
     
-    track: '#F5F5F5',      // Light Gray for Bar Background
-    border: '#CFD8DC'
+    track: '#F5F5F5',      // Light Gray
+    border: '#CFD8DC',
+    graphBtn: '#FB8C00'    // Orange
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
@@ -58,7 +70,7 @@ const getStatusColor = (percentage) => {
     return COLORS.poor; 
 };
 
-// --- COMPONENT: ANIMATED BAR (Updated Design) ---
+// --- COMPONENT: ANIMATED BAR ---
 const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260 }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
     const displayPercentage = getRoundedPercentage(percentage);
@@ -79,21 +91,13 @@ const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260 }
 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
-            {/* Percentage on Top */}
             <Text style={styles.barLabelTop}>{displayPercentage}%</Text>
-            
-            {/* Bar Track */}
             <View style={styles.barBackground}>
-                {/* Colored Fill */}
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
-                
-                {/* Marks Text (Rotated and Centered over the track) */}
                 <View style={styles.barTextContainer}>
                     <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
                 </View>
             </View>
-            
-            {/* Label Bottom */}
             <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
             {subLabel ? <Text style={styles.barSubLabel} numberOfLines={1}>{subLabel}</Text> : null}
         </View>
@@ -101,6 +105,9 @@ const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260 }
 };
 
 const TeacherPerformanceScreen = () => {
+    // Navigation Hook
+    const navigation = useNavigation();
+
     const { user } = useAuth();
     const userRole = user?.role || 'teacher';
     const userId = user?.id;
@@ -116,14 +123,11 @@ const TeacherPerformanceScreen = () => {
     const [attendanceData, setAttendanceData] = useState({});
     
     // Modal States
-    const [isGraphVisible, setIsGraphVisible] = useState(false); // For Exams
+    const [isGraphVisible, setIsGraphVisible] = useState(false);
     const [individualGraphData, setIndividualGraphData] = useState(null);
-    
-    // Attendance Graph States
     const [isAttGraphVisible, setIsAttGraphVisible] = useState(false);
     const [attGraphData, setAttGraphData] = useState(null);
     const [loadingAttGraph, setLoadingAttGraph] = useState(false);
-
     const [isCompareVisible, setIsCompareVisible] = useState(false);
     
     // Filter States
@@ -132,6 +136,7 @@ const TeacherPerformanceScreen = () => {
     // Comparison States
     const [compareExam, setCompareExam] = useState('Overall');
     const [compareClass, setCompareClass] = useState('All Classes');
+    const [compareSortBy, setCompareSortBy] = useState('high-low'); 
     const [availableClasses, setAvailableClasses] = useState(['All Classes']);
 
     // --- FETCH DATA ---
@@ -150,8 +155,6 @@ const TeacherPerformanceScreen = () => {
             setExpandedId(null);
             extractClasses(data);
             
-            // Fetch attendance summaries regardless of view mode (Table or List)
-            // so percentages are ready when expanding a card.
             if (userRole === 'admin') {
                 fetchAttendanceSummaries(data);
             }
@@ -185,38 +188,28 @@ const TeacherPerformanceScreen = () => {
         }
     };
 
-    // --- FETCH ATTENDANCE GRAPH DATA ---
     const fetchAttendanceGraph = async (tId, teacherName) => {
         setLoadingAttGraph(true);
         const currentYear = new Date().getFullYear().toString();
         
         try {
-            // Using the 'yearly' logic from your reference code
             const response = await apiClient.get(`/teacher-attendance/report/${tId}`, {
                 params: { period: 'yearly', targetYear: currentYear }
             });
 
             const history = response.data.detailedHistory || [];
-            
-            // Process into months (Jan, Feb...)
             const monthsMap = {};
             history.forEach(rec => {
                 const d = new Date(rec.date);
-                const monthIdx = d.getMonth(); // 0-11
+                const monthIdx = d.getMonth(); 
                 const monthName = d.toLocaleString('default', { month: 'short' });
                 const sortKey = d.getFullYear() * 100 + monthIdx;
 
                 if (!monthsMap[sortKey]) {
                     monthsMap[sortKey] = { name: monthName, present: 0, total: 0 };
                 }
-
-                // Total = Present + Absent + Late (Assume strict counting of working days)
-                if (['P', 'A', 'L'].includes(rec.status)) {
-                    monthsMap[sortKey].total++;
-                }
-                if (rec.status === 'P') {
-                    monthsMap[sortKey].present++;
-                }
+                if (['P', 'A', 'L'].includes(rec.status)) monthsMap[sortKey].total++;
+                if (rec.status === 'P') monthsMap[sortKey].present++;
             });
 
             const processed = Object.keys(monthsMap)
@@ -232,10 +225,7 @@ const TeacherPerformanceScreen = () => {
                     };
                 });
 
-            setAttGraphData({
-                title: teacherName.toUpperCase(),
-                data: processed
-            });
+            setAttGraphData({ title: teacherName.toUpperCase(), data: processed });
             setIsAttGraphVisible(true);
 
         } catch (error) {
@@ -314,7 +304,12 @@ const TeacherPerformanceScreen = () => {
             };
         })
         .filter(item => item.total_possible > 0)
-        .sort((a, b) => b.percentage - a.percentage);
+        .sort((a, b) => {
+            if (compareSortBy === 'low-high') {
+                return a.percentage - b.percentage;
+            }
+            return b.percentage - a.percentage; // Default: High to Low
+        });
     };
 
     const processedData = useMemo(() => {
@@ -362,19 +357,31 @@ const TeacherPerformanceScreen = () => {
         return COLORS.textSub;
     };
 
-    // --- RENDER TABLE ---
+    // --- RENDER TABLE (UPDATED ALIGNMENT) ---
     const renderTableView = () => {
         return (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContainer}>
                 <View style={styles.tableContainer}>
+                    {/* Header Row */}
                     <View style={styles.tableHeaderRow}>
-                        <Text style={[styles.tableHeaderCell, { width: 45 }]}>No</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 120, textAlign: 'left', paddingLeft: 5 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 170 }]}>Subject / Class</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 90 }]}>Performance</Text>
-                        <Text style={[styles.tableHeaderCell, { width: 90 }]}>Attendance</Text>
+                        <View style={[styles.headerCellContainer, { width: COL_WIDTHS.no }]}>
+                            <Text style={styles.tableHeaderCell}>No</Text>
+                        </View>
+                        <View style={[styles.headerCellContainer, { width: COL_WIDTHS.name, alignItems: 'flex-start', paddingLeft: 10 }]}>
+                            <Text style={styles.tableHeaderCell}>Name</Text>
+                        </View>
+                        <View style={[styles.headerCellContainer, { width: COL_WIDTHS.subject }]}>
+                            <Text style={styles.tableHeaderCell}>Subject / Class</Text>
+                        </View>
+                        <View style={[styles.headerCellContainer, { width: COL_WIDTHS.perf }]}>
+                            <Text style={styles.tableHeaderCell}>Performance</Text>
+                        </View>
+                        <View style={[styles.headerCellContainer, { width: COL_WIDTHS.att }]}>
+                            <Text style={styles.tableHeaderCell}>Attendance</Text>
+                        </View>
                     </View>
 
+                    {/* Data Rows */}
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {processedData.map((item, index) => {
                             const attPercentageStr = attendanceData[item.id] !== undefined && attendanceData[item.id] !== 'N/A' 
@@ -384,39 +391,57 @@ const TeacherPerformanceScreen = () => {
 
                             return (
                                 <View key={item.uniqueKey} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-                                    <View style={{ width: 45, justifyContent: 'center', alignItems: 'center' }}>
+                                    
+                                    {/* NO */}
+                                    <View style={[styles.cellContainer, { width: COL_WIDTHS.no }]}>
                                         <Text style={styles.tableCell}>{index + 1}</Text>
                                     </View>
-                                    <View style={{ width: 120, justifyContent: 'center', paddingLeft: 5 }}>
-                                        <Text style={[styles.tableCell, { fontWeight: 'bold' }]} numberOfLines={2}>{item.name}</Text>
+                                    
+                                    {/* NAME */}
+                                    <View style={[styles.cellContainer, { width: COL_WIDTHS.name, alignItems: 'flex-start', paddingLeft: 10 }]}>
+                                        <Text style={[styles.tableCell, { fontWeight: 'bold', textAlign: 'left' }]} numberOfLines={2}>{item.name}</Text>
                                     </View>
-                                    <View style={{ width: 170, justifyContent: 'center' }}>
+                                    
+                                    {/* SUBJECT / CLASS LIST */}
+                                    <View style={[styles.cellContainer, { width: COL_WIDTHS.subject }]}>
                                         {item.details && item.details.length > 0 ? (
                                             item.details.map((d, i) => (
-                                                <View key={i} style={styles.detailRowItem}>
+                                                <View key={i} style={styles.subRowItem}>
                                                     <Text style={styles.detailRowText}>{d.class_group} - {d.subject}</Text>
                                                 </View>
                                             ))
                                         ) : (
-                                            <View style={styles.detailRowItem}><Text style={styles.detailRowText}>N/A</Text></View>
+                                            <View style={styles.subRowItem}><Text style={styles.detailRowText}>N/A</Text></View>
                                         )}
                                     </View>
-                                    <View style={{ width: 90, justifyContent: 'center', alignItems: 'center' }}>
+                                    
+                                    {/* PERFORMANCE */}
+                                    <View style={[styles.cellContainer, { width: COL_WIDTHS.perf }]}>
                                         {item.details && item.details.length > 0 ? (
                                             item.details.map((d, i) => {
                                                 const dPerc = getRoundedPercentage(d.average_marks);
                                                 return (
-                                                    <View key={i} style={styles.detailRowItem}>
+                                                    <View key={i} style={styles.subRowItem}>
                                                         <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusColor(dPerc) }}>{dPerc}%</Text>
                                                     </View>
                                                 )
                                             })
                                         ) : (
-                                            <View style={styles.detailRowItem}><Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.poor }}>0%</Text></View>
+                                            <View style={styles.subRowItem}><Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.poor }}>0%</Text></View>
                                         )}
                                     </View>
-                                    <View style={{ width: 90, justifyContent: 'center', alignItems: 'center' }}>
-                                        <Text style={{ fontWeight: 'bold', color: attColor }}>{attPercentageStr}</Text>
+                                    
+                                    {/* ATTENDANCE + GRAPH BUTTON */}
+                                    <View style={[styles.cellContainer, { width: COL_WIDTHS.att, flexDirection: 'row' }]}>
+                                        <Text style={{ fontWeight: 'bold', color: attColor, marginRight: 8, fontSize: 12 }}>{attPercentageStr}</Text>
+                                        {userRole === 'admin' && (
+                                            <TouchableOpacity 
+                                                style={styles.tableGraphBtn} 
+                                                onPress={() => fetchAttendanceGraph(item.id, item.name)}
+                                            >
+                                                <Icon name="chart-bar" size={14} color="#FFF" />
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 </View>
                             );
@@ -433,8 +458,6 @@ const TeacherPerformanceScreen = () => {
         const performanceColor = getStatusColor(item.percentage);
         const isExpanded = expandedId === item.uniqueKey;
         const percentage = item.percentage;
-        
-        // Attendance Data for this card
         const teacherAttPct = attendanceData[item.id] !== undefined ? attendanceData[item.id] : 'N/A';
         const attColor = getStatusColor(teacherAttPct === 'N/A' ? 0 : teacherAttPct);
 
@@ -467,7 +490,6 @@ const TeacherPerformanceScreen = () => {
 
                 {isExpanded && (
                     <View style={styles.expandedSection}>
-                        {/* --- ATTENDANCE ROW (Inserted Here) --- */}
                         {userRole === 'admin' && (
                             <View style={styles.attRow}>
                                 <Text style={styles.attLabel}>Overall Attendance:</Text>
@@ -485,7 +507,6 @@ const TeacherPerformanceScreen = () => {
                             </View>
                         )}
                         
-                        {/* --- Detailed Performance --- */}
                         {userRole === 'admin' ? (
                             item.details && item.details.length > 0 ? (
                                 item.details.map((detail, idx) => {
@@ -553,12 +574,21 @@ const TeacherPerformanceScreen = () => {
 
     return (
         <View style={styles.container}>
+            <StatusBar backgroundColor={COLORS.background} barStyle="dark-content" />
             
-            {/* --- NEW HEADER CARD --- */}
+            {/* --- HEADER --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
+                    {/* BACK BUTTON */}
+                    <TouchableOpacity 
+                        style={styles.backButton} 
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Icon name="arrow-left" size={24} color={COLORS.textMain} />
+                    </TouchableOpacity>
+
                     <View style={styles.headerIconContainer}>
-                        <Icon name="poll" size={24} color="#008080" />
+                        <Icon name="poll" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle}>{userRole === 'admin' ? 'Teacher Performance' : 'Class Performance'}</Text>
@@ -566,14 +596,13 @@ const TeacherPerformanceScreen = () => {
                     </View>
                 </View>
                 
-                {/* Admin Actions inside Header */}
                 {userRole === 'admin' && (
                     <View style={{flexDirection: 'row', gap: 10}}>
                          <TouchableOpacity style={styles.headerActionBtn} onPress={() => setIsTableView(!isTableView)}>
-                            <Icon name={isTableView ? "card-bulleted-outline" : "table-large"} size={22} color="#008080" />
+                            <Icon name={isTableView ? "card-bulleted-outline" : "table-large"} size={22} color={COLORS.primary} />
                          </TouchableOpacity>
                          <TouchableOpacity style={styles.headerActionBtn} onPress={() => setIsCompareVisible(true)}>
-                            <Icon name="scale-balance" size={22} color="#008080" />
+                            <Icon name="scale-balance" size={22} color={COLORS.primary} />
                          </TouchableOpacity>
                     </View>
                 )}
@@ -582,9 +611,14 @@ const TeacherPerformanceScreen = () => {
             {/* Filter Section */}
             <View style={styles.filterContainer}>
                 <View style={styles.pickerWrapper}>
-                    <Picker selectedValue={sortBy} onValueChange={setSortBy} style={styles.picker}>
-                        <Picker.Item label="Sort: High to Low" value="high-low" />
-                        <Picker.Item label="Sort: Low to High" value="low-high" />
+                    <Picker 
+                        selectedValue={sortBy} 
+                        onValueChange={setSortBy} 
+                        style={styles.picker} 
+                        dropdownIconColor={COLORS.textMain}
+                    >
+                        <Picker.Item label="Sort: High to Low" value="high-low" style={{fontSize: 14}} />
+                        <Picker.Item label="Sort: Low to High" value="low-high" style={{fontSize: 14}}/>
                     </Picker>
                 </View>
             </View>
@@ -613,7 +647,7 @@ const TeacherPerformanceScreen = () => {
                 )
             )}
 
-            {/* Modal: Individual Graph (Exams) */}
+            {/* Modal: Individual Graph */}
             <Modal visible={isGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsGraphVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.graphModalCard}>
@@ -647,7 +681,7 @@ const TeacherPerformanceScreen = () => {
                 </View>
             </Modal>
 
-            {/* Modal: Attendance Graph (NEW) */}
+            {/* Modal: Attendance Graph */}
             <Modal visible={isAttGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsAttGraphVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.graphModalCard}>
@@ -687,24 +721,36 @@ const TeacherPerformanceScreen = () => {
                     <View style={styles.fsHeader}>
                         <Text style={styles.fsTitle}>Teacher Comparison</Text>
                         <TouchableOpacity onPress={() => setIsCompareVisible(false)} style={styles.closeFsBtn}>
-                            <Icon name="close" size={24} color="#333" />
+                            <Icon name="close" size={24} color={COLORS.textMain} />
                         </TouchableOpacity>
                     </View>
                     <View style={styles.compareControls}>
                         <View style={styles.compareControlRow}>
                             <Text style={styles.controlLabel}>Exam Type:</Text>
                             <View style={styles.controlPicker}>
-                                <Picker selectedValue={compareExam} onValueChange={setCompareExam}>
-                                    {EXAM_TYPES.map(t => <Picker.Item key={t} label={t} value={t} />)}
+                                <Picker selectedValue={compareExam} onValueChange={setCompareExam} dropdownIconColor={COLORS.textMain}>
+                                    {EXAM_TYPES.map(t => <Picker.Item key={t} label={t} value={t} style={{fontSize: 14}} />)}
                                 </Picker>
                             </View>
                         </View>
+                        
+                        {/* NEW: Sort Filter */}
+                        <View style={styles.compareControlRow}>
+                            <Text style={styles.controlLabel}>Sort Order:</Text>
+                            <View style={styles.controlPicker}>
+                                <Picker selectedValue={compareSortBy} onValueChange={setCompareSortBy} dropdownIconColor={COLORS.textMain}>
+                                    <Picker.Item label="High to Low" value="high-low" style={{fontSize: 14}} />
+                                    <Picker.Item label="Low to High" value="low-high" style={{fontSize: 14}} />
+                                </Picker>
+                            </View>
+                        </View>
+
                         {compareExam !== 'Overall' && (
                             <View style={styles.compareControlRow}>
                                 <Text style={styles.controlLabel}>Class:</Text>
                                 <View style={styles.controlPicker}>
-                                    <Picker selectedValue={compareClass} onValueChange={setCompareClass}>
-                                        {availableClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                                    <Picker selectedValue={compareClass} onValueChange={setCompareClass} dropdownIconColor={COLORS.textMain}>
+                                        {availableClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
                                     </Picker>
                                 </View>
                             </View>
@@ -747,7 +793,7 @@ const styles = StyleSheet.create({
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -765,6 +811,12 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    // Back Button Style
+    backButton: {
+        marginRight: 4,
+        padding: 5,
+        marginLeft: -3,
+    },
     headerIconContainer: {
         backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
@@ -775,23 +827,25 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
-    headerSubtitle: { fontSize: 13, color: '#666666' },
+    headerTitle: { fontSize: 19, fontWeight: 'bold', color: COLORS.textMain },
+    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
     headerActionBtn: {
-        padding: 5,
+        padding: 6,
         backgroundColor: '#f0fdfa',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#ccfbf1'
+        borderColor: '#ccfbf1',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
 
     // --- FILTERS & NOTE ---
     filterContainer: { paddingHorizontal: 15, marginBottom: 5 },
     pickerWrapper: {
         borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 5,
-        backgroundColor: '#fff', overflow: 'hidden', height: 45, justifyContent: 'center'
+        backgroundColor: COLORS.white, overflow: 'hidden', height: 45, justifyContent: 'center'
     },
-    picker: { width: '100%', color: '#1f2937' },
+    picker: { width: '100%', color: COLORS.textMain },
     
     noteContainer: {
         backgroundColor: '#FFF8E1', 
@@ -810,15 +864,76 @@ const styles = StyleSheet.create({
     listPadding: { paddingHorizontal: 15, paddingBottom: 40 },
     emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30, fontStyle: 'italic' },
 
-    // --- TABLE ---
-    tableContainer: { backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', elevation: 2, marginBottom: 20 },
-    tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.primary, paddingVertical: 10, paddingHorizontal: 5 },
-    tableHeaderCell: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textAlign: 'center' },
-    tableRow: { flexDirection: 'row', backgroundColor: '#FFF', paddingVertical: 0, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#EEE', alignItems: 'center', minHeight: 50 },
+    // --- TABLE STYLES (Fixed Alignment) ---
+    tableScrollContainer: { paddingHorizontal: 15, paddingBottom: 20 },
+    tableContainer: { 
+        backgroundColor: COLORS.cardBg, 
+        borderRadius: 8, 
+        overflow: 'hidden', 
+        elevation: 2, 
+        borderWidth: 1,
+        borderColor: COLORS.border
+    },
+    tableHeaderRow: { 
+        flexDirection: 'row', 
+        backgroundColor: COLORS.primary, 
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border
+    },
+    headerCellContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 2
+    },
+    tableHeaderCell: { 
+        color: COLORS.white, 
+        fontWeight: 'bold', 
+        fontSize: 11, 
+        textAlign: 'center' 
+    },
+    tableRow: { 
+        flexDirection: 'row', 
+        backgroundColor: COLORS.white, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#EEE', 
+        alignItems: 'center', 
+        minHeight: 50 
+    },
     tableRowAlt: { backgroundColor: '#F9FAFB' },
-    tableCell: { fontSize: 12, color: COLORS.textMain, textAlign: 'center' },
-    detailRowItem: { height: 30, justifyContent: 'center', borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0', width: '100%' },
+    
+    cellContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 2
+    },
+    tableCell: { 
+        fontSize: 12, 
+        color: COLORS.textMain, 
+        textAlign: 'center' 
+    },
+    
+    // Sub-items inside a table cell (Subject list)
+    subRowItem: {
+        width: '100%',
+        paddingVertical: 4,
+        borderBottomWidth: 0.5,
+        borderBottomColor: '#f0f0f0',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
     detailRowText: { fontSize: 11, color: COLORS.textSub, textAlign: 'center' },
+    
+    tableGraphBtn: {
+        backgroundColor: COLORS.graphBtn,
+        padding: 4,
+        borderRadius: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 2,
+        marginLeft: 5
+    },
 
     // --- CARDS ---
     card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
@@ -874,7 +989,6 @@ const styles = StyleSheet.create({
     barLabelTop: { marginBottom: 6, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
     barBackground: { width: 34, height: '80%', backgroundColor: '#F5F5F5', borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
     barFill: { width: '100%', borderRadius: 6 },
-    // Text inside the bar track
     barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
     barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#000', transform: [{ rotate: '-90deg' }], width: 200, textAlign: 'center' },
     barLabelBottom: { marginTop: 10, fontSize: 12, fontWeight: 'bold', color: COLORS.textMain, textAlign: 'center', width: 60 },
