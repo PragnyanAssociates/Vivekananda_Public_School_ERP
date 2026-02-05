@@ -336,7 +336,7 @@ const PerformanceFilter = () => {
                     activeOpacity={0.7}
                 >
                     <Image 
-                        source={{ uri: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png' }} 
+                        source={{ uri: 'https://cdn-icons-png.flaticon.com/128/12489/12489385.png' }} 
                         style={styles.quickAccessIcon}
                     />
                 </TouchableOpacity>
