@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
- * Updated: Comparison Modal now shows Teacher Name, Class Total & Average for specific subjects.
+ * Updated: Fixed Attendance Graph to show Academic Year (from June) instead of just Calendar Year.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -134,7 +134,7 @@ const StudentPerformance = () => {
     // Data
     const [students, setStudents] = useState<any[]>([]);
     const [marksData, setMarksData] = useState<any[]>([]);
-    const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); // Added for assignments
+    const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); 
     const [attendanceMap, setAttendanceMap] = useState<any>({}); 
 
     // Specific Student Attendance Data (for graph)
@@ -201,7 +201,7 @@ const StudentPerformance = () => {
             const response = await apiClient.get(`/reports/class-data/${classGroup}`);
             setStudents(response.data.students || []);
             setMarksData(response.data.marks || []);
-            setTeacherAssignments(response.data.assignments || []); // Capture Teacher Assignments
+            setTeacherAssignments(response.data.assignments || []);
         } catch (error) {
             console.error('Error fetching marks:', error);
         }
@@ -230,9 +230,24 @@ const StudentPerformance = () => {
     const fetchStudentAttendanceHistory = async (studentId: number) => {
         setLoadingAttGraph(true);
         try {
-            const currentYear = new Date().getFullYear();
+            // UPDATED LOGIC: Calculate date range for the Academic Year (starting June)
+            const now = new Date();
+            const currentMonth = now.getMonth(); // 0-11
+            const currentYear = now.getFullYear();
+            
+            // If current month is Jan-May (0-4), academic year started in prev year's June.
+            // If current month is June-Dec (5-11), academic year started in current year's June.
+            const startYear = currentMonth < 5 ? currentYear - 1 : currentYear;
+            
+            const startDate = `${startYear}-06-01`; // June 1st
+            const endDate = now.toISOString().split('T')[0]; // Today
+
             const response = await apiClient.get(`/attendance/student-history-admin/${studentId}`, {
-                params: { viewMode: 'yearly', targetYear: currentYear }
+                params: { 
+                    viewMode: 'custom', 
+                    startDate: startDate,
+                    endDate: endDate
+                }
             });
             
             const history = response.data.history || [];
@@ -302,9 +317,6 @@ const StudentPerformance = () => {
 
     // Open Attendance Graph
     const handleOpenAttGraph = (studentName: string) => {
-        // Find student details to get data if not loaded
-        // Note: For table view, if we haven't expanded, we need to load history.
-        // For simplicity, we trigger the history load if array is empty, then show modal.
         const stud = students.find(s => s.full_name === studentName);
         if(stud) {
              setAttGraphData({ title: studentName.toUpperCase() });
@@ -314,7 +326,6 @@ const StudentPerformance = () => {
         }
     };
 
-    // Since fetch is async and updates state, we need to set data when modal opens
     useEffect(() => {
         if(isAttGraphVisible && attGraphData) {
             setAttGraphData(prev => ({ ...prev, data: studentMonthlyAtt }));
@@ -395,11 +406,9 @@ const StudentPerformance = () => {
             };
         });
 
-        // Calculate Rank based on total marks
         results.sort((a, b) => b.totalObtained - a.totalObtained);
         results = results.map((item, index) => ({ ...item, performanceRank: index + 1 }));
 
-        // Apply View Filter
         if (sortBy === 'desc') {
             // Already sorted
         } else if (sortBy === 'asc') {
@@ -480,7 +489,6 @@ const StudentPerformance = () => {
             };
         }).filter(item => item.total_possible > 0);
 
-        // Sorting Logic for Comparison View
         data.sort((a, b) => {
             if (compareSortBy === 'asc') {
                 return a.percentage - b.percentage;
@@ -490,7 +498,6 @@ const StudentPerformance = () => {
                 if (!isNaN(rA) && !isNaN(rB)) return rA - rB;
                 return (a.roll || '').localeCompare(b.roll || '');
             } else {
-                // Default: High to Low (desc)
                 return b.percentage - a.percentage;
             }
         });
@@ -502,11 +509,9 @@ const StudentPerformance = () => {
     const getComparisonSummary = () => {
         if (compareSubject === 'All Subjects' || studentList.length === 0) return null;
 
-        // 1. Get Teacher Name
         const assignment = teacherAssignments.find(a => a.subject === compareSubject);
         const teacherName = assignment ? assignment.teacher_name : 'Not Assigned';
 
-        // 2. Calculate Stats
         const comparisonList = getComparisonData();
         let totalObtained = 0;
         let totalPossible = 0;
@@ -535,15 +540,7 @@ const StudentPerformance = () => {
 
     // --- RENDER TABLE ---
     const renderTableView = () => {
-        // Defined widths for perfect alignment
-        const COL_WIDTHS = {
-            rank: 45,
-            name: 130,
-            roll: 60,
-            marks: 90,
-            perf: 70,
-            att: 100
-        };
+        const COL_WIDTHS = { rank: 45, name: 130, roll: 60, marks: 90, perf: 70, att: 100 };
 
         return (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
@@ -585,15 +582,11 @@ const StudentPerformance = () => {
                                             {item.percentage}%
                                         </Text>
                                     </View>
-                                    {/* Attendance Column with Graph Button */}
                                     <View style={{ width: COL_WIDTHS.att, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
                                         <Text style={{ fontWeight: 'bold', color: attendanceColor, fontSize: 12, marginRight: 8 }}>
                                             {item.attendancePercentage}%
                                         </Text>
-                                        <TouchableOpacity 
-                                            onPress={() => handleOpenAttGraph(item.full_name)}
-                                            style={styles.tableIconBtn}
-                                        >
+                                        <TouchableOpacity onPress={() => handleOpenAttGraph(item.full_name)} style={styles.tableIconBtn}>
                                             <Icon name="chart-bar" size={16} color={COLORS.graphIcon} />
                                         </TouchableOpacity>
                                     </View>
@@ -645,7 +638,6 @@ const StudentPerformance = () => {
 
                 {isExpanded && (
                     <View style={styles.expandedSection}>
-                        {/* Overall Attendance with Graph Button */}
                         <View style={styles.attRow}>
                              <Text style={styles.attLabel}>Overall Attendance:</Text>
                              <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -661,7 +653,6 @@ const StudentPerformance = () => {
                              </View>
                         </View>
 
-                        {/* Exam Breakdown */}
                         <View style={styles.detailHeader}>
                             <Text style={styles.detailTitle}>Exam Breakdown</Text>
                             <TouchableOpacity style={styles.iconButton} onPress={() => handleOpenGraph(item.full_name, item.examBreakdown)}>
@@ -702,10 +693,8 @@ const StudentPerformance = () => {
     return (
         <View style={styles.container}>
             
-            {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
-                    {/* BACK BUTTON */}
                     <TouchableOpacity 
                         style={styles.backButton} 
                         onPress={() => navigation.goBack()}
@@ -731,7 +720,6 @@ const StudentPerformance = () => {
                 </View>
             </View>
 
-            {/* Filter Section (Main View) */}
             <View style={styles.filterContainer}>
                 <View style={styles.filterBox}>
                     <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
@@ -747,7 +735,6 @@ const StudentPerformance = () => {
                 </View>
             </View>
 
-            {/* Note Section */}
             <View style={styles.noteContainer}>
                 <Text style={styles.noteText}>
                     Note: Performance ranking based on total marks obtained across all exams.
@@ -849,6 +836,14 @@ const StudentPerformance = () => {
                         </TouchableOpacity>
                     </View>
                     <View style={styles.compareControls}>
+                        {/* Added Class Filter in Modal */}
+                        <Text style={styles.controlLabel}>Select Class:</Text>
+                        <View style={[styles.controlPicker, {marginBottom: 10}]}>
+                            <Picker selectedValue={selectedClass} onValueChange={setSelectedClass}>
+                                {classList.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                            </Picker>
+                        </View>
+
                         <Text style={styles.controlLabel}>Select Comparison Criterion:</Text>
                         <View style={styles.controlPicker}>
                             <Picker selectedValue={compareExam} onValueChange={setCompareExam}>
@@ -857,8 +852,7 @@ const StudentPerformance = () => {
                         </View>
                         
                         <View style={styles.controlRow}>
-                             {/* Subject Selector */}
-                            <View style={{ flex: 1, marginRight: 10 }}>
+                             <View style={{ flex: 1, marginRight: 10 }}>
                                 <Text style={styles.controlLabel}>Select Subject:</Text>
                                 <View style={styles.controlPicker}>
                                     <Picker selectedValue={compareSubject} onValueChange={setCompareSubject}>
@@ -870,7 +864,6 @@ const StudentPerformance = () => {
                                 </View>
                             </View>
                             
-                            {/* Sort Selector (NEW) */}
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.controlLabel}>Sort Order:</Text>
                                 <View style={styles.controlPicker}>
@@ -885,7 +878,7 @@ const StudentPerformance = () => {
 
                     </View>
                     <View style={styles.compareGraphArea}>
-                        {/* --- ADDED: SUMMARY CARD FOR SPECIFIC SUBJECT --- */}
+                        {/* --- SUMMARY CARD FOR SPECIFIC SUBJECT --- */}
                         {stats && (
                             <View style={styles.summaryCard}>
                                 <View style={styles.summaryRow}>
@@ -965,11 +958,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    // Back Button Style
-    backButton: {
-        marginRight: 10,
-        padding: 5,
-    },
+    backButton: { marginRight: 10, padding: 5 },
     headerIconContainer: {
         backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
@@ -1092,13 +1081,13 @@ const styles = StyleSheet.create({
 
     // --- SUMMARY CARD STYLES ---
     summaryCard: {
-        backgroundColor: '#fdfefe', // Light Lime/Yellow bg to stand out slightly
+        backgroundColor: '#fefefd',
         marginHorizontal: 20,
         marginBottom: 20,
         borderRadius: 8,
         padding: 12,
         borderWidth: 1,
-        borderColor: '#5243d9'
+        borderColor: '#8675e7'
     },
     summaryRow: {
         flexDirection: 'row',

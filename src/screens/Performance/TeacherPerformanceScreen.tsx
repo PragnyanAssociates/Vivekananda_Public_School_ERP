@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
  * Purpose: Teacher Performance Analytics with Table View, Class-wise Max Mark Logic, and Attendance Graph.
- * Updated: Added Back Button in Header.
+ * Updated: Fixed Attendance Graph to show Academic Year (from June) instead of just Calendar Year.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -13,7 +13,7 @@ import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigation } from '@react-navigation/native'; // Added for Back Button
+import { useNavigation } from '@react-navigation/native';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android') {
@@ -190,30 +190,49 @@ const TeacherPerformanceScreen = () => {
 
     const fetchAttendanceGraph = async (tId, teacherName) => {
         setLoadingAttGraph(true);
-        const currentYear = new Date().getFullYear().toString();
         
         try {
+            // UPDATED LOGIC: Calculate date range for the Academic Year (starting June)
+            const now = new Date();
+            const currentMonth = now.getMonth(); // 0 (Jan) - 11 (Dec)
+            const currentYear = now.getFullYear();
+
+            // If current month is Jan-May (0-4), academic year started in prev year's June.
+            // If current month is June-Dec (5-11), academic year started in current year's June.
+            const startYear = currentMonth < 5 ? currentYear - 1 : currentYear;
+            
+            const startDate = `${startYear}-06-01`; // June 1st
+            const endDate = now.toISOString().split('T')[0]; // Today
+
             const response = await apiClient.get(`/teacher-attendance/report/${tId}`, {
-                params: { period: 'yearly', targetYear: currentYear }
+                params: { 
+                    period: 'custom', 
+                    startDate: startDate,
+                    endDate: endDate
+                }
             });
 
             const history = response.data.detailedHistory || [];
             const monthsMap = {};
+            
             history.forEach(rec => {
                 const d = new Date(rec.date);
                 const monthIdx = d.getMonth(); 
                 const monthName = d.toLocaleString('default', { month: 'short' });
+                // Use YYYYMM format for numerical sorting across years
                 const sortKey = d.getFullYear() * 100 + monthIdx;
 
                 if (!monthsMap[sortKey]) {
                     monthsMap[sortKey] = { name: monthName, present: 0, total: 0 };
                 }
+                
+                // Status 'P' = Present, 'A' = Absent, 'L' = Late/Leave (Assuming total includes all)
                 if (['P', 'A', 'L'].includes(rec.status)) monthsMap[sortKey].total++;
                 if (rec.status === 'P') monthsMap[sortKey].present++;
             });
 
             const processed = Object.keys(monthsMap)
-                .sort((a, b) => a - b)
+                .sort((a, b) => a - b) // Sort by sortKey (YYYYMM)
                 .map(key => {
                     const m = monthsMap[key];
                     const pct = m.total > 0 ? (m.present / m.total) * 100 : 0;
