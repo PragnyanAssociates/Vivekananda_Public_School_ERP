@@ -1,5 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, ScrollView, RefreshControl, Image, Linking, SafeAreaView } from 'react-native';
+import { 
+    View, 
+    Text, 
+    FlatList, 
+    StyleSheet, 
+    ActivityIndicator, 
+    TouchableOpacity, 
+    Alert, 
+    Modal, 
+    TextInput, 
+    ScrollView, 
+    RefreshControl, 
+    Image, 
+    Linking, 
+    SafeAreaView, 
+    useColorScheme,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform
+} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
@@ -9,35 +28,45 @@ import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import * as Animatable from 'react-native-animatable';
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', 
-    cardBg: '#FFFFFF',
-    textMain: '#263238',
-    textSub: '#546E7A',
-    border: '#CFD8DC',
-    success: '#43A047',
-    danger: '#E53935',
-    blue: '#1E88E5'
+// --- THEME HELPER ---
+const getTheme = (scheme: string | null | undefined) => {
+    const isDark = scheme === 'dark';
+    return {
+        isDark,
+        background: isDark ? '#121212' : '#F2F5F8',
+        cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
+        textMain: isDark ? '#E0E0E0' : '#263238',
+        textSub: isDark ? '#B0BEC5' : '#546E7A',
+        border: isDark ? '#333333' : '#CFD8DC',
+        primary: '#008080',
+        danger: isDark ? '#EF5350' : '#E53935',
+        blue: '#1E88E5',
+        inputBg: isDark ? '#2C2C2C' : '#FAFAFA',
+        placeholder: isDark ? '#757575' : '#90A4AE',
+        headerIconBg: isDark ? 'rgba(0, 128, 128, 0.2)' : '#E0F2F1'
+    };
 };
 
 const TeacherAdminResourcesScreen = () => {
     const navigation = useNavigation();
-    const [mainView, setMainView] = useState<'syllabus' | 'textbooks'>('syllabus');
+    const colorScheme = useColorScheme();
+    const theme = getTheme(colorScheme);
+    
+    // View States
     const [boardView, setBoardView] = useState<'state' | 'central'>('state');
     const [selectedClassFilter, setSelectedClassFilter] = useState('All'); 
     
-    const [syllabi, setSyllabi] = useState([]);
+    // Data States
     const [textbooks, setTextbooks] = useState([]);
+    const [allClasses, setAllClasses] = useState<string[]>([]);
+    
+    // UI States
     const [isLoading, setIsLoading] = useState(true);
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const [editingItem, setEditingItem] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [allClasses, setAllClasses] = useState([]);
+    const [editingItem, setEditingItem] = useState<any | null>(null);
     
-    // Form State
-    const [modalResourceType, setModalResourceType] = useState<'syllabus' | 'textbook'>('syllabus');
+    // Form States
     const [modalBoardType, setModalBoardType] = useState<'state' | 'central'>('state');
     const [selectedClass, setSelectedClass] = useState('');
     const [subjectName, setSubjectName] = useState('');
@@ -47,23 +76,26 @@ const TeacherAdminResourcesScreen = () => {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [syllabusRes, textbookRes, classesRes] = await Promise.all([
-                apiClient.get('/resources?type=syllabus'),
+            // Only fetching Textbooks as requested
+            const [textbookRes, classesRes] = await Promise.all([
                 apiClient.get('/resources?type=textbook'),
                 apiClient.get('/all-classes')
             ]);
-            setSyllabi(syllabusRes.data);
             setTextbooks(textbookRes.data);
             setAllClasses(classesRes.data);
-        } catch (e) { Alert.alert("Error", "Failed to fetch data from the server."); } 
-        finally { setIsLoading(false); }
+        } catch (e) { 
+            Alert.alert("Error", "Failed to fetch data from the server."); 
+        } finally { 
+            setIsLoading(false); 
+        }
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleCardPress = async (item) => {
+    const handleCardPress = async (item: any) => {
         if (!item.url) return Alert.alert("Not Available", "The link for this item has not been provided yet.");
         if (item.url.toLowerCase().endsWith('.pdf')) {
+            // @ts-ignore
             navigation.navigate('PDFViewer', { url: item.url, title: item.subject_name });
         } else {
             const canOpen = await Linking.canOpenURL(item.url);
@@ -72,214 +104,311 @@ const TeacherAdminResourcesScreen = () => {
         }
     };
     
-    const handleChoosePhoto = () => { launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => { if (response.didCancel || response.errorCode) return; setSelectedImage(response); }); };
+    const handleChoosePhoto = () => { 
+        launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => { 
+            if (response.didCancel || response.errorCode) return; 
+            setSelectedImage(response); 
+        }); 
+    };
     
-    const resetForm = () => { setEditingItem(null); setSelectedClass(''); setSubjectName(''); setUrl(''); setSelectedImage(null); setModalResourceType(mainView === 'syllabus' ? 'syllabus' : 'textbook'); setModalBoardType(boardView); };
+    const resetForm = () => { 
+        setEditingItem(null); 
+        setSelectedClass(''); 
+        setSubjectName(''); 
+        setUrl(''); 
+        setSelectedImage(null); 
+        setModalBoardType(boardView); 
+    };
     
     const openCreateModal = () => { resetForm(); setIsModalVisible(true); };
     
-    const openEditModal = (item, type) => { setEditingItem(item); setModalResourceType(type); setModalBoardType(item.syllabus_type); setSelectedClass(item.class_group); setUrl(item.url || ''); setSubjectName(item.subject_name || ''); setSelectedImage(null); setIsModalVisible(true); };
+    const openEditModal = (item: any) => { 
+        setEditingItem(item); 
+        setModalBoardType(item.syllabus_type); 
+        setSelectedClass(item.class_group); 
+        setUrl(item.url || ''); 
+        setSubjectName(item.subject_name || ''); 
+        setSelectedImage(null); 
+        setIsModalVisible(true); 
+    };
     
-    const handleDelete = (item) => { const resourceName = mainView.slice(0, -1); Alert.alert(`Confirm Delete`, `Delete ${resourceName} for ${item.subject_name} (${item.class_group})?`, [{ text: "Cancel", style: 'cancel' }, { text: "Delete", style: 'destructive', onPress: async () => { try { await apiClient.delete(`/resources/${item.id}`); fetchData(); } catch(e) { Alert.alert("Error", `Could not delete ${resourceName}.`); }}},]);};
+    const handleDelete = (item: any) => { 
+        Alert.alert(`Confirm Delete`, `Delete textbook for ${item.subject_name} (${item.class_group})?`, [
+            { text: "Cancel", style: 'cancel' }, 
+            { text: "Delete", style: 'destructive', onPress: async () => { 
+                try { 
+                    await apiClient.delete(`/resources/${item.id}`); 
+                    fetchData(); 
+                } catch(e) { 
+                    Alert.alert("Error", `Could not delete textbook.`); 
+                }
+            }},
+        ]);
+    };
     
     const handleSave = async () => { 
-        if (!selectedClass || !url || !modalBoardType || !modalResourceType || !subjectName) return Alert.alert("Validation Error", "All fields with * are required."); 
+        if (!selectedClass || !url || !modalBoardType || !subjectName) {
+            return Alert.alert("Validation Error", "All fields with * are required."); 
+        }
+        
         setIsSaving(true); 
         const data = new FormData(); 
         data.append('class_group', selectedClass); 
         data.append('url', url); 
         data.append('syllabus_type', modalBoardType); 
         data.append('subject_name', subjectName); 
-        data.append('resource_type', modalResourceType); 
+        data.append('resource_type', 'textbook'); // Hardcoded as per requirement
+        
         if (selectedImage?.assets?.[0]) { 
-            data.append('coverImage', { uri: selectedImage.assets[0].uri, type: selectedImage.assets[0].type, name: selectedImage.assets[0].fileName, }); 
+            data.append('coverImage', { 
+                uri: selectedImage.assets[0].uri, 
+                type: selectedImage.assets[0].type, 
+                name: selectedImage.assets[0].fileName, 
+            }); 
         } 
+        
         try { 
             const config = { headers: { 'Content-Type': 'multipart/form-data' } }; 
             if (editingItem) await apiClient.put(`/resources/${editingItem.id}`, data, config); 
             else await apiClient.post('/resources', data, config); 
-            Alert.alert("Success", "Resource saved successfully!"); 
+            
+            Alert.alert("Success", "Textbook saved successfully!"); 
             setIsModalVisible(false); 
             fetchData(); 
-        } catch (e) { Alert.alert("Error", e.response?.data?.message || "An error occurred while saving."); } 
-        finally { setIsSaving(false); }
+        } catch (e: any) { 
+            Alert.alert("Error", e.response?.data?.message || "An error occurred while saving."); 
+        } finally { 
+            setIsSaving(false); 
+        }
     };
     
     const displayableClasses = allClasses.filter(c => c.startsWith('Class') || c === 'LKG' || c === 'UKG');
 
     const renderList = () => {
-        const isSyllabus = mainView === 'syllabus';
-        const baseData = isSyllabus ? syllabi : textbooks;
-        
-        const filteredData = baseData
-            .filter((item) => item.syllabus_type === boardView)
-            .filter((item) => selectedClassFilter === 'All' ? true : item.class_group === selectedClassFilter);
+        const filteredData = textbooks
+            .filter((item: any) => item.syllabus_type === boardView)
+            .filter((item: any) => selectedClassFilter === 'All' ? true : item.class_group === selectedClassFilter);
 
         return (
             <FlatList
                 data={filteredData}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item: any) => item.id.toString()}
                 numColumns={2} 
                 contentContainerStyle={styles.gridContainer}
-                renderItem={({ item, index }) => {
+                renderItem={({ item, index }: { item: any, index: number }) => {
                     const imageUri = item.cover_image_url ? `${SERVER_URL}${item.cover_image_url}` : `https://via.placeholder.com/300x400/DCDCDC/808080?text=${item.subject_name.replace(' ', '+')}`;
                     return (
                         <Animatable.View animation="fadeInUp" duration={500} delay={index * 50} style={styles.gridItemWrapper}>
-                            <TouchableOpacity style={styles.gridItem} onPress={() => handleCardPress(item)} activeOpacity={0.9}>
-                                <Image source={{ uri: imageUri }} style={styles.coverImage} />
+                            <TouchableOpacity 
+                                style={[styles.gridItem, { backgroundColor: theme.cardBg }]} 
+                                onPress={() => handleCardPress(item)} 
+                                activeOpacity={0.9}
+                            >
+                                <Image source={{ uri: imageUri }} style={styles.coverImage} resizeMode="cover" />
                                 <View style={styles.actionsOverlay}>
-                                    <TouchableOpacity style={styles.iconButton} onPress={() => openEditModal(item, isSyllabus ? 'syllabus' : 'textbook')}>
-                                        <MaterialIcons name="edit" size={16} color={COLORS.blue} />
+                                    <TouchableOpacity style={styles.iconButton} onPress={() => openEditModal(item)}>
+                                        <MaterialIcons name="edit" size={16} color={theme.blue} />
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.iconButton} onPress={() => handleDelete(item)}>
-                                        <MaterialIcons name="delete" size={16} color={COLORS.danger} />
+                                        <MaterialIcons name="delete" size={16} color={theme.danger} />
                                     </TouchableOpacity>
                                 </View>
                                 <View style={styles.infoContainer}>
-                                    <Text style={styles.gridTitle} numberOfLines={1}>{item.subject_name}</Text>
-                                    <Text style={styles.gridSubtitle}>{item.class_group}</Text>
+                                    <Text style={[styles.gridTitle, { color: theme.textMain }]} numberOfLines={1}>{item.subject_name}</Text>
+                                    <Text style={[styles.gridSubtitle, { color: theme.textSub }]}>{item.class_group}</Text>
                                 </View>
                             </TouchableOpacity>
                         </Animatable.View>
                     );
                 }}
-                ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>{`No ${mainView} found.`}</Text></View>}
-                refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchData} />}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Text style={[styles.emptyText, { color: theme.textSub }]}>No textbooks found.</Text>
+                    </View>
+                }
+                refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchData} colors={[theme.primary]} />}
             />
         );
     };
     
+    // Dynamic Styles for Components
+    const pickerStyle = { color: theme.textMain, backgroundColor: 'transparent' };
+
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            {/* --- HEADER --- */}
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, borderColor: theme.border, borderWidth: theme.isDark ? 1 : 0 }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialCommunityIcons name="bookshelf" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.headerIconBg }]}>
+                        <MaterialCommunityIcons name="bookshelf" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Resources</Text>
-                        <Text style={styles.headerSubtitle}>Syllabus & Textbooks</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Library</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Textbooks Repository</Text>
                     </View>
                 </View>
-                <TouchableOpacity style={styles.headerBtn} onPress={openCreateModal}>
+                <TouchableOpacity style={[styles.headerBtn, { backgroundColor: theme.primary }]} onPress={openCreateModal}>
                     <MaterialIcons name="add" size={18} color="#fff" />
                     <Text style={styles.headerBtnText}>Add</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* --- TABS --- */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity style={[styles.tab, mainView === 'syllabus' && styles.tabActive]} onPress={() => setMainView('syllabus')}>
-                    <Text style={[styles.tabText, mainView === 'syllabus' && styles.tabTextActive]}>Syllabus</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.tab, mainView === 'textbooks' && styles.tabActive]} onPress={() => setMainView('textbooks')}>
-                    <Text style={[styles.tabText, mainView === 'textbooks' && styles.tabTextActive]}>Textbooks</Text>
-                </TouchableOpacity>
-            </View>
-            
             {/* --- FILTERS --- */}
             <View style={styles.filterSection}>
                 <View style={styles.pickerWrapper}>
-                    <Text style={styles.pickerLabel}>Board:</Text>
-                    <View style={styles.pickerBox}>
-                        <Picker selectedValue={boardView} onValueChange={setBoardView} style={styles.picker}>
-                            <Picker.Item label="State" value="state" />
-                            <Picker.Item label="Central" value="central" />
+                    <Text style={[styles.pickerLabel, { color: theme.textSub }]}>Board:</Text>
+                    <View style={[styles.pickerBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                        <Picker 
+                            selectedValue={boardView} 
+                            onValueChange={setBoardView} 
+                            style={pickerStyle}
+                            dropdownIconColor={theme.textMain}
+                            mode="dropdown"
+                        >
+                            <Picker.Item label="State Board" value="state" style={{color: theme.textMain, backgroundColor: theme.cardBg}} />
+                            <Picker.Item label="Central Board" value="central" style={{color: theme.textMain, backgroundColor: theme.cardBg}} />
                         </Picker>
                     </View>
                 </View>
 
                 <View style={styles.pickerWrapper}>
-                    <Text style={styles.pickerLabel}>Class:</Text>
-                    <View style={styles.pickerBox}>
-                        <Picker selectedValue={selectedClassFilter} onValueChange={setSelectedClassFilter} style={styles.picker}>
-                            <Picker.Item label="All Classes" value="All" />
-                            {displayableClasses.map((c) => <Picker.Item key={c} label={c} value={c} />)}
+                    <Text style={[styles.pickerLabel, { color: theme.textSub }]}>Class:</Text>
+                    <View style={[styles.pickerBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                        <Picker 
+                            selectedValue={selectedClassFilter} 
+                            onValueChange={setSelectedClassFilter} 
+                            style={pickerStyle}
+                            dropdownIconColor={theme.textMain}
+                            mode="dropdown"
+                        >
+                            <Picker.Item label="All Classes" value="All" style={{color: theme.textMain, backgroundColor: theme.cardBg}} />
+                            {displayableClasses.map((c) => (
+                                <Picker.Item key={c} label={c} value={c} style={{color: theme.textMain, backgroundColor: theme.cardBg}} />
+                            ))}
                         </Picker>
                     </View>
                 </View>
             </View>
 
-            {isLoading ? <ActivityIndicator style={{marginTop: 40}} size="large" color={COLORS.primary} /> : renderList()}
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={theme.primary} />
+                </View>
+            ) : renderList()}
 
             {/* --- MODAL --- */}
-            <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide">
-                <View style={styles.modalBackground}>
-                    <View style={styles.modalContent}>
+            <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide" transparent>
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    style={styles.modalBackground}
+                >
+                    <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Create'} Resource</Text>
+                            <Text style={[styles.modalTitle, { color: theme.textMain }]}>
+                                {editingItem ? 'Edit' : 'Add'} Textbook
+                            </Text>
                             <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                                <MaterialIcons name="close" size={24} color="#333" />
+                                <MaterialIcons name="close" size={24} color={theme.textMain} />
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView contentContainerStyle={{paddingBottom: 20}} keyboardShouldPersistTaps="handled">
-                            <Text style={styles.label}>Resource Type*</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker selectedValue={modalResourceType} onValueChange={setModalResourceType} enabled={!editingItem}>
-                                    <Picker.Item label="Syllabus" value="syllabus" />
-                                    <Picker.Item label="Textbook" value="textbook" />
+                        <ScrollView contentContainerStyle={{paddingBottom: 20}} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            
+                            <Text style={[styles.label, { color: theme.textSub }]}>Board Type*</Text>
+                            <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
+                                <Picker 
+                                    selectedValue={modalBoardType} 
+                                    onValueChange={setModalBoardType}
+                                    style={pickerStyle}
+                                    dropdownIconColor={theme.textMain}
+                                >
+                                    <Picker.Item label="State Board" value="state" style={{color: theme.textMain, backgroundColor: theme.inputBg}}/>
+                                    <Picker.Item label="Central Board" value="central" style={{color: theme.textMain, backgroundColor: theme.inputBg}}/>
                                 </Picker>
                             </View>
                             
-                            <Text style={styles.label}>Board Type*</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker selectedValue={modalBoardType} onValueChange={setModalBoardType}>
-                                    <Picker.Item label="State Board" value="state" />
-                                    <Picker.Item label="Central Board" value="central" />
+                            <Text style={[styles.label, { color: theme.textSub }]}>Class*</Text>
+                            <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
+                                <Picker 
+                                    selectedValue={selectedClass} 
+                                    onValueChange={setSelectedClass} 
+                                    enabled={!editingItem}
+                                    style={pickerStyle}
+                                    dropdownIconColor={theme.textMain}
+                                >
+                                    <Picker.Item label="-- Select Class --" value="" style={{color: theme.textSub}} />
+                                    {displayableClasses.map((c) => (
+                                        <Picker.Item key={c} label={c} value={c} style={{color: theme.textMain, backgroundColor: theme.inputBg}} />
+                                    ))}
                                 </Picker>
                             </View>
                             
-                            <Text style={styles.label}>Class*</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} enabled={!editingItem}>
-                                    <Picker.Item label="-- Select Class --" value="" />
-                                    {displayableClasses.map((c) => <Picker.Item key={c} label={c} value={c} />)}
-                                </Picker>
-                            </View>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Subject Name*</Text>
+                            <TextInput 
+                                style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textMain }]} 
+                                value={subjectName} 
+                                onChangeText={setSubjectName} 
+                                placeholder="e.g., Mathematics, English..." 
+                                placeholderTextColor={theme.placeholder}
+                            />
                             
-                            <Text style={styles.label}>Subject Name*</Text>
-                            <TextInput style={styles.input} value={subjectName} onChangeText={setSubjectName} placeholder="e.g., English..." />
+                            <Text style={[styles.label, { color: theme.textSub }]}>Textbook Link / PDF URL*</Text>
+                            <TextInput 
+                                style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.textMain }]} 
+                                value={url} 
+                                onChangeText={setUrl} 
+                                placeholder="https://..." 
+                                keyboardType="url" 
+                                placeholderTextColor={theme.placeholder}
+                            />
                             
-                            <Text style={styles.label}>Resource URL*</Text>
-                            <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://..." keyboardType="url" />
-                            
-                            <TouchableOpacity style={styles.imagePicker} onPress={handleChoosePhoto}>
-                                <MaterialIcons name="image" size={24} color={COLORS.textSub} />
-                                <Text style={styles.imagePickerText}>{editingItem?.cover_image_url || selectedImage ? 'Change Image' : 'Select Cover Image'}</Text>
+                            <TouchableOpacity style={[styles.imagePicker, { backgroundColor: theme.inputBg }]} onPress={handleChoosePhoto}>
+                                <MaterialIcons name="image" size={24} color={theme.textSub} />
+                                <Text style={[styles.imagePickerText, { color: theme.textMain }]}>
+                                    {editingItem?.cover_image_url || selectedImage ? 'Change Cover Image' : 'Select Cover Image'}
+                                </Text>
                             </TouchableOpacity>
-                            { (selectedImage?.assets?.[0]?.uri || editingItem?.cover_image_url) && <Image style={styles.previewImage} source={{ uri: selectedImage?.assets?.[0]?.uri || `${SERVER_URL}${editingItem.cover_image_url}` }} /> }
+                            { (selectedImage?.assets?.[0]?.uri || editingItem?.cover_image_url) && 
+                                <Image 
+                                    style={styles.previewImage} 
+                                    source={{ uri: selectedImage?.assets?.[0]?.uri || `${SERVER_URL}${editingItem.cover_image_url}` }} 
+                                    resizeMode="contain"
+                                /> 
+                            }
                             
                             <View style={styles.modalActions}>
                                 <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsModalVisible(false)}>
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={handleSave} disabled={isSaving}>
+                                <TouchableOpacity 
+                                    style={[styles.modalBtn, { backgroundColor: theme.primary }]} 
+                                    onPress={handleSave} 
+                                    disabled={isSaving}
+                                >
                                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save</Text>}
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // --- HEADER CARD STYLES ---
+    // --- HEADER ---
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
+        paddingVertical: 15,
+        width: '94%', 
         alignSelf: 'center',
         marginTop: 15,
-        marginBottom: 10,
+        marginBottom: 15,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
@@ -292,7 +421,6 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -301,64 +429,134 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
     headerBtn: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
         borderRadius: 20,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
         marginLeft: 10,
     },
-    headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-    // --- TABS ---
-    tabContainer: { flexDirection: 'row', marginHorizontal: 15, marginBottom: 10, backgroundColor: COLORS.cardBg, borderRadius: 8, overflow: 'hidden', elevation: 2, borderWidth: 1, borderColor: COLORS.border },
-    tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-    tabActive: { backgroundColor: '#F0FDF4', borderBottomWidth: 3, borderBottomColor: COLORS.primary },
-    tabText: { fontSize: 14, fontWeight: '600', color: COLORS.textSub },
-    tabTextActive: { color: COLORS.primary },
+    headerBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
     // --- FILTERS ---
-    filterSection: { flexDirection: 'row', paddingHorizontal: 15, gap: 10, marginBottom: 10 },
+    filterSection: { flexDirection: 'row', paddingHorizontal: 15, gap: 10, marginBottom: 15 },
     pickerWrapper: { flex: 1 },
-    pickerLabel: { fontSize: 12, fontWeight: 'bold', color: COLORS.textSub, marginBottom: 4, marginLeft: 2 },
-    pickerBox: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, height: 40, justifyContent: 'center' },
-    picker: { color: COLORS.textMain },
+    pickerLabel: { fontSize: 12, fontWeight: 'bold', marginBottom: 5, marginLeft: 2 },
+    pickerBox: { 
+        borderRadius: 8, 
+        borderWidth: 1, 
+        height: 45, 
+        justifyContent: 'center',
+        overflow: 'hidden'
+    },
 
     // --- GRID ---
-    gridContainer: { paddingHorizontal: 10, paddingBottom: 20 },
-    gridItemWrapper: { width: '50%', padding: 5 },
-    gridItem: { backgroundColor: '#fff', borderRadius: 10, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, overflow: 'hidden' },
-    coverImage: { width: '100%', aspectRatio: 3 / 4, backgroundColor: '#eee' },
-    infoContainer: { padding: 10, alignItems: 'center' },
-    gridTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.textMain, textAlign: 'center' },
-    gridSubtitle: { fontSize: 12, color: COLORS.textSub, marginTop: 2 },
-    actionsOverlay: { position: 'absolute', top: 5, right: 5, flexDirection: 'row', gap: 5 },
-    iconButton: { backgroundColor: 'rgba(255,255,255,0.9)', padding: 5, borderRadius: 15, elevation: 2 },
-    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
-    emptyText: { textAlign: 'center', fontSize: 16, color: COLORS.textSub },
+    gridContainer: { paddingHorizontal: 10, paddingBottom: 30 },
+    gridItemWrapper: { width: '50%', padding: 6 },
+    gridItem: { 
+        borderRadius: 12, 
+        elevation: 2, 
+        shadowColor: "#000", 
+        shadowOffset: { width: 0, height: 1 }, 
+        shadowOpacity: 0.1, 
+        shadowRadius: 3, 
+        overflow: 'hidden',
+        height: 240, // Fixed height for uniformity
+    },
+    coverImage: { 
+        width: '100%', 
+        height: 160, 
+        backgroundColor: '#eee' 
+    },
+    infoContainer: { padding: 10, alignItems: 'center', flex: 1, justifyContent: 'center' },
+    gridTitle: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+    gridSubtitle: { fontSize: 12, marginTop: 2 },
+    
+    actionsOverlay: { 
+        position: 'absolute', 
+        top: 8, 
+        right: 8, 
+        flexDirection: 'row', 
+        gap: 6 
+    },
+    iconButton: { 
+        backgroundColor: 'rgba(255,255,255,0.95)', 
+        padding: 6, 
+        borderRadius: 20, 
+        elevation: 2 
+    },
+    
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
+    emptyText: { textAlign: 'center', fontSize: 16 },
 
     // --- MODAL ---
-    modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 12, padding: 20, maxHeight: '85%', elevation: 10 },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.textSub, marginBottom: 5, marginTop: 10 },
-    input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 10, fontSize: 15, backgroundColor: '#FAFAFA' },
-    pickerContainer: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#FAFAFA', marginBottom: 5 },
-    imagePicker: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0e0e0', padding: 10, borderRadius: 8, marginTop: 10, justifyContent: 'center' },
-    imagePickerText: { marginLeft: 10, fontSize: 14, color: COLORS.textMain },
-    previewImage: { width: 80, height: 100, borderRadius: 8, alignSelf: 'center', marginTop: 10 },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 25 },
-    modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginHorizontal: 5, elevation: 2 },
-    saveBtn: { backgroundColor: COLORS.primary },
-    cancelBtn: { backgroundColor: '#e0e0e0' },
-    saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-    cancelBtnText: { color: '#333', fontWeight: 'bold', fontSize: 15 },
+    modalBackground: { 
+        flex: 1, 
+        backgroundColor: 'rgba(0,0,0,0.6)', 
+        justifyContent: 'center', 
+        alignItems: 'center' 
+    },
+    modalContent: { 
+        width: '90%', 
+        borderRadius: 16, 
+        padding: 20, 
+        maxHeight: '85%', 
+        elevation: 10 
+    },
+    modalHeader: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: 20 
+    },
+    modalTitle: { fontSize: 22, fontWeight: 'bold' },
+    
+    label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 12 },
+    input: { 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        padding: 12, 
+        fontSize: 16 
+    },
+    pickerContainer: { 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        marginBottom: 5,
+        justifyContent: 'center',
+        height: 50,
+        overflow: 'hidden'
+    },
+    
+    imagePicker: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        padding: 15, 
+        borderRadius: 8, 
+        marginTop: 15, 
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'transparent',
+        borderStyle: 'dashed'
+    },
+    imagePickerText: { marginLeft: 10, fontSize: 15, fontWeight: '500' },
+    previewImage: { width: 100, height: 130, borderRadius: 8, alignSelf: 'center', marginTop: 15, backgroundColor: '#eee' },
+    
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30 },
+    modalBtn: { 
+        flex: 1, 
+        paddingVertical: 14, 
+        borderRadius: 8, 
+        alignItems: 'center', 
+        marginHorizontal: 6, 
+        elevation: 1 
+    },
+    cancelBtn: { backgroundColor: '#E0E0E0' },
+    saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+    cancelBtnText: { color: '#333', fontWeight: 'bold', fontSize: 16 },
 });
 
 export default TeacherAdminResourcesScreen;
