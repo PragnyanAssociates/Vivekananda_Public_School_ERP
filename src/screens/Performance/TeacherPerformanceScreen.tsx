@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
  * Purpose: Teacher Performance Analytics with Table View, Class-wise Max Mark Logic, and Attendance Graph.
- * Updated: Fixed Attendance Graph to show Academic Year (from June) instead of just Calendar Year.
+ * Updated: Back button is now hidden for Teachers and only visible for Admins.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -598,13 +598,15 @@ const TeacherPerformanceScreen = () => {
             {/* --- HEADER --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
-                    {/* BACK BUTTON */}
-                    <TouchableOpacity 
-                        style={styles.backButton} 
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-left" size={24} color={COLORS.textMain} />
-                    </TouchableOpacity>
+                    {/* BACK BUTTON - Only for Admin */}
+                    {userRole === 'admin' && (
+                        <TouchableOpacity 
+                            style={styles.backButton} 
+                            onPress={() => navigation.goBack()}
+                        >
+                            <Icon name="arrow-left" size={24} color={COLORS.textMain} />
+                        </TouchableOpacity>
+                    )}
 
                     <View style={styles.headerIconContainer}>
                         <Icon name="poll" size={24} color={COLORS.primary} />

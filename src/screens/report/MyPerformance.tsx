@@ -54,7 +54,7 @@ const COLORS = {
     textSub: '#546E7A',
     
     success: '#43A047',    // Green (85% - 100%)
-    average: '#FB8C00',    // Orange (50% - 85%)
+    average: '#1E88E5',    // Orange (50% - 85%)
     poor: '#E53935',       // Red (0% - 50%)
     
     noteBg: '#FFF8E1',     
@@ -63,8 +63,8 @@ const COLORS = {
     rankBg: '#ECEFF1',     
     rankText: '#37474F',   
     
-    selectedChip: '#008080', // Updated to match Theme
-    overviewChip: '#37474F' 
+    selectedChip: '#b278f5', // Updated to match Theme
+    overviewChip: '#222323' 
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
     // Note Styles
     noteCard: { backgroundColor: COLORS.noteBg, borderRadius: 12, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: COLORS.noteBorder },
     noteHeader: { marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#FFE0B2', paddingBottom: 5 },
-    noteTitle: { fontSize: 14, fontWeight: '800', color: '#E65100', textTransform: 'uppercase' },
+    noteTitle: { fontSize: 14, fontWeight: '800', color: '#1E88E5', textTransform: 'uppercase' },
     
     noteGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     legendItem: { flexDirection: 'row', alignItems: 'center', width: '48%', marginBottom: 6 },

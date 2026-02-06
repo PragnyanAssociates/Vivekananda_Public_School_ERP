@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, Alert, Platform, TextInput, Image } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -13,18 +13,18 @@ const THEME = { primary: '#008080', background: '#F2F5F8', text: '#212529', mute
 
 const GroupListScreen = () => {
     const { user } = useAuth();
-    const navigation = useNavigation<any>();
-    const [groups, setGroups] = useState<any[]>([]);
+    const navigation = useNavigation();
+    const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const socketRef = useRef<Socket | null>(null);
+    const socketRef = useRef(null);
 
     const fetchGroups = useCallback(async (showLoader = false) => {
         if (showLoader) setLoading(true);
         try {
             const response = await apiClient.get('/groups');
             setGroups(response.data);
-        } catch (error: any) {
+        } catch (error) {
             Alert.alert("Error", error.response?.data?.message || "Could not fetch groups.");
         } finally {
             if (showLoader) setLoading(false);
@@ -49,14 +49,13 @@ const GroupListScreen = () => {
         [groups, searchQuery]
     );
 
-    const formatTimestamp = (timestamp: string) => {
+    const formatTimestamp = (timestamp) => {
         if (!timestamp) return '';
-        // FIX: Ensure correct local time
         const date = new Date(timestamp);
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
-    const renderGroupItem = ({ item }: { item: any }) => (
+    const renderGroupItem = ({ item }) => (
         <TouchableOpacity style={styles.groupItem} onPress={() => navigation.navigate('GroupChat', { group: item })}>
             <Image source={getProfileImageSource(item.group_dp_url)} style={styles.avatar} />
             <View style={styles.groupInfo}>
@@ -91,6 +90,17 @@ const GroupListScreen = () => {
                         <Text style={styles.headerSubtitle}>Discussions</Text>
                     </View>
                 </View>
+
+                {/* NEW ADD BUTTON PLACED HERE INSIDE HEADER */}
+                {(user?.role === 'admin' || user?.role === 'teacher') && (
+                    <TouchableOpacity 
+                        style={styles.headerAddButton} 
+                        onPress={() => navigation.navigate('CreateGroup')}
+                    >
+                        <Icon name="plus" size={20} color={THEME.white} />
+                        <Text style={styles.headerAddButtonText}>Add</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <View style={styles.searchContainer}>
@@ -105,11 +115,8 @@ const GroupListScreen = () => {
                 ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No groups found.</Text></View>}
                 contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 10 }}
             />
-            {(user?.role === 'admin' || user?.role === 'teacher') && (
-                <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('CreateGroup')}>
-                    <Icon name="plus" size={30} color={THEME.white} />
-                </TouchableOpacity>
-            )}
+            
+            {/* REMOVED THE OLD BOTTOM FLOATING BUTTON */}
         </SafeAreaView>
     );
 };
@@ -130,6 +137,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between', // Changed to push items to edges
         elevation: 3,
         shadowColor: '#000', 
         shadowOpacity: 0.1, 
@@ -150,6 +158,22 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: THEME.text },
     headerSubtitle: { fontSize: 13, color: THEME.muted },
 
+    // NEW STYLES FOR THE HEADER ADD BUTTON
+    headerAddButton: {
+        backgroundColor: THEME.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20, // Makes it pill-shaped
+    },
+    headerAddButtonText: {
+        color: THEME.white,
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 4,
+    },
+
     searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, marginHorizontal: 15, paddingHorizontal: 10, marginBottom: 10, borderWidth: 1, borderColor: THEME.border, height: 45 },
     searchInput: { flex: 1, height: 40, fontSize: 16, marginLeft: 8, color: THEME.text },
     
@@ -164,7 +188,8 @@ const styles = StyleSheet.create({
     unreadText: { color: THEME.white, fontWeight: 'bold', fontSize: 12 },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
     emptyText: { textAlign: 'center', fontSize: 16, color: THEME.muted },
-    fab: { position: 'absolute', right: 20, bottom: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', elevation: 8 },
+    
+    // Removed 'fab' style since it's no longer used
 });
 
 export default GroupListScreen;
