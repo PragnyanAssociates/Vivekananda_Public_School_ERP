@@ -8,21 +8,23 @@ import {
   Alert,
   SafeAreaView,
   Dimensions,
-  // --- CHANGE 1: The standard Image will still be used for icons ---
   Image,
   Platform,
   TextInput,
   Modal,
   TouchableWithoutFeedback,
+  useColorScheme,
+  FlatList,
+  BackHandler // Added for hardware back button handling
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
-// --- CHANGE 2: IMPORT FastImage ---
 import FastImage from 'react-native-fast-image';
 
 // --- Component Imports ---
@@ -38,31 +40,24 @@ import TeacherAdminPTMScreen from '../screens/ptm/TeacherAdminPTMScreen';
 import OnlineClassScreen from '../screens/Online_Class/OnlineClassScreen';
 import FoodScreen from '../screens/food/FoodScreen';
 import TeacherHealthAdminScreen from '../screens/health/TeacherHealthAdminScreen';
-// import GroupChatScreen from '../screens/chat/GroupChatScreen';
 import AdminEventsScreen from '../screens/events/AdminEventsScreen';
 import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
 import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
-// import MarksEntryScreen from '../screens/report/MarksEntryScreen';
 import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
 import TeacherSyllabusScreen from '../screens/syllabus/TeacherSyllabusScreen';
 import TeacherAdminResourcesScreen from '../screens/syllabus_Textbook/TeacherAdminResourcesScreen';
 import TeacherAttendanceReportScreen from '../screens/teacher_attendence/TeacherAttendanceReportScreen';
-
 import TeacherPerformanceScreen from '../screens/Performance/TeacherPerformanceScreen';
 import StudentPerformance from '../screens/Performance/StudentPerformance';
-
 import ActivitiesScreen from '../screens/Extra_activity/ActivitiesScreen';
 import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
 import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 import PerformanceFilter from '../screens/report/PerformanceFilter';
-
 import StudentFeedback from '../screens/Feedbacks/StudentFeedback';
 
 // --- Constants & Colors ---
 const { width: windowWidth } = Dimensions.get('window');
-const CARD_GAP = 12;
-const CONTENT_HORIZONTAL_PADDING = 15;
 const BOTTOM_NAV_HEIGHT = 70;
 const PRIMARY_COLOR = '#008080';
 const SECONDARY_COLOR = '#e0f2f7';
@@ -79,20 +74,94 @@ const MAIN_TABS = ['home', 'calendar', 'profile'];
 // --- Main Component ---
 const TeacherDashboard = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('home');
-  const [searchQuery, setSearchQuery] = useState('');
+  // State for Navigation Hierarchy (Dashboard vs Category Details)
+  const [currentView, setCurrentView] = useState('dashboard'); 
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
   const { user, logout } = useAuth();
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const isFocused = useIsFocused();
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isBottomNavVisible, setIsBottomNavVisible] = useState(true);
 
-  const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
+  // --- Dark Mode / Light Mode Detection ---
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
 
-  // --- CHANGE 3: CONSTRUCT a source object suitable for FastImage for better caching ---
+  const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
+
+  // --- 1. DATA STRUCTURE: CATEGORIES & SUB-MODULES ---
+  const MAIN_CATEGORIES = [
+    {
+        id: 'cat_Teachers',
+        title: 'Teachers',
+        subtitle: 'Attendance, Performance & PTM. ',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/1995/1995574.png',
+        subModules: [
+            { id: 'qa0', title: 'My Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/939/939354.png', navigateToTab: 'TeacherPerformanceScreen' },
+            { id: 'qa1', title: 'My Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceReportScreen' },
+            { id: 'qa2', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'TeacherAdminPTMScreen' },
+            { id: 'qa3', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
+            { id: 'qa4', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },  
+        ]
+    },
+    {
+        id: 'cat_students',
+        title: 'Students',
+        subtitle: 'Attendance, Performance & Health Info.',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/2784/2784403.png',
+        subModules: [
+            { id: 'qa5', title: 'Students  Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
+            { id: 'qa6', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
+            { id: 'qa7', title: 'Student Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
+            { id: 'qa8', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
+        ]
+    },
+    {
+        id: 'cat_academic',
+        title: 'Academics',
+        subtitle: 'Timetable, Syllabus, Homework & Exams.',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/1773/1773017.png',
+        subModules: [
+            { id: 'qa9', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
+            { id: 'qa10', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'TeacherSyllabusScreen' },
+            { id: 'qa11', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
+            { id: 'qa12', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
+            { id: 'qa13', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'TeacherAdminExamsScreen' },
+            { id: 'qa14', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'TeacherAdminExamScreen' },
+            { id: 'qa15', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateTo: 'ReportScreen' },
+            { id: 'qa16', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
+        ]
+    },
+    {
+        id: 'cat_resources',
+        title: 'Study Materials',
+        subtitle: 'Learning Resources',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/1156/1156964.png',
+        subModules: [
+            { id: 'qa17', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
+            { id: 'qa18', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
+            { id: 'qa19', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
+            { id: 'qa20', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'TeacherAdminLabsScreen' },
+            { id: 'qa21', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
+        ]
+    },
+    {
+        id: 'cat_Extracurricular',
+        title: 'Extracurricular Activities',
+        subtitle: 'Sports & Kitchen',
+        imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png',
+        subModules: [
+            { id: 'qa22', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
+            { id: 'qa23', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
+        ]
+    },
+  ];
+
   const profileImageSource = user?.profile_image_url
     ? {
         uri: `${SERVER_URL}${user.profile_image_url}?t=${new Date().getTime()}`,
-        priority: FastImage.priority.high, // Prioritize loading and caching
+        priority: FastImage.priority.high, 
       }
     : require('../assets/default_avatar.png');
 
@@ -109,107 +178,171 @@ const TeacherDashboard = ({ navigation }) => {
   useEffect(() => {
     if (isFocused) {
       fetchUnreadCount();
+      // Handle Hardware Back Button
+      const backAction = () => {
+        if (currentView === 'category_detail') {
+          setCurrentView('dashboard');
+          setSelectedCategory(null);
+          return true; // Prevent default behavior
+        }
+        return false; 
+      };
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+      return () => backHandler.remove();
     }
-  }, [isFocused, fetchUnreadCount]);
+  }, [isFocused, fetchUnreadCount, currentView]);
 
   const handleLogout = () => { Alert.alert("Logout", "Are you sure you want to log out?", [ { text: "Cancel", style: "cancel" }, { text: "Logout", onPress: logout, style: "destructive" } ]); };
 
-  const allQuickAccessItems = [
-    { id: 'qa43', title: 'My Attendence', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceReportScreen' },
-    { id: 'qa24', title: 'My Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/939/939354.png', navigateToTab: 'TeacherPerformanceScreen' },
-    // { id: 'qa27', title: 'Student Performance', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'StudentPerformance' },
-    { id: 'qa34', title: 'Students  Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
-     { id: 'qa32', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
-    // { id: 'qa31', title: 'Transport', imageSource: 'https://cdn-icons-png.flaticon.com/128/3124/3124263.png', navigateToTab: 'TransportScreen' },
-    { id: 'qa2', title: 'Timetable', imageSource: 'https://cdn-icons-png.flaticon.com/128/1254/1254275.png', navigateToTab: 'Timetable' },
-    { id: 'qa3', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-    { id: 'qa4', title: 'Home Work', imageSource: 'https://cdn-icons-png.flaticon.com/128/11647/11647336.png', navigateToTab: 'TeacherAdminHomeworkScreen' },
-    // { id: 'qa28', title: 'Extracurricular Activities', imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png', navigateToTab: 'ActivitiesScreen' },
-    { id: 'qa18', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
-    { id: 'qa21', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },
-    { id: 'qa4', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'TeacherAdminExamsScreen' },
-    { id: 'qa29', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
-    { id: 'qa1', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'TeacherAdminPTMScreen' },
-    { id: 'qa7', title: 'Online class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
-    { id: 'qa8', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
-    { id: 'qa9', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
-    { id: 'qa10', title: 'Group chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
-    { id: 'qa11', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
-    { id: 'qa12', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'TeacherAdminExamScreen' },
-    { id: 'qa13', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'TeacherAdminLabsScreen' },
-    { id: 'qa18', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateTo: 'ReportScreen' },
-    { id: 'qa15', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
-    { id: 'qa20', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'TeacherSyllabusScreen' },
-    { id: 'qa52', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
-    { id: 'qa53', title: 'Student Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
-    
-    // { id: 'qa-ads-create', title: 'Create Ad', imageSource: 'https://cdn-icons-png.flaticon.com/128/4944/4944482.png', navigateTo: 'CreateAdScreen' },
-  ];
+  const switchTab = (tab) => {
+    if (tab === activeTab && currentView === 'dashboard') return;
 
-  const [filteredItems, setFilteredItems] = useState(allQuickAccessItems);
-
-  useEffect(() => {
-    setFilteredItems(searchQuery.trim() === '' ? allQuickAccessItems : allQuickAccessItems.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase())));
-  }, [searchQuery]);
-
-  const switchTab = (tab: string) => {
-    if (tab === activeTab) return;
+    if (tab === 'home') {
+        setCurrentView('dashboard');
+        setSelectedCategory(null);
+    }
     setActiveTab(tab);
     setIsBottomNavVisible(MAIN_TABS.includes(tab));
   };
 
+  const handleCategoryPress = (category) => {
+      setSelectedCategory(category);
+      setCurrentView('category_detail');
+  };
+
+  const handleSubModuleNavigation = (item) => {
+    if (item.navigateTo) {
+        navigation.navigate(item.navigateTo);
+    } else if (item.navigateToTab) {
+        if(item.navigateToTab === 'calendar' || item.navigateToTab === 'profile') {
+            switchTab(item.navigateToTab);
+        } else {
+            setActiveTab(item.navigateToTab);
+        }
+    } else {
+        Alert.alert(item.title, `Coming soon!`);
+    }
+  };
+
   const ContentScreenHeader = ({ title, onBack }) => ( <View style={styles.contentHeader}><TouchableOpacity onPress={onBack} style={styles.backButtonGlobal}><MaterialIcons name="arrow-back" size={24} color={PRIMARY_COLOR} /></TouchableOpacity><Text style={styles.contentHeaderTitle}>{title}</Text><View style={{ width: 30 }} /></View> );
+
+  // --- RENDERING LOGIC ---
+
+  // 1. MAIN DASHBOARD (CATEGORIES)
+  const renderDashboardCategories = () => (
+      <ScrollView contentContainerStyle={styles.contentScrollViewContainer}>
+          
+          {/* --- HEADER CARD --- */}
+          <View style={[
+              styles.headerCard, 
+              { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }
+          ]}>
+              <View style={[
+                  styles.headerIconContainer,
+                  { backgroundColor: isDarkMode ? 'rgba(0, 128, 128, 0.2)' : '#e0f2f7' }
+              ]}>
+                  <MaterialCommunityIcons 
+                    name="view-dashboard" 
+                    size={28} 
+                    color={PRIMARY_COLOR} 
+                  />
+              </View>
+              <View style={styles.headerTextContainer}>
+                  <Text style={[
+                      styles.headerTitle,
+                      { color: isDarkMode ? '#ffffff' : '#333333' }
+                  ]}>Dashboard</Text>
+                  <Text style={[
+                      styles.headerSubtitle,
+                      { color: isDarkMode ? '#9ca3af' : '#666666' }
+                  ]}>Overview & Quick Access</Text>
+              </View>
+          </View>
+
+          <View style={styles.dashboardGrid}>
+              {MAIN_CATEGORIES.map((category) => (
+                  <TouchableOpacity 
+                    key={category.id} 
+                    style={styles.categoryCard} 
+                    onPress={() => handleCategoryPress(category)}
+                    activeOpacity={0.8}
+                  >
+                      <View style={styles.categoryIconCircle}>
+                         <Image source={{ uri: category.imageSource }} style={styles.categoryImage} resizeMode="contain" />
+                      </View>
+                      <Text style={styles.categoryTitle}>{category.title}</Text>
+                      <Text style={styles.categorySubtitle}>{category.subtitle}</Text>
+                  </TouchableOpacity>
+              ))}
+          </View>
+      </ScrollView>
+  );
+
+  // 2. SUB-MODULES VIEW
+  const renderSubCategoryView = () => {
+    if (!selectedCategory) return null;
+
+    return (
+        <View style={{ flex: 1, backgroundColor: '#F2F5F8' }}>
+            {/* Header Card */}
+            <View style={styles.subHeaderCard}>
+                <View style={styles.subHeaderIconContainer}>
+                    <Image source={{ uri: selectedCategory.imageSource }} style={{ width: 28, height: 28 }} resizeMode="contain" />
+                </View>
+                <View style={styles.subHeaderTextContainer}>
+                    <Text style={styles.subHeaderTitle}>{selectedCategory.title}</Text>
+                    <Text style={styles.subHeaderSubtitle}>{selectedCategory.subtitle}</Text>
+                </View>
+                <TouchableOpacity onPress={() => { setCurrentView('dashboard'); setSelectedCategory(null); }} style={styles.closeSubViewButton}>
+                    <MaterialIcons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Grid of Sub-Modules */}
+            <FlatList
+                data={selectedCategory.subModules}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                contentContainerStyle={styles.subGridContainer}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        style={styles.subCard}
+                        onPress={() => handleSubModuleNavigation(item)}
+                        activeOpacity={0.8}
+                    >
+                        <View style={styles.subCardImageContainer}>
+                            <Image
+                                source={{ uri: item.imageSource }}
+                                style={styles.subCardImage}
+                                resizeMode="contain"
+                            />
+                        </View>
+                        <Text style={styles.subCardTitle}>{item.title}</Text>
+                    </TouchableOpacity>
+                )}
+            />
+        </View>
+    );
+  };
 
   const renderContent = () => {
     const handleBack = () => switchTab('home');
-    // ... No changes inside renderContent ...
-    switch (activeTab) {
-      case 'home':
-        return (
-          <>
-            <View style={styles.searchContainer}>
-              <MaterialIcons name="search" size={22} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search modules..."
-                placeholderTextColor={TEXT_COLOR_MEDIUM}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                clearButtonMode="while-editing"
-              />
-            </View>
-            <ScrollView contentContainerStyle={styles.contentScrollViewContainer}>
-              <View style={styles.dashboardGrid}>
-                {filteredItems.map(item => (
-                  <DashboardCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => {
-                      if (item.navigateTo) {
-                        navigation.navigate(item.navigateTo);
-                      } else if (item.navigateToTab) {
-                        switchTab(item.navigateToTab);
-                      } else {
-                        Alert.alert(item.title, `Coming soon!`);
-                      }
-                    }}
-                  />
-                ))}
-                {filteredItems.length % 3 === 2 && <View style={styles.placeholderCard} />}
-                {filteredItems.length % 3 === 1 && <><View style={styles.placeholderCard} /><View style={styles.placeholderCard} /></>}
-              </View>
-              {filteredItems.length === 0 && (
-                <View style={styles.noResultsContainer}>
-                  <Text style={styles.noResultsText}>No modules found for "{searchQuery}"</Text>
-                </View>
-              )}
-            </ScrollView>
-          </>
-        );
+    
+    // If in Home Tab
+    if (activeTab === 'home') {
+        if (currentView === 'category_detail') {
+            return renderSubCategoryView();
+        }
+        return renderDashboardCategories();
+    }
 
+    // Other Tabs
+    switch (activeTab) {
       case 'allNotifications': return ( <><ContentScreenHeader title="Notifications" onBack={handleBack} /><NotificationsScreen onUnreadCountChange={setUnreadNotificationsCount} /></> );
       case 'calendar': return ( <><ContentScreenHeader title="Academic Calendar" onBack={handleBack} /><AcademicCalendar /></> );
       case 'profile': return ( <><ContentScreenHeader title="My Profile" onBack={handleBack} /><ProfileScreen /></> );
+      
       case 'TeacherAdminHomeworkScreen': return ( <><ContentScreenHeader title="Homework" onBack={handleBack} /><TeacherAdminHomeworkScreen /></> );
       case 'Timetable': return ( <><ContentScreenHeader title="My Timetable" onBack={handleBack} /><TimetableScreen /></> );
       case 'Attendance': return ( <><ContentScreenHeader title="Attendance Report" onBack={handleBack} /><AttendanceScreen /></> );
@@ -219,11 +352,9 @@ const TeacherDashboard = ({ navigation }) => {
       case 'OnlineClassScreen': return ( <><ContentScreenHeader title="Online Class" onBack={handleBack} /><OnlineClassScreen /></> );
       case 'FoodScreen': return ( <><ContentScreenHeader title="Lunch Menu" onBack={handleBack} /><FoodScreen /></> );
       case 'TeacherHealthAdminScreen': return ( <><ContentScreenHeader title="Healh Info" onBack={handleBack} /><TeacherHealthAdminScreen /></> );
-      // case 'GroupChatScreen': return ( <><ContentScreenHeader title="Group Chat" onBack={handleBack} /><GroupChatScreen /></> );
       case 'AdminEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleBack} /><AdminEventsScreen /></> );
       case 'TeacherAdminExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleBack} /><TeacherAdminExamScreen /></> );
       case 'TeacherAdminLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleBack} /><TeacherAdminLabsScreen /></> );
-      // case 'MarksEntryScreen': return ( <><ContentScreenHeader title="Progress Reports" onBack={handleBack} /><MarksEntryScreen /></> );
       case 'TeacherAdminMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleBack} /><TeacherAdminMaterialsScreen /></> );
       case 'TeacherSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleBack} /><TeacherSyllabusScreen /></> );
       case 'TeacherAdminResourcesScreen': return ( <><ContentScreenHeader title="Textbooks" onBack={handleBack} /><TeacherAdminResourcesScreen /></> );
@@ -244,10 +375,9 @@ const TeacherDashboard = ({ navigation }) => {
   return (
     <LinearGradient colors={GRADIENT_COLORS} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safeArea}>
-        {activeTab === 'home' && (
+        {activeTab === 'home' && currentView === 'dashboard' && (
           <View style={styles.topBar}>
             <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
-              {/* --- CHANGE 4: USE FastImage INSTEAD OF Image --- */}
               <FastImage source={profileImageSource} style={styles.profileImage} />
               <View style={styles.profileTextContainer}>
                 <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Teacher'}</Text>
@@ -275,7 +405,6 @@ const TeacherDashboard = ({ navigation }) => {
         <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
           <TouchableWithoutFeedback onPress={() => setProfileModalVisible(false)}>
             <View style={styles.modalOverlay}>
-              {/* --- CHANGE 5: USE FastImage IN THE MODAL AS WELL --- */}
               <FastImage source={profileImageSource} style={styles.enlargedProfileImage} />
               <TouchableOpacity style={styles.closeModalButton} onPress={() => setProfileModalVisible(false)}>
                 <MaterialIcons name="close" size={30} color="#fff" />
@@ -289,13 +418,10 @@ const TeacherDashboard = ({ navigation }) => {
   );
 };
 
-// --- UI Helper Components (Simplified) ---
-// The standard Image component is fine for the external icons in the cards
-const DashboardCard = ({ item, onPress }) => ( <TouchableOpacity style={styles.dashboardCardWrapper} onPress={onPress} activeOpacity={0.7}> <View style={styles.dashboardCard}><View style={styles.cardIconContainer}><Image source={{ uri: item.imageSource }} style={styles.cardImage} /></View> <Text style={styles.cardTitle}>{item.title}</Text></View> </TouchableOpacity> );
+// --- UI Helper Components ---
 const BottomNavItem = ({ icon, label, isActive, onPress }) => ( <TouchableOpacity style={styles.navItem} onPress={onPress}> <Icon name={icon} size={24} color={isActive ? PRIMARY_COLOR : TEXT_COLOR_MEDIUM} /> <Text style={[styles.navText, isActive && styles.navTextActive]}>{label}</Text> </TouchableOpacity> );
 
 // --- Styles ---
-// ... NO CHANGES TO STYLES ...
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: 'transparent' },
   mainContent: { flex: 1 },
@@ -312,18 +438,109 @@ const styles = StyleSheet.create({
   contentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 12, backgroundColor: SECONDARY_COLOR, borderBottomWidth: 1, borderBottomColor: BORDER_COLOR, },
   backButtonGlobal: { padding: 5 },
   contentHeaderTitle: { fontSize: 20, fontWeight: 'bold', color: PRIMARY_COLOR, textAlign: 'center', flex: 1, },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE, borderRadius: 12, marginHorizontal: CONTENT_HORIZONTAL_PADDING, marginTop: 15, marginBottom: 5, borderColor: BORDER_COLOR, borderWidth: 1, elevation: 2 },
-  searchIcon: { marginLeft: 15 },
-  searchInput: { flex: 1, height: 48, paddingLeft: 10, fontSize: 16, color: TEXT_COLOR_DARK },
-  noResultsContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50, paddingHorizontal: 20 },
-  noResultsText: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center' },
-  contentScrollViewContainer: { paddingHorizontal: CONTENT_HORIZONTAL_PADDING, paddingTop: 10, paddingBottom: 20, flexGrow: 1, },
+  
+  // --- HEADER CARD STYLES ---
+  contentScrollViewContainer: { paddingHorizontal: 15, paddingBottom: 20, flexGrow: 1, paddingTop: 15 },
+  headerCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 20, 
+      marginBottom: 20,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 3, 
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.03)'
+  },
+  headerIconContainer: {
+      width: 50,
+      height: 50,
+      borderRadius: 25, 
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 15,
+  },
+  headerTextContainer: { flex: 1, justifyContent: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 2 },
+  headerSubtitle: { fontSize: 13, fontWeight: '400' },
+
+  // --- DASHBOARD CATEGORY GRID ---
   dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  dashboardCardWrapper: { width: (windowWidth - (CONTENT_HORIZONTAL_PADDING * 2) - (CARD_GAP * 2)) / 3, marginBottom: CARD_GAP },
-  dashboardCard: { borderRadius: 10, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', height: 115, backgroundColor: WHITE, shadowColor: '#455A64', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3, borderWidth: 1, borderColor: BORDER_COLOR, },
-  cardIconContainer: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  cardImage: { width: 38, height: 38, resizeMode: 'contain' },
-  cardTitle: { fontSize: 11, fontWeight: '600', color: TEXT_COLOR_DARK, textAlign: 'center', lineHeight: 14, paddingHorizontal: 4, },
+  categoryCard: {
+    width: (windowWidth - 45) / 2,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 15,
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 4,
+    minHeight: 140,
+    justifyContent: 'center'
+  },
+  categoryIconCircle: { width: 60, height: 60, backgroundColor: '#f0fdf4', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  categoryImage: { width: 40, height: 40 },
+  categoryTitle: { fontSize: 15, fontWeight: 'bold', color: TEXT_COLOR_DARK, textAlign: 'center', marginBottom: 2 },
+  categorySubtitle: { fontSize: 11, color: TEXT_COLOR_MEDIUM, textAlign: 'center' },
+
+  // --- SUB-VIEW STYLES ---
+  subHeaderCard: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    width: '96%', 
+    alignSelf: 'center',
+    marginTop: 15,
+    marginBottom: 10,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000', 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    shadowOffset: { width: 0, height: 2 },
+  },
+  subHeaderIconContainer: {
+    backgroundColor: '#E0F2F1',
+    borderRadius: 30,
+    width: 45,
+    height: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  subHeaderTextContainer: { justifyContent: 'center', flex: 1 },
+  subHeaderTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333', },
+  subHeaderSubtitle: { fontSize: 13, color: '#666666', marginTop: 1, },
+  closeSubViewButton: { padding: 5 },
+  subGridContainer: { paddingHorizontal: 8, paddingBottom: 20, },
+  subCard: {
+    flex: 1,
+    margin: 6,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    maxWidth: (windowWidth / 2) - 16, 
+  },
+  subCardImageContainer: { marginBottom: 15, padding: 10, backgroundColor: '#F7FAFC', borderRadius: 50, },
+  subCardImage: { width: 50, height: 50, },
+  subCardTitle: { fontSize: 15, fontWeight: '600', color: '#2D3748', textAlign: 'center', },
+
   bottomNav: { flexDirection: 'row', backgroundColor: SECONDARY_COLOR, borderTopWidth: 1, borderTopColor: BORDER_COLOR, paddingVertical: Platform.OS === 'ios' ? 10 : 8, paddingBottom: Platform.OS === 'ios' ? 20 : 8, minHeight: BOTTOM_NAV_HEIGHT, },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 5 },
   navText: { fontSize: 10, color: TEXT_COLOR_MEDIUM, marginTop: 3 },
@@ -333,9 +550,6 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center' },
   enlargedProfileImage: { width: windowWidth * 0.8, height: windowWidth * 0.8, borderRadius: (windowWidth * 0.8) / 2, borderWidth: 4, borderColor: '#fff' },
   closeModalButton: { position: 'absolute', top: 50, right: 20, padding: 10, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
-  placeholderCard: {
-    width: (windowWidth - (CONTENT_HORIZONTAL_PADDING * 2) - (CARD_GAP * 2)) / 3,
-  },
 });
 
 export default TeacherDashboard;
