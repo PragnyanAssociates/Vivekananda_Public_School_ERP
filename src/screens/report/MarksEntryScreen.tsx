@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/MarksEntryScreen.js
- * Purpose: Data Entry for Marks & Attendance. Handles persistence and role-based access.
- * Updated: Responsive Table, Fixing "Failed to Save" errors, preserving marks logic.
+ * Purpose: Data Entry for Marks & Attendance. 
+ * Updated: Implements "Smart Save" (Delta Saving) - Only sends changed data.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -80,8 +80,15 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const userId = user?.id; 
 
     const [students, setStudents] = useState([]);
+    
+    // Current Data
     const [marksData, setMarksData] = useState({});
     const [attendanceData, setAttendanceData] = useState({});
+    
+    // Original Data Snapshots (For Smart Save Comparison)
+    const [originalMarksData, setOriginalMarksData] = useState({});
+    const [originalAttendanceData, setOriginalAttendanceData] = useState({});
+
     const [teacherAssignments, setTeacherAssignments] = useState([]);
 
     const [selectedExam, setSelectedExam] = useState('Overall');
@@ -98,7 +105,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
     }, [classGroup]);
     
     useEffect(() => {
-        // Reset editing state when switching views to prevent accidental edits in overview
         setIsEditing(true);
     }, [selectedExam, viewMode]);
 
@@ -111,7 +117,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             setStudents(students);
             setTeacherAssignments(assignments || []);
 
-            // Initialize structure for Marks
+            // --- 1. Process Marks Data ---
             const marksMap = {};
             students.forEach(student => {
                 marksMap[student.id] = {};
@@ -123,7 +129,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 });
             });
 
-            // Populate existing marks
             marks.forEach(mark => {
                 if (marksMap[mark.student_id] && marksMap[mark.student_id][mark.subject]) {
                     const displayExamType = EXAM_DISPLAY_MAPPING[mark.exam_type];
@@ -135,8 +140,11 @@ const MarksEntryScreen = ({ route, navigation }) => {
             });
 
             setMarksData(marksMap);
+            // Create Deep Copy for Original Reference
+            setOriginalMarksData(JSON.parse(JSON.stringify(marksMap)));
 
-            // Initialize structure for Attendance
+
+            // --- 2. Process Attendance Data ---
             const attendanceMap = {};
             students.forEach(student => {
                 attendanceMap[student.id] = {};
@@ -145,7 +153,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 });
             });
 
-            // Populate existing attendance
             attendance.forEach(att => {
                 if (attendanceMap[att.student_id]) {
                     attendanceMap[att.student_id][att.month] = {
@@ -156,6 +163,9 @@ const MarksEntryScreen = ({ route, navigation }) => {
             });
 
             setAttendanceData(attendanceMap);
+            // Create Deep Copy for Original Reference
+            setOriginalAttendanceData(JSON.parse(JSON.stringify(attendanceMap)));
+
         } catch (error) {
             console.error('Error fetching class data:', error);
             Alert.alert('Error', 'Failed to load class data. Please check connection.');
@@ -239,54 +249,71 @@ const MarksEntryScreen = ({ route, navigation }) => {
         }
     };
 
+    // --- SMART SAVE MARKS: Only send changed items ---
     const saveMarks = async () => {
         setSaving(true);
         const marksPayload = [];
         
         students.forEach(student => {
             subjects.forEach(subject => {
-                // 1. Save Individual Exams
+                
+                let subjectHasChange = false;
+
+                // 1. Check Individual Exams vs Original
                 EDITABLE_EXAM_TYPES.forEach(examDisplayType => {
                     const examKey = EXAM_KEY_MAPPING[examDisplayType];
-                    const rawValue = marksData[student.id]?.[subject]?.[examDisplayType];
                     
-                    // Convert '' to null for DB, otherwise pass string
-                    const marksValue = (rawValue === '' || rawValue === undefined) ? null : rawValue;
+                    const currentValue = marksData[student.id]?.[subject]?.[examDisplayType] || '';
+                    const originalValue = originalMarksData[student.id]?.[subject]?.[examDisplayType] || '';
 
-                    if (examKey) {
-                        marksPayload.push({ 
-                            student_id: student.id, 
-                            class_group: classGroup, 
-                            subject: subject, 
-                            exam_type: examKey, 
-                            marks_obtained: marksValue 
-                        });
+                    // Compare current input with original database value
+                    if (currentValue !== originalValue) {
+                        subjectHasChange = true;
+                        
+                        // Convert '' to null for DB
+                        const marksValue = (currentValue === '') ? null : currentValue;
+
+                        if (examKey) {
+                            marksPayload.push({ 
+                                student_id: student.id, 
+                                class_group: classGroup, 
+                                subject: subject, 
+                                exam_type: examKey, 
+                                marks_obtained: marksValue 
+                            });
+                        }
                     }
                 });
 
-                // 2. Save Calculated Total
-                const overallValue = calculateOverallForSubject(student.id, subject);
-                marksPayload.push({ 
-                    student_id: student.id, 
-                    class_group: classGroup, 
-                    subject: subject, 
-                    exam_type: 'Total', 
-                    marks_obtained: overallValue === '' ? null : overallValue 
-                });
+                // 2. If ANY mark in this subject changed, Re-calculate and Save the TOTAL
+                if (subjectHasChange) {
+                    const overallValue = calculateOverallForSubject(student.id, subject);
+                    marksPayload.push({ 
+                        student_id: student.id, 
+                        class_group: classGroup, 
+                        subject: subject, 
+                        exam_type: 'Total', 
+                        marks_obtained: overallValue === '' ? null : overallValue 
+                    });
+                }
             });
         });
 
+        // 3. Stop if no changes
         if (marksPayload.length === 0) {
-            Alert.alert("Info", "No marks to save.");
+            Alert.alert("No Changes", "You haven't made any changes to save.");
             setSaving(false);
             return;
         }
 
         try {
             await apiClient.post('/reports/marks/bulk', { marksPayload });
+            
+            // Sync Original Data with Current Data after successful save
+            setOriginalMarksData(JSON.parse(JSON.stringify(marksData)));
+            
             Alert.alert('Success', 'Marks saved successfully!');
             setIsEditing(false); 
-            fetchClassData(); // Refresh to ensure data is synced
         } catch (error) {
             console.error('Error saving marks:', error);
             const errMsg = error.response?.data?.message || 'Failed to save marks. Check internet connection.';
@@ -296,26 +323,44 @@ const MarksEntryScreen = ({ route, navigation }) => {
         }
     };
 
+    // --- SMART SAVE ATTENDANCE: Only send changed items ---
     const saveAttendance = async () => {
         setSaving(true);
         const attendancePayload = [];
+        
         students.forEach(student => {
             MONTHS.forEach(month => {
-                const att = attendanceData[student.id]?.[month] || {};
-                const wDays = att.working_days === '' || att.working_days === undefined ? null : att.working_days;
-                const pDays = att.present_days === '' || att.present_days === undefined ? null : att.present_days;
-                
-                attendancePayload.push({ 
-                    student_id: student.id, 
-                    month, 
-                    working_days: wDays, 
-                    present_days: pDays 
-                });
+                const currentAtt = attendanceData[student.id]?.[month] || {};
+                const originalAtt = originalAttendanceData[student.id]?.[month] || {};
+
+                const currW = currentAtt.working_days || '';
+                const currP = currentAtt.present_days || '';
+                const origW = originalAtt.working_days || '';
+                const origP = originalAtt.present_days || '';
+
+                if (currW !== origW || currP !== origP) {
+                    attendancePayload.push({ 
+                        student_id: student.id, 
+                        month, 
+                        working_days: currW === '' ? null : currW, 
+                        present_days: currP === '' ? null : currP 
+                    });
+                }
             });
         });
 
+        if (attendancePayload.length === 0) {
+            Alert.alert("No Changes", "No attendance changes detected.");
+            setSaving(false);
+            return;
+        }
+
         try {
             await apiClient.post('/reports/attendance/bulk', { attendancePayload });
+            
+            // Sync Original Data
+            setOriginalAttendanceData(JSON.parse(JSON.stringify(attendanceData)));
+
             Alert.alert('Success', 'Attendance saved successfully!');
         } catch (error) {
             console.error('Error saving attendance:', error);

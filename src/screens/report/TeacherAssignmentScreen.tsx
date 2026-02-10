@@ -1,7 +1,6 @@
 /**
  * File: src/screens/report/TeacherAssignmentScreen.js
  * Purpose: Admin screen to assign teachers to subjects.
- * Logic: Assigning a teacher does NOT delete marks. Marks are linked to Student+Subject.
  */
 import React, { useState, useEffect } from 'react';
 import { 

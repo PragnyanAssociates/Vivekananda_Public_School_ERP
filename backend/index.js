@@ -6940,41 +6940,28 @@ app.get('/api/teacher-attendance/report/:teacherId', verifyToken, async (req, re
 
 
 // ==========================================================
-// --- PROGRESS CARD (REPORTS) API ROUTES (FIXED MAX MARKS) ---
+// --- PROGRESS CARD (REPORTS) API ROUTES ---
 // ==========================================================
 
 // 1. HELPER: Dynamic Max Marks Logic
-// Rules: 
-// Classes 1-5: AT/UT = 25 marks
-// Classes 6-10: AT/UT = 20 marks
-// SA Exams: Always 100 marks
 const getMaxMarks = (examType, classGroup) => {
-    // Sanitize input
     const type = examType ? examType.toUpperCase() : '';
     const className = classGroup ? classGroup.toString() : '';
 
-    // SA Exams (Always 100)
     if (type.startsWith('SA') || type === 'PRE-FINAL' || type === 'TOTAL') {
         return 100;
     }
 
-    // AT (Assignment) & UT (Unit Test) Logic
     if (type.startsWith('AT') || type.startsWith('UT') || 
         type.startsWith('ASSIGNMENT') || type.startsWith('UNITEST')) {
         
-        // Define Senior Classes (Exams are out of 20)
         const seniorClasses = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
-        
-        // Check if the current class is in the senior list
         if (seniorClasses.includes(className)) {
-            return 20; // Seniors (6-10) get 20 Marks
+            return 20; 
         }
-        
-        // Default: Juniors (Class 1-5) get 25 Marks
         return 25; 
     }
-
-    return 100; // Fallback default
+    return 100; 
 };
 
 // 2. HELPER: Calculate Performance Stats
@@ -6984,18 +6971,14 @@ const calculateStats = (marksData, classGroup) => {
     const examBreakdown = {};
 
     marksData.forEach(row => {
-        // Skip null marks or 'Total' rows (we calculate totals based on components)
         if (row.marks_obtained === null || row.marks_obtained === '' || row.exam_type === 'Total') return;
 
         const obtained = parseFloat(row.marks_obtained);
-        
-        // ★★★ FIX: Pass classGroup to determine if max is 20 or 25
         const maxMark = getMaxMarks(row.exam_type, classGroup); 
 
         totalObtained += obtained;
         totalPossible += maxMark;
 
-        // Group by Exam Type
         if (!examBreakdown[row.exam_type]) {
             examBreakdown[row.exam_type] = { 
                 exam_type: row.exam_type, 
@@ -7009,7 +6992,6 @@ const calculateStats = (marksData, classGroup) => {
         examBreakdown[row.exam_type].count += 1;
     });
 
-    // Calculate Percentages
     const breakdownArray = Object.values(examBreakdown).map(item => ({
         ...item,
         percentage: item.total_possible > 0 
@@ -7054,7 +7036,6 @@ app.get('/api/performance/admin/all-teachers', [verifyToken, isAdmin], async (re
                     [assign.class_group, assign.subject]
                 );
 
-                // Pass Class Group to calculation
                 const stats = calculateStats(marks, assign.class_group);
 
                 if (stats.totalPossible > 0) {
@@ -7120,7 +7101,6 @@ app.get('/api/performance/teacher/:teacherId', [verifyToken], async (req, res) =
                 [assign.class_group, assign.subject]
             );
 
-            // Pass Class Group to calculation
             const stats = calculateStats(marks, assign.class_group);
 
             if (stats.totalPossible > 0) {
@@ -7143,25 +7123,9 @@ app.get('/api/performance/teacher/:teacherId', [verifyToken], async (req, res) =
     }
 });
 
-// Subject configuration based on class
-const CLASS_SUBJECTS = {
-    'LKG': ['All Subjects'],
-    'UKG': ['All Subjects'],
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
-};
-
 // --- ADMIN ONLY ROUTES ---
 
-// GET: Get all teachers for assignment dropdown (Admin only)
+// GET: Get all teachers for assignment dropdown
 app.get('/api/reports/teachers', [verifyToken, isAdmin], async (req, res) => {
     try {
         const query = "SELECT id, full_name, username FROM users WHERE role = 'teacher' ORDER BY full_name";
@@ -7173,11 +7137,10 @@ app.get('/api/reports/teachers', [verifyToken, isAdmin], async (req, res) => {
     }
 });
 
-// GET: Get teacher assignments for a class (Admin only)
+// GET: Get teacher assignments for a class
 app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], async (req, res) => {
     const { classGroup } = req.params;
     try {
-        // Removed academic_year filter
         const [assignments] = await db.query(
             `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
              FROM report_teacher_assignments ta
@@ -7192,7 +7155,7 @@ app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], 
     }
 });
 
-// POST: Assign teacher to subject (Admin only)
+// POST: Assign teacher to subject
 app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res) => {
     const { teacherId, classGroup, subject } = req.body;
     
@@ -7201,7 +7164,6 @@ app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res)
     }
 
     try {
-        // Removed academic_year from Insert
         await db.query(
             `INSERT INTO report_teacher_assignments (teacher_id, class_group, subject)
              VALUES (?, ?, ?)
@@ -7215,7 +7177,7 @@ app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res)
     }
 });
 
-// DELETE: Remove teacher assignment (Admin only)
+// DELETE: Remove teacher assignment
 app.delete('/api/reports/teacher-assignments/:assignmentId', [verifyToken, isAdmin], async (req, res) => {
     const { assignmentId } = req.params;
     try {
@@ -7264,19 +7226,16 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
 
         const studentIds = students.map(s => s.id);
 
-        // Removed academic_year filter
         const [marks] = await db.query(
             "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?)",
             [studentIds]
         );
         
-        // Removed academic_year filter
         const [attendance] = await db.query(
             "SELECT student_id, month, working_days, present_days FROM report_student_attendance WHERE student_id IN (?)",
             [studentIds]
         );
 
-        // Removed academic_year filter
         const [assignments] = await db.query(
             `SELECT ta.id, ta.teacher_id, ta.subject, u.full_name as teacher_name 
              FROM report_teacher_assignments ta
@@ -7305,15 +7264,13 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     try {
         await connection.beginTransaction();
 
-        // Note: report_student_marks should have a UNIQUE KEY on (student_id, class_group, subject, exam_type)
+        // NO ACADEMIC YEAR HERE
         const query = `
             INSERT INTO report_student_marks (student_id, class_group, subject, exam_type, marks_obtained)
             VALUES ? 
             ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)`;
         
         const values = marksPayload.map(m => {
-            // Use parseFloat to safely handle numbers, allow decimals if needed
-            // If empty string or null is passed, finalMarks becomes null
             let finalMarks = null;
             if (m.marks_obtained !== null && m.marks_obtained !== "") {
                 const parsed = parseFloat(m.marks_obtained);
@@ -7337,7 +7294,6 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     } catch (error) {
         await connection.rollback();
         console.error("Error bulk saving marks:", error);
-        // Return detailed error message if possible
         res.status(500).json({ message: "Failed to save marks. Server Error." });
     } finally {
         connection.release();
@@ -7356,6 +7312,7 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     try {
         await connection.beginTransaction();
         
+        // NO ACADEMIC YEAR HERE
         const query = `
             INSERT INTO report_student_attendance (student_id, month, working_days, present_days)
             VALUES ? 
@@ -7364,7 +7321,6 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
                 present_days = VALUES(present_days)`;
         
         const values = attendancePayload.map(a => {
-            // Parse integers for days
             let working = null;
             let present = null;
             
@@ -7398,8 +7354,7 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     }
 });
 
-// --- STUDENT ROUTE (CORRECTED) ---
-// Note: Date/Year logic removed.
+// --- STUDENT ROUTES ---
 
 // GET: Student's own report card
 app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
@@ -7425,13 +7380,11 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
         
         const studentInfo = studentRows[0];
 
-        // Removed academic_year filter
         const [marks] = await db.query(
             "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ?",
             [studentId]
         );
         
-        // Removed academic_year filter
         const [attendance] = await db.query(
             "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ?",
             [studentId]
@@ -7444,9 +7397,7 @@ app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
     }
 });
 
-// --- NEW API ROUTE ---
-
-// GET: Get performance summaries for all classes
+// GET: Class Summaries
 app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     try {
         const [classes] = await db.query(
@@ -7457,7 +7408,6 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
         const summaries = [];
 
         for (const classGroup of classGroups) {
-            // Removed m.academic_year filter
             const [marks] = await db.query(
                 `SELECT 
                     m.student_id, 
@@ -7538,23 +7488,15 @@ app.get('/api/reports/class-summaries', [verifyToken, isTeacherOrAdmin], async (
     }
 });
 
-
-// ★★★ CORRECTED AND IMPROVED ROUTE ★★★
-// GET: A specific student's consolidated report card by their ID
+// GET: Student Consolidated Report
 app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
     const { studentId } = req.params;
 
-    // --- NEW: Add logging to see which ID the server is receiving ---
-    console.log(`[Report Card] API request received for studentId: ${studentId}`);
-
-    // --- NEW: Add validation to check if the studentId is valid ---
     if (!studentId || isNaN(parseInt(studentId, 10))) {
-        console.error(`[Report Card] Invalid studentId received: ${studentId}`);
         return res.status(400).json({ message: "An invalid student ID was provided." });
     }
 
     try {
-        // Step 1: Fetch basic student info
         const [studentRows] = await db.query(
             `SELECT
                 u.id,
@@ -7567,28 +7509,21 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
             [studentId]
         );
 
-        // Step 2: If no student is found, log it and return a 404 error
         if (studentRows.length === 0) {
-            // --- NEW: Improved logging for when a student isn't found ---
-            console.warn(`[Report Card] Student not found in the database for studentId: ${studentId}`);
             return res.status(404).json({ message: `Student with ID ${studentId} was not found.` });
         }
         const studentInfo = studentRows[0];
-        console.log(`[Report Card] Found student: ${studentInfo.full_name}`);
 
-        // Step 3: Fetch all marks for the student (Removed academic_year filter)
         const [marks] = await db.query(
             "SELECT subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id = ?",
             [studentId]
         );
 
-        // Step 4: Fetch all attendance for the student (Removed academic_year filter)
         const [attendance] = await db.query(
             "SELECT month, working_days, present_days FROM report_student_attendance WHERE student_id = ?",
             [studentId]
         );
 
-        // Step 5: Send the combined data
         res.json({ studentInfo, marks, attendance });
 
     } catch (error) {
@@ -7597,16 +7532,11 @@ app.get('/api/reports/student/:studentId', [verifyToken], async (req, res) => {
     }
 });
 
-
-
-// --- NEW STUDENT PERFORMANCE ROUTE ---
-
 // GET: specific class data for the logged-in student (For Performance Graph)
 app.get('/api/reports/student-class-performance', verifyToken, async (req, res) => {
-    const studentId = req.user.id; // Get ID from the logged-in token
+    const studentId = req.user.id; 
 
     try {
-        // 1. Get the Class Group of the logged-in student
         const [userResult] = await db.query(
             "SELECT class_group FROM users WHERE id = ?", 
             [studentId]
@@ -7618,7 +7548,6 @@ app.get('/api/reports/student-class-performance', verifyToken, async (req, res) 
 
         const classGroup = userResult[0].class_group;
 
-        // 2. Fetch all students in that class (Needed to calculate Ranks)
         const [students] = await db.query(
             `SELECT 
                 u.id, 
@@ -7637,13 +7566,11 @@ app.get('/api/reports/student-class-performance', verifyToken, async (req, res) 
 
         const studentIds = students.map(s => s.id);
 
-        // 3. Fetch marks for the whole class (Removed academic_year filter)
         const [marks] = await db.query(
             "SELECT student_id, subject, exam_type, marks_obtained FROM report_student_marks WHERE student_id IN (?)",
             [studentIds]
         );
 
-        // Return the data in the same structure the frontend expects
         res.json({ students, marks, currentUserClass: classGroup });
 
     } catch (error) {
