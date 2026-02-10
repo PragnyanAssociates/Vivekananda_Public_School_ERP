@@ -7163,17 +7163,31 @@ app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res)
         return res.status(400).json({ message: "Missing required fields" });
     }
 
+    const connection = await db.getConnection();
     try {
-        await db.query(
+        await connection.beginTransaction();
+
+        // 1. DELETE any existing assignment for this class & subject (Replaces old teacher)
+        await connection.query(
+            "DELETE FROM report_teacher_assignments WHERE class_group = ? AND subject = ?",
+            [classGroup, subject]
+        );
+
+        // 2. INSERT the new assignment
+        await connection.query(
             `INSERT INTO report_teacher_assignments (teacher_id, class_group, subject)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE teacher_id = VALUES(teacher_id)`,
+             VALUES (?, ?, ?)`,
             [teacherId, classGroup, subject]
         );
+
+        await connection.commit();
         res.status(200).json({ message: "Teacher assigned successfully" });
     } catch (error) {
+        await connection.rollback();
         console.error("Error assigning teacher:", error);
         res.status(500).json({ message: "Failed to assign teacher" });
+    } finally {
+        connection.release();
     }
 });
 
@@ -7253,6 +7267,7 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
 });
 
 // POST: Bulk save/update marks for multiple students
+// UPDATED: No academic_year
 app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { marksPayload } = req.body;
 
@@ -7264,7 +7279,6 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     try {
         await connection.beginTransaction();
 
-        // NO ACADEMIC YEAR HERE
         const query = `
             INSERT INTO report_student_marks (student_id, class_group, subject, exam_type, marks_obtained)
             VALUES ? 
@@ -7301,6 +7315,7 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
 });
 
 // POST: Bulk save/update attendance for multiple students
+// UPDATED: No academic_year
 app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { attendancePayload } = req.body;
     
@@ -7312,7 +7327,7 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     try {
         await connection.beginTransaction();
         
-        // NO ACADEMIC YEAR HERE
+        // Ensure your report_student_attendance table also does not have academic_year (or allows NULL)
         const query = `
             INSERT INTO report_student_attendance (student_id, month, working_days, present_days)
             VALUES ? 
