@@ -5001,78 +5001,154 @@ app.get('/api/kitchen/inventory', async (req, res) => {
     }
 });
 
-// POST a new item to the inventory (from the '+' button)
+// POST a new item to the inventory
 app.post('/api/kitchen/inventory', kitchenUpload.single('itemImage'), async (req, res) => {
+    // Basic validation
+    if (!req.body.itemName || !req.body.quantity) {
+        return res.status(400).json({ message: "Item Name and Quantity are required." });
+    }
+
     const { itemName, quantity, unit } = req.body;
-    const imageUrl = req.file ? `/public/uploads/${req.file.filename}` : null;
+    // Store public URL path
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
     try {
         await db.query(
             'INSERT INTO kitchen_inventory (item_name, quantity_remaining, unit, image_url) VALUES (?, ?, ?, ?)',
-            [itemName, quantity, unit, imageUrl]
+            [itemName, quantity, unit || 'pcs', imageUrl]
         );
-        res.status(201).json({ message: 'Item added to inventory successfully.' });
+        res.status(201).json({ message: 'Item added successfully.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'This item already exists in the inventory.' });
+            return res.status(409).json({ message: 'Item already exists.' });
         }
         console.error("POST Inventory Error:", error);
         res.status(500).json({ message: 'Error adding item.' });
     }
 });
 
-// ✏️ NEW: PUT (update) an existing inventory item's details (name, unit)
+// PUT (Update) Inventory Item - Partial Updates
 app.put('/api/kitchen/inventory/:id', kitchenUpload.single('itemImage'), async (req, res) => {
     const { id } = req.params;
-    const { itemName, unit } = req.body;
-    const imageUrl = req.file ? `/public/uploads/${req.file.filename}` : null;
+    const fields = req.body;
+    
+    let updates = [];
+    let params = [];
 
-    // Build the query dynamically based on whether a new image was uploaded
-    let query = 'UPDATE kitchen_inventory SET item_name = ?, unit = ?';
-    const params = [itemName, unit];
+    // Map frontend field names to DB column names
+    if (fields.itemName) { updates.push('item_name = ?'); params.push(fields.itemName); }
+    if (fields.quantity) { updates.push('quantity_remaining = ?'); params.push(fields.quantity); }
+    if (fields.unit) { updates.push('unit = ?'); params.push(fields.unit); }
 
-    if (imageUrl) {
-        query += ', image_url = ?';
-        params.push(imageUrl);
+    if (req.file) {
+        updates.push('image_url = ?');
+        params.push(`/uploads/${req.file.filename}`);
     }
 
-    query += ' WHERE id = ?';
+    if (updates.length === 0) {
+        return res.status(400).json({ message: "No changes provided." });
+    }
+
+    const query = `UPDATE kitchen_inventory SET ${updates.join(', ')} WHERE id = ?`;
     params.push(id);
 
     try {
         const [result] = await db.query(query, params);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Item not found.' });
-        }
-        res.status(200).json({ message: 'Item updated successfully.' });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        res.status(200).json({ message: 'Updated successfully.' });
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'Another item with this name already exists.' });
-        }
         console.error("PUT Inventory Error:", error);
         res.status(500).json({ message: 'Error updating item.' });
     }
 });
 
-// 🗑️ NEW: DELETE an inventory item
+// DELETE Inventory Item
 app.delete('/api/kitchen/inventory/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        // Your DB schema `ON DELETE CASCADE` will automatically remove related usage logs.
         const [result] = await db.query('DELETE FROM kitchen_inventory WHERE id = ?', [id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Item not found.' });
-        }
-        res.status(200).json({ message: 'Item deleted successfully.' });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        res.status(200).json({ message: 'Deleted successfully.' });
     } catch (error) {
-        console.error("DELETE Inventory Error:", error);
         res.status(500).json({ message: 'Error deleting item.' });
     }
 });
 
+// --- Permanent Asset Routes ---
 
-// --- Usage Logging Routes (No Changes Here) ---
+// GET Permanent Items
+app.get('/api/permanent-inventory', async (req, res) => {
+    try {
+        const [items] = await db.query('SELECT * FROM permanent_inventory ORDER BY item_name ASC');
+        res.json(items);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching data.' });
+    }
+});
 
-// GET today's usage log by default, or for a specific date
+// POST Permanent Item
+app.post('/api/permanent-inventory', kitchenUpload.single('itemImage'), async (req, res) => {
+    const { itemName, totalQuantity, notes } = req.body;
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    try {
+        await db.query(
+            'INSERT INTO permanent_inventory (item_name, total_quantity, notes, image_url) VALUES (?, ?, ?, ?)',
+            [itemName, totalQuantity, notes, imageUrl]
+        );
+        res.status(201).json({ message: 'Added successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error adding item.' });
+    }
+});
+
+// PUT Permanent Item - Partial Updates
+app.put('/api/permanent-inventory/:id', kitchenUpload.single('itemImage'), async (req, res) => {
+    const { id } = req.params;
+    const fields = req.body;
+    
+    let updates = [];
+    let params = [];
+
+    if (fields.itemName) { updates.push('item_name = ?'); params.push(fields.itemName); }
+    if (fields.totalQuantity) { updates.push('total_quantity = ?'); params.push(fields.totalQuantity); }
+    if (fields.notes !== undefined) { updates.push('notes = ?'); params.push(fields.notes); }
+
+    if (req.file) {
+        updates.push('image_url = ?');
+        params.push(`/uploads/${req.file.filename}`);
+    }
+
+    if (updates.length === 0) {
+        return res.status(400).json({ message: "No changes provided." });
+    }
+
+    const query = `UPDATE permanent_inventory SET ${updates.join(', ')} WHERE id = ?`;
+    params.push(id);
+
+    try {
+        const [result] = await db.query(query, params);
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        res.status(200).json({ message: 'Updated successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating item.' });
+    }
+});
+
+// DELETE Permanent Item
+app.delete('/api/permanent-inventory/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [result] = await db.query('DELETE FROM permanent_inventory WHERE id = ?', [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        res.status(200).json({ message: 'Deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting item.' });
+    }
+});
+
+// --- Usage Routes ---
+
 app.get('/api/kitchen/usage', async (req, res) => {
     const usageDate = req.query.date || new Date().toISOString().split('T')[0];
     const query = `
@@ -5086,11 +5162,10 @@ app.get('/api/kitchen/usage', async (req, res) => {
         const [usage] = await db.query(query, [usageDate]);
         res.json(usage);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching usage log.' });
+        res.status(500).json({ message: 'Error fetching usage.' });
     }
 });
 
-// POST a new usage entry
 app.post('/api/kitchen/usage', async (req, res) => {
     const { inventoryId, quantityUsed, usageDate } = req.body;
     const connection = await db.getConnection();
@@ -5100,89 +5175,17 @@ app.post('/api/kitchen/usage', async (req, res) => {
             'INSERT INTO kitchen_usage_log (inventory_id, quantity_used, usage_date) VALUES (?, ?, ?)',
             [inventoryId, quantityUsed, usageDate]
         );
-        const [updateResult] = await connection.query(
+        await connection.query(
             'UPDATE kitchen_inventory SET quantity_remaining = quantity_remaining - ? WHERE id = ?',
             [quantityUsed, inventoryId]
         );
-        if (updateResult.affectedRows === 0) throw new Error('Inventory item not found.');
         await connection.commit();
-        res.status(201).json({ message: 'Usage logged successfully.' });
+        res.status(201).json({ message: 'Usage logged.' });
     } catch (error) {
         await connection.rollback();
         res.status(500).json({ message: 'Error logging usage.' });
     } finally {
         connection.release();
-    }
-});
-
-// ==========================================================
-// ★★★ PERMANENT ASSET API ROUTES (UPDATED FOR IMAGE UPLOAD) ★★★
-// ==========================================================
-
-// GET all permanent items
-app.get('/api/permanent-inventory', async (req, res) => {
-    // This route does not change
-    try {
-        const [items] = await db.query('SELECT * FROM permanent_inventory ORDER BY item_name ASC');
-        res.json(items);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching permanent inventory.' });
-    }
-});
-
-// POST a new permanent item (NOW ACCEPTS AN IMAGE)
-app.post('/api/permanent-inventory', kitchenUpload.single('itemImage'), async (req, res) => {
-    const { itemName, totalQuantity, notes } = req.body;
-    const imageUrl = req.file ? `/public/uploads/${req.file.filename}` : null; // Get image path if uploaded
-    try {
-        await db.query(
-            'INSERT INTO permanent_inventory (item_name, total_quantity, notes, image_url) VALUES (?, ?, ?, ?)',
-            [itemName, totalQuantity, notes, imageUrl]
-        );
-        res.status(201).json({ message: 'Permanent item added successfully.' });
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'This item already exists.' });
-        res.status(500).json({ message: 'Error adding permanent item.' });
-    }
-});
-
-// PUT (update) an existing permanent item (NOW ACCEPTS AN IMAGE)
-app.put('/api/permanent-inventory/:id', kitchenUpload.single('itemImage'), async (req, res) => {
-    const { id } = req.params;
-    const { itemName, totalQuantity, notes } = req.body;
-    
-    try {
-        let query = 'UPDATE permanent_inventory SET item_name = ?, total_quantity = ?, notes = ?';
-        const params = [itemName, totalQuantity, notes];
-
-        // If a new image is being uploaded, add it to the query
-        if (req.file) {
-            query += ', image_url = ?';
-            params.push(`/public/uploads/${req.file.filename}`);
-        }
-
-        query += ' WHERE id = ?';
-        params.push(id);
-        
-        const [result] = await db.query(query, params);
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
-        
-        res.status(200).json({ message: 'Item updated successfully.' });
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Another item with this name already exists.' });
-        res.status(500).json({ message: 'Error updating item.' });
-    }
-});
-
-// DELETE a permanent item (This route does not change)
-app.delete('/api/permanent-inventory/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const [result] = await db.query('DELETE FROM permanent_inventory WHERE id = ?', [id]);
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
-        res.status(200).json({ message: 'Item deleted successfully.' });
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting item.' });
     }
 });
 
