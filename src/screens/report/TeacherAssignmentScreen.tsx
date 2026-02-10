@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/TeacherAssignmentScreen.js
- * Purpose: Admin screen to assign teachers to subjects for a class
- * Updated: Header Card Design & Theme Consistency
+ * Purpose: Admin screen to assign teachers to subjects.
+ * Logic: Assigning a teacher does NOT delete marks. Marks are linked to Student+Subject.
  */
 import React, { useState, useEffect } from 'react';
 import { 
@@ -27,16 +27,11 @@ const CLASS_SUBJECTS = {
     'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
-// --- COLORS ---
 const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', 
-    cardBg: '#FFFFFF',
+    primary: '#008080',
+    background: '#F2F5F8',
     textMain: '#263238',
     textSub: '#546E7A',
-    success: '#43A047',
-    danger: '#E53935',
-    border: '#CFD8DC'
 };
 
 const TeacherAssignmentScreen = ({ route }) => {
@@ -63,7 +58,6 @@ const TeacherAssignmentScreen = ({ route }) => {
             setTeachers(teachersRes.data);
             setAssignments(assignmentsRes.data);
             
-            // Pre-populate selected teachers
             const selected = {};
             assignmentsRes.data.forEach(a => {
                 selected[a.subject] = a.teacher_id.toString();
@@ -91,7 +85,7 @@ const TeacherAssignmentScreen = ({ route }) => {
                 classGroup,
                 subject
             });
-            Alert.alert('Success', 'Teacher assigned successfully');
+            Alert.alert('Success', 'Teacher assigned successfully. Previous marks for this subject will be visible to the new teacher.');
             fetchData();
         } catch (error) {
             console.error('Error assigning teacher:', error);
@@ -103,8 +97,8 @@ const TeacherAssignmentScreen = ({ route }) => {
 
     const handleRemove = async (assignmentId) => {
         Alert.alert(
-            'Confirm',
-            'Remove this teacher assignment?',
+            'Confirm Removal',
+            'Are you sure you want to remove this teacher assignment? \n\nNote: Student marks will NOT be deleted.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -113,7 +107,7 @@ const TeacherAssignmentScreen = ({ route }) => {
                     onPress: async () => {
                         try {
                             await apiClient.delete(`/reports/teacher-assignments/${assignmentId}`);
-                            Alert.alert('Success', 'Assignment removed');
+                            Alert.alert('Success', 'Assignment removed. Marks preserved.');
                             fetchData();
                         } catch (error) {
                             Alert.alert('Error', 'Failed to remove assignment');
@@ -134,8 +128,6 @@ const TeacherAssignmentScreen = ({ route }) => {
 
     return (
         <ScrollView style={styles.container}>
-            
-            {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
                     <View style={styles.headerIconContainer}>
@@ -148,7 +140,6 @@ const TeacherAssignmentScreen = ({ route }) => {
                 </View>
             </View>
 
-            {/* Subject List */}
             <View style={styles.listContainer}>
                 {subjects.map(subject => {
                     const currentAssignment = assignments.find(a => a.subject === subject);
@@ -182,6 +173,7 @@ const TeacherAssignmentScreen = ({ route }) => {
                                                 setSelectedTeachers(prev => ({ ...prev, [subject]: value }))
                                             }
                                             style={styles.picker}
+                                            dropdownIconColor="#333"
                                         >
                                             <Picker.Item label="Select Teacher..." value="" color="#999"/>
                                             {teachers.map(teacher => (
@@ -215,148 +207,35 @@ const TeacherAssignmentScreen = ({ route }) => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    loaderContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    listContainer: {
-        paddingHorizontal: 15,
-        paddingBottom: 30
-    },
+    container: { flex: 1, backgroundColor: COLORS.background },
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    listContainer: { paddingHorizontal: 15, paddingBottom: 30 },
 
-    // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 15,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        backgroundColor: '#FFFFFF', paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3,
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    headerIconContainer: { backgroundColor: '#E0F2F1', borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
     headerSubtitle: { fontSize: 13, color: COLORS.textSub },
 
-    // --- CARD STYLES ---
-    subjectCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-        borderWidth: 1,
-        borderColor: '#f0f2f5'
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        paddingBottom: 8
-    },
-    subjectTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: COLORS.textMain
-    },
+    subjectCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: '#f0f2f5' },
+    cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 8 },
+    subjectTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
     
-    // --- ASSIGNED STATE ---
-    assignedContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#E8F5E9',
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#C8E6C9'
-    },
-    assignedInfo: {
-        flex: 1,
-    },
-    assignedLabel: {
-        fontSize: 11,
-        color: '#2E7D32',
-        marginBottom: 2
-    },
-    teacherName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#1B5E20'
-    },
-    removeButton: {
-        backgroundColor: '#ef5350',
-        padding: 8,
-        borderRadius: 6,
-        marginLeft: 10
-    },
+    assignedContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E8F5E9', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#C8E6C9' },
+    assignedInfo: { flex: 1 },
+    assignedLabel: { fontSize: 11, color: '#2E7D32', marginBottom: 2 },
+    teacherName: { fontSize: 14, fontWeight: 'bold', color: '#1B5E20' },
+    removeButton: { backgroundColor: '#ef5350', padding: 8, borderRadius: 6, marginLeft: 10 },
 
-    // --- UNASSIGNED STATE ---
-    assignContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10
-    },
-    pickerContainer: {
-        flex: 1,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        borderRadius: 8,
-        backgroundColor: '#FAFAFA',
-        height: 45,
-        justifyContent: 'center',
-        overflow: 'hidden'
-    },
-    picker: {
-        width: '100%',
-    },
-    assignButton: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 8,
-        alignItems: 'center',
-        elevation: 2
-    },
-    assignButtonDisabled: {
-        backgroundColor: '#B0BEC5',
-        elevation: 0
-    },
-    assignButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 14
-    }
+    assignContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    pickerContainer: { flex: 1, borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 8, backgroundColor: '#FAFAFA', height: 45, justifyContent: 'center', overflow: 'hidden' },
+    picker: { width: '100%', color: '#333' },
+    assignButton: { backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: 'center', elevation: 2 },
+    assignButtonDisabled: { backgroundColor: '#B0BEC5', elevation: 0 },
+    assignButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 }
 });
 
 export default TeacherAssignmentScreen;

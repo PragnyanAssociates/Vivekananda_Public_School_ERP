@@ -1,13 +1,18 @@
 /**
  * File: src/screens/report/ClassListScreen.js
  * Purpose: Displays a list of all classes with performance summaries for Teachers/Admins.
- * Updated: Applied Header Card Design & Theme Consistency.
+ * Updated: Responsive Design & Error Handling.
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { 
+    View, Text, FlatList, TouchableOpacity, StyleSheet, 
+    ActivityIndicator, Dimensions, StatusBar 
+} from 'react-native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+
+const { width } = Dimensions.get('window');
 
 const ClassListScreen = ({ navigation }) => {
     const [classSummaries, setClassSummaries] = useState([]);
@@ -23,12 +28,13 @@ const ClassListScreen = ({ navigation }) => {
 
     const fetchClassSummaries = async () => {
         setLoading(true);
+        setError(null);
         try {
             const response = await apiClient.get('/reports/class-summaries');
             setClassSummaries(response.data);
         } catch (err) {
             console.error('Failed to fetch class summaries:', err);
-            setError('Could not load class data. Please try again later.');
+            setError('Could not load class data. Check your connection.');
         } finally {
             setLoading(false);
         }
@@ -39,7 +45,15 @@ const ClassListScreen = ({ navigation }) => {
     }
 
     if (error) {
-        return <View style={styles.loaderContainer}><Text style={styles.errorText}>{error}</Text></View>;
+        return (
+            <View style={styles.loaderContainer}>
+                <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={fetchClassSummaries}>
+                    <Text style={styles.retryText}>Try Again</Text>
+                </TouchableOpacity>
+            </View>
+        );
     }
 
     const renderItem = ({ item }) => (
@@ -48,10 +62,10 @@ const ClassListScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('MarksEntry', { classGroup: item.class_group })}
             activeOpacity={0.9}
         >
-            {/* Left Side: Class Name (Updated to Teal) */}
+            {/* Left Side: Class Name */}
             <View style={styles.classSection}>
                 <Text style={styles.classText}>{item.class_group}</Text>
-                <Icon name="chevron-right" size={24} color="rgba(255,255,255,0.6)" style={{marginTop: 5}} />
+                <Icon name="chevron-right" size={24} color="rgba(255,255,255,0.7)" style={{ marginTop: 5 }} />
             </View>
 
             {/* Right Side: Stats */}
@@ -70,7 +84,9 @@ const ClassListScreen = ({ navigation }) => {
                     <Icon name="trophy-variant" size={18} color="#e67e22" style={styles.icon} />
                     <View style={styles.textWrapper}>
                         <Text style={styles.statLabel}>Top Student</Text>
-                        <Text style={styles.statValue} numberOfLines={1}>{`${item.topStudent.name} (${item.topStudent.marks})`}</Text>
+                        <Text style={styles.statValue} numberOfLines={1}>
+                            {item.topStudent?.name ? `${item.topStudent.name} (${item.topStudent.marks})` : 'N/A'}
+                        </Text>
                     </View>
                 </View>
 
@@ -80,7 +96,9 @@ const ClassListScreen = ({ navigation }) => {
                     <Icon name="book-open-page-variant" size={18} color="#2980b9" style={styles.icon} />
                     <View style={styles.textWrapper}>
                         <Text style={styles.statLabel}>Top Subject</Text>
-                        <Text style={styles.statValue} numberOfLines={1}>{`${item.topSubject.name} (${item.topSubject.marks})`}</Text>
+                        <Text style={styles.statValue} numberOfLines={1}>
+                            {item.topSubject?.name ? `${item.topSubject.name} (${item.topSubject.marks})` : 'N/A'}
+                        </Text>
                     </View>
                 </View>
             </View>
@@ -89,6 +107,7 @@ const ClassListScreen = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
+            <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
             
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
@@ -117,20 +136,21 @@ const ClassListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F2F5F8' // Updated Background
+        backgroundColor: '#F2F5F8'
     },
     loaderContainer: {
         flex: 1,
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        padding: 20
     },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
         backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
+        paddingVertical: 15,
+        width: '94%', 
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 15,
@@ -146,7 +166,7 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
+        backgroundColor: '#E0F2F1',
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -172,14 +192,14 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     classSection: {
-        backgroundColor: '#12668d', // Updated to Teal
-        padding: 15,
+        backgroundColor: '#008080', // Teal
+        padding: 10,
         justifyContent: 'center',
         alignItems: 'center',
-        width: 100, 
+        width: 80, 
     },
     classText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
         color: '#ffffff',
         textAlign: 'center'
@@ -198,7 +218,8 @@ const styles = StyleSheet.create({
         marginRight: 10,
         backgroundColor: '#F5F7FA',
         padding: 6,
-        borderRadius: 8
+        borderRadius: 8,
+        overflow: 'hidden'
     },
     textWrapper: {
         flex: 1,
@@ -230,7 +251,18 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: 16,
         color: '#e74c3c',
-        textAlign: 'center'
+        textAlign: 'center',
+        marginVertical: 10
+    },
+    retryButton: {
+        backgroundColor: '#008080',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20
+    },
+    retryText: {
+        color: '#fff',
+        fontWeight: 'bold'
     }
 });
 

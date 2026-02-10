@@ -7305,19 +7305,25 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     try {
         await connection.beginTransaction();
 
-        // Removed academic_year column from INSERT
+        // Note: report_student_marks should have a UNIQUE KEY on (student_id, class_group, subject, exam_type)
         const query = `
             INSERT INTO report_student_marks (student_id, class_group, subject, exam_type, marks_obtained)
             VALUES ? 
             ON DUPLICATE KEY UPDATE marks_obtained = VALUES(marks_obtained)`;
         
         const values = marksPayload.map(m => {
-            const parsedMarks = parseInt(m.marks_obtained, 10);
-            const finalMarks = isNaN(parsedMarks) ? null : parsedMarks;
+            // Use parseFloat to safely handle numbers, allow decimals if needed
+            // If empty string or null is passed, finalMarks becomes null
+            let finalMarks = null;
+            if (m.marks_obtained !== null && m.marks_obtained !== "") {
+                const parsed = parseFloat(m.marks_obtained);
+                if (!isNaN(parsed)) {
+                    finalMarks = parsed;
+                }
+            }
             
             return [
                 m.student_id, 
-                // Removed academic_year
                 m.class_group, 
                 m.subject,
                 m.exam_type, 
@@ -7331,7 +7337,8 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     } catch (error) {
         await connection.rollback();
         console.error("Error bulk saving marks:", error);
-        res.status(500).json({ message: "Failed to save marks." });
+        // Return detailed error message if possible
+        res.status(500).json({ message: "Failed to save marks. Server Error." });
     } finally {
         connection.release();
     }
@@ -7349,7 +7356,6 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     try {
         await connection.beginTransaction();
         
-        // Removed academic_year column from INSERT
         const query = `
             INSERT INTO report_student_attendance (student_id, month, working_days, present_days)
             VALUES ? 
@@ -7358,17 +7364,25 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
                 present_days = VALUES(present_days)`;
         
         const values = attendancePayload.map(a => {
-            const working = parseInt(a.working_days, 10);
-            const present = parseInt(a.present_days, 10);
-            const finalWorking = isNaN(working) ? null : working;
-            const finalPresent = isNaN(present) ? null : present;
+            // Parse integers for days
+            let working = null;
+            let present = null;
+            
+            if (a.working_days !== null && a.working_days !== "") {
+                const p = parseInt(a.working_days, 10);
+                if (!isNaN(p)) working = p;
+            }
+            
+            if (a.present_days !== null && a.present_days !== "") {
+                const p = parseInt(a.present_days, 10);
+                if (!isNaN(p)) present = p;
+            }
             
             return [
                 a.student_id, 
-                // Removed academic_year
                 a.month,
-                finalWorking,
-                finalPresent
+                working,
+                present
             ];
         });
         

@@ -1,17 +1,19 @@
 /**
  * File: src/screens/report/MarksEntryScreen.js
- * Purpose: Teachers/Admins enter marks with role-based editing permissions.
- * Updated: Header Card Design Implementation.
+ * Purpose: Data Entry for Marks & Attendance. Handles persistence and role-based access.
+ * Updated: Responsive Table, Fixing "Failed to Save" errors, preserving marks logic.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, TextInput,
-    TouchableOpacity, Alert, ActivityIndicator, RefreshControl
+    TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Dimensions
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Changed to MaterialCommunityIcons for better set
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const { width } = Dimensions.get('window');
 
 // --- CONSTANTS ---
 const CLASS_SUBJECTS = {
@@ -96,6 +98,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
     }, [classGroup]);
     
     useEffect(() => {
+        // Reset editing state when switching views to prevent accidental edits in overview
         setIsEditing(true);
     }, [selectedExam, viewMode]);
 
@@ -108,6 +111,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             setStudents(students);
             setTeacherAssignments(assignments || []);
 
+            // Initialize structure for Marks
             const marksMap = {};
             students.forEach(student => {
                 marksMap[student.id] = {};
@@ -119,6 +123,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 });
             });
 
+            // Populate existing marks
             marks.forEach(mark => {
                 if (marksMap[mark.student_id] && marksMap[mark.student_id][mark.subject]) {
                     const displayExamType = EXAM_DISPLAY_MAPPING[mark.exam_type];
@@ -131,6 +136,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
 
             setMarksData(marksMap);
 
+            // Initialize structure for Attendance
             const attendanceMap = {};
             students.forEach(student => {
                 attendanceMap[student.id] = {};
@@ -139,6 +145,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 });
             });
 
+            // Populate existing attendance
             attendance.forEach(att => {
                 if (attendanceMap[att.student_id]) {
                     attendanceMap[att.student_id][att.month] = {
@@ -151,7 +158,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             setAttendanceData(attendanceMap);
         } catch (error) {
             console.error('Error fetching class data:', error);
-            Alert.alert('Error', 'Failed to load class data');
+            Alert.alert('Error', 'Failed to load class data. Please check connection.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -235,27 +242,55 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const saveMarks = async () => {
         setSaving(true);
         const marksPayload = [];
+        
         students.forEach(student => {
             subjects.forEach(subject => {
+                // 1. Save Individual Exams
                 EDITABLE_EXAM_TYPES.forEach(examDisplayType => {
                     const examKey = EXAM_KEY_MAPPING[examDisplayType];
-                    const marksValue = marksData[student.id]?.[subject]?.[examDisplayType] || '';
+                    const rawValue = marksData[student.id]?.[subject]?.[examDisplayType];
+                    
+                    // Convert '' to null for DB, otherwise pass string
+                    const marksValue = (rawValue === '' || rawValue === undefined) ? null : rawValue;
+
                     if (examKey) {
-                        marksPayload.push({ student_id: student.id, class_group: classGroup, subject: subject, exam_type: examKey, marks_obtained: marksValue === '' ? null : marksValue });
+                        marksPayload.push({ 
+                            student_id: student.id, 
+                            class_group: classGroup, 
+                            subject: subject, 
+                            exam_type: examKey, 
+                            marks_obtained: marksValue 
+                        });
                     }
                 });
+
+                // 2. Save Calculated Total
                 const overallValue = calculateOverallForSubject(student.id, subject);
-                marksPayload.push({ student_id: student.id, class_group: classGroup, subject: subject, exam_type: 'Total', marks_obtained: overallValue === '' ? null : overallValue });
+                marksPayload.push({ 
+                    student_id: student.id, 
+                    class_group: classGroup, 
+                    subject: subject, 
+                    exam_type: 'Total', 
+                    marks_obtained: overallValue === '' ? null : overallValue 
+                });
             });
         });
+
+        if (marksPayload.length === 0) {
+            Alert.alert("Info", "No marks to save.");
+            setSaving(false);
+            return;
+        }
+
         try {
             await apiClient.post('/reports/marks/bulk', { marksPayload });
-            Alert.alert('Success', 'Marks saved successfully! Progress reports updated.');
+            Alert.alert('Success', 'Marks saved successfully!');
             setIsEditing(false); 
-            fetchClassData();
+            fetchClassData(); // Refresh to ensure data is synced
         } catch (error) {
             console.error('Error saving marks:', error);
-            Alert.alert('Error', error.response?.data?.message || 'Failed to save marks');
+            const errMsg = error.response?.data?.message || 'Failed to save marks. Check internet connection.';
+            Alert.alert('Save Failed', errMsg);
         } finally {
             setSaving(false);
         }
@@ -267,15 +302,24 @@ const MarksEntryScreen = ({ route, navigation }) => {
         students.forEach(student => {
             MONTHS.forEach(month => {
                 const att = attendanceData[student.id]?.[month] || {};
-                attendancePayload.push({ student_id: student.id, month, working_days: att.working_days === '' ? null : att.working_days, present_days: att.present_days === '' ? null : att.present_days });
+                const wDays = att.working_days === '' || att.working_days === undefined ? null : att.working_days;
+                const pDays = att.present_days === '' || att.present_days === undefined ? null : att.present_days;
+                
+                attendancePayload.push({ 
+                    student_id: student.id, 
+                    month, 
+                    working_days: wDays, 
+                    present_days: pDays 
+                });
             });
         });
+
         try {
             await apiClient.post('/reports/attendance/bulk', { attendancePayload });
             Alert.alert('Success', 'Attendance saved successfully!');
         } catch (error) {
             console.error('Error saving attendance:', error);
-            Alert.alert('Error', 'Failed to save attendance');
+            Alert.alert('Error', error.response?.data?.message || 'Failed to save attendance');
         } finally {
             setSaving(false);
         }
@@ -304,7 +348,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     </View>
                 </View>
                 
-                {/* Admin Actions */}
+                {/* Admin Actions: Assign Teachers */}
                 {userRole === 'admin' && (
                     <TouchableOpacity style={styles.headerActionBtn} onPress={() => navigation.navigate('TeacherAssignment', { classGroup })}>
                         <Icon name="account-plus" size={22} color="#008080" />
@@ -327,12 +371,12 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     {/* Filters for Marks */}
                     <View style={styles.filterContainer}>
                         <View style={styles.filterBox}>
-                            <Picker selectedValue={selectedExam} onValueChange={setSelectedExam} style={styles.picker}>
+                            <Picker selectedValue={selectedExam} onValueChange={setSelectedExam} style={styles.picker} dropdownIconColor="#333">
                                 {ALL_EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} />)}
                             </Picker>
                         </View>
                         <View style={styles.filterBox}>
-                            <Picker selectedValue={sortOrder} onValueChange={setSortOrder} style={styles.picker}>
+                            <Picker selectedValue={sortOrder} onValueChange={setSortOrder} style={styles.picker} dropdownIconColor="#333">
                                 <Picker.Item label="Roll No" value="rollno" />
                                 <Picker.Item label="High to Low" value="descending" />
                                 <Picker.Item label="Low to High" value="ascending" />
@@ -340,16 +384,16 @@ const MarksEntryScreen = ({ route, navigation }) => {
                         </View>
                     </View>
 
-                    <ScrollView>
-                        <ScrollView horizontal>
+                    <ScrollView style={styles.scrollContainer}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={true} persistentScrollbar={true}>
                             <View style={styles.tableWrapper}>
                                 <View style={styles.tableRow}>
-                                    <View style={[styles.cellHeader, styles.cellRollNo]}><Text style={styles.headerText}>Roll No</Text></View>
+                                    <View style={[styles.cellHeader, styles.cellRollNo]}><Text style={styles.headerText}>Roll</Text></View>
                                     <View style={[styles.cellHeader, styles.cellName]}><Text style={styles.headerText}>Name</Text></View>
                                     {subjects.map(subject => (
                                         <View key={subject} style={[styles.cellHeader, styles.cellSubject]}><Text style={styles.headerText}>{subject}</Text></View>
                                     ))}
-                                    <View style={[styles.cellHeader, styles.cellTotal]}><Text style={styles.headerText}>Total</Text></View>
+                                    <View style={[styles.cellHeader, styles.cellTotal]}><Text style={styles.headerText}>Sub Tot</Text></View>
                                     <View style={[styles.cellHeader, styles.cellTotal, styles.grandTotalHeader]}><Text style={styles.headerText}>Grand Total</Text></View>
                                 </View>
 
@@ -358,13 +402,14 @@ const MarksEntryScreen = ({ route, navigation }) => {
                                     return (
                                         <View key={student.id} style={styles.tableRow}>
                                             <View style={[styles.cell, styles.cellRollNo]}><Text style={styles.cellText}>{student.roll_no}</Text></View>
-                                            <View style={[styles.cell, styles.cellName]}><Text style={styles.cellText}>{student.full_name}</Text></View>
+                                            <View style={[styles.cell, styles.cellName]}><Text style={styles.cellText} numberOfLines={2}>{student.full_name}</Text></View>
                                             
                                             {subjects.map(subject => {
                                                 const canUserEditSubject = () => {
                                                     if (userRole === 'admin') return true;
                                                     const assignment = teacherAssignments.find(a => a.subject === subject);
                                                     if (assignment) return assignment.teacher_id === userId;
+                                                    // Default: if no one assigned, admin can edit, but teacher cannot
                                                     return false;
                                                 };
 
@@ -376,13 +421,17 @@ const MarksEntryScreen = ({ route, navigation }) => {
                                                 return (
                                                     <View key={subject} style={[styles.cell, styles.cellSubject]}>
                                                         <TextInput
-                                                            style={[styles.input, !isEditable && styles.inputDisabled, isOverallView && styles.inputOverallView]}
+                                                            style={[
+                                                                styles.input, 
+                                                                !isEditable && styles.inputDisabled, 
+                                                                isOverallView && styles.inputOverallView
+                                                            ]}
                                                             keyboardType="numeric"
-                                                            maxLength={isOverallView ? 4 : 3}
+                                                            maxLength={isOverallView ? 5 : 3}
                                                             value={displayValue}
                                                             onChangeText={(val) => updateMarks(student.id, subject, selectedExam, val)}
                                                             editable={isEditable}
-                                                            placeholder="-"
+                                                            placeholder={isEditable ? "-" : ""}
                                                             placeholderTextColor="#999"
                                                         />
                                                     </View>
@@ -414,11 +463,11 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     <ScrollView horizontal refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
                         <View style={styles.tableWrapper}>
                             <View style={styles.tableRow}>
-                                <View style={[styles.cellHeader, styles.cellRollNo]}><Text style={styles.headerText}>Roll No</Text></View>
+                                <View style={[styles.cellHeader, styles.cellRollNo]}><Text style={styles.headerText}>Roll</Text></View>
                                 <View style={[styles.cellHeader, styles.cellName]}><Text style={styles.headerText}>Name</Text></View>
                                 {MONTHS.map(month => (
                                     <View key={month} style={[styles.cellHeader, styles.cellAttendance]}>
-                                        <Text style={styles.headerText}>{month}</Text>
+                                        <Text style={styles.headerText}>{month.substring(0,3)}</Text>
                                         <Text style={styles.subHeaderText}>(W / P)</Text>
                                     </View>
                                 ))}
@@ -470,8 +519,9 @@ const MarksEntryScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    scrollContainer: { flex: 1 },
     
-    // --- HEADER CARD STYLES ---
+    // --- HEADER ---
     headerCard: {
         backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
@@ -485,34 +535,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
+        backgroundColor: '#E0F2F1', borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
     headerSubtitle: { fontSize: 13, color: '#666666' },
-    headerActionBtn: {
-        padding: 8,
-        backgroundColor: '#f0fdfa',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#ccfbf1'
-    },
+    headerActionBtn: { padding: 8, backgroundColor: '#f0fdfa', borderRadius: 8, borderWidth: 1, borderColor: '#ccfbf1' },
 
     // --- TABS ---
-    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingTop: 5, backgroundColor: COLORS.background, elevation: 0, marginBottom: 10 },
+    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingTop: 5, backgroundColor: COLORS.background, marginBottom: 10 },
     tabButton: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
     tabButtonActive: { borderBottomColor: COLORS.primary },
     tabText: { fontSize: 16, color: COLORS.textSub, fontWeight: '500' },
@@ -525,32 +560,41 @@ const styles = StyleSheet.create({
 
     // --- TABLE ---
     tableWrapper: { marginHorizontal: 15, paddingBottom: 20 },
-    tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#ddd' },
-    cellHeader: { backgroundColor: COLORS.tableHeader, padding: 12, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2c3e50' },
-    cell: { backgroundColor: '#fff', padding: 8, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#f0f2f5' },
+    tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#ddd', alignItems: 'center', height: 50 },
+    cellHeader: { backgroundColor: COLORS.tableHeader, padding: 5, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2c3e50', height: 55 },
+    cell: { backgroundColor: '#fff', padding: 0, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#f0f2f5', height: 50 },
     
     // Column Widths
-    cellRollNo: { width: 70 },
-    cellName: { width: 160 },
-    cellSubject: { width: 90 },
-    cellTotal: { width: 90, backgroundColor: '#e8f5e9' },
+    cellRollNo: { width: 50 },
+    cellName: { width: 140 },
+    cellSubject: { width: 70 },
+    cellTotal: { width: 70, backgroundColor: '#e8f5e9' },
     grandTotalHeader: { backgroundColor: '#27ae60' },
     grandTotalCell: { backgroundColor: '#c8e6c9' },
-    cellAttendance: { width: 120 },
+    cellAttendance: { width: 100 },
 
-    headerText: { fontSize: 13, fontWeight: 'bold', color: '#fff', textAlign: 'center' },
-    subHeaderText: { fontSize: 10, color: '#ecf0f1', marginTop: 2 },
-    cellText: { fontSize: 13, color: '#2c3e50', textAlign: 'center' },
+    headerText: { fontSize: 12, fontWeight: 'bold', color: '#fff', textAlign: 'center' },
+    subHeaderText: { fontSize: 9, color: '#ecf0f1', marginTop: 1 },
+    cellText: { fontSize: 12, color: '#2c3e50', textAlign: 'center' },
     overallText: { fontWeight: 'bold', color: '#1b5e20' },
-    totalText: { fontWeight: 'bold', color: '#1b5e20', fontSize: 14 },
+    totalText: { fontWeight: 'bold', color: '#1b5e20', fontSize: 13 },
 
     // Inputs
-    input: { borderWidth: 1, borderColor: COLORS.inputBorder, borderRadius: 6, padding: 5, textAlign: 'center', fontSize: 14, backgroundColor: '#fff', width: '100%', height: 40 },
-    inputDisabled: { backgroundColor: '#f8fafc', color: '#94a3b8', borderWidth: 0 },
+    input: { 
+        borderWidth: 0, 
+        textAlign: 'center', 
+        fontSize: 14, 
+        backgroundColor: '#fff', 
+        width: '100%', 
+        height: '100%', // Fills the cell
+        color: '#333',
+        padding: 0
+    },
+    inputDisabled: { backgroundColor: '#f8fafc', color: '#94a3b8' },
     inputOverallView: { backgroundColor: '#e9ecef', color: '#495057', fontWeight: 'bold' },
     
-    attendanceInputContainer: { flexDirection: 'row', alignItems: 'center', width: '100%', gap: 5 },
-    attendanceInput: { flex: 1, minWidth: 35, textAlign: 'center' },
+    attendanceInputContainer: { flexDirection: 'row', alignItems: 'center', width: '100%', height: '100%', justifyContent: 'center' },
+    attendanceInput: { flex: 1, textAlign: 'center', height: '100%' },
     attendanceSeparator: { fontSize: 16, color: '#94a3b8' },
 
     // Buttons
