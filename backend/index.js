@@ -6266,22 +6266,25 @@ app.get('/api/subjects/all-unique', verifyToken, async (req, res) => {
 // Add a dedicated multer storage config for alumni photos
 const alumniStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadPath = '/data/uploads/alumni'; // Ensure this path exists or matches logic
+        // Adjust this path to match your server structure
+        const uploadPath = path.join(process.cwd(), 'data', 'uploads', 'alumni'); 
         if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        cb(null, generateUniqueFilename(file.originalname, 'alumni-pic'));
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, `alumni-${uniqueSuffix}${ext}`);
     }
 });
+
 const alumniUpload = multer({ storage: alumniStorage });
 
-// GET all alumni records (NOW WITH SEARCH, SORT, and YEAR FILTER)
+// --- GET ALL (With Search, Sort & Filter) ---
 app.get('/api/alumni', async (req, res) => {
     try {
         const { search, sortBy = 'alumni_name', sortOrder = 'ASC', year } = req.query;
 
-        // Basic validation for sort parameters to prevent SQL injection
         const allowedSortColumns = ['alumni_name', 'admission_no', 'present_status'];
         const safeSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'alumni_name';
         const safeSortOrder = (sortOrder.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
@@ -6290,13 +6293,11 @@ app.get('/api/alumni', async (req, res) => {
         const queryParams = [];
 
         if (year && !isNaN(parseInt(year))) {
-             // Filter by the year of the school outgoing date
             whereClauses.push("YEAR(school_outgoing_date) = ?");
             queryParams.push(parseInt(year));
         }
 
         if (search) {
-            // Search by name, admission number, or present status
             whereClauses.push("(alumni_name LIKE ? OR admission_no LIKE ? OR present_status LIKE ?)");
             const searchTerm = `%${search}%`;
             queryParams.push(searchTerm, searchTerm, searchTerm);
@@ -6319,11 +6320,11 @@ app.get('/api/alumni', async (req, res) => {
     }
 });
 
-// POST a new alumni record (now handles file upload)
+// --- POST (Create New) ---
 app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => {
     const fields = req.body;
-    // The URL stored in the DB must still use the public virtual path '/uploads/'
-    const profile_pic_url = req.file ? `/uploads/${req.file.filename}` : null; 
+    // Store web-accessible path
+    const profile_pic_url = req.file ? `/uploads/alumni/${req.file.filename}` : null; 
 
     if (!fields.admission_no || !fields.alumni_name) {
         return res.status(400).json({ message: "Admission Number and Alumni Name are required." });
@@ -6350,21 +6351,21 @@ app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => 
     } catch (error) {
         console.error("POST /api/alumni Error:", error);
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: `An alumni record with Admission No '${fields.admission_no}' already exists.` });
+            return res.status(409).json({ message: `Admission No '${fields.admission_no}' already exists.` });
         }
         res.status(500).json({ message: "Failed to create alumni record." });
     }
 });
 
-// PUT (update) an existing alumni record (now handles file upload)
+// --- PUT (Update Existing - Handles Partial Updates) ---
 app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) => {
     const { id } = req.params;
     const fields = req.body;
     
-    // Dynamically build the query to avoid updating profile_pic_url to NULL if not provided
     let setClauses = [];
     let params = [];
     
+    // Explicit list of allowed fields for security
     const updatableFields = [
         'admission_no', 'alumni_name', 'dob', 'pen_no', 'phone_no', 'aadhar_no', 
         'parent_name', 'parent_phone', 'address', 'school_joined_date', 
@@ -6372,21 +6373,24 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
         'tc_issued_date', 'tc_number', 'present_status'
     ];
 
+    // Only add fields that are actually sent in the request
     updatableFields.forEach(field => {
         if (fields[field] !== undefined) {
             setClauses.push(`${field} = ?`);
-            params.push(fields[field] || null);
+            // Convert empty strings to NULL for dates/numbers if necessary, otherwise use value
+            const val = fields[field] === '' ? null : fields[field];
+            params.push(val);
         }
     });
 
+    // Handle Image
     if (req.file) {
         setClauses.push('profile_pic_url = ?');
-        // The URL stored in the DB must still use the public virtual path '/uploads/'
-        params.push(`/uploads/${req.file.filename}`);
+        params.push(`/uploads/alumni/${req.file.filename}`);
     }
 
     if (setClauses.length === 0) {
-        return res.status(400).json({ message: "No fields to update." });
+        return res.status(400).json({ message: "No fields provided for update." });
     }
 
     const query = `UPDATE alumni_records SET ${setClauses.join(', ')} WHERE id = ?`;
@@ -6401,37 +6405,32 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
     } catch (error) {
         console.error(`PUT /api/alumni/${id} Error:`, error);
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: `An alumni record with Admission No '${fields.admission_no}' already exists.` });
+            return res.status(409).json({ message: `Admission No '${fields.admission_no}' already exists.` });
         }
         res.status(500).json({ message: "Failed to update alumni record." });
     }
 });
 
-// DELETE an alumni record (now also deletes the image file)
+// --- DELETE ---
 app.delete('/api/alumni/:id', async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // First, get the record to find the image path
         const [[record]] = await connection.query("SELECT profile_pic_url FROM alumni_records WHERE id = ?", [id]);
 
-        // Then, delete the record from the database
         const [result] = await connection.query("DELETE FROM alumni_records WHERE id = ?", [id]);
         if (result.affectedRows === 0) {
             await connection.rollback();
             return res.status(404).json({ message: "Alumni record not found." });
         }
 
-        // If an image path exists, delete the file from the server
+        // Delete Image File
         if (record && record.profile_pic_url) {
-            // 1. Remove the virtual '/uploads' prefix from the URL
-            const relativeFilename = record.profile_pic_url.replace('/uploads/', ''); 
-            
-            // 2. Join the ROOT_STORAGE_PATH with the remaining filename
-            // We use ROOT_STORAGE_PATH because that is where '/data/uploads' is defined
-            const filePath = path.join(ROOT_STORAGE_PATH, relativeFilename);
+            // Adjust logic to map URL back to file system path
+            const filename = path.basename(record.profile_pic_url);
+            const filePath = path.join(process.cwd(), 'data', 'uploads', 'alumni', filename);
 
             if (fs.existsSync(filePath)) {
                 fs.unlink(filePath, (err) => {

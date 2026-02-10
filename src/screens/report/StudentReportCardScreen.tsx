@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#343a40', textAlign: 'center', marginVertical: 20, marginTop: 25 },
     table: { borderWidth: 1, borderColor: '#dfe4ea', borderRadius: 8, overflow: 'hidden' },
     tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#dfe4ea' },
-    tableHeader: { padding: 12, fontWeight: 'bold', textAlign: 'center', backgroundColor: '#f8f9fa', color: '#495057', fontSize: 13, borderRightWidth: 1, borderRightColor: '#dfe4ea' },
+    tableHeader: { padding: 12, fontWeight: 'bold', textAlign: 'center', backgroundColor: '#f8f9fa', color: '#495057', fontSize: 12, borderRightWidth: 1, borderRightColor: '#dfe4ea' },
     tableCell: { padding: 12, textAlign: 'center', color: '#212529', fontSize: 14, borderRightWidth: 1, borderRightColor: '#dfe4ea' },
     subjectCol: { width: 90, textAlign: 'left', fontWeight: '600' },
     markCol: { width: 55 },
