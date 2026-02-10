@@ -6260,31 +6260,28 @@ app.get('/api/subjects/all-unique', verifyToken, async (req, res) => {
 
 
 // ==========================================================
-// --- ALUMNI RECORDS API ROUTES (WITH IMAGE UPLOAD) ---
+// --- ALUMNI NETWORK API ROUTES ---
 // ==========================================================
 
-// Add a dedicated multer storage config for alumni photos
+// 1. Config specific storage for Alumni (saves to /data/uploads with 'alumni-' prefix)
 const alumniStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Adjust this path to match your server structure
-        const uploadPath = path.join(process.cwd(), 'data', 'uploads', 'alumni'); 
-        if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
+        // We use the ROOT_STORAGE_PATH defined in your server.js
+        cb(null, '/data/uploads'); 
     },
     filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, `alumni-${uniqueSuffix}${ext}`);
+        // Uses your existing helper function
+        cb(null, generateUniqueFilename(file.originalname, 'alumni')); 
     }
 });
-
 const alumniUpload = multer({ storage: alumniStorage });
 
-// --- GET ALL (With Search, Sort & Filter) ---
+// 2. GET All Alumni (With Search, Sort & Year Filter)
 app.get('/api/alumni', async (req, res) => {
     try {
         const { search, sortBy = 'alumni_name', sortOrder = 'ASC', year } = req.query;
 
+        // Security: Whitelist sort columns
         const allowedSortColumns = ['alumni_name', 'admission_no', 'present_status'];
         const safeSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'alumni_name';
         const safeSortOrder = (sortOrder.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
@@ -6292,11 +6289,13 @@ app.get('/api/alumni', async (req, res) => {
         let whereClauses = [];
         const queryParams = [];
 
+        // Filter by Year (checks school_outgoing_date)
         if (year && !isNaN(parseInt(year))) {
             whereClauses.push("YEAR(school_outgoing_date) = ?");
             queryParams.push(parseInt(year));
         }
 
+        // Search Logic
         if (search) {
             whereClauses.push("(alumni_name LIKE ? OR admission_no LIKE ? OR present_status LIKE ?)");
             const searchTerm = `%${search}%`;
@@ -6309,7 +6308,7 @@ app.get('/api/alumni', async (req, res) => {
             SELECT * FROM alumni_records 
             ${whereClause}
             ORDER BY ${safeSortBy} ${safeSortOrder}
-            LIMIT 5000;
+            LIMIT 1000;
         `;
 
         const [records] = await db.query(query, queryParams);
@@ -6320,11 +6319,12 @@ app.get('/api/alumni', async (req, res) => {
     }
 });
 
-// --- POST (Create New) ---
+// 3. POST New Alumni (Handles Image Upload)
 app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => {
     const fields = req.body;
-    // Store web-accessible path
-    const profile_pic_url = req.file ? `/uploads/alumni/${req.file.filename}` : null; 
+    
+    // Construct the public URL: /uploads/filename
+    const profile_pic_url = req.file ? `/uploads/${req.file.filename}` : null; 
 
     if (!fields.admission_no || !fields.alumni_name) {
         return res.status(400).json({ message: "Admission Number and Alumni Name are required." });
@@ -6337,12 +6337,16 @@ app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => 
             school_outgoing_date, school_outgoing_grade, tc_issued_date, tc_number, present_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
+    
+    // Handle empty strings as NULL
+    const v = (val) => (val === '' || val === 'null' || val === undefined ? null : val);
+
     const params = [
-        fields.admission_no, fields.alumni_name, profile_pic_url, fields.dob || null, fields.pen_no || null, 
-        fields.phone_no || null, fields.aadhar_no || null, fields.parent_name || null, fields.parent_phone || null, 
-        fields.address || null, fields.school_joined_date || null, fields.school_joined_grade || null, 
-        fields.school_outgoing_date || null, fields.school_outgoing_grade || null, fields.tc_issued_date || null, 
-        fields.tc_number || null, fields.present_status || null
+        fields.admission_no, fields.alumni_name, profile_pic_url, v(fields.dob), v(fields.pen_no), 
+        v(fields.phone_no), v(fields.aadhar_no), v(fields.parent_name), v(fields.parent_phone), 
+        v(fields.address), v(fields.school_joined_date), v(fields.school_joined_grade), 
+        v(fields.school_outgoing_date), v(fields.school_outgoing_grade), v(fields.tc_issued_date), 
+        v(fields.tc_number), v(fields.present_status)
     ];
 
     try {
@@ -6357,7 +6361,7 @@ app.post('/api/alumni', alumniUpload.single('profile_pic'), async (req, res) => 
     }
 });
 
-// --- PUT (Update Existing - Handles Partial Updates) ---
+// 4. PUT Update Alumni (Partial Updates + Image Replacement)
 app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) => {
     const { id } = req.params;
     const fields = req.body;
@@ -6365,7 +6369,6 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
     let setClauses = [];
     let params = [];
     
-    // Explicit list of allowed fields for security
     const updatableFields = [
         'admission_no', 'alumni_name', 'dob', 'pen_no', 'phone_no', 'aadhar_no', 
         'parent_name', 'parent_phone', 'address', 'school_joined_date', 
@@ -6373,24 +6376,32 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
         'tc_issued_date', 'tc_number', 'present_status'
     ];
 
-    // Only add fields that are actually sent in the request
     updatableFields.forEach(field => {
         if (fields[field] !== undefined) {
             setClauses.push(`${field} = ?`);
-            // Convert empty strings to NULL for dates/numbers if necessary, otherwise use value
-            const val = fields[field] === '' ? null : fields[field];
+            const val = fields[field] === '' || fields[field] === 'null' ? null : fields[field];
             params.push(val);
         }
     });
 
-    // Handle Image
+    // Handle Image Update
     if (req.file) {
+        // 1. Find old image to delete
+        try {
+            const [[oldRecord]] = await db.query("SELECT profile_pic_url FROM alumni_records WHERE id = ?", [id]);
+            if (oldRecord && oldRecord.profile_pic_url) {
+                const oldFilename = path.basename(oldRecord.profile_pic_url);
+                const oldPath = path.join('/data/uploads', oldFilename);
+                if (fs.existsSync(oldPath)) fs.unlink(oldPath, (err) => { if(err) console.error("Error deleting old alumni image:", err) });
+            }
+        } catch (err) { console.error("Error handling old image cleanup:", err); }
+
         setClauses.push('profile_pic_url = ?');
-        params.push(`/uploads/alumni/${req.file.filename}`);
+        params.push(`/uploads/${req.file.filename}`);
     }
 
     if (setClauses.length === 0) {
-        return res.status(400).json({ message: "No fields provided for update." });
+        return res.status(400).json({ message: "No fields to update." });
     }
 
     const query = `UPDATE alumni_records SET ${setClauses.join(', ')} WHERE id = ?`;
@@ -6398,55 +6409,37 @@ app.put('/api/alumni/:id', alumniUpload.single('profile_pic'), async (req, res) 
     
     try {
         const [result] = await db.query(query, params);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Alumni record not found." });
-        }
+        if (result.affectedRows === 0) return res.status(404).json({ message: "Alumni record not found." });
         res.status(200).json({ message: "Alumni record updated successfully." });
     } catch (error) {
         console.error(`PUT /api/alumni/${id} Error:`, error);
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: `Admission No '${fields.admission_no}' already exists.` });
-        }
-        res.status(500).json({ message: "Failed to update alumni record." });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: `Admission No exists.` });
+        res.status(500).json({ message: "Failed to update record." });
     }
 });
 
-// --- DELETE ---
+// 5. DELETE Alumni
 app.delete('/api/alumni/:id', async (req, res) => {
     const { id } = req.params;
-    const connection = await db.getConnection();
     try {
-        await connection.beginTransaction();
+        // Get image path before deleting record
+        const [[record]] = await db.query("SELECT profile_pic_url FROM alumni_records WHERE id = ?", [id]);
 
-        const [[record]] = await connection.query("SELECT profile_pic_url FROM alumni_records WHERE id = ?", [id]);
+        const [result] = await db.query("DELETE FROM alumni_records WHERE id = ?", [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ message: "Record not found." });
 
-        const [result] = await connection.query("DELETE FROM alumni_records WHERE id = ?", [id]);
-        if (result.affectedRows === 0) {
-            await connection.rollback();
-            return res.status(404).json({ message: "Alumni record not found." });
-        }
-
-        // Delete Image File
+        // Delete the file from disk
         if (record && record.profile_pic_url) {
-            // Adjust logic to map URL back to file system path
             const filename = path.basename(record.profile_pic_url);
-            const filePath = path.join(process.cwd(), 'data', 'uploads', 'alumni', filename);
-
+            const filePath = path.join('/data/uploads', filename);
             if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
-                    if (err) console.error("Failed to delete alumni image file:", err);
-                });
+                fs.unlink(filePath, (err) => { if (err) console.error("Failed to delete alumni file:", err); });
             }
         }
-        
-        await connection.commit();
-        res.status(200).json({ message: "Alumni record deleted successfully." });
+        res.status(200).json({ message: "Deleted successfully." });
     } catch (error) {
-        await connection.rollback();
         console.error(`DELETE /api/alumni/${id} Error:`, error);
-        res.status(500).json({ message: "Failed to delete alumni record." });
-    } finally {
-        connection.release();
+        res.status(500).json({ message: "Failed to delete record." });
     }
 });
 

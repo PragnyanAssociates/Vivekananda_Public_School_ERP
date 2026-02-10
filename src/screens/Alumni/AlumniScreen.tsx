@@ -6,10 +6,10 @@ import {
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-// Ensure these paths match your project structure
 import { useAuth } from '../../context/AuthContext';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { SERVER_URL } from '../../../apiConfig';
+// Ensure this path is correct for your project
+import { SERVER_URL } from '../../../apiConfig'; 
 import apiClient from '../../api/client'; 
 import { launchImageLibrary, ImagePickerResponse, Asset } from 'react-native-image-picker';
 
@@ -19,10 +19,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { width, height } = Dimensions.get('window');
 
-// --- THEME CONFIGURATION ---
+// --- THEME COLORS ---
 const LightColors = {
     primary: '#008080',
-    background: '#F2F5F8',
+    background: '#F5F7FA',
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
@@ -35,7 +35,7 @@ const LightColors = {
 };
 
 const DarkColors = {
-    primary: '#008080', // Keep primary brand color or lighten slightly
+    primary: '#008080',
     background: '#121212',
     cardBg: '#1E1E1E',
     textMain: '#E0E0E0',
@@ -48,7 +48,7 @@ const DarkColors = {
     modalOverlay: 'rgba(255,255,255,0.1)'
 };
 
-// --- TYPE DEFINITIONS ---
+// --- TYPES ---
 interface AlumniRecord {
   id: number;
   admission_no: string;
@@ -74,12 +74,10 @@ interface AlumniRecord {
 const formatDate = (dateString?: string): string => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  // Simple check for invalid date
   if (isNaN(date.getTime())) return 'N/A';
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-// Convert ISO string or Date to YYYY-MM-DD for form inputs/comparison
 const toYYYYMMDD = (dateStr: string | Date | undefined): string => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -91,7 +89,6 @@ const getCurrentYear = () => new Date().getFullYear();
 
 // --- COMPONENTS ---
 
-// Image Enlarger
 const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () => void }> = ({ visible, uri, onClose }) => {
     if (!uri || !visible) return null;
     return (
@@ -106,14 +103,9 @@ const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () 
     );
 };
 
-// Year Picker
 const YearPickerModal: React.FC<{ 
-    visible: boolean, 
-    years: string[], 
-    selectedValue: string, 
-    onSelect: (year: string) => void, 
-    onClose: () => void,
-    colors: typeof LightColors
+    visible: boolean, years: string[], selectedValue: string, 
+    onSelect: (year: string) => void, onClose: () => void, colors: typeof LightColors
 }> = ({ visible, years, selectedValue, onSelect, onClose, colors }) => {
     const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
     return (
@@ -140,20 +132,18 @@ const YearPickerModal: React.FC<{
 
 // --- MAIN SCREEN ---
 const AlumniScreen: React.FC = () => {
-    // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
 
-    // State
     const [alumniData, setAlumniData] = useState<AlumniRecord[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [modalVisible, setModalVisible] = useState<boolean>(false); 
     const [isEditing, setIsEditing] = useState<boolean>(false);
     
-    // Data Management
+    // Data Handling for Partial Updates
     const initialFormState: Partial<AlumniRecord> = {};
-    const [originalData, setOriginalData] = useState<Partial<AlumniRecord>>(initialFormState); // For comparison
+    const [originalData, setOriginalData] = useState<Partial<AlumniRecord>>(initialFormState); 
     const [formData, setFormData] = useState<Partial<AlumniRecord>>(initialFormState);
     const [currentItemId, setCurrentItemId] = useState<number | null>(null);
 
@@ -162,14 +152,14 @@ const AlumniScreen: React.FC = () => {
     const [pickerTarget, setPickerTarget] = useState<keyof AlumniRecord | null>(null);
     const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
     
-    // Filter State
+    // Search & Filter
     const [searchText, setSearchText] = useState<string>('');
     const [filterYear, setFilterYear] = useState<string>(getCurrentYear().toString()); 
     const [yearPickerVisible, setYearPickerVisible] = useState<boolean>(false);
     const [isSearching, setIsSearching] = useState<boolean>(false);
     const [availableYears, setAvailableYears] = useState<string[]>([]); 
     
-    // Image Enlarge State
+    // Image Enlarging
     const [enlargeModalVisible, setEnlargeModalVisible] = useState<boolean>(false);
     const [enlargeImageUri, setEnlargeImageUri] = useState<string>('');
 
@@ -181,12 +171,12 @@ const AlumniScreen: React.FC = () => {
             const data = response.data;
             setAlumniData(data);
             
-            // Extract years for filter
+            // Extract available years dynamically
             const years = data.map((item: AlumniRecord) => item.school_outgoing_date ? new Date(item.school_outgoing_date).getFullYear().toString() : null).filter((y: any) => y);
             const uniqueYears = Array.from(new Set([...years, (getCurrentYear() - 1).toString(), getCurrentYear().toString(), (getCurrentYear() + 1).toString()]));
             setAvailableYears(uniqueYears);
         } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.message || 'Failed to fetch alumni data.');
+            Alert.alert('Error', error.response?.data?.message || 'Failed to fetch data.');
         } finally {
             if (isSearch) setIsSearching(false); else setLoading(false);
         }
@@ -199,18 +189,15 @@ const AlumniScreen: React.FC = () => {
         if (item) {
             setIsEditing(true); 
             setCurrentItemId(item.id);
-            
-            // Normalize data for editing (handle nulls and date formats)
+            // Normalize dates for form comparison
             const normalizedItem = {
                 ...item,
                 dob: toYYYYMMDD(item.dob),
                 school_joined_date: toYYYYMMDD(item.school_joined_date),
                 school_outgoing_date: toYYYYMMDD(item.school_outgoing_date),
-                tc_issued_date: toYYYYMMDD(item.tc_issued_date),
             };
-            
             setFormData(normalizedItem);
-            setOriginalData(normalizedItem); // Store clean copy for comparison
+            setOriginalData(normalizedItem); 
         } else {
             setIsEditing(false); 
             setCurrentItemId(null);
@@ -226,24 +213,18 @@ const AlumniScreen: React.FC = () => {
         });
     };
 
-    // --- OPTIMIZED SAVE FUNCTION ---
     const handleSave = async () => {
-        if (!formData.admission_no || !formData.alumni_name) {
-            return Alert.alert('Validation Error', 'Admission Number and Name are required.');
-        }
+        if (!formData.admission_no || !formData.alumni_name) return Alert.alert('Required', 'Admission No and Name are required.');
 
         const data = new FormData();
         let hasChanges = false;
 
         if (isEditing && currentItemId) {
-            // Edit Mode: Compare formData with originalData
+            // OPTIMIZATION: Check what changed
             Object.keys(formData).forEach(key => {
                 const k = key as keyof AlumniRecord;
                 const newVal = formData[k];
                 const oldVal = originalData[k];
-
-                // Check if value changed. 
-                // Treat null, undefined, and empty string as roughly equivalent for the check to avoid noise
                 const cleanNew = (newVal === null || newVal === undefined) ? '' : String(newVal);
                 const cleanOld = (oldVal === null || oldVal === undefined) ? '' : String(oldVal);
 
@@ -253,64 +234,47 @@ const AlumniScreen: React.FC = () => {
                 }
             });
 
-            // Always add image if selected
             if (selectedImage?.uri) {
                 data.append('profile_pic', { 
-                    uri: selectedImage.uri, 
-                    type: selectedImage.type || 'image/jpeg', 
-                    name: selectedImage.fileName || 'profile_pic.jpg' 
+                    uri: selectedImage.uri, type: selectedImage.type || 'image/jpeg', name: selectedImage.fileName || 'profile_pic.jpg' 
                 } as any);
                 hasChanges = true;
             }
 
-            if (!hasChanges) {
-                // Optimization: Don't call API if nothing changed
-                setModalVisible(false);
-                return;
-            }
+            if (!hasChanges) { setModalVisible(false); return; } // Exit if no changes
+
+            try {
+                await apiClient.put(`/alumni/${currentItemId}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', 'Updated successfully.');
+                setModalVisible(false); fetchData();
+            } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Update failed.'); }
 
         } else {
-            // New Record: Send everything present
+            // New Record
             Object.keys(formData).forEach(key => {
                 const val = formData[key as keyof AlumniRecord];
-                if (val !== null && val !== undefined && val !== '') {
-                    data.append(key, String(val));
-                }
+                if (val) data.append(key, String(val));
             });
             if (selectedImage?.uri) {
-                data.append('profile_pic', { 
-                    uri: selectedImage.uri, 
-                    type: selectedImage.type || 'image/jpeg', 
-                    name: selectedImage.fileName || 'profile_pic.jpg' 
-                } as any);
+                data.append('profile_pic', { uri: selectedImage.uri, type: 'image/jpeg', name: 'profile.jpg' } as any);
             }
-        }
 
-        try {
-            let response;
-            if (isEditing && currentItemId) {
-                response = await apiClient.put(`/alumni/${currentItemId}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
-            } else {
-                response = await apiClient.post('/alumni', data, { headers: { 'Content-Type': 'multipart/form-data' } });
-            }
-            
-            Alert.alert('Success', response.data.message || 'Record saved successfully.');
-            setModalVisible(false);
-            fetchData();
-        } catch (error: any) { 
-            Alert.alert('Save Error', error.response?.data?.message || 'An error occurred during save.'); 
+            try {
+                await apiClient.post('/alumni', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', 'Created successfully.');
+                setModalVisible(false); fetchData();
+            } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Creation failed.'); }
         }
     };
 
     const handleDelete = (id: number) => {
-        Alert.alert("Confirm Delete", "Are you sure you want to delete this record?", [
+        Alert.alert("Confirm Delete", "Permanently delete this record?", [
             { text: "Cancel", style: "cancel" },
             { text: "Delete", style: "destructive", onPress: async () => {
                 try {
-                    const response = await apiClient.delete(`/alumni/${id}`);
-                    Alert.alert("Success", response.data.message);
+                    await apiClient.delete(`/alumni/${id}`);
                     fetchData();
-                } catch (error: any) { Alert.alert('Delete Error', error.response?.data?.message); }
+                } catch (error: any) { Alert.alert('Error', error.response?.data?.message); }
             }}
         ]);
     };
@@ -318,7 +282,6 @@ const AlumniScreen: React.FC = () => {
     const showDatePicker = (target: keyof AlumniRecord) => {
         const val = formData[target];
         const currentDate = val ? new Date(val as string) : new Date();
-        // Check for invalid date
         setDate(isNaN(currentDate.getTime()) ? new Date() : currentDate);
         setPickerTarget(target);
     };
@@ -330,15 +293,13 @@ const AlumniScreen: React.FC = () => {
         }
     };
 
-    const handleCardPress = (id: number) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpandedCardId(prev => (prev === id ? null : id)); };
-
     if (loading) return <View style={[styles.center, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
             
-            {/* --- HEADER --- */}
+            {/* Header */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
@@ -355,7 +316,7 @@ const AlumniScreen: React.FC = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* --- SEARCH & FILTER --- */}
+            {/* Search */}
             <View style={styles.searchFilterContainer}>
                 <View style={[styles.searchWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                     <MaterialIcons name="search" size={20} color={COLORS.textSub} style={{marginRight: 8}} />
@@ -369,25 +330,22 @@ const AlumniScreen: React.FC = () => {
                     />
                     {isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
                 </View>
-                
                 <TouchableOpacity style={[styles.filterButton, { backgroundColor: COLORS.primary }]} onPress={() => setYearPickerVisible(true)}>
                     <Text style={styles.filterButtonText}>{filterYear}</Text>
                     <MaterialIcons name="arrow-drop-down" size={20} color="#fff" />
                 </TouchableOpacity>
             </View>
             
-            {/* --- LIST --- */}
+            {/* List */}
             <FlatList
                 data={alumniData}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                     <AlumniCardItem 
-                        item={item} 
-                        colors={COLORS}
-                        onEdit={handleOpenModal} 
-                        onDelete={handleDelete}
+                        item={item} colors={COLORS}
+                        onEdit={handleOpenModal} onDelete={handleDelete}
                         isExpanded={expandedCardId === item.id}
-                        onPress={() => handleCardPress(item.id)}
+                        onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpandedCardId(prev => (prev === item.id ? null : item.id)); }}
                         onDpPress={(url) => { setEnlargeImageUri(`${SERVER_URL}${url}`); setEnlargeModalVisible(true); }} 
                     />
                 )}
@@ -400,7 +358,7 @@ const AlumniScreen: React.FC = () => {
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 100 }}
             />
 
-            {/* --- ADD/EDIT MODAL --- */}
+            {/* Modal */}
             <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
                 <SafeAreaView style={{flex: 1, backgroundColor: COLORS.background}}>
                     <ScrollView style={styles.modalContainer} contentContainerStyle={{paddingBottom: 50}}>
@@ -425,18 +383,18 @@ const AlumniScreen: React.FC = () => {
                             </TouchableOpacity>
                         </View>
                         
-                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} />
-                        <InputField label="Alumni Name*" value={formData.alumni_name} onChange={(t) => setFormData(p => ({...p, alumni_name: t}))} colors={COLORS} />
+                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} />
+                        <InputField label="Alumni Name*" value={formData.alumni_name} onChange={(t: string) => setFormData(p => ({...p, alumni_name: t}))} colors={COLORS} />
                         
                         <View style={styles.formRow}>
-                            <Text style={[styles.label, { color: COLORS.textSub }]}>DOB</Text>
+                            <Text style={[styles.label, { color: COLORS.textSub }]}>Date of Birth</Text>
                             <TouchableOpacity onPress={() => showDatePicker('dob')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                                 <Text style={{ color: COLORS.textMain }}>{formData.dob ? formatDate(formData.dob) : 'Select Date'}</Text>
                             </TouchableOpacity>
                         </View>
                         
-                        <InputField label="Phone No" value={formData.phone_no} onChange={(t) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} />
-                        <InputField label="Present Status" value={formData.present_status} onChange={(t) => setFormData(p => ({...p, present_status: t}))} placeholder="e.g., Engineer" colors={COLORS} />
+                        <InputField label="Phone No" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} />
+                        <InputField label="Present Status" value={formData.present_status} onChange={(t: string) => setFormData(p => ({...p, present_status: t}))} placeholder="e.g., Engineer" colors={COLORS} />
                         
                         <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>School Details</Text>
                         
@@ -453,7 +411,7 @@ const AlumniScreen: React.FC = () => {
                             </TouchableOpacity>
                         </View>
                         
-                        <InputField label="Address" value={formData.address} onChange={(t) => setFormData(p => ({...p, address: t}))} colors={COLORS} multiline />
+                        <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} colors={COLORS} multiline />
 
                         {pickerTarget && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
                         
@@ -462,47 +420,32 @@ const AlumniScreen: React.FC = () => {
                                 <Text style={{color: COLORS.textMain}}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary }]} onPress={handleSave}>
-                                <Text style={styles.modalButtonText}>Save Record</Text>
+                                <Text style={styles.modalButtonText}>Save</Text>
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
 
-            <YearPickerModal 
-                visible={yearPickerVisible} 
-                years={availableYears} 
-                selectedValue={filterYear} 
-                onSelect={handleYearSelect} 
-                onClose={() => setYearPickerVisible(false)} 
-                colors={COLORS}
-            />
+            <YearPickerModal visible={yearPickerVisible} years={availableYears} selectedValue={filterYear} onSelect={(y) => setFilterYear(y)} onClose={() => setYearPickerVisible(false)} colors={COLORS} />
             <ImageEnlargerModal visible={enlargeModalVisible} uri={enlargeImageUri} onClose={() => setEnlargeModalVisible(false)} />
 
         </SafeAreaView>
     );
-
-    function handleYearSelect(year: string) { setFilterYear(year); }
 };
-
-// --- SUB-COMPONENTS ---
 
 const InputField = ({ label, value, onChange, placeholder = "", kType = "default", colors, multiline = false }: any) => (
     <View style={styles.formRow}>
         <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
         <TextInput 
             style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textMain }, multiline && { height: 80, textAlignVertical: 'top' }]} 
-            value={value || ''} 
-            onChangeText={onChange} 
-            keyboardType={kType} 
-            placeholder={placeholder}
-            placeholderTextColor={colors.textSub}
-            multiline={multiline}
+            value={value || ''} onChangeText={onChange} keyboardType={kType} placeholder={placeholder} placeholderTextColor={colors.textSub} multiline={multiline}
         />
     </View>
 );
 
 const AlumniCardItem: React.FC<{ item: AlumniRecord, colors: any, onEdit: any, onDelete: any, isExpanded: boolean, onPress: any, onDpPress: any }> = ({ item, colors, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
+    // Ensures the URL handles the server context
     const imageUri = item.profile_pic_url ? `${SERVER_URL}${item.profile_pic_url}` : undefined;
     
     return (
@@ -551,29 +494,18 @@ const InfoRow = ({ icon, label, value, isMultiLine = false, colors }: any) => (
 const styles = StyleSheet.create({ 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
     container: { flex: 1 }, 
-    
-    // Header
-    headerCard: {
-        paddingHorizontal: 15, paddingVertical: 12, width: '94%', alignSelf: 'center',
-        marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row',
-        alignItems: 'center', justifyContent: 'space-between', elevation: 3,
-        shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4
-    },
+    headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '94%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 12 },
     headerBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-    // Search
     searchFilterContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingBottom: 15 },
     searchWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, height: 45, borderWidth: 1 },
     searchInput: { flex: 1, fontSize: 16 },
     filterButton: { marginLeft: 10, paddingHorizontal: 12, height: 45, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
     filterButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, marginRight: 4 },
-
-    // Card
     card: { borderRadius: 12, marginVertical: 6, elevation: 2, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 }, 
     cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 15, borderBottomWidth: 1 }, 
     avatarWrapper: { marginRight: 12 },
@@ -593,11 +525,8 @@ const styles = StyleSheet.create({
     infoIcon: { width: 22, textAlign: 'center', marginRight: 8 }, 
     infoLabel: { fontSize: 13, fontWeight: '600', marginRight: 5 }, 
     infoValue: { fontSize: 13, flex: 1 }, 
-    
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50, opacity: 0.7 }, 
     emptyText: { fontSize: 16, fontWeight: '600', marginTop: 10 }, 
-    
-    // Modal
     modalContainer: { padding: 20 }, 
     modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 22, fontWeight: 'bold' }, 
