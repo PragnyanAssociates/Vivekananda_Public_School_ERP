@@ -33,8 +33,8 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
 const ROOT_STORAGE_PATH = '/data/uploads'; 
-const PRE_ADMISSIONS_SUBPATH = 'preadmissions'; // Subfolder for organization
-const PRE_ADMISSIONS_ABSOLUTE_PATH = require('path').join(ROOT_STORAGE_PATH, PRE_ADMISSIONS_SUBPATH);
+const PRE_ADMISSIONS_SUBPATH = 'preadmissions';  // Subfolder for organization
+const PRE_ADMISSIONS_DIR = path.join('/data/uploads', PRE_ADMISSIONS_SUBPATH);
 
 // Create directories if they don't exist (Critical for Railway Persistent Volumes)
 if (!fs.existsSync(ROOT_STORAGE_PATH)) {
@@ -6453,18 +6453,20 @@ app.delete('/api/alumni/:id', async (req, res) => {
 // Multer storage config for pre-admission photos
 const preAdmissionsStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        if (!fs.existsSync(PRE_ADMISSIONS_ABSOLUTE_PATH)) {
-            fs.mkdirSync(PRE_ADMISSIONS_ABSOLUTE_PATH, { recursive: true });
+        if (!fs.existsSync(PRE_ADMISSIONS_DIR)) {
+            fs.mkdirSync(PRE_ADMISSIONS_DIR, { recursive: true });
         }
-        cb(null, PRE_ADMISSIONS_ABSOLUTE_PATH);
+        cb(null, PRE_ADMISSIONS_DIR);
     },
     filename: (req, file, cb) => {
-        cb(null, generateUniqueFilename(file.originalname, 'preadmission-photo'));
+        // Generate unique filename
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, `preadmission-${uniqueSuffix}${path.extname(file.originalname)}`);
     }
 });
 const preAdmissionsUpload = multer({ storage: preAdmissionsStorage });
 
-// GET all pre-admission records (NOW WITH SEARCH AND YEAR FILTER)
+// GET all records
 app.get('/api/preadmissions', async (req, res) => {
     try {
         const { search, year } = req.query; 
@@ -6473,13 +6475,11 @@ app.get('/api/preadmissions', async (req, res) => {
         const queryParams = [];
 
         if (year && !isNaN(parseInt(year))) {
-             // Filter by the year of the submission date
             whereClauses.push("YEAR(submission_date) = ?");
             queryParams.push(parseInt(year));
         }
 
         if (search) {
-            // Search by name, admission number, or previous institute
             whereClauses.push("(student_name LIKE ? OR admission_no LIKE ? OR previous_institute LIKE ?)");
             const searchTerm = `%${search}%`;
             queryParams.push(searchTerm, searchTerm, searchTerm);
@@ -6491,7 +6491,7 @@ app.get('/api/preadmissions', async (req, res) => {
             SELECT * FROM pre_admissions 
             ${whereClause}
             ORDER BY submission_date DESC
-            LIMIT 5000;
+            LIMIT 1000;
         `;
         
         const [records] = await db.query(query, queryParams);
@@ -6502,14 +6502,14 @@ app.get('/api/preadmissions', async (req, res) => {
     }
 });
 
-// POST a new pre-admission record
+// POST new record
 app.post('/api/preadmissions', preAdmissionsUpload.single('photo'), async (req, res) => {
     const fields = req.body;
-    // The public URL must reflect the subfolder used for storage
+    // URL format: /uploads/preadmissions/filename
     const photo_url = req.file ? `/uploads/${PRE_ADMISSIONS_SUBPATH}/${req.file.filename}` : null; 
 
     if (!fields.admission_no || !fields.student_name || !fields.joining_grade) {
-        return res.status(400).json({ message: "Admission No, Student Name, and Joining Grade are required." });
+        return res.status(400).json({ message: "Admission No, Name, and Grade are required." });
     }
 
     const query = `
@@ -6519,11 +6519,15 @@ app.post('/api/preadmissions', preAdmissionsUpload.single('photo'), async (req, 
             joining_grade, address, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
+    
+    // Helper to handle empty strings
+    const v = (val) => (val === '' || val === 'null' || val === undefined ? null : val);
+
     const params = [
-        fields.admission_no, fields.student_name, photo_url, fields.dob || null, fields.pen_no || null, 
-        fields.phone_no || null, fields.aadhar_no || null, fields.parent_name || null, 
-        fields.parent_phone || null, fields.previous_institute || null, fields.previous_grade || null,
-        fields.joining_grade, fields.address || null, fields.status || 'Pending'
+        fields.admission_no, fields.student_name, photo_url, v(fields.dob), v(fields.pen_no), 
+        v(fields.phone_no), v(fields.aadhar_no), v(fields.parent_name), 
+        v(fields.parent_phone), v(fields.previous_institute), v(fields.previous_grade),
+        fields.joining_grade, v(fields.address), fields.status || 'Pending'
     ];
 
     try {
@@ -6532,13 +6536,13 @@ app.post('/api/preadmissions', preAdmissionsUpload.single('photo'), async (req, 
     } catch (error) {
         console.error("POST /api/preadmissions Error:", error);
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: `A record with Admission No '${fields.admission_no}' already exists.` });
+            return res.status(409).json({ message: `Admission No '${fields.admission_no}' already exists.` });
         }
-        res.status(500).json({ message: "Failed to create pre-admission record." });
+        res.status(500).json({ message: "Failed to create record." });
     }
 });
 
-// PUT (update) an existing pre-admission record
+// PUT update record (Partial Update Logic)
 app.put('/api/preadmissions/:id', preAdmissionsUpload.single('photo'), async (req, res) => {
     const { id } = req.params;
     const fields = req.body;
@@ -6555,11 +6559,13 @@ app.put('/api/preadmissions/:id', preAdmissionsUpload.single('photo'), async (re
     updatableFields.forEach(field => {
         if (fields[field] !== undefined) {
             setClauses.push(`${field} = ?`);
-            params.push(fields[field] || null);
+            const val = fields[field] === '' || fields[field] === 'null' ? null : fields[field];
+            params.push(val);
         }
     });
 
     if (req.file) {
+        // Logic to delete old file can be added here if needed
         setClauses.push('photo_url = ?');
         params.push(`/uploads/${PRE_ADMISSIONS_SUBPATH}/${req.file.filename}`);
     }
@@ -6574,41 +6580,31 @@ app.put('/api/preadmissions/:id', preAdmissionsUpload.single('photo'), async (re
     try {
         const [result] = await db.query(query, params);
         if (result.affectedRows === 0) return res.status(404).json({ message: "Record not found." });
-        res.status(200).json({ message: "Pre-admission record updated successfully." });
+        res.status(200).json({ message: "Updated successfully." });
     } catch (error) {
         console.error(`PUT /api/preadmissions/${id} Error:`, error);
         res.status(500).json({ message: "Failed to update record." });
     }
 });
 
-// DELETE a pre-admission record
+// DELETE record
 app.delete('/api/preadmissions/:id', async (req, res) => {
     const { id } = req.params;
-    
     try {
-        // First, get the record to find the image path
         const [[record]] = await db.query("SELECT photo_url FROM pre_admissions WHERE id = ?", [id]);
         
-        // Delete the record from the database
         const [result] = await db.query("DELETE FROM pre_admissions WHERE id = ?", [id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Record not found." });
-        }
+        if (result.affectedRows === 0) return res.status(404).json({ message: "Record not found." });
 
-        // If an image path exists, delete the file from the server
         if (record && record.photo_url) {
-            // Fix: Reconstruct absolute path using defined constants
-            const relativeFilename = record.photo_url.replace('/uploads/', ''); 
-            const filePath = require('path').join(ROOT_STORAGE_PATH, relativeFilename);
+            const filename = path.basename(record.photo_url);
+            const filePath = path.join(PRE_ADMISSIONS_DIR, filename);
 
-            if (require('fs').existsSync(filePath)) {
-                require('fs').unlink(filePath, (err) => {
-                    if (err) console.error("Failed to delete pre-admission photo:", err);
-                });
+            if (fs.existsSync(filePath)) {
+                fs.unlink(filePath, (err) => { if(err) console.error(err); });
             }
         }
-        
-        res.status(200).json({ message: "Pre-admission record deleted successfully." });
+        res.status(200).json({ message: "Deleted successfully." });
     } catch (error) {
         console.error(`DELETE /api/preadmissions/${id} Error:`, error);
         res.status(500).json({ message: "Failed to delete record." });

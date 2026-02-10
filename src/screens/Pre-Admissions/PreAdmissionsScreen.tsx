@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, 
-    Modal, ScrollView, TextInput, Platform, Image, LayoutAnimation, UIManager, Dimensions, SafeAreaView 
+    Modal, ScrollView, TextInput, Platform, Image, LayoutAnimation, UIManager, 
+    Dimensions, SafeAreaView, useColorScheme, StatusBar 
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -17,21 +18,42 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { width, height } = Dimensions.get('window');
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', 
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F5F7FA',
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
     border: '#CFD8DC',
+    inputBg: '#FFFFFF',
     success: '#43A047',
     danger: '#E53935',
     orange: '#FFA000',
-    blue: '#1E88E5'
+    blue: '#1E88E5',
+    pendingBg: '#FFF3E0', pendingText: '#FF9800',
+    approvedBg: '#E8F5E9', approvedText: '#4CAF50',
+    rejectedBg: '#FFEBEE', rejectedText: '#F44336',
 };
 
-// --- TYPE DEFINITIONS ---
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    success: '#66BB6A',
+    danger: '#EF5350',
+    orange: '#FFA726',
+    blue: '#42A5F5',
+    pendingBg: 'rgba(255, 152, 0, 0.15)', pendingText: '#FFB74D',
+    approvedBg: 'rgba(76, 175, 80, 0.15)', approvedText: '#81C784',
+    rejectedBg: 'rgba(244, 67, 54, 0.15)', rejectedText: '#E57373',
+};
+
+// --- TYPES ---
 type Status = 'Pending' | 'Approved' | 'Rejected';
 interface PreAdmissionRecord { 
     id: number; 
@@ -53,43 +75,35 @@ interface PreAdmissionRecord {
 }
 
 // --- HELPER FUNCTIONS ---
-const formatDate = (dateString?: string, includeTime = false): string => { 
+// Fixed date formatting to DD/MM/YYYY
+const formatDate = (dateString?: string): string => { 
     if (!dateString) return 'N/A'; 
     const date = new Date(dateString); 
-    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-    const localDate = new Date(date.getTime() + userTimezoneOffset);
-    const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' }; 
-    if (includeTime) { 
-        options.hour = '2-digit'; 
-        options.minute = '2-digit'; 
-    } 
-    return localDate.toLocaleDateString('en-GB', options); 
+    if (isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); 
 };
+
+// Convert for Input Field (YYYY-MM-DD)
 const toYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
 const getCurrentYear = () => new Date().getFullYear();
 
-// --- UX COMPONENTS ---
-const StatusPill = ({ status }: { status: Status }) => { 
-    const statusStyle = { 
-        Pending: { backgroundColor: '#FFF3E0', color: '#FF9800' }, 
-        Approved: { backgroundColor: '#E8F5E9', color: '#4CAF50' }, 
-        Rejected: { backgroundColor: '#FFEBEE', color: '#F44336' }, 
-    }; 
+// --- COMPONENTS ---
+
+// Status Pill
+const StatusPill = ({ status, colors }: { status: Status, colors: typeof LightColors }) => { 
+    let bg, text;
+    if (status === 'Approved') { bg = colors.approvedBg; text = colors.approvedText; }
+    else if (status === 'Rejected') { bg = colors.rejectedBg; text = colors.rejectedText; }
+    else { bg = colors.pendingBg; text = colors.pendingText; }
+
     return (
-        <View style={[styles.statusPill, { backgroundColor: statusStyle[status].backgroundColor }]}>
-            <Text style={[styles.statusPillText, { color: statusStyle[status].color }]}>{status}</Text>
+        <View style={[styles.statusPill, { backgroundColor: bg }]}>
+            <Text style={[styles.statusPillText, { color: text }]}>{status}</Text>
         </View>
     ); 
 };
 
-const InfoRow = ({ icon, label, value, isMultiLine = false }) => (
-    <View style={[styles.infoRow, isMultiLine && { alignItems: 'flex-start' }]}>
-        <FontAwesome name={icon} size={14} color={COLORS.textSub} style={[styles.infoIcon, isMultiLine && { marginTop: 3 }]} />
-        <Text style={styles.infoLabel}>{label}:</Text>
-        <Text style={styles.infoValue} numberOfLines={isMultiLine ? undefined : 1}>{value}</Text>
-    </View>
-);
-
+// Image Modal
 const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () => void }> = ({ visible, uri, onClose }) => {
     if (!uri || !visible) return null;
     return (
@@ -104,23 +118,24 @@ const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () 
     );
 };
 
-const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedValue: string, onSelect: (year: string) => void, onClose: () => void }> = ({ visible, years, selectedValue, onSelect, onClose }) => {
+// Year Picker
+const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedValue: string, onSelect: (year: string) => void, onClose: () => void, colors: any }> = ({ visible, years, selectedValue, onSelect, onClose, colors }) => {
     const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <TouchableOpacity style={pickerStyles.overlay} activeOpacity={1} onPress={onClose}>
-                <View style={pickerStyles.pickerContainer}>
-                    <Text style={pickerStyles.pickerTitle}>Select Application Year</Text>
+                <View style={[pickerStyles.pickerContainer, { backgroundColor: colors.cardBg }]}>
+                    <Text style={[pickerStyles.pickerTitle, { color: colors.textMain, borderColor: colors.border }]}>Select Application Year</Text>
                     <ScrollView style={pickerStyles.scrollArea}>
                         {sortedYears.map((year) => (
-                            <TouchableOpacity key={year} style={pickerStyles.option} onPress={() => { onSelect(year); onClose(); }}>
-                                <Text style={[pickerStyles.optionText, year === selectedValue && pickerStyles.selectedOptionText]}>{year}</Text>
-                                {year === selectedValue && <MaterialIcons name="check" size={20} color={COLORS.primary} />}
+                            <TouchableOpacity key={year} style={[pickerStyles.option, { borderColor: colors.background }]} onPress={() => { onSelect(year); onClose(); }}>
+                                <Text style={[pickerStyles.optionText, { color: colors.textMain }, year === selectedValue && { color: colors.primary, fontWeight: 'bold' }]}>{year}</Text>
+                                {year === selectedValue && <MaterialIcons name="check" size={20} color={colors.primary} />}
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
-                    <TouchableOpacity style={pickerStyles.closeButton} onPress={onClose}>
-                        <Text style={pickerStyles.closeButtonText}>Close</Text>
+                    <TouchableOpacity style={[pickerStyles.closeButton, { backgroundColor: colors.background }]} onPress={onClose}>
+                        <Text style={[pickerStyles.closeButtonText, { color: colors.textMain }]}>Close</Text>
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
@@ -128,71 +143,40 @@ const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedVal
     );
 }
 
-// --- CARD ITEM ---
-const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, onEdit: (item: PreAdmissionRecord) => void, onDelete: (id: number) => void, isExpanded: boolean, onPress: () => void, onDpPress: (url: string) => void }> = ({ item, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
-    const imageUri = item.photo_url ? `${SERVER_URL}${item.photo_url}` : undefined;
-    return (
-        <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-            <View style={styles.cardHeader}>
-                 <TouchableOpacity onPress={(e) => { e.stopPropagation(); if (imageUri) onDpPress(item.photo_url!); }} disabled={!imageUri} style={styles.avatarWrapper}>
-                    {imageUri ? <Image source={{ uri: imageUri }} style={styles.avatarImage} /> : <View style={[styles.avatarImage, styles.avatarFallback]}><FontAwesome name="user" size={30} color="#90A4AE" /></View>}
-                </TouchableOpacity>
-
-                <View style={styles.cardHeaderText}>
-                    <Text style={styles.cardTitle}>{item.student_name}</Text>
-                    <Text style={styles.cardSubtitle}>Joining: {item.joining_grade}</Text>
-                </View>
-                <View style={styles.cardActions}>
-                    <StatusPill status={item.status} />
-                    <View style={styles.buttonGroup}>
-                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onEdit(item); }} style={styles.iconButton}><MaterialIcons name="edit" size={20} color={COLORS.orange} /></TouchableOpacity>
-                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onDelete(item.id); }} style={styles.iconButton}><MaterialIcons name="delete" size={20} color={COLORS.danger} /></TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-
-            {isExpanded && (
-                <View style={styles.expandedContainer}>
-                    <InfoRow icon="id-card" label="Admission No" value={item.admission_no} />
-                    <InfoRow icon="calendar" label="Submitted" value={formatDate(item.submission_date, true)} />
-                    <InfoRow icon="birthday-cake" label="D.O.B" value={formatDate(item.dob)} />
-                    <InfoRow icon="phone" label="Phone" value={item.phone_no || 'N/A'} />
-                    <InfoRow icon="user" label="Parent" value={item.parent_name || 'N/A'} />
-                    <InfoRow icon="mobile" label="Parent Phone" value={item.parent_phone || 'N/A'} />
-                    <InfoRow icon="university" label="Prev. Institute" value={item.previous_institute || 'N/A'} />
-                    <InfoRow icon="graduation-cap" label="Prev. Grade" value={item.previous_grade || 'N/A'} />
-                    <InfoRow icon="map-marker" label="Address" value={item.address || 'N/A'} isMultiLine />
-                </View>
-            )}
-        </TouchableOpacity>
-    );
-};
-
-// --- MAIN SCREEN COMPONENT ---
+// --- MAIN SCREEN ---
 const PreAdmissionsScreen: React.FC = () => {
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [data, setData] = useState<PreAdmissionRecord[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [isEditing, setIsEditing] = useState<boolean>(false);
-    const [currentItem, setCurrentItem] = useState<PreAdmissionRecord | null>(null);
-    const [formData, setFormData] = useState<Partial<PreAdmissionRecord>>({});
+    
+    // Form Management (Partial Update Logic)
+    const initialFormState: Partial<PreAdmissionRecord> = {};
+    const [originalData, setOriginalData] = useState<Partial<PreAdmissionRecord>>(initialFormState);
+    const [formData, setFormData] = useState<Partial<PreAdmissionRecord>>(initialFormState);
+    const [currentItemId, setCurrentItemId] = useState<number | null>(null);
+
     const [selectedImage, setSelectedImage] = useState<Asset | null>(null);
     const [date, setDate] = useState(new Date());
     const [pickerTarget, setPickerTarget] = useState<'dob' | null>(null);
     const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
 
-    // --- Search/Filter State ---
+    // Search/Filter
     const [searchText, setSearchText] = useState<string>('');
     const [filterYear, setFilterYear] = useState<string>(getCurrentYear().toString()); 
     const [yearPickerVisible, setYearPickerVisible] = useState<boolean>(false);
     const [isSearching, setIsSearching] = useState<boolean>(false);
     const [availableYears, setAvailableYears] = useState<string[]>([]); 
     
-    // --- Image Enlarge State ---
+    // Image Enlarge
     const [enlargeModalVisible, setEnlargeModalVisible] = useState<boolean>(false);
     const [enlargeImageUri, setEnlargeImageUri] = useState<string>('');
     
-    // --- Data Fetching Logic ---
     const fetchData = useCallback(async (isSearch: boolean = false) => {
         if (isSearch) setIsSearching(true); else setLoading(true);
         try {
@@ -201,11 +185,10 @@ const PreAdmissionsScreen: React.FC = () => {
             const records: PreAdmissionRecord[] = response.data;
             setData(records);
 
-            const years = records.map((item: PreAdmissionRecord) => item.submission_date ? new Date(item.submission_date).getFullYear().toString() : null).filter((year: string | null): year is string => year !== null);
+            const years = records.map((item) => item.submission_date ? new Date(item.submission_date).getFullYear().toString() : null).filter((y): y is string => y !== null);
             const currentYear = getCurrentYear();
             const uniqueYears = Array.from(new Set([...years, (currentYear - 1).toString(), currentYear.toString(), (currentYear + 1).toString()]));
             setAvailableYears(uniqueYears);
-
         } catch (error: any) { 
             Alert.alert('Error', error.response?.data?.message || 'Failed to fetch data.'); 
         } finally { 
@@ -219,55 +202,112 @@ const PreAdmissionsScreen: React.FC = () => {
     
     const handleOpenModal = (item: PreAdmissionRecord | null = null) => { 
         setSelectedImage(null); 
-        if (item) { setIsEditing(true); setCurrentItem(item); setFormData(item); } 
-        else { setIsEditing(false); setCurrentItem(null); setFormData({ status: 'Pending' }); } 
+        if (item) { 
+            setIsEditing(true); 
+            setCurrentItemId(item.id);
+            // Normalize for comparison
+            const normalized = {
+                ...item,
+                dob: item.dob ? toYYYYMMDD(new Date(item.dob)) : undefined
+            };
+            setFormData(normalized); 
+            setOriginalData(normalized);
+        } 
+        else { 
+            setIsEditing(false); 
+            setCurrentItemId(null); 
+            setFormData({ status: 'Pending' }); 
+            setOriginalData({});
+        } 
         setModalVisible(true); 
     };
     
     const handleChoosePhoto = () => { 
         launchImageLibrary({ mediaType: 'photo', quality: 0.5 }, (response: ImagePickerResponse) => { 
-            if (!response.didCancel && !response.errorCode && response.assets && response.assets.length > 0) { setSelectedImage(response.assets[0]); } 
+            if (response.assets && response.assets.length > 0) { setSelectedImage(response.assets[0]); } 
         }); 
     };
     
+    // --- OPTIMIZED SAVE (PARTIAL UPDATES) ---
     const handleSave = async () => {
-        if (!formData.admission_no || !formData.student_name || !formData.joining_grade) { return Alert.alert('Validation Error', 'Admission No, Student Name, and Joining Grade are required.'); }
+        if (!formData.admission_no || !formData.student_name || !formData.joining_grade) { return Alert.alert('Validation Error', 'Admission No, Name, and Grade are required.'); }
+        
         const body = new FormData();
-        Object.keys(formData).forEach(key => { const value = formData[key as keyof PreAdmissionRecord]; if (value !== null && value !== undefined) body.append(key, String(value)); });
-        if (selectedImage?.uri) { body.append('photo', { uri: selectedImage.uri, type: selectedImage.type || 'image/jpeg', name: selectedImage.fileName || 'preadmission_photo.jpg' } as any); }
-        try {
-            let response;
-            if (isEditing && currentItem) response = await apiClient.put(`/preadmissions/${currentItem.id}`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
-            else response = await apiClient.post('/preadmissions', body, { headers: { 'Content-Type': 'multipart/form-data' } });
-            Alert.alert('Success', response.data.message); setModalVisible(false); fetchData();
-        } catch (error: any) { Alert.alert('Save Error', error.response?.data?.message || 'An error occurred during save.'); }
+        let hasChanges = false;
+
+        if (isEditing && currentItemId) {
+            // Check changes
+            Object.keys(formData).forEach(key => {
+                const k = key as keyof PreAdmissionRecord;
+                const newVal = formData[k];
+                const oldVal = originalData[k];
+                const cleanNew = (newVal === null || newVal === undefined) ? '' : String(newVal);
+                const cleanOld = (oldVal === null || oldVal === undefined) ? '' : String(oldVal);
+
+                if (cleanNew !== cleanOld) {
+                    body.append(key, cleanNew);
+                    hasChanges = true;
+                }
+            });
+
+            if (selectedImage?.uri) { 
+                body.append('photo', { uri: selectedImage.uri, type: selectedImage.type || 'image/jpeg', name: 'photo.jpg' } as any);
+                hasChanges = true;
+            }
+
+            if (!hasChanges) { setModalVisible(false); return; }
+
+            try {
+                await apiClient.put(`/preadmissions/${currentItemId}`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', 'Updated successfully'); setModalVisible(false); fetchData();
+            } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Update failed.'); }
+
+        } else {
+            // New Record
+            Object.keys(formData).forEach(key => {
+                const val = formData[key as keyof PreAdmissionRecord];
+                if (val !== null && val !== undefined) body.append(key, String(val));
+            });
+            if (selectedImage?.uri) { 
+                body.append('photo', { uri: selectedImage.uri, type: 'image/jpeg', name: 'photo.jpg' } as any); 
+            }
+
+            try {
+                await apiClient.post('/preadmissions', body, { headers: { 'Content-Type': 'multipart/form-data' } });
+                Alert.alert('Success', 'Created successfully'); setModalVisible(false); fetchData();
+            } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Creation failed.'); }
+        }
     };
 
     const handleDelete = (id: number) => {
-        Alert.alert("Confirm Delete", "Are you sure you want to delete this record?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { const response = await apiClient.delete(`/preadmissions/${id}`); Alert.alert("Success", response.data.message); fetchData(); } catch (error: any) { Alert.alert('Delete Error', error.response?.data?.message || 'Failed to delete record.'); }}}]);
+        Alert.alert("Confirm Delete", "Are you sure?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await apiClient.delete(`/preadmissions/${id}`); Alert.alert("Success", "Deleted"); fetchData(); } catch (error: any) { Alert.alert('Error', error.response?.data?.message); }}}]);
     };
 
-    const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => { setPickerTarget(null); if (event.type === 'set' && selectedDate) { setFormData(prev => ({ ...prev, dob: toYYYYMMDD(selectedDate) })); } };
-    const handleImageEnlarge = (url: string) => { setEnlargeImageUri(`${SERVER_URL}${url}`); setEnlargeModalVisible(true); };
-    const handleYearSelect = (year: string) => { setFilterYear(year); }
+    const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => { 
+        setPickerTarget(null); 
+        if (event.type === 'set' && selectedDate) { 
+            setFormData(prev => ({ ...prev, dob: toYYYYMMDD(selectedDate) })); 
+        } 
+    };
 
-    if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    if (loading) return <View style={[styles.center, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
             
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            {/* --- HEADER --- */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="person-add-alt-1" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
+                        <MaterialIcons name="person-add-alt-1" size={24} color={COLORS.primary} />
                     </View>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Pre-Admissions</Text>
-                        <Text style={styles.headerSubtitle}>Applications</Text>
+                    <View>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Pre-Admissions</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Applications</Text>
                     </View>
                 </View>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => handleOpenModal()}>
+                <TouchableOpacity style={[styles.headerBtn, { backgroundColor: COLORS.primary }]} onPress={() => handleOpenModal()}>
                     <MaterialIcons name="add" size={18} color="#fff" />
                     <Text style={styles.headerBtnText}>Add</Text>
                 </TouchableOpacity>
@@ -275,207 +315,227 @@ const PreAdmissionsScreen: React.FC = () => {
             
             {/* --- SEARCH & FILTER --- */}
             <View style={styles.searchFilterContainer}>
-                <View style={styles.searchWrapper}>
-                    <MaterialIcons name="search" size={20} color={COLORS.textSub} style={styles.searchIcon} />
+                <View style={[styles.searchWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                    <MaterialIcons name="search" size={20} color={COLORS.textSub} style={{marginRight: 8}} />
                     <TextInput
-                        style={styles.searchInput}
+                        style={[styles.searchInput, { color: COLORS.textMain }]}
                         placeholder="Search Name, ID..."
+                        placeholderTextColor={COLORS.textSub}
                         value={searchText}
                         onChangeText={setSearchText}
-                        placeholderTextColor={COLORS.textSub}
-                        autoCapitalize="none"
                         onSubmitEditing={() => fetchData(true)}
                     />
-                    {isSearching && <ActivityIndicator size="small" color={COLORS.primary} style={styles.loadingIndicator} />}
+                    {isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
                 </View>
-                <TouchableOpacity style={styles.filterButton} onPress={() => setYearPickerVisible(true)}>
+                <TouchableOpacity style={[styles.filterButton, { backgroundColor: COLORS.primary }]} onPress={() => setYearPickerVisible(true)}>
                     <Text style={styles.filterButtonText}>{filterYear}</Text>
                     <MaterialIcons name="arrow-drop-down" size={20} color="#fff" />
                 </TouchableOpacity>
             </View>
 
+            {/* --- LIST --- */}
             <FlatList
                 data={data}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                     <PreAdmissionCardItem 
                         item={item} 
+                        colors={COLORS}
                         onEdit={handleOpenModal} 
                         onDelete={handleDelete} 
                         isExpanded={expandedCardId === item.id} 
                         onPress={() => handleCardPress(item.id)} 
-                        onDpPress={handleImageEnlarge}
+                        onDpPress={(url) => { setEnlargeImageUri(`${SERVER_URL}${url}`); setEnlargeModalVisible(true); }}
                     />
                 )}
-                ListEmptyComponent={<View style={styles.emptyContainer}><MaterialIcons name="inbox" size={60} color="#CFD8DC" /><Text style={styles.emptyText}>No applications found.</Text></View>}
+                ListEmptyComponent={<View style={styles.emptyContainer}><MaterialIcons name="inbox" size={60} color={COLORS.border} /><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No applications found.</Text></View>}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 100 }}
             />
             
-            {/* --- Modal Forms --- */}
+            {/* --- MODAL --- */}
             <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
-                <SafeAreaView style={{flex: 1, backgroundColor: '#fff'}}>
+                <SafeAreaView style={{flex: 1, backgroundColor: COLORS.background}}>
                     <ScrollView style={styles.modalContainer} contentContainerStyle={{paddingBottom: 50}}>
                         <View style={styles.modalHeaderRow}>
-                            <Text style={styles.modalTitle}>{isEditing ? 'Edit Application' : 'New Application'}</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialIcons name="close" size={24} color="#333" /></TouchableOpacity>
+                            <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>{isEditing ? 'Edit Application' : 'New Application'}</Text>
+                            <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialIcons name="close" size={24} color={COLORS.textMain} /></TouchableOpacity>
                         </View>
                         
                         <View style={styles.imagePickerContainer}>
                             {selectedImage?.uri || formData.photo_url ? (
-                                <Image source={selectedImage?.uri ? { uri: selectedImage.uri } : { uri: `${SERVER_URL}${formData.photo_url}` }} style={styles.profileImage} />
+                                <Image source={selectedImage?.uri ? { uri: selectedImage.uri } : { uri: `${SERVER_URL}${formData.photo_url}` }} style={[styles.profileImage, { borderColor: COLORS.primary }]} />
                             ) : (
-                                <View style={[styles.profileImage, styles.avatarFallback]}><FontAwesome name="user-circle" size={60} color="#9E9E9E" /></View>
+                                <View style={[styles.profileImage, styles.avatarFallback, { borderColor: COLORS.primary }]}><FontAwesome name="user-circle" size={60} color="#9E9E9E" /></View>
                             )}
-                            <TouchableOpacity style={styles.imagePickerButton} onPress={handleChoosePhoto}><MaterialIcons name="camera-alt" size={16} color="#fff" /><Text style={styles.imagePickerButtonText}>Photo</Text></TouchableOpacity>
+                            <TouchableOpacity style={[styles.imagePickerButton, { backgroundColor: COLORS.primary }]} onPress={handleChoosePhoto}><MaterialIcons name="camera-alt" size={16} color="#fff" /><Text style={styles.imagePickerButtonText}>Photo</Text></TouchableOpacity>
                         </View>
                         
-                        <Text style={styles.label}>Admission No*</Text><TextInput style={styles.input} value={formData.admission_no || ''} onChangeText={t => setFormData(p => ({...p, admission_no: t}))} />
-                        <Text style={styles.label}>Student Name*</Text><TextInput style={styles.input} value={formData.student_name || ''} onChangeText={t => setFormData(p => ({...p, student_name: t}))} />
-                        <Text style={styles.label}>Date of Birth</Text><TouchableOpacity onPress={() => setPickerTarget('dob')} style={styles.input}><Text style={styles.dateText}>{formData.dob ? formatDate(formData.dob) : 'Select Date'}</Text></TouchableOpacity>
-                        <Text style={styles.label}>Joining Grade*</Text><TextInput style={styles.input} value={formData.joining_grade || ''} onChangeText={t => setFormData(p => ({...p, joining_grade: t}))} />
+                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} />
+                        <InputField label="Student Name*" value={formData.student_name} onChange={(t: string) => setFormData(p => ({...p, student_name: t}))} colors={COLORS} />
                         
-                        <Text style={styles.sectionHeader}>Status</Text>
-                        <View style={styles.statusSelector}>{(['Pending', 'Approved', 'Rejected'] as Status[]).map(status => (<TouchableOpacity key={status} onPress={() => setFormData(p => ({...p, status}))} style={[styles.statusButton, formData.status === status && styles.selectedStatusButton]}><Text style={[styles.statusButtonText, formData.status === status && styles.selectedStatusButtonText]}>{status}</Text></TouchableOpacity>))}</View>
+                        <View style={styles.formRow}>
+                            <Text style={[styles.label, { color: COLORS.textSub }]}>Date of Birth</Text>
+                            <TouchableOpacity onPress={() => setPickerTarget('dob')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                                <Text style={{ color: COLORS.textMain }}>{formData.dob ? formatDate(formData.dob) : 'Select Date'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} />
+                        
+                        <InputField label="Phone No" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} />
+                        <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} />
+
+                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Status</Text>
+                        <View style={styles.statusSelector}>
+                            {(['Pending', 'Approved', 'Rejected'] as Status[]).map(status => (
+                                <TouchableOpacity key={status} onPress={() => setFormData(p => ({...p, status}))} style={[styles.statusButton, { borderColor: COLORS.border }, formData.status === status && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
+                                    <Text style={[styles.statusButtonText, { color: COLORS.textMain }, formData.status === status && { color: '#FFFFFF' }]}>{status}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                         
                         {pickerTarget && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
                         
                         <View style={styles.modalActions}>
-                            <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setModalVisible(false)}><Text style={{color: '#333'}}>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSave}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity>
+                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.border }]} onPress={() => setModalVisible(false)}><Text style={{color: COLORS.textMain}}>Cancel</Text></TouchableOpacity>
+                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary }]} onPress={handleSave}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity>
                         </View>
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
 
-            <YearPickerModal visible={yearPickerVisible} years={availableYears} selectedValue={filterYear} onSelect={handleYearSelect} onClose={() => setYearPickerVisible(false)} />
+            <YearPickerModal visible={yearPickerVisible} years={availableYears} selectedValue={filterYear} onSelect={(y) => setFilterYear(y)} onClose={() => setYearPickerVisible(false)} colors={COLORS} />
             <ImageEnlargerModal visible={enlargeModalVisible} uri={enlargeImageUri} onClose={() => setEnlargeModalVisible(false)} />
         </SafeAreaView>
     );
 };
 
+// --- SUB COMPONENTS ---
+
+const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false }: any) => (
+    <View style={styles.formRow}>
+        <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
+        <TextInput 
+            style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textMain }, multiline && { height: 80, textAlignVertical: 'top' }]} 
+            value={value || ''} onChangeText={onChange} keyboardType={kType} multiline={multiline}
+        />
+    </View>
+);
+
+const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, onEdit: any, onDelete: any, isExpanded: boolean, onPress: any, onDpPress: any }> = ({ item, colors, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
+    const imageUri = item.photo_url ? `${SERVER_URL}${item.photo_url}` : undefined;
+    return (
+        <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg }]} onPress={onPress} activeOpacity={0.9}>
+            <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+                 <TouchableOpacity onPress={(e) => { e.stopPropagation(); if (imageUri) onDpPress(item.photo_url!); }} disabled={!imageUri} style={styles.avatarWrapper}>
+                    {imageUri ? <Image source={{ uri: imageUri }} style={[styles.avatarImage, { borderColor: colors.border }]} /> : <View style={[styles.avatarImage, styles.avatarFallback]}><FontAwesome name="user" size={30} color="#fff" /></View>}
+                </TouchableOpacity>
+
+                <View style={styles.cardHeaderText}>
+                    <Text style={[styles.cardTitle, { color: colors.textMain }]}>{item.student_name}</Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textSub }]}>Joining: {item.joining_grade}</Text>
+                </View>
+                <View style={styles.cardActions}>
+                    <StatusPill status={item.status} colors={colors} />
+                    <View style={styles.buttonGroup}>
+                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onEdit(item); }} style={styles.iconButton}><MaterialIcons name="edit" size={20} color={colors.orange} /></TouchableOpacity>
+                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onDelete(item.id); }} style={styles.iconButton}><MaterialIcons name="delete" size={20} color={colors.danger} /></TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+
+            {isExpanded && (
+                <View style={[styles.expandedContainer, { borderTopColor: colors.border }]}>
+                    <InfoRow icon="id-card" label="Admission No" value={item.admission_no} colors={colors} />
+                    <InfoRow icon="calendar" label="Submitted" value={formatDate(item.submission_date)} colors={colors} />
+                    <InfoRow icon="birthday-cake" label="D.O.B" value={formatDate(item.dob)} colors={colors} />
+                    <InfoRow icon="phone" label="Phone" value={item.phone_no} colors={colors} />
+                    <InfoRow icon="user" label="Parent" value={item.parent_name} colors={colors} />
+                    <InfoRow icon="graduation-cap" label="Prev. Grade" value={item.previous_grade} colors={colors} />
+                    <InfoRow icon="map-marker" label="Address" value={item.address} isMultiLine colors={colors} />
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+};
+
+const InfoRow = ({ icon, label, value, isMultiLine = false, colors }: any) => (
+    <View style={[styles.infoRow, isMultiLine && { alignItems: 'flex-start' }]}>
+        <FontAwesome name={icon} size={14} color={colors.textSub} style={[styles.infoIcon, isMultiLine && { marginTop: 3 }]} />
+        <Text style={[styles.infoLabel, { color: colors.textMain }]}>{label}:</Text>
+        <Text style={[styles.infoValue, { color: colors.textSub }]} numberOfLines={isMultiLine ? undefined : 1}>{value || 'N/A'}</Text>
+    </View>
+);
+
 const styles = StyleSheet.create({ 
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }, 
-    container: { flex: 1, backgroundColor: COLORS.background }, 
-
-    // --- HEADER CARD STYLES ---
-    headerCard: {
-        backgroundColor: COLORS.cardBg,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
-    },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
-    headerBtn: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginLeft: 10,
-    },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
+    container: { flex: 1 }, 
+    headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 12 },
+    headerBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-    // --- SEARCH & FILTER ---
     searchFilterContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingBottom: 15 },
-    searchWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 10, height: 45, borderWidth: 1, borderColor: COLORS.border },
-    searchIcon: { marginRight: 8 },
-    searchInput: { flex: 1, fontSize: 16, color: COLORS.textMain },
-    loadingIndicator: { marginLeft: 5 },
-    filterButton: { marginLeft: 10, backgroundColor: COLORS.primary, paddingHorizontal: 12, height: 45, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
+    searchWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, height: 45, borderWidth: 1 },
+    searchInput: { flex: 1, fontSize: 16 },
+    filterButton: { marginLeft: 10, paddingHorizontal: 12, height: 45, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
     filterButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, marginRight: 4 },
-    
-    // --- CARD STYLES ---
-    card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginVertical: 6, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' }, 
-    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }, 
+    card: { borderRadius: 12, marginVertical: 6, elevation: 2, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 }, 
+    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 15, borderBottomWidth: 1 }, 
     avatarWrapper: { marginRight: 12 },
-    avatarImage: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#f0f0f0', borderWidth: 1, borderColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center' },
-    avatarFallback: { backgroundColor: '#B0BEC5' },
+    avatarImage: { width: 50, height: 50, borderRadius: 25, borderWidth: 1, backgroundColor: '#f0f0f0' },
+    avatarFallback: { backgroundColor: '#B0BEC5', justifyContent: 'center', alignItems: 'center' },
     cardHeaderText: { flex: 1, justifyContent: 'center', marginTop: 2 }, 
-    cardTitle: { fontSize: 17, fontWeight: 'bold', color: COLORS.textMain }, 
-    cardSubtitle: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
+    cardTitle: { fontSize: 16, fontWeight: 'bold' }, 
+    cardSubtitle: { fontSize: 13, marginTop: 2 },
     cardActions: { alignItems: 'flex-end' }, 
     buttonGroup: { flexDirection: 'row', marginTop: 5 }, 
     iconButton: { marginLeft: 12, padding: 4 }, 
     statusPill: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignItems: 'center', marginBottom: 5 }, 
-    statusPillText: { fontSize: 11, fontWeight: 'bold' }, 
-    expandedContainer: { paddingHorizontal: 15, paddingBottom: 15, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 10 }, 
+    statusPillText: { fontSize: 10, fontWeight: 'bold' }, 
+    expandedContainer: { paddingHorizontal: 15, paddingBottom: 15, borderTopWidth: 1, paddingTop: 10 }, 
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 }, 
-    infoIcon: { width: 20, textAlign: 'center', marginRight: 8 }, 
-    infoLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textMain, marginRight: 5 }, 
-    infoValue: { fontSize: 13, color: COLORS.textSub, flex: 1 }, 
-    
-    // --- MODAL & GENERAL ---
-    emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50, opacity: 0.6 }, 
-    emptyText: { fontSize: 16, fontWeight: '600', color: COLORS.textSub, marginTop: 10 }, 
-    emptySubText: { fontSize: 14, color: COLORS.textSub, marginTop: 4 }, 
+    infoIcon: { width: 22, textAlign: 'center', marginRight: 8 }, 
+    infoLabel: { fontSize: 13, fontWeight: '600', marginRight: 5 }, 
+    infoValue: { fontSize: 13, flex: 1 }, 
+    emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50, opacity: 0.7 }, 
+    emptyText: { fontSize: 16, fontWeight: '600', marginTop: 10 }, 
     modalContainer: { padding: 20 }, 
     modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.textMain }, 
-    label: { fontSize: 14, color: COLORS.textSub, marginBottom: 5, fontWeight: '500' }, 
-    input: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, marginBottom: 10, fontSize: 15, color: COLORS.textMain }, 
-    dateText: { color: COLORS.textMain, fontSize: 15 }, 
-    textArea: { height: 80, textAlignVertical: 'top' }, 
+    modalTitle: { fontSize: 22, fontWeight: 'bold' }, 
+    label: { fontSize: 14, marginBottom: 5, fontWeight: '500' }, 
+    input: { borderWidth: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, fontSize: 15 }, 
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 50 }, 
-    modalButton: { paddingVertical: 12, borderRadius: 8, flex: 1, alignItems: 'center', elevation: 2 }, 
-    cancelButton: { backgroundColor: '#e0e0e0', marginRight: 10 }, 
-    saveButton: { backgroundColor: COLORS.primary, marginLeft: 10 }, 
+    modalButton: { paddingVertical: 12, borderRadius: 8, flex: 1, alignItems: 'center', marginHorizontal: 5 }, 
     modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 }, 
     imagePickerContainer: { alignItems: 'center', marginBottom: 20 }, 
-    profileImage: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#f0f0f0', marginBottom: 10, borderWidth: 2, borderColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }, 
-    imagePickerButton: { flexDirection: 'row', backgroundColor: COLORS.primary, paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, alignItems: 'center' }, 
+    profileImage: { width: 100, height: 100, borderRadius: 50, marginBottom: 10, borderWidth: 2, justifyContent: 'center', alignItems: 'center' }, 
+    imagePickerButton: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, alignItems: 'center' }, 
     imagePickerButtonText: { color: '#fff', marginLeft: 6, fontWeight: 'bold', fontSize: 12 }, 
-    sectionHeader: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginTop: 15, marginBottom: 10, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    sectionHeader: { fontSize: 16, fontWeight: 'bold', marginTop: 15, marginBottom: 10, paddingBottom: 5, borderBottomWidth: 1 },
+    formRow: { marginBottom: 15 },
     statusSelector: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 }, 
-    statusButton: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#B0BEC5', alignItems: 'center', marginHorizontal: 4 }, 
-    selectedStatusButton: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, 
-    statusButtonText: { color: COLORS.textMain, fontWeight: '600' }, 
-    selectedStatusButtonText: { color: '#FFFFFF' }, 
+    statusButton: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center', marginHorizontal: 4 }, 
+    statusButtonText: { fontWeight: '600' }, 
 });
 
-// --- Year Picker Styles ---
 const pickerStyles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-    pickerContainer: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 15, paddingHorizontal: 20, maxHeight: height * 0.7 },
-    pickerTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain, textAlign: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#EEE', paddingBottom: 10 },
-    pickerScrollArea: { maxHeight: height * 0.5 },
-    pickerOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-    pickerOptionText: { fontSize: 16, color: COLORS.textMain },
-    pickerSelectedOptionText: { fontWeight: 'bold', color: COLORS.primary },
-    pickerCloseButton: { backgroundColor: COLORS.blue, padding: 15, borderRadius: 10, marginTop: 15, marginBottom: Platform.OS === 'ios' ? 30 : 15, alignItems: 'center' },
-    pickerCloseButtonText: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
+    pickerContainer: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 15, paddingHorizontal: 20, maxHeight: height * 0.7 },
+    pickerTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15, borderBottomWidth: 1, paddingBottom: 10 },
+    scrollArea: { maxHeight: height * 0.5 },
+    option: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1 },
+    optionText: { fontSize: 16 },
+    closeButton: { padding: 15, borderRadius: 10, marginTop: 15, marginBottom: Platform.OS === 'ios' ? 30 : 15, alignItems: 'center' },
+    closeButtonText: { fontSize: 16, fontWeight: 'bold' },
 });
 
-// --- Image Enlarger Styles ---
 const enlargeStyles = StyleSheet.create({
-    modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.9)', justifyContent: 'center', alignItems: 'center' },
-    enlargeFullImage: { width: width * 0.9, height: height * 0.7 },
-    enlargeCloseButton: { position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }
+    modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.95)', justifyContent: 'center', alignItems: 'center' },
+    fullImage: { width: width, height: height * 0.8 },
+    closeButton: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(50,50,50,0.8)', borderRadius: 20 }
 });
 
 export default PreAdmissionsScreen;
