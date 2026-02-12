@@ -5671,11 +5671,10 @@ app.post('/api/groups', verifyToken, isTeacherOrAdmin, async (req, res) => {
     }
 });
 
-// Get all groups for the logged-in user, sorted by latest message, with unread counts.
+// Get all groups for the logged-in user.
 app.get('/api/groups', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        // FIX: Removed .000Z to prevent double timezone addition
         const query = `
             SELECT
                 g.id, g.name, g.description, g.created_at, g.created_by, g.group_dp_url, g.background_color,
@@ -5785,14 +5784,12 @@ app.delete('/api/groups/:groupId', verifyToken, isGroupCreator, async (req, res)
 
 
 // ★★★ 4. API Routes for Chat Messages ★★★
-// ★★★ UPDATED: Get Chat History + Last Seen Timestamp ★★★
 app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
     try {
         const { groupId } = req.params;
         const userId = req.user.id;
 
         // 1. Fetch Messages
-        // FIX: Removed .000Z to match local time fix
         const query = `
             SELECT
                 m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
@@ -5814,7 +5811,6 @@ app.get('/api/groups/:groupId/history', verifyToken, async (req, res) => {
             [groupId, userId]
         );
 
-        // Return both messages and the timestamp
         res.json({
             messages,
             lastSeen: lastSeenData ? lastSeenData.last_seen_timestamp : null
@@ -5833,7 +5829,6 @@ app.post('/api/groups/media', verifyToken, chatUpload.single('media'), (req, res
 
 
 // ★★★ 5. Real-Time Socket.IO Logic ★★★
-// ★★★ 5. Real-Time Socket.IO Logic (Fixed Timestamp Format) ★★★
 io.on('connection', (socket) => {
     console.log(`🔌 A user connected: ${socket.id}`);
 
@@ -5858,7 +5853,6 @@ io.on('connection', (socket) => {
             );
             const newMessageId = result.insertId;
             
-            // FIX: Removed .000Z so frontend treats it as local time
             const [[broadcastMessage]] = await connection.query(`
                 SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.file_name,
@@ -5920,7 +5914,6 @@ io.on('connection', (socket) => {
             }
             await connection.query('UPDATE group_chat_messages SET message_text = ?, is_edited = TRUE WHERE id = ?', [newText, messageId]);
             
-            // FIX: Removed .000Z here as well
             const [[updatedMessage]] = await connection.query(`
                 SELECT m.id, m.message_text, DATE_FORMAT(m.timestamp, '%Y-%m-%dT%H:%i:%s') as timestamp, m.user_id, m.group_id, m.message_type, m.file_url, m.is_edited,
                 m.file_name,

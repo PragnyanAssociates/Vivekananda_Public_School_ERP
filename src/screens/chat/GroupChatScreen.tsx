@@ -1,24 +1,84 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, Keyboard, Modal, Pressable, PermissionsAndroid, Dimensions } from 'react-native';
+import { 
+    View, 
+    Text, 
+    StyleSheet, 
+    SafeAreaView, 
+    FlatList, 
+    TextInput, 
+    TouchableOpacity, 
+    ActivityIndicator, 
+    KeyboardAvoidingView, 
+    Platform, 
+    Alert, 
+    Image, 
+    Keyboard, 
+    Modal, 
+    Pressable, 
+    PermissionsAndroid, 
+    Dimensions, 
+    useColorScheme,
+    StatusBar
+} from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { io, Socket } from 'socket.io-client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; 
-import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import { getProfileImageSource } from '../../utils/imageHelpers';
 import Video from 'react-native-video';
 import EmojiPicker from 'rn-emoji-keyboard';
 import { v4 as uuidv4 } from 'uuid';
 import RNFS from 'react-native-fs';
-import { pick, types, isCancel } from '@react-native-documents/picker';
+import { pick, types } from '@react-native-documents/picker';
 import FileViewer from 'react-native-file-viewer';
 import ImageViewing from 'react-native-image-viewing';
 
-const THEME = { primary: '#008080', text: '#212529', muted: '#86909c', border: '#dee2e6', myMessageBg: '#dcf8c6', otherMessageBg: '#ffffff', white: '#ffffff', destructive: '#dc3545', background: '#F2F5F8', cardBg: '#FFFFFF', unreadBannerBg: '#e1f5fe', unreadBannerText: '#0288d1' };
+// --- THEME CONFIGURATION ---
+const lightTheme = {
+    mode: 'light',
+    primary: '#008080',
+    text: '#212529',
+    muted: '#86909c',
+    border: '#dee2e6',
+    myMessageBg: '#dcf8c6',
+    otherMessageBg: '#ffffff',
+    white: '#ffffff',
+    destructive: '#dc3545',
+    background: '#F2F5F8', 
+    cardBg: '#FFFFFF',
+    unreadBannerBg: '#e1f5fe',
+    unreadBannerText: '#0288d1',
+    inputBg: '#f0f0f0',
+    headerTitle: '#212529',
+    modalBg: '#ffffff',
+    fileIconBg: '#eee'
+};
 
+const darkTheme = {
+    mode: 'dark',
+    primary: '#4db6ac', 
+    text: '#ececec',
+    muted: '#b0b3b8',
+    border: '#2f3336',
+    myMessageBg: '#005c4b', 
+    otherMessageBg: '#202c33',
+    white: '#ececec',
+    destructive: '#ff6b6b',
+    background: '#0b141a', 
+    cardBg: '#202c33',
+    unreadBannerBg: '#1f2c34',
+    unreadBannerText: '#64b5f6',
+    inputBg: '#2a3942',
+    headerTitle: '#ececec',
+    modalBg: '#202c33',
+    fileIconBg: '#2a3942'
+};
+
+// --- HELPER FUNCTIONS ---
 const getLocalISOString = () => {
     const now = new Date();
     const offsetMs = now.getTimezoneOffset() * 60 * 1000;
@@ -54,6 +114,10 @@ const GroupChatScreen = () => {
     const route = useRoute<any>();
     const navigation = useNavigation<any>();
     
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const theme = colorScheme === 'dark' ? darkTheme : lightTheme;
+
     const [group, setGroup] = useState(route.params.group);
     const [messages, setMessages] = useState<any[]>([]);
     const [lastSeenTime, setLastSeenTime] = useState<string | null>(null);
@@ -68,11 +132,10 @@ const GroupChatScreen = () => {
     const [isImageViewerVisible, setImageViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [selectedVideoUri, setSelectedVideoUri] = useState<string | null>(null);
+    const [initialScrollDone, setInitialScrollDone] = useState(false);
 
     const socketRef = useRef<Socket | null>(null);
     const flatListRef = useRef<FlatList | null>(null);
-    const initialScrollDone = useRef(false);
-    const unreadIndexRef = useRef<number>(-1);
 
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
@@ -90,20 +153,17 @@ const GroupChatScreen = () => {
         catch (error) { console.log("Failed to mark group as seen."); }
     }, [group.id]);
 
-    // 1. Fetch History & Calculate Scroll Position
+    // 1. Fetch History
     useEffect(() => {
         const fetchHistory = async () => {
             setLoading(true);
             try {
                 const response = await apiClient.get(`/groups/${group.id}/history`);
-                // Backend now returns { messages: [], lastSeen: string }
                 const fetchedMessages = response.data.messages || [];
                 const fetchedLastSeen = response.data.lastSeen;
 
                 setMessages(fetchedMessages);
                 setLastSeenTime(fetchedLastSeen);
-
-                // Mark as seen *after* fetching so we know where the "Unread" line was
                 markAsSeen(); 
             } catch (error) { 
                 Alert.alert("Error", "Could not load chat history."); 
@@ -127,8 +187,6 @@ const GroupChatScreen = () => {
                     }
                     return [...prev, msg];
                 });
-                // Auto-scroll on new message if user is near bottom (simplified: just scroll)
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
             }
         });
         socketRef.current.on('messageDeleted', (id) => setMessages(prev => prev.filter(msg => msg.id !== id)));
@@ -138,7 +196,7 @@ const GroupChatScreen = () => {
         return () => { socketRef.current?.disconnect(); };
     }, [group.id, user?.id]);
 
-    // 2. Prepare Data with Date Separators AND Unread Banner
+    // 2. Prepare Data (REVERSED)
     const processedData = useMemo(() => {
         if (messages.length === 0) return [];
         const processed = [];
@@ -147,15 +205,10 @@ const GroupChatScreen = () => {
 
         messages.forEach((message, index) => {
             const messageDate = new Date(message.timestamp).toDateString();
-            
-            // Date Separator
             if (messageDate !== lastDate) {
                 processed.push({ type: 'date', id: `date-${messageDate}`, date: formatDateSeparator(message.timestamp) });
                 lastDate = messageDate;
             }
-
-            // Unread Banner Logic
-            // If this message is NOT mine, AND it is newer than lastSeen, AND banner not added yet
             if (!unreadBannerAdded && lastSeenTime && message.user_id !== user?.id) {
                 const msgTime = new Date(message.timestamp).getTime();
                 const seenTime = new Date(lastSeenTime).getTime();
@@ -164,37 +217,24 @@ const GroupChatScreen = () => {
                     unreadBannerAdded = true;
                 }
             }
-
             processed.push({ ...message, type: 'message' });
         });
-        return processed;
+        return processed.reverse();
     }, [messages, lastSeenTime, user?.id]);
 
-    // 3. Handle Initial Scroll (The "WhatsApp" Behavior)
-    useEffect(() => {
-        if (!loading && processedData.length > 0 && !initialScrollDone.current) {
-            // Find index of unread banner
+    // 3. Scroll Logic
+    const handleContentSizeChange = () => {
+        if (!initialScrollDone && processedData.length > 0 && flatListRef.current) {
             const bannerIndex = processedData.findIndex(item => item.type === 'unread_banner');
-            
             if (bannerIndex !== -1) {
-                // Scroll to Unread Banner (plus a bit of offset context)
-                // We use setTimeout to ensure layout is ready
                 setTimeout(() => {
-                    flatListRef.current?.scrollToIndex({ index: bannerIndex, animated: false, viewPosition: 0 });
+                    flatListRef.current?.scrollToIndex({ index: bannerIndex, animated: false, viewPosition: 0.5 });
                 }, 100);
-            } else {
-                // No unread messages -> Scroll to Bottom
-                setTimeout(() => {
-                    flatListRef.current?.scrollToEnd({ animated: false });
-                }, 100);
-            }
-            initialScrollDone.current = true;
+            } 
+            setInitialScrollDone(true);
         }
-    }, [loading, processedData]);
+    };
 
-    // ... (sendMessage, uploadFile, handlers remain same as before) ...
-    // COPY FROM PREVIOUS STEP or use below condensed version for brevity
-    
     const sendMessage = (type: any, text: any, url: any, clientMessageId?: any, fileName?: any) => {
         if (!user || !socketRef.current) return;
         const tempId = clientMessageId || uuidv4();
@@ -209,7 +249,6 @@ const GroupChatScreen = () => {
                 reply_type: replyingTo ? replyingTo.message_type : null
             };
             setMessages(prev => [...prev, tempMessage]);
-            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
         }
         socketRef.current.emit('sendMessage', {
             userId: user.id, groupId: group.id, messageType: type, messageText: text, fileUrl: url, fileName: fileName,
@@ -228,7 +267,7 @@ const GroupChatScreen = () => {
             message_text: null, timestamp: getLocalISOString(), status: 'uploading', progress: 0,
         };
         setMessages(prev => [...prev, tempMessage]);
-        flatListRef.current?.scrollToEnd({ animated: true });
+        
         const formData = new FormData();
         formData.append('media', { uri: file.uri, type: file.type, name: file.fileName });
         try {
@@ -248,27 +287,101 @@ const GroupChatScreen = () => {
         }
     };
 
-    // ... (Pickers, Handlers - No changes needed here) ...
+    const downloadAndOpenFile = async (fileUrl: string, fileName: string, action: 'open' | 'download') => { 
+        if (!fileUrl) return Alert.alert("Error", "No file available."); 
+        
+        const fullUrl = SERVER_URL + fileUrl; 
+        const localPath = `${RNFS.DownloadDirectoryPath}/${fileName}`; 
+        
+        try { 
+            if (Platform.OS === 'android') { 
+                await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE); 
+            } 
+            
+            closeOptionsModal(); 
+            const fileExists = await RNFS.exists(localPath); 
+            
+            // Logic for 'open' action: If exists, just open. If not, download then open.
+            if (action === 'open') {
+                if (fileExists) {
+                    try {
+                        await FileViewer.open(localPath);
+                    } catch (e) {
+                        Alert.alert("Error", "No app found to open this file.");
+                    }
+                    return;
+                }
+                // If not exists, fall through to download logic
+                Alert.alert("Opening...", "Downloading file to view...");
+            } else {
+                // Action is 'download'
+                if (fileExists) {
+                    Alert.alert("Already Downloaded", `File is saved in your Downloads folder.`); 
+                    return; 
+                }
+                Alert.alert("Downloading...", "Please wait..."); 
+            }
+
+            // Perform Download
+            const options = {
+                fromUrl: fullUrl,
+                toFile: localPath,
+                background: true,
+            };
+            
+            await RNFS.downloadFile(options).promise; 
+            
+            if (action === 'open') {
+                try {
+                    await FileViewer.open(localPath);
+                } catch(e) {
+                    Alert.alert("Error", "File downloaded but no app found to open it.");
+                }
+            } else {
+                Alert.alert("Download Complete", `File saved as ${fileName}`); 
+            }
+
+            if (Platform.OS === 'android') RNFS.scanFile(localPath); 
+
+        } catch (err) { 
+            Alert.alert("Error", "An error occurred while downloading."); 
+            console.error(err);
+        } 
+    };
+
     const handlePickImageVideo = () => { launchImageLibrary({ mediaType: 'mixed' }, (response) => { if (!response.didCancel && response.assets) uploadFile(response.assets[0], response.assets[0].type?.startsWith('video') ? 'video' : 'image'); }); };
     const handlePickDocument = async () => { try { const results = await pick({ type: [types.allFiles], allowMultiSelection: false }); if (results && results.length > 0) uploadFile({ uri: results[0].uri, type: results[0].type, fileName: results[0].name }, 'file'); } catch (err) {} };
     const showAttachmentMenu = () => { Alert.alert("Attach a file", "What would you like to send?", [{ text: "Image or Video", onPress: handlePickImageVideo }, { text: "Document", onPress: handlePickDocument }, { text: "Cancel", style: "cancel" }]); };
     const handleSend = () => { if (!newMessage.trim()) return; if (editingMessage) { socketRef.current?.emit('editMessage', { messageId: editingMessage.id, newText: newMessage.trim(), userId: user?.id, groupId: group.id }); setEditingMessage(null); } else { sendMessage('text', newMessage.trim(), null); } setNewMessage(''); Keyboard.dismiss(); };
     const onLongPressMessage = (message: any) => { if (!user || message.status === 'uploading') return; setSelectedMessage(message); setOptionsModalVisible(true); };
-    const handleMediaPress = (item: any) => { if (item.status === 'uploading' || item.status === 'failed' || !item.file_url) return; if (item.message_type === 'image') { const index = imageMessages.findIndex(img => img.uri === SERVER_URL + item.file_url); if (index > -1) { setCurrentImageIndex(index); setImageViewerVisible(true); } } else if (item.message_type === 'video') { setSelectedVideoUri(SERVER_URL + item.file_url); } };
+    
+    // Updated Handler for Media Press
+    const handleMediaPress = (item: any) => { 
+        if (item.status === 'uploading' || item.status === 'failed' || !item.file_url) return; 
+        
+        if (item.message_type === 'image') { 
+            const index = imageMessages.findIndex(img => img.uri === SERVER_URL + item.file_url); 
+            if (index > -1) { setCurrentImageIndex(index); setImageViewerVisible(true); } 
+        } else if (item.message_type === 'video') { 
+            setSelectedVideoUri(SERVER_URL + item.file_url); 
+        } else if (item.message_type === 'file') {
+            // TAP ACTION: OPEN FILE
+            downloadAndOpenFile(item.file_url, item.file_name, 'open');
+        }
+    };
+    
     const handleDeleteMessage = (messageId: number) => { socketRef.current?.emit('deleteMessage', { messageId, userId: user?.id, groupId: group.id }); };
-    const downloadAndOpenFile = async (fileUrl: string, fileName: string, action: 'open' | 'download') => { if (!fileUrl) return Alert.alert("Error", "No file available."); const fullUrl = SERVER_URL + fileUrl; const localPath = `${RNFS.DownloadDirectoryPath}/${fileName}`; try { if (Platform.OS === 'android') { await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE); } closeOptionsModal(); const fileExists = await RNFS.exists(localPath); if (fileExists) { if (action === 'open') FileViewer.open(localPath); else Alert.alert("Already Downloaded", `File is already in your Downloads folder.`); return; } Alert.alert(action === 'open' ? "Opening..." : "Downloading...", "Please wait..."); await RNFS.downloadFile({ fromUrl: fullUrl, toFile: localPath }).promise; if (action === 'open') FileViewer.open(localPath); else Alert.alert("Download Complete", `File saved as ${fileName}`); if (Platform.OS === 'android') RNFS.scanFile(localPath); } catch (err) { Alert.alert("Error", "An error occurred."); } };
     const cancelReply = () => setReplyingTo(null);
     const cancelEdit = () => { setEditingMessage(null); setNewMessage(''); Keyboard.dismiss(); };
     const closeOptionsModal = () => { setOptionsModalVisible(false); setSelectedMessage(null); };
 
     // --- RENDER ITEMS ---
     const renderMessageItem = ({ item }: { item: any }) => {
-        if (item.type === 'date') return <View style={styles.dateSeparator}><Text style={styles.dateSeparatorText}>{item.date}</Text></View>;
+        if (item.type === 'date') return <View style={[styles.dateSeparator, {backgroundColor: theme.mode === 'dark' ? '#1f2c34' : '#e1f3fb'}]}><Text style={[styles.dateSeparatorText, {color: theme.muted}]}>{item.date}</Text></View>;
         
-        // ★★★ UNREAD BANNER RENDERER ★★★
         if (item.type === 'unread_banner') return (
-            <View style={styles.unreadBanner}>
-                <Text style={styles.unreadBannerText}>{item.unread_count ? `${item.unread_count} Unread Messages` : 'Unread Messages'}</Text>
+            <View style={[styles.unreadBanner, {backgroundColor: theme.unreadBannerBg}]}>
+                <Text style={[styles.unreadBannerText, {color: theme.unreadBannerText}]}>{item.unread_count ? `${item.unread_count} Unread Messages` : 'Unread Messages'}</Text>
             </View>
         );
 
@@ -280,39 +393,71 @@ const GroupChatScreen = () => {
             const sourceUri = item.localUri || (SERVER_URL + item.file_url);
             const isUploading = item.status === 'uploading';
             const isFailed = item.status === 'failed';
-            const renderOverlay = () => { if (!isUploading && !isFailed) return null; return (<View style={styles.mediaOverlay}>{isUploading && <ActivityIndicator size="large" color={THEME.white} />}{isFailed && <Icon name="alert-circle-outline" size={40} color={THEME.white} />}</View>); };
+            const renderOverlay = () => { if (!isUploading && !isFailed) return null; return (<View style={styles.mediaOverlay}>{isUploading && <ActivityIndicator size="large" color={theme.white} />}{isFailed && <Icon name="alert-circle-outline" size={40} color={theme.white} />}</View>); };
 
             switch (item.message_type) {
                 case 'image': return (<TouchableOpacity disabled={isUploading} onPress={() => handleMediaPress(item)}><Image source={{ uri: sourceUri }} style={styles.mediaMessage} />{renderOverlay()}</TouchableOpacity>);
                 case 'video': return (<TouchableOpacity disabled={isUploading} onPress={() => handleMediaPress(item)}><Video source={{ uri: sourceUri }} style={styles.mediaMessage} controls={false} paused resizeMode="cover" /><View style={styles.videoPlayIconContainer}><Icon name="play-circle" size={50} color="rgba(255, 255, 255, 0.8)" /></View>{renderOverlay()}</TouchableOpacity>);
-                case 'file': { const iconInfo = getFileIcon(item.file_name); return (<TouchableOpacity disabled={isUploading} onPress={() => downloadAndOpenFile(item.file_url, item.file_name, 'open')}><View style={styles.fileContainer}><Icon name={iconInfo.name} size={48} color={iconInfo.color} /><View style={styles.fileInfo}><Text style={styles.fileName} numberOfLines={2}>{item.file_name}</Text></View>{renderOverlay()}</View></TouchableOpacity>); }
-                default: return <Text style={styles.messageText}>{item.message_text}</Text>;
+                case 'file': { 
+                    const iconInfo = getFileIcon(item.file_name); 
+                    return (
+                        <TouchableOpacity 
+                            disabled={isUploading} 
+                            onPress={() => handleMediaPress(item)} 
+                            onLongPress={() => onLongPressMessage(item)} // Enable Long Press for files
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.fileContainer}>
+                                <View style={[styles.fileIconWrapper, {backgroundColor: theme.fileIconBg}]}>
+                                    <Icon name={iconInfo.name} size={32} color={iconInfo.color} />
+                                </View>
+                                <View style={styles.fileInfo}>
+                                    <Text style={[styles.fileName, {color: theme.text}]} numberOfLines={1}>{item.file_name}</Text>
+                                    <Text style={[styles.fileSubText, {color: theme.muted}]}>PDF • Tap to view</Text>
+                                </View>
+                                {renderOverlay()}
+                            </View>
+                        </TouchableOpacity>
+                    ); 
+                }
+                default: return <Text style={[styles.messageText, {color: theme.text}]}>{item.message_text}</Text>;
             }
         };
 
         return (
-            <TouchableOpacity onLongPress={() => onLongPressMessage(item)} activeOpacity={0.8} style={isSelected ? styles.highlightedMessage : null}>
+            <TouchableOpacity onLongPress={() => onLongPressMessage(item)} activeOpacity={0.9} style={isSelected ? styles.highlightedMessage : null}>
                 <View style={[styles.messageRow, isMyMessage ? styles.myMessageRow : styles.otherMessageRow]}>
                     {!isMyMessage && <Image source={getProfileImageSource(item.profile_image_url)} style={styles.senderDp} />}
-                    <View style={[styles.messageContainer, isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer, item.message_type !== 'text' && styles.mediaContainer]}>
+                    <View style={[
+                        styles.messageContainer, 
+                        { backgroundColor: isMyMessage ? theme.myMessageBg : theme.otherMessageBg },
+                        // FIX: Remove padding for files/media so they fill the bubble
+                        (item.message_type !== 'text') && { padding: 4, paddingBottom: 4 } 
+                    ]}>
                         {!isMyMessage && (
-                            <View style={styles.senderInfo}>
-                                <Text style={styles.senderName}>{item.full_name}</Text>
-                                {item.role === 'student' && item.class_group && <Text style={styles.senderDetails}> ({item.class_group}{item.roll_no ? `, Roll: ${item.roll_no}` : ''})</Text>}
+                            <View style={[styles.senderInfo, {paddingHorizontal: item.message_type !== 'text' ? 5 : 0}]}>
+                                <Text style={[styles.senderName, {color: theme.primary}]}>{item.full_name}</Text>
+                                {item.role === 'student' && item.class_group && <Text style={[styles.senderDetails, {color: theme.muted}]}> ({item.class_group}{item.roll_no ? `, Roll: ${item.roll_no}` : ''})</Text>}
                             </View>
                         )}
                         {item.reply_to_message_id && (
-                            <View style={[styles.replyContainer, isMyMessage ? styles.myReplyContainer : styles.otherReplyContainer]}>
-                                <Text style={styles.replySenderName}>{item.reply_sender_name}</Text>
-                                <Text style={styles.replyText} numberOfLines={1}>{item.reply_type === 'text' ? item.reply_text : 'Media'}</Text>
+                            <View style={[styles.replyContainer, {backgroundColor: isMyMessage ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)', marginHorizontal: item.message_type !== 'text' ? 5 : 0}]}>
+                                <Text style={[styles.replySenderName, {color: theme.primary}]}>{item.reply_sender_name}</Text>
+                                <Text style={[styles.replyText, {color: theme.muted}]} numberOfLines={1}>{item.reply_type === 'text' ? item.reply_text : 'Media'}</Text>
                             </View>
                         )}
+                        
                         {renderContent()}
-                        <View style={{flexDirection:'row', alignItems:'center', justifyContent: 'flex-end', marginTop: 2}}>
-                             <Text style={[styles.messageTime, (item.message_type === 'image' || item.message_type === 'video') && !item.status ? styles.mediaTime : {}]}>
+                        
+                        <View style={{flexDirection:'row', alignItems:'center', justifyContent: 'flex-end', marginTop: 2, paddingRight: item.message_type !== 'text' ? 5 : 0}}>
+                             <Text style={[
+                                 styles.messageTime, 
+                                 {color: theme.muted},
+                                 (item.message_type === 'image' || item.message_type === 'video') && !item.status ? styles.mediaTime : {}
+                             ]}>
                                 {item.is_edited ? 'Edited • ' : ''}{messageTime}
                             </Text>
-                            {isMyMessage && (<Icon name="check" size={14} color={THEME.muted} style={{marginLeft: 3}} />)}
+                            {isMyMessage && (<Icon name="check" size={14} color={theme.muted} style={{marginLeft: 3}} />)}
                         </View>
                     </View>
                 </View>
@@ -320,44 +465,119 @@ const GroupChatScreen = () => {
         );
     };
 
-    // ... (Modals remain same) ...
-    const renderOptionsModal = () => { if (!selectedMessage) return null; const isMy = selectedMessage.user_id === user?.id; const isMedia = ['image', 'video', 'file'].includes(selectedMessage.message_type); return (<Modal animationType="fade" transparent visible={isOptionsModalVisible} onRequestClose={closeOptionsModal}><Pressable style={styles.modalOverlay} onPress={closeOptionsModal}><Pressable style={styles.modalContent}><Text style={styles.modalTitle}>Message Options</Text><TouchableOpacity style={styles.modalOption} onPress={() => { setReplyingTo(selectedMessage); closeOptionsModal(); }}><Text style={styles.modalOptionText}>Reply</Text></TouchableOpacity>{isMedia && <TouchableOpacity style={styles.modalOption} onPress={() => downloadAndOpenFile(selectedMessage.file_url, selectedMessage.file_name, 'download')}><Text style={styles.modalOptionText}>Download</Text></TouchableOpacity>}{isMy && selectedMessage.message_type === 'text' && <TouchableOpacity style={styles.modalOption} onPress={() => { setEditingMessage(selectedMessage); setNewMessage(selectedMessage.message_text); closeOptionsModal(); }}><Text style={styles.modalOptionText}>Edit</Text></TouchableOpacity>}{isMy && <TouchableOpacity style={styles.modalOption} onPress={() => { handleDeleteMessage(selectedMessage.id); closeOptionsModal(); }}><Text style={[styles.modalOptionText, styles.destructiveText]}>Delete</Text></TouchableOpacity>}<TouchableOpacity style={styles.modalOption} onPress={closeOptionsModal}><Text style={styles.modalOptionText}>Cancel</Text></TouchableOpacity></Pressable></Pressable></Modal>); };
-    const renderVideoPlayer = () => (<Modal visible={!!selectedVideoUri} transparent onRequestClose={() => setSelectedVideoUri(null)}><View style={styles.videoModalContainer}><TouchableOpacity style={styles.videoCloseButton} onPress={() => setSelectedVideoUri(null)}><Icon name="close" size={32} color={THEME.white} /></TouchableOpacity>{selectedVideoUri && <Video source={{ uri: selectedVideoUri }} style={styles.fullScreenVideo} controls resizeMode="contain" />}</View></Modal>);
+    const renderOptionsModal = () => { 
+        if (!selectedMessage) return null; 
+        const isMy = selectedMessage.user_id === user?.id; 
+        const isMedia = ['image', 'video', 'file'].includes(selectedMessage.message_type); 
+        return (
+            <Modal animationType="fade" transparent visible={isOptionsModalVisible} onRequestClose={closeOptionsModal}>
+                <Pressable style={styles.modalOverlay} onPress={closeOptionsModal}>
+                    <Pressable style={[styles.modalContent, {backgroundColor: theme.modalBg}]}>
+                        <Text style={[styles.modalTitle, {color: theme.text}]}>Message Options</Text>
+                        <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={() => { setReplyingTo(selectedMessage); closeOptionsModal(); }}>
+                            <Text style={[styles.modalOptionText, {color: theme.primary}]}>Reply</Text>
+                        </TouchableOpacity>
+                        
+                        {/* FIX: DOWNLOAD BUTTON SHOWS FOR FILES NOW */}
+                        {isMedia && (
+                            <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={() => downloadAndOpenFile(selectedMessage.file_url, selectedMessage.file_name, 'download')}>
+                                <Text style={[styles.modalOptionText, {color: theme.primary}]}>Download</Text>
+                            </TouchableOpacity>
+                        )}
+                        
+                        {isMy && selectedMessage.message_type === 'text' && (
+                            <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={() => { setEditingMessage(selectedMessage); setNewMessage(selectedMessage.message_text); closeOptionsModal(); }}>
+                                <Text style={[styles.modalOptionText, {color: theme.primary}]}>Edit</Text>
+                            </TouchableOpacity>
+                        )}
+                        {isMy && (
+                            <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={() => { handleDeleteMessage(selectedMessage.id); closeOptionsModal(); }}>
+                                <Text style={[styles.modalOptionText, styles.destructiveText]}>Delete</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={closeOptionsModal}>
+                            <Text style={[styles.modalOptionText, {color: theme.text}]}>Cancel</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+        ); 
+    };
+    
+    const renderVideoPlayer = () => (<Modal visible={!!selectedVideoUri} transparent onRequestClose={() => setSelectedVideoUri(null)}><View style={styles.videoModalContainer}><TouchableOpacity style={styles.videoCloseButton} onPress={() => setSelectedVideoUri(null)}><Icon name="close" size={32} color={theme.white} /></TouchableOpacity>{selectedVideoUri && <Video source={{ uri: selectedVideoUri }} style={styles.fullScreenVideo} controls resizeMode="contain" />}</View></Modal>);
 
     return (
-        <SafeAreaView style={{flex: 1, backgroundColor: THEME.background}}>
+        <SafeAreaView style={{flex: 1, backgroundColor: theme.background}}>
+            <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             {renderOptionsModal()}{renderVideoPlayer()}
             <ImageViewing images={imageMessages} imageIndex={currentImageIndex} visible={isImageViewerVisible} onRequestClose={() => setImageViewerVisible(false)} />
             
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, {backgroundColor: theme.cardBg, shadowColor: theme.mode === 'dark' ? '#000' : '#888'}]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}><MaterialIcons name="arrow-back" size={24} color="#333" /></TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigation.navigate('GroupSettings', { group })} style={{flexDirection:'row', alignItems:'center'}}><Image source={getProfileImageSource(group.group_dp_url)} style={styles.headerDp} /><View><Text style={styles.headerTitle}>{group.name}</Text><Text style={styles.headerSubtitle}>Tap for info</Text></View></TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
+                        <MaterialIcons name="arrow-back" size={24} color={theme.headerTitle} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('GroupSettings', { group })} style={{flexDirection:'row', alignItems:'center'}}>
+                        <Image source={getProfileImageSource(group.group_dp_url)} style={styles.headerDp} />
+                        <View>
+                            <Text style={[styles.headerTitle, {color: theme.headerTitle}]}>{group.name}</Text>
+                            <Text style={[styles.headerSubtitle, {color: theme.muted}]}>Tap for info</Text>
+                        </View>
+                    </TouchableOpacity>
                 </View>
             </View>
 
-            <KeyboardAvoidingView style={{flex: 1, backgroundColor: group.background_color || '#e5ddd5'}} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
-                {loading ? <ActivityIndicator style={{flex: 1}} size="large" /> :
+            <KeyboardAvoidingView style={{flex: 1, backgroundColor: theme.background}} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+                {loading ? <ActivityIndicator style={{flex: 1}} size="large" color={theme.primary} /> :
                 <FlatList
                     ref={flatListRef}
                     data={processedData}
+                    inverted={true} 
                     renderItem={renderMessageItem}
                     keyExtractor={(item) => item.id?.toString() || item.clientMessageId}
-                    contentContainerStyle={{ paddingVertical: 10, paddingBottom: 20 }}
-                    // Handle variable row heights for scrolling
+                    contentContainerStyle={{ paddingVertical: 10, paddingBottom: 20, flexGrow: 1, justifyContent: 'flex-end' }}
+                    onContentSizeChange={handleContentSizeChange}
                     onScrollToIndexFailed={(info) => {
-                        // Fallback: If exact scroll fails, try to scroll to the rough position or end
                         flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
                     }}
                 />}
                 <View>
-                    {replyingTo && (<View style={styles.replyingBanner}><Icon name="reply" size={18} color={THEME.primary} /><View style={styles.replyingTextContainer}><Text style={styles.replyingToName}>{replyingTo.user_id === user?.id ? 'You' : replyingTo.full_name}</Text><Text numberOfLines={1}>{replyingTo.message_text || 'Media'}</Text></View><Icon name="close" size={20} color={THEME.muted} onPress={cancelReply} /></View>)}
-                    {editingMessage && (<View style={styles.editingBanner}><Icon name="pencil" size={16} color={THEME.primary} /><Text style={styles.editingText}>Editing Message</Text><Icon name="close" size={20} color={THEME.muted} onPress={cancelEdit} /></View>)}
-                    <View style={styles.inputContainer}>
-                        <TouchableOpacity onPress={() => { Keyboard.dismiss(); setIsEmojiPickerOpen(true); }} style={styles.iconButton}><Icon name="emoticon-outline" size={24} color={THEME.muted} /></TouchableOpacity>
-                        <TextInput style={styles.input} value={newMessage} onChangeText={setNewMessage} placeholder="Type a message..." multiline onFocus={()=>setIsEmojiPickerOpen(false)} />
-                        <TouchableOpacity onPress={showAttachmentMenu} style={styles.iconButton}><Icon name="paperclip" size={24} color={THEME.muted} /></TouchableOpacity>
-                        <TouchableOpacity style={styles.sendButton} onPress={handleSend}><Icon name={editingMessage ? "check" : "send"} size={24} color={THEME.white} /></TouchableOpacity>
+                    {replyingTo && (
+                        <View style={[styles.replyingBanner, {backgroundColor: theme.inputBg, borderColor: theme.border}]}>
+                            <Icon name="reply" size={18} color={theme.primary} />
+                            <View style={[styles.replyingTextContainer, {borderLeftColor: theme.primary}]}>
+                                <Text style={[styles.replyingToName, {color: theme.primary}]}>{replyingTo.user_id === user?.id ? 'You' : replyingTo.full_name}</Text>
+                                <Text numberOfLines={1} style={{color: theme.text}}>{replyingTo.message_text || 'Media'}</Text>
+                            </View>
+                            <Icon name="close" size={20} color={theme.muted} onPress={cancelReply} />
+                        </View>
+                    )}
+                    {editingMessage && (
+                        <View style={[styles.editingBanner, {backgroundColor: theme.inputBg, borderColor: theme.border}]}>
+                            <Icon name="pencil" size={16} color={theme.primary} />
+                            <Text style={[styles.editingText, {color: theme.primary}]}>Editing Message</Text>
+                            <Icon name="close" size={20} color={theme.muted} onPress={cancelEdit} />
+                        </View>
+                    )}
+                    <View style={[styles.inputContainer, {backgroundColor: theme.cardBg}]}>
+                        <TouchableOpacity onPress={() => { Keyboard.dismiss(); setIsEmojiPickerOpen(true); }} style={styles.iconButton}>
+                            <Icon name="emoticon-outline" size={24} color={theme.muted} />
+                        </TouchableOpacity>
+                        <TextInput 
+                            style={[styles.input, {backgroundColor: theme.inputBg, color: theme.text}]} 
+                            value={newMessage} 
+                            onChangeText={setNewMessage} 
+                            placeholder="Type a message..." 
+                            placeholderTextColor={theme.muted}
+                            multiline 
+                            onFocus={()=>setIsEmojiPickerOpen(false)} 
+                        />
+                        <TouchableOpacity onPress={showAttachmentMenu} style={styles.iconButton}>
+                            <Icon name="paperclip" size={24} color={theme.muted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.sendButton, {backgroundColor: theme.primary}]} onPress={handleSend}>
+                            <Icon name={editingMessage ? "check" : "send"} size={24} color={'#ffffff'} />
+                        </TouchableOpacity>
                     </View>
                 </View>
             </KeyboardAvoidingView>
@@ -366,62 +586,64 @@ const GroupChatScreen = () => {
     );
 };
 
+// Static Styles (Responsive)
 const styles = StyleSheet.create({
-    headerCard: { backgroundColor: THEME.cardBg, paddingHorizontal: 15, paddingVertical: 10, width: '95%', alignSelf: 'center', marginTop: 10, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, zIndex: 10 },
+    headerCard: { paddingHorizontal: 15, paddingVertical: 10, width: '95%', alignSelf: 'center', marginTop: 10, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, zIndex: 10 },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerDp: { width: 40, height: 40, borderRadius: 20, marginRight: 10, backgroundColor: '#eee' },
-    headerTitle: { fontSize: 18, fontWeight: 'bold', color: THEME.text },
-    headerSubtitle: { fontSize: 12, color: THEME.muted },
+    headerTitle: { fontSize: 18, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 12 },
     
-    // Banner Styles
-    unreadBanner: { backgroundColor: THEME.unreadBannerBg, paddingVertical: 8, marginVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 8, width: '90%', alignSelf: 'center', elevation: 1 },
-    unreadBannerText: { color: THEME.unreadBannerText, fontWeight: 'bold', fontSize: 13 },
-    dateSeparator: { alignSelf: 'center', backgroundColor: '#e1f3fb', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 10, elevation: 1 },
-    dateSeparatorText: { color: '#5a7a8a', fontSize: 12, fontWeight: '600' },
+    unreadBanner: { paddingVertical: 8, marginVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 8, width: '90%', alignSelf: 'center', elevation: 1 },
+    unreadBannerText: { fontWeight: 'bold', fontSize: 13 },
+    dateSeparator: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 10, elevation: 1 },
+    dateSeparatorText: { fontSize: 12, fontWeight: '600' },
 
     messageRow: { flexDirection: 'row', marginVertical: 5, paddingHorizontal: 10, alignItems: 'flex-end' },
     myMessageRow: { justifyContent: 'flex-end' },
     otherMessageRow: { justifyContent: 'flex-start' },
     senderDp: { width: 36, height: 36, borderRadius: 18, marginRight: 8, marginBottom: 5, backgroundColor: '#eee' },
-    messageContainer: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.1, shadowRadius: 1 },
-    myMessageContainer: { backgroundColor: THEME.myMessageBg, borderBottomRightRadius: 2 },
-    otherMessageContainer: { backgroundColor: THEME.otherMessageBg, borderBottomLeftRadius: 2 },
-    mediaContainer: { padding: 5, backgroundColor: 'transparent' },
-    senderInfo: { flexDirection: 'row', marginBottom: 4, alignItems: 'baseline' },
-    senderName: { fontWeight: 'bold', color: THEME.primary },
-    senderDetails: { fontSize: 11, color: THEME.muted, marginLeft: 4 },
-    messageText: { fontSize: 16, color: THEME.text },
-    messageTime: { fontSize: 11, color: THEME.muted, marginLeft: 5 },
-    mediaTime: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.5)', color: THEME.white, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, fontSize: 10 },
     
-    inputContainer: { flexDirection: 'row', padding: 8, backgroundColor: THEME.white, alignItems: 'center' },
-    input: { flex: 1, backgroundColor: '#f0f0f0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 10 : 8, fontSize: 16, maxHeight: 100, color: THEME.text },
-    sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+    // Updated Message Container: Padding is dynamically adjusted in render for files
+    messageContainer: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.1, shadowRadius: 1 },
+    
+    mediaContainer: { backgroundColor: 'transparent' },
+    senderInfo: { flexDirection: 'row', marginBottom: 4, alignItems: 'baseline' },
+    senderName: { fontWeight: 'bold' },
+    senderDetails: { fontSize: 11, marginLeft: 4 },
+    messageText: { fontSize: 16 },
+    messageTime: { fontSize: 11, marginLeft: 5 },
+    mediaTime: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, fontSize: 10 },
+    
+    inputContainer: { flexDirection: 'row', padding: 8, alignItems: 'center' },
+    input: { flex: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 10 : 8, fontSize: 16, maxHeight: 100 },
+    sendButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
     iconButton: { padding: 8 },
-    editingBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#eef', borderTopWidth: 1, borderColor: THEME.border },
-    editingText: { flex: 1, marginLeft: 10, color: THEME.primary },
-    replyingBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingLeft: 15, backgroundColor: '#f0f0f0', borderTopWidth: 1, borderColor: THEME.border },
-    replyingTextContainer: { flex: 1, marginLeft: 10, borderLeftWidth: 3, borderLeftColor: THEME.primary, paddingLeft: 10 },
-    replyingToName: { fontWeight: 'bold', color: THEME.primary },
+    editingBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderTopWidth: 1 },
+    editingText: { flex: 1, marginLeft: 10 },
+    replyingBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingLeft: 15, borderTopWidth: 1 },
+    replyingTextContainer: { flex: 1, marginLeft: 10, borderLeftWidth: 3, paddingLeft: 10 },
+    replyingToName: { fontWeight: 'bold' },
     
     mediaMessage: { width: 220, height: 220, borderRadius: 10 },
     replyContainer: { marginBottom: 5, padding: 8, borderRadius: 6, opacity: 0.8 },
-    myReplyContainer: { backgroundColor: '#c5eec2' },
-    otherReplyContainer: { backgroundColor: '#e9e9e9' },
-    replySenderName: { fontWeight: 'bold', fontSize: 13, color: THEME.primary },
-    replyText: { fontSize: 13, color: THEME.muted },
+    replySenderName: { fontWeight: 'bold', fontSize: 13 },
+    replyText: { fontSize: 13 },
     mediaOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
-    uploadProgressText: { color: THEME.white, marginTop: 8, fontWeight: 'bold', fontSize: 16 },
-    fileContainer: { flexDirection: 'row', alignItems: 'center', padding: 10, width: 220, overflow: 'hidden' },
-    fileInfo: { flex: 1, marginLeft: 10, justifyContent: 'center' },
-    fileName: { fontSize: 15, fontWeight: '500', color: THEME.text },
     
-    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
-    modalContent: { width: '80%', backgroundColor: 'white', borderRadius: 10, paddingVertical: 10, elevation: 5 },
-    modalTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, color: THEME.text },
-    modalOption: { paddingVertical: 15, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: THEME.border },
-    modalOptionText: { fontSize: 16, color: THEME.primary },
-    destructiveText: { color: THEME.destructive },
+    // Updated File Container Styles for slimmer look
+    fileContainer: { flexDirection: 'row', alignItems: 'center', padding: 6, width: 230, borderRadius: 10 },
+    fileIconWrapper: { padding: 8, borderRadius: 8, marginRight: 10, justifyContent: 'center', alignItems: 'center' },
+    fileInfo: { flex: 1, justifyContent: 'center' },
+    fileName: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
+    fileSubText: { fontSize: 11 },
+    
+    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalContent: { width: '80%', borderRadius: 10, paddingVertical: 10, elevation: 5 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
+    modalOption: { paddingVertical: 15, paddingHorizontal: 20, borderTopWidth: 1 },
+    modalOptionText: { fontSize: 16 },
+    destructiveText: { color: '#dc3545' },
     videoPlayIconContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
     videoModalContainer: { flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
     fullScreenVideo: { width: Dimensions.get('window').width, height: Dimensions.get('window').height },
