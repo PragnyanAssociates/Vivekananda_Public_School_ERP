@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useCallback }  from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Modal, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+    View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
+    Alert, ScrollView, TextInput, SafeAreaView, useColorScheme, StatusBar, 
+    Dimensions, Platform 
+} from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -7,34 +11,66 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useIsFocused } from '@react-navigation/native';
 import * as Animatable from 'react-native-animatable';
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', 
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION (Master Style Guide) ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F5F7FA',
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
     border: '#CFD8DC',
-    success: '#43A047',
+    inputBg: '#FAFAFA',
+    iconGrey: '#90A4AE',
     danger: '#E53935',
+    success: '#43A047',
     warning: '#FFC107',
-    blue: '#1E88E5'
+    blue: '#1E88E5',
+    headerIconBg: '#E0F2F1',
+    divider: '#f0f2f5',
+    resultCardBg: '#E3F2FD',
+    resultText: '#1565C0',
+    answerBg: '#F5F5F5',
+    correctBg: '#E8F5E9'
 };
 
-// Custom Radio Button Component
-const CustomRadioButton = ({ label, value, selectedValue, onSelect }) => {
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconGrey: '#757575',
+    danger: '#EF5350',
+    success: '#66BB6A',
+    warning: '#FFA726',
+    blue: '#42A5F5',
+    headerIconBg: '#333333',
+    divider: '#2C2C2C',
+    resultCardBg: '#1A2733',
+    resultText: '#90CAF9',
+    answerBg: '#2C2C2C',
+    correctBg: '#1B5E20'
+};
+
+// --- CUSTOM COMPONENTS ---
+
+const CustomRadioButton = ({ label, value, selectedValue, onSelect, colors }) => {
     const isSelected = value === selectedValue;
     return (
         <TouchableOpacity style={styles.radioContainer} onPress={() => onSelect(value)} activeOpacity={0.8}>
-            <View style={[styles.radioOuterCircle, isSelected && styles.radioOuterCircleSelected]}>
-                {isSelected && <View style={styles.radioInnerCircle} />}
+            <View style={[styles.radioOuterCircle, { borderColor: isSelected ? colors.blue : colors.textSub }]}>
+                {isSelected && <View style={[styles.radioInnerCircle, { backgroundColor: colors.blue }]} />}
             </View>
-            <Text style={[styles.radioLabel, isSelected && styles.radioLabelSelected]}>{label}</Text>
+            <Text style={[styles.radioLabel, { color: isSelected ? colors.blue : colors.textMain, fontWeight: isSelected ? 'bold' : 'normal' }]}>{label}</Text>
         </TouchableOpacity>
     );
 };
 
-// Main Router Component
+// --- MAIN ROUTER COMPONENT ---
 const StudentExamsScreen = () => {
     const [view, setView] = useState('list');
     const [selectedExam, setSelectedExam] = useState(null);
@@ -56,9 +92,13 @@ const StudentExamsScreen = () => {
     return null;
 };
 
-// Exam List View
+// --- VIEW 1: EXAM LIST ---
 const ExamList = ({ onStartExam, onViewResult }) => {
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [exams, setExams] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const isFocused = useIsFocused();
@@ -69,8 +109,9 @@ const ExamList = ({ onStartExam, onViewResult }) => {
         try {
             const response = await apiClient.get(`/exams/student/${user.id}/${user.class_group}`);
             setExams(response.data);
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to fetch exams.'); } 
-        finally { setIsLoading(false); }
+        } catch (e: any) { 
+            Alert.alert('Error', e.response?.data?.message || 'Failed to fetch exams.'); 
+        } finally { setIsLoading(false); }
     }, [user?.id, user?.class_group]);
 
     useEffect(() => {
@@ -80,26 +121,28 @@ const ExamList = ({ onStartExam, onViewResult }) => {
     const renderButton = (item) => {
         switch (item.status) {
             case 'graded':
-                return <TouchableOpacity style={styles.buttonViewResult} onPress={() => onViewResult(item.attempt_id)}><Text style={styles.buttonText}>View Result</Text></TouchableOpacity>;
+                return <TouchableOpacity style={[styles.buttonViewResult, { backgroundColor: COLORS.success }]} onPress={() => onViewResult(item.attempt_id)}><Text style={styles.buttonText}>View Result</Text></TouchableOpacity>;
             case 'submitted':
             case 'in_progress':
-                return <View style={styles.buttonAwaiting}><Text style={styles.buttonTextAwaiting}>Results Pending</Text></View>;
+                return <View style={[styles.buttonAwaiting, { backgroundColor: isDark ? '#332b00' : '#FFF3E0', borderColor: isDark ? '#554400' : '#FFE0B2' }]}><Text style={[styles.buttonTextAwaiting, { color: COLORS.warning }]}>Results Pending</Text></View>;
             default:
-                return <TouchableOpacity style={styles.buttonStart} onPress={() => onStartExam(item)}><MaterialIcons name="play-arrow" size={18} color="#fff" /><Text style={styles.buttonText}>Start Exam</Text></TouchableOpacity>;
+                return <TouchableOpacity style={[styles.buttonStart, { backgroundColor: COLORS.blue }]} onPress={() => onStartExam(item)}><MaterialIcons name="play-arrow" size={18} color="#fff" /><Text style={styles.buttonText}>Start Exam</Text></TouchableOpacity>;
         }
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={COLORS.background} />
+            
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialCommunityIcons name="clipboard-text-outline" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                        <MaterialCommunityIcons name="clipboard-text-outline" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Exams</Text>
-                        <Text style={styles.headerSubtitle}>My Assessments</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Exams</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>My Assessments</Text>
                     </View>
                 </View>
             </View>
@@ -109,16 +152,18 @@ const ExamList = ({ onStartExam, onViewResult }) => {
                 keyExtractor={(item: any) => item.exam_id.toString()}
                 renderItem={({ item, index }) => (
                     <Animatable.View animation="fadeInUp" duration={500} delay={index * 100}>
-                        <View style={styles.card}>
+                        <View style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                             <View style={styles.cardHeader}>
-                                <View style={styles.pill}><Text style={styles.pillText}>Quiz</Text></View>
-                                <Text style={styles.cardTitle}>{item.title}</Text>
+                                <View style={[styles.pill, { backgroundColor: isDark ? COLORS.inputBg : '#E0F2F1' }]}>
+                                    <Text style={[styles.pillText, { color: COLORS.primary }]}>Quiz</Text>
+                                </View>
+                                <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{item.title}</Text>
                             </View>
                             
-                            <View style={styles.detailsRow}>
-                                <View style={styles.detailItem}><MaterialIcons name="help-outline" size={16} color={COLORS.textSub} /><Text style={styles.detailText}>{item.question_count} Qs</Text></View>
-                                <View style={styles.detailItem}><MaterialIcons name="check-circle-outline" size={16} color={COLORS.textSub} /><Text style={styles.detailText}>{item.total_marks} Marks</Text></View>
-                                <View style={styles.detailItem}><MaterialIcons name="timer" size={16} color={COLORS.textSub} /><Text style={styles.detailText}>{item.time_limit_mins} Min</Text></View>
+                            <View style={[styles.detailsRow, { backgroundColor: isDark ? COLORS.inputBg : '#f9f9f9' }]}>
+                                <View style={styles.detailItem}><MaterialIcons name="help-outline" size={16} color={COLORS.textSub} /><Text style={[styles.detailText, { color: COLORS.textSub }]}>{item.question_count} Qs</Text></View>
+                                <View style={styles.detailItem}><MaterialIcons name="check-circle-outline" size={16} color={COLORS.textSub} /><Text style={[styles.detailText, { color: COLORS.textSub }]}>{item.total_marks} Marks</Text></View>
+                                <View style={styles.detailItem}><MaterialIcons name="timer" size={16} color={COLORS.textSub} /><Text style={[styles.detailText, { color: COLORS.textSub }]}>{item.time_limit_mins} Min</Text></View>
                             </View>
                             {renderButton(item)}
                         </View>
@@ -126,16 +171,20 @@ const ExamList = ({ onStartExam, onViewResult }) => {
                 )}
                 onRefresh={fetchExams}
                 refreshing={isLoading}
-                ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>No exams available for your class yet.</Text> : null}
+                ListEmptyComponent={!isLoading ? <View style={styles.centered}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No exams available for your class yet.</Text></View> : null}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
             />
         </SafeAreaView>
     );
 };
 
-// Take Exam View
+// --- VIEW 2: TAKE EXAM ---
 const TakeExamView = ({ exam, onFinish }) => {
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [questions, setQuestions] = useState([]);
     const [answers, setAnswers] = useState({});
     const [isLoading, setIsLoading] = useState(true);
@@ -225,16 +274,16 @@ const TakeExamView = ({ exam, onFinish }) => {
         return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     };
 
-    if (isLoading) return <View style={styles.centered}><ActivityIndicator size="large" color={COLORS.primary}/></View>;
+    if (isLoading) return <View style={[styles.centered, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary}/></View>;
     
     return (
-        <SafeAreaView style={styles.container}>
-             {/* --- HEADER CARD --- */}
-             <View style={styles.headerCard}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+             {/* Header Card */}
+             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle} numberOfLines={1}>{exam.title}</Text>
-                        <Text style={styles.headerSubtitle}>In Progress</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{exam.title}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>In Progress</Text>
                     </View>
                 </View>
                 {timeLeft !== null && (
@@ -247,10 +296,10 @@ const TakeExamView = ({ exam, onFinish }) => {
 
             <ScrollView contentContainerStyle={{paddingHorizontal: 15, paddingBottom: 40}}>
                 {questions.map((q: any, index) => (
-                    <View key={q.question_id} style={styles.questionBox}>
+                    <View key={q.question_id} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                         <View style={styles.questionHeader}>
-                            <Text style={styles.questionText}>{index + 1}. {q.question_text}</Text>
-                            <Text style={styles.marksText}>{q.marks} Marks</Text>
+                            <Text style={[styles.questionText, { color: COLORS.textMain }]}>{index + 1}. {q.question_text}</Text>
+                            <Text style={[styles.marksText, { color: COLORS.textSub }]}>{q.marks} Marks</Text>
                         </View>
                         
                         {q.question_type === 'multiple_choice' ? (
@@ -262,21 +311,23 @@ const TakeExamView = ({ exam, onFinish }) => {
                                         value={key}
                                         selectedValue={answers[q.question_id]}
                                         onSelect={(newValue) => handleAnswerChange(q.question_id, newValue)}
+                                        colors={COLORS}
                                     />
                                 ))}
                             </View>
                         ) : (
                             <TextInput 
-                                style={styles.textInput} 
+                                style={[styles.textInput, { borderColor: COLORS.border, backgroundColor: COLORS.inputBg, color: COLORS.textMain }]} 
                                 multiline 
                                 placeholder="Type your answer here..." 
+                                placeholderTextColor={COLORS.placeholder}
                                 onChangeText={text => handleAnswerChange(q.question_id, text)} 
                             />
                         )}
                     </View>
                 ))}
                 
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={isSubmitting}>
+                <TouchableOpacity style={[styles.submitButton, { backgroundColor: COLORS.success }]} onPress={handleSubmit} disabled={isSubmitting}>
                     {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Submit Exam</Text>}
                 </TouchableOpacity>
             </ScrollView>
@@ -284,9 +335,13 @@ const TakeExamView = ({ exam, onFinish }) => {
     );
 };
 
-// Result View
+// --- VIEW 3: RESULTS ---
 const ResultView = ({ attemptId, onBack }) => {
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [result, setResult] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -313,42 +368,42 @@ const ResultView = ({ attemptId, onBack }) => {
         fetchResult();
     }, [attemptId, user?.id, onBack]);
 
-    if (isLoading) return <View style={styles.centered}><ActivityIndicator size="large" color={COLORS.primary}/></View>;
-    if (!result) return <View style={styles.centered}><Text>No result data found.</Text></View>;
+    if (isLoading) return <View style={[styles.centered, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary}/></View>;
+    if (!result) return <View style={[styles.centered, { backgroundColor: COLORS.background }]}><Text style={{color: COLORS.textSub}}>No result data found.</Text></View>;
 
     const { attempt, exam, details } = result;
     return (
-        <SafeAreaView style={styles.container}>
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
                     <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color="#333" />
+                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialCommunityIcons name="star-circle-outline" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                        <MaterialCommunityIcons name="star-circle-outline" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Result</Text>
-                        <Text style={styles.headerSubtitle} numberOfLines={1}>{exam.title}</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Result</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]} numberOfLines={1}>{exam.title}</Text>
                     </View>
                 </View>
             </View>
 
             <ScrollView contentContainerStyle={{paddingHorizontal: 15, paddingBottom: 40}}>
-                <View style={styles.resultSummaryCard}>
-                    <Text style={styles.resultScoreLabel}>Total Score</Text>
-                    <Text style={styles.resultScore}>{attempt.final_score} <Text style={{fontSize: 18, color: '#546E7A'}}>/ {exam.total_marks}</Text></Text>
-                    {attempt.teacher_feedback && <Text style={styles.feedbackText}>"{attempt.teacher_feedback}"</Text>}
+                <View style={[styles.resultSummaryCard, { backgroundColor: COLORS.resultCardBg, borderColor: COLORS.blue }]}>
+                    <Text style={[styles.resultScoreLabel, { color: COLORS.resultText }]}>Total Score</Text>
+                    <Text style={[styles.resultScore, { color: COLORS.blue }]}>{attempt.final_score} <Text style={{fontSize: 18, color: COLORS.textSub}}>/ {exam.total_marks}</Text></Text>
+                    {attempt.teacher_feedback && <Text style={[styles.feedbackText, { color: COLORS.resultText }]}>"{attempt.teacher_feedback}"</Text>}
                 </View>
 
                 {details.map((item, index) => (
-                    <View key={item.question_id} style={styles.questionBox}>
-                        <Text style={styles.questionText}>{index + 1}. {item.question_text}</Text>
-                        <Text style={styles.yourAnswer}>Your Answer: <Text style={{fontWeight: 'normal'}}>{item.answer_text || 'Not Answered'}</Text></Text>
-                        {item.question_type === 'multiple_choice' && item.options && <Text style={styles.correctAnswer}>Correct Answer: <Text style={{fontWeight: 'normal'}}>{item.options[item.correct_answer]}</Text></Text>}
-                        <View style={styles.marksAwardedBadge}>
-                            <Text style={styles.marksAwardedText}>Marks: {item.marks_awarded} / {item.marks}</Text>
+                    <View key={item.question_id} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+                        <Text style={[styles.questionText, { color: COLORS.textMain }]}>{index + 1}. {item.question_text}</Text>
+                        <Text style={[styles.yourAnswer, { backgroundColor: COLORS.answerBg, color: COLORS.textMain }]}>Your Answer: <Text style={{fontWeight: 'normal'}}>{item.answer_text || 'Not Answered'}</Text></Text>
+                        {item.question_type === 'multiple_choice' && item.options && <Text style={[styles.correctAnswer, { backgroundColor: COLORS.correctBg }]}>Correct Answer: <Text style={{fontWeight: 'normal'}}>{item.options[item.correct_answer]}</Text></Text>}
+                        <View style={[styles.marksAwardedBadge, { backgroundColor: COLORS.headerIconBg }]}>
+                            <Text style={[styles.marksAwardedText, { color: COLORS.primary }]}>Marks: {item.marks_awarded} / {item.marks}</Text>
                         </View>
                     </View>
                 ))}
@@ -359,12 +414,11 @@ const ResultView = ({ attemptId, onBack }) => {
 
 // Styles
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // --- HEADER CARD STYLES ---
+    // Header
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -376,14 +430,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -392,60 +444,67 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
 
     // Card Styles
-    card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+    card: { 
+        borderRadius: 12, 
+        marginBottom: 15, 
+        padding: 15, 
+        elevation: 2, 
+        shadowOpacity: 0.05, 
+        shadowRadius: 3, 
+        shadowOffset: { width: 0, height: 1 } 
+    },
     cardHeader: { marginBottom: 10 },
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain, marginTop: 4 },
-    pill: { backgroundColor: '#e0f2f1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
-    pillText: { color: COLORS.primary, fontWeight: 'bold', fontSize: 12 },
+    cardTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 4 },
+    pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
+    pillText: { fontWeight: 'bold', fontSize: 12 },
     
-    detailsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, backgroundColor: '#f9f9f9', padding: 10, borderRadius: 8 },
+    detailsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, padding: 10, borderRadius: 8 },
     detailItem: { flexDirection: 'row', alignItems: 'center' },
-    detailText: { marginLeft: 5, color: COLORS.textSub, fontSize: 13, fontWeight: '600' },
+    detailText: { marginLeft: 5, fontSize: 13, fontWeight: '600' },
     
-    buttonStart: { flexDirection: 'row', backgroundColor: COLORS.blue, paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-    buttonViewResult: { backgroundColor: COLORS.success, paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-    buttonAwaiting: { backgroundColor: '#FFF3E0', paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFE0B2' },
+    // Buttons
+    buttonStart: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    buttonViewResult: { paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    buttonAwaiting: { paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
     buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginLeft: 5 },
-    buttonTextAwaiting: { color: COLORS.warning, fontWeight: 'bold', fontSize: 16 },
+    buttonTextAwaiting: { fontWeight: 'bold', fontSize: 16 },
 
-    emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: COLORS.textSub },
+    emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
     
-    // Exam Taking Styles
+    // Exam Taking
     timerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, borderWidth: 1, borderColor: '#FFCDD2' },
     timerText: { fontSize: 14, fontWeight: 'bold', color: '#D32F2F', marginLeft: 5 },
     
-    questionBox: { backgroundColor: '#fff', borderRadius: 12, padding: 15, marginBottom: 15, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2 },
+    questionBox: { borderRadius: 12, padding: 15, marginBottom: 15, elevation: 1, shadowOpacity: 0.05, shadowRadius: 2 },
     questionHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-    questionText: { fontSize: 16, fontWeight: '600', color: COLORS.textMain, flex: 1, paddingRight: 10 },
-    marksText: { fontSize: 12, color: COLORS.textSub, fontStyle: 'italic' },
+    questionText: { fontSize: 16, fontWeight: '600', flex: 1, paddingRight: 10 },
+    marksText: { fontSize: 12, fontStyle: 'italic' },
     
     optionsContainer: { marginTop: 5 },
     radioContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingVertical: 8 },
-    radioOuterCircle: { height: 20, width: 20, borderRadius: 10, borderWidth: 2, borderColor: COLORS.blue, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-    radioOuterCircleSelected: { borderColor: COLORS.blue },
-    radioInnerCircle: { height: 10, width: 10, borderRadius: 5, backgroundColor: COLORS.blue },
-    radioLabel: { fontSize: 15, color: COLORS.textMain },
-    radioLabelSelected: { fontWeight: 'bold', color: COLORS.blue },
+    radioOuterCircle: { height: 20, width: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+    radioInnerCircle: { height: 10, width: 10, borderRadius: 5 },
+    radioLabel: { fontSize: 15 },
     
-    textInput: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 12, minHeight: 100, textAlignVertical: 'top', fontSize: 15, backgroundColor: '#FAFAFA' },
+    textInput: { borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 100, textAlignVertical: 'top', fontSize: 15 },
     
-    submitButton: { backgroundColor: COLORS.success, padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 30, elevation: 3 },
+    submitButton: { padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 30, elevation: 3 },
     submitButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
     // Result Styles
-    resultSummaryCard: { backgroundColor: '#E3F2FD', padding: 20, marginBottom: 20, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#BBDEFB' },
-    resultScoreLabel: { fontSize: 14, color: '#1565C0', fontWeight: '600', marginBottom: 5 },
-    resultScore: { fontSize: 32, fontWeight: 'bold', color: '#0D47A1' },
-    feedbackText: { fontSize: 15, fontStyle: 'italic', marginTop: 10, color: '#1565C0', textAlign: 'center' },
+    resultSummaryCard: { padding: 20, marginBottom: 20, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
+    resultScoreLabel: { fontSize: 14, fontWeight: '600', marginBottom: 5 },
+    resultScore: { fontSize: 32, fontWeight: 'bold' },
+    feedbackText: { fontSize: 15, fontStyle: 'italic', marginTop: 10, textAlign: 'center' },
     
-    yourAnswer: { fontSize: 14, color: COLORS.textMain, marginTop: 8, backgroundColor: '#F5F5F5', padding: 8, borderRadius: 6 },
-    correctAnswer: { fontSize: 14, color: '#2E7D32', marginTop: 5, backgroundColor: '#E8F5E9', padding: 8, borderRadius: 6 },
-    marksAwardedBadge: { alignSelf: 'flex-end', backgroundColor: '#E0F2F1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 10 },
-    marksAwardedText: { fontSize: 12, fontWeight: 'bold', color: COLORS.primary },
+    yourAnswer: { fontSize: 14, marginTop: 8, padding: 8, borderRadius: 6 },
+    correctAnswer: { fontSize: 14, color: '#2E7D32', marginTop: 5, padding: 8, borderRadius: 6 },
+    marksAwardedBadge: { alignSelf: 'flex-end', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 10 },
+    marksAwardedText: { fontSize: 12, fontWeight: 'bold' },
 });
 
 export default StudentExamsScreen;

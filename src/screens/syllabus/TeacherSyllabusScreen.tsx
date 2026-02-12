@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, SafeAreaView } from 'react-native';
+import { 
+    View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
+    Alert, ScrollView, SafeAreaView, useColorScheme, StatusBar, Dimensions 
+} from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -7,6 +10,45 @@ import { useIsFocused } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
 const Stack = createStackNavigator();
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION (Master Style Guide) ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F5F7FA',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#CFD8DC',
+    inputBg: '#FAFAFA',
+    iconGrey: '#90A4AE',
+    danger: '#E53935',
+    success: '#43A047',
+    warning: '#FFA000',
+    headerIconBg: '#E0F2F1',
+    divider: '#f0f2f5',
+    filterBg: '#FFFFFF',
+    filterTabBg: '#f1f5f9'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconGrey: '#757575',
+    danger: '#EF5350',
+    success: '#66BB6A',
+    warning: '#FFA726',
+    headerIconBg: '#333333',
+    divider: '#2C2C2C',
+    filterBg: '#1E1E1E',
+    filterTabBg: '#2C2C2C'
+};
+
 const FILTER_TYPES = ["Overall", "AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
 
 // Helper to format date strictly as DD/MM/YYYY
@@ -16,6 +58,7 @@ const formatDate = (isoString) => {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+// --- NAVIGATOR ---
 const TeacherSyllabusNavigator = () => (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="TeacherSubjectList" component={TeacherSyllabusListScreen} />
@@ -23,8 +66,13 @@ const TeacherSyllabusNavigator = () => (
     </Stack.Navigator>
 );
 
+// --- SUBJECT LIST SCREEN ---
 const TeacherSyllabusListScreen = ({ navigation }) => {
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const isFocused = useIsFocused();
@@ -42,15 +90,19 @@ const TeacherSyllabusListScreen = ({ navigation }) => {
     useEffect(() => { if (isFocused) fetchAssignments(); }, [isFocused, fetchAssignments]);
 
     return (
-        <View style={styles.container}>
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
-                <View style={styles.headerIconContainer}>
-                    <MaterialIcons name="menu-book" size={24} color="#008080" />
-                </View>
-                <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>My Syllabus</Text>
-                    <Text style={styles.headerSubtitle}>Select a subject to manage</Text>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={COLORS.background} />
+            
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+                <View style={styles.headerContentWrapper}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                        <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>My Syllabus</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Select a subject to manage</Text>
+                    </View>
                 </View>
             </View>
 
@@ -59,28 +111,35 @@ const TeacherSyllabusListScreen = ({ navigation }) => {
                 keyExtractor={(item, index) => `${item.class_group}-${item.subject_name}-${index}`}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
                 renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('TeacherLessonProgress', { classGroup: item.class_group, subjectName: item.subject_name })}>
-                        <View style={styles.iconBox}>
-                            <MaterialIcons name="class" size={24} color="#4f46e5" />
+                    <TouchableOpacity 
+                        style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} 
+                        onPress={() => navigation.navigate('TeacherLessonProgress', { classGroup: item.class_group, subjectName: item.subject_name })}
+                    >
+                        <View style={[styles.iconBox, { backgroundColor: isDark ? COLORS.inputBg : '#E0E7FF' }]}>
+                            <MaterialIcons name="class" size={24} color={COLORS.primary} />
                         </View>
                         <View style={styles.cardContent}>
-                           <Text style={styles.cardTitle}>{item.subject_name}</Text>
-                           <Text style={styles.cardSubtitle}>{item.class_group}</Text>
+                           <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{item.subject_name}</Text>
+                           <Text style={[styles.cardSubtitle, { color: COLORS.textSub }]}>{item.class_group}</Text>
                         </View>
-                        <MaterialIcons name="chevron-right" size={24} color="#cbd5e1" />
+                        <MaterialIcons name="chevron-right" size={24} color={COLORS.iconGrey} />
                     </TouchableOpacity>
                 )}
                 onRefresh={fetchAssignments}
                 refreshing={isLoading}
-                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No assigned classes found.</Text>}
+                ListEmptyComponent={!isLoading && <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No assigned classes found.</Text>}
             />
-        </View>
+        </SafeAreaView>
     );
 };
 
+// --- PROGRESS SCREEN ---
 const TeacherLessonProgressScreen = ({ route, navigation }) => {
     const { classGroup, subjectName } = route.params;
     const { user: teacher } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
     
     // State for filtering
     const [fullLessonList, setFullLessonList] = useState([]); 
@@ -160,39 +219,39 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
         );
     };
 
-    if (isLoading) return <View style={styles.centered}><ActivityIndicator size="large" color="#4f46e5" /></View>;
+    if (isLoading) return <View style={[styles.centered, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             
-            {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerContentWrapper}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color="#333333" />
+                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
 
-                    <View style={styles.headerIconContainer}>
-                         <MaterialIcons name="trending-up" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                         <MaterialIcons name="trending-up" size={24} color={COLORS.primary} />
                     </View>
                     
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>{subjectName}</Text>
-                        <Text style={styles.headerSubtitle}>{classGroup} • Progress</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{subjectName}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{classGroup} • Progress</Text>
                     </View>
                 </View>
             </View>
 
-            {/* FILTER BAR */}
-            <View style={styles.filterBarContainer}>
+            {/* Filter Bar */}
+            <View style={[styles.filterBarContainer, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
                     {FILTER_TYPES.map((type) => (
                         <TouchableOpacity 
                             key={type} 
-                            style={[styles.filterTab, selectedFilter === type && styles.filterTabActive]}
+                            style={[styles.filterTab, selectedFilter === type ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.filterTabBg }]}
                             onPress={() => handleFilter(type)}
                         >
-                            <Text style={[styles.filterText, selectedFilter === type && styles.filterTextActive]}>
+                            <Text style={[styles.filterText, { color: selectedFilter === type ? '#FFF' : COLORS.textSub }]}>
                                 {type}
                             </Text>
                         </TouchableOpacity>
@@ -202,56 +261,55 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
 
             <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
                 {/* Stats Grid */}
-                <View style={styles.statsContainer}>
+                <View style={[styles.statsContainer, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                     <View style={styles.statBox}>
-                        <Text style={[styles.statNum, {color: '#10b981'}]}>{overview.completed}</Text>
-                        <Text style={styles.statLabel}>Done</Text>
+                        <Text style={[styles.statNum, {color: COLORS.success}]}>{overview.completed}</Text>
+                        <Text style={[styles.statLabel, { color: COLORS.textSub }]}>Done</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={[styles.statNum, {color: '#ef4444'}]}>{overview.missed}</Text>
-                        <Text style={styles.statLabel}>Missed</Text>
+                        <Text style={[styles.statNum, {color: COLORS.danger}]}>{overview.missed}</Text>
+                        <Text style={[styles.statLabel, { color: COLORS.textSub }]}>Missed</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={[styles.statNum, {color: '#f59e0b'}]}>{overview.left}</Text>
-                        <Text style={styles.statLabel}>Left</Text>
+                        <Text style={[styles.statNum, {color: COLORS.warning}]}>{overview.left}</Text>
+                        <Text style={[styles.statLabel, { color: COLORS.textSub }]}>Left</Text>
                     </View>
                 </View>
 
                 {filteredLessons.map((lesson) => {
                     const isCompleted = lesson.status === 'Completed';
                     const isMissed = lesson.status === 'Missed';
-                    // Use to_date for overdue check
                     const isOverdue = new Date(lesson.to_date) < new Date() && !isCompleted && !isMissed;
 
                     return (
-                        <View key={lesson.lesson_id} style={[styles.lessonCard, isOverdue && styles.overdueBorder]}>
+                        <View key={lesson.lesson_id} style={[styles.lessonCard, { backgroundColor: COLORS.cardBg, borderColor: isOverdue ? COLORS.danger : COLORS.border, shadowColor: COLORS.border }]}>
                             <View style={styles.lessonHeader}>
-                                <Text style={styles.lessonTitle}>{lesson.lesson_name}</Text>
-                                <Text style={styles.examBadge}>{lesson.exam_type}</Text>
-                                <Text style={[styles.dateText, isOverdue && {color: '#ef4444'}]}>
+                                <Text style={[styles.lessonTitle, { color: COLORS.textMain }]}>{lesson.lesson_name}</Text>
+                                <Text style={[styles.examBadge, { color: COLORS.primary, backgroundColor: isDark ? COLORS.inputBg : '#E0F2F1' }]}>{lesson.exam_type}</Text>
+                                <Text style={[styles.dateText, { color: isOverdue ? COLORS.danger : COLORS.textSub }]}>
                                     Due: {formatDate(lesson.from_date)} - {formatDate(lesson.to_date)}
                                 </Text>
                             </View>
 
                             {(isCompleted || isMissed) ? (
                                 <View style={styles.statusActionRow}>
-                                    <View style={[styles.badge, isCompleted ? styles.badgeSuccess : styles.badgeError]}>
-                                        <MaterialIcons name={isCompleted ? "check" : "close"} size={14} color={isCompleted ? "#15803d" : "#b91c1c"} />
-                                        <Text style={[styles.badgeText, isCompleted ? {color: '#15803d'} : {color: '#b91c1c'}]}>
+                                    <View style={[styles.badge, isCompleted ? { backgroundColor: isDark ? '#052e16' : '#dcfce7' } : { backgroundColor: isDark ? '#450a0a' : '#fee2e2' }]}>
+                                        <MaterialIcons name={isCompleted ? "check" : "close"} size={14} color={isCompleted ? COLORS.success : COLORS.danger} />
+                                        <Text style={[styles.badgeText, { color: isCompleted ? COLORS.success : COLORS.danger }]}>
                                             {lesson.status}
                                         </Text>
                                     </View>
                                     <TouchableOpacity onPress={() => handleStatusUpdate(lesson.lesson_id, 'Pending')}>
-                                        <Text style={styles.editLink}>Edit</Text>
+                                        <Text style={[styles.editLink, { color: COLORS.textSub }]}>Edit</Text>
                                     </TouchableOpacity>
                                 </View>
                             ) : (
                                 <View style={styles.btnRow}>
-                                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#dcfce7'}]} onPress={() => handleStatusUpdate(lesson.lesson_id, 'Completed')}>
-                                        <Text style={[styles.btnText, {color: '#166534'}]}>Mark Done</Text>
+                                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: isDark ? '#052e16' : '#dcfce7'}]} onPress={() => handleStatusUpdate(lesson.lesson_id, 'Completed')}>
+                                        <Text style={[styles.btnText, {color: COLORS.success}]}>Mark Done</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#fee2e2'}]} onPress={() => handleStatusUpdate(lesson.lesson_id, 'Missed')}>
-                                        <Text style={[styles.btnText, {color: '#991b1b'}]}>Mark Missed</Text>
+                                    <TouchableOpacity style={[styles.actionBtn, {backgroundColor: isDark ? '#450a0a' : '#fee2e2'}]} onPress={() => handleStatusUpdate(lesson.lesson_id, 'Missed')}>
+                                        <Text style={[styles.btnText, {color: COLORS.danger}]}>Mark Missed</Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -259,100 +317,72 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                     );
                 })}
                 {filteredLessons.length === 0 && (
-                    <Text style={styles.emptyText}>No lessons found for {selectedFilter}.</Text>
+                    <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found for {selectedFilter}.</Text>
                 )}
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Matching reference background
+    container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // --- HEADER CARD STYLES ---
+    // Header Style
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
-        paddingVertical: 10,
-        width: '96%', 
+        paddingVertical: 12,
+        width: '96%',
         alignSelf: 'center',
-        marginTop: 15, // REDUCED GAP (Fixed from 40 to 15)
+        marginTop: 15,
         marginBottom: 10,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
         shadowOffset: { width: 0, height: 2 },
     },
-    headerContentWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    headerTextContainer: {
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#333333',
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: '#666666',
-        marginTop: 1,
-    },
-    // ---------------------------------------------
+    headerContentWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    headerTextContainer: { justifyContent: 'center' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13, marginTop: 1 },
 
     // List Card
-    card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 15, marginBottom: 12, borderRadius: 16, shadowColor: '#64748b', shadowOpacity: 0.1, shadowRadius: 5, elevation: 2 },
-    iconBox: { width: 45, height: 45, borderRadius: 12, backgroundColor: '#e0e7ff', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    card: { flexDirection: 'row', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 12, elevation: 2, shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, width: '96%', alignSelf: 'center' },
+    iconBox: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
     cardContent: { flex: 1 },
-    cardTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-    cardSubtitle: { fontSize: 13, color: '#64748b' },
-    emptyText: { textAlign: 'center', marginTop: 50, color: '#94a3b8' },
+    cardTitle: { fontSize: 16, fontWeight: '700' },
+    cardSubtitle: { fontSize: 13 },
+    emptyText: { textAlign: 'center', marginTop: 50 },
     
     // Filter Bar
-    filterBarContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    filterBarContainer: { borderBottomWidth: 1, marginBottom: 10 },
     filterScroll: { paddingHorizontal: 15, paddingVertical: 12 },
-    filterTab: { marginRight: 15, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#f1f5f9' },
-    filterTabActive: { backgroundColor: '#4f46e5' },
-    filterText: { color: '#64748b', fontWeight: '600', fontSize: 14 },
-    filterTextActive: { color: '#fff' },
+    filterTab: { marginRight: 15, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20 },
+    filterText: { fontWeight: '600', fontSize: 14 },
 
-    statsContainer: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, backgroundColor: '#fff', marginBottom: 15, borderRadius: 12, marginHorizontal: 15, marginTop: 10, elevation: 1 },
+    // Stats
+    statsContainer: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, marginBottom: 15, borderRadius: 12, marginHorizontal: 15, marginTop: 10, elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     statBox: { alignItems: 'center' },
     statNum: { fontSize: 24, fontWeight: '800' },
-    statLabel: { fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+    statLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
 
     // Lesson Card
-    lessonCard: { backgroundColor: '#fff', marginHorizontal: 15, marginBottom: 12, borderRadius: 12, padding: 15, borderWidth: 1, borderColor: '#f1f5f9', elevation: 1 },
-    overdueBorder: { borderColor: '#fca5a5' },
+    lessonCard: { marginHorizontal: 15, marginBottom: 12, borderRadius: 12, padding: 15, borderWidth: 1, elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     lessonHeader: { marginBottom: 12 },
-    lessonTitle: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
-    dateText: { fontSize: 13, color: '#64748b', marginTop: 4 },
-    examBadge: { fontSize: 10, color: '#6366f1', backgroundColor: '#e0e7ff', alignSelf:'flex-start', paddingHorizontal:6, paddingVertical:2, borderRadius: 4, marginTop:4, overflow:'hidden', fontWeight: 'bold' },
+    lessonTitle: { fontSize: 16, fontWeight: '600' },
+    dateText: { fontSize: 13, marginTop: 4 },
+    examBadge: { fontSize: 10, alignSelf:'flex-start', paddingHorizontal:6, paddingVertical:2, borderRadius: 4, marginTop:4, overflow:'hidden', fontWeight: 'bold' },
     
     // Actions
     statusActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
     badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-    badgeSuccess: { backgroundColor: '#dcfce7' },
-    badgeError: { backgroundColor: '#fee2e2' },
     badgeText: { fontSize: 12, fontWeight: '700', marginLeft: 5 },
-    editLink: { color: '#64748b', textDecorationLine: 'underline', fontSize: 13 },
+    editLink: { textDecorationLine: 'underline', fontSize: 13 },
     
     btnRow: { flexDirection: 'row', gap: 10 },
     actionBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },

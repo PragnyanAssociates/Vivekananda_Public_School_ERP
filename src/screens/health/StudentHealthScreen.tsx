@@ -1,7 +1,10 @@
-// 📂 File: src/screens/health/StudentHealthScreen.tsx (UPDATED)
+// 📂 File: src/screens/health/StudentHealthScreen.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { 
+    View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, 
+    useColorScheme, StatusBar 
+} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
@@ -17,28 +20,52 @@ interface HealthData {
   medications?: string;
 }
 
-const PRIMARY_COLOR = '#008080';
-const TEXT_COLOR_DARK = '#333';
-const TEXT_COLOR_MEDIUM = '#555';
-const BACKGROUND_COLOR = '#f0f4f7';
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#333333',
+    textSub: '#555555',
+    border: '#CFD8DC',
+    iconBg: '#E0F2F1',
+    infoBoxBg: '#f8f9fa',
+    shadow: '#000'
+};
 
-// ★★★ NEW REUSABLE COMPONENT ★★★
-const ScreenHeader = ({ icon, title, subtitle }) => (
-  <View style={styles.headerCard}>
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    iconBg: '#333333',
+    infoBoxBg: '#2C2C2C',
+    shadow: '#000'
+};
+
+// --- REUSABLE HEADER ---
+const ScreenHeader = ({ icon, title, subtitle, colors }) => (
+  <View style={[styles.headerCard, { backgroundColor: colors.cardBg, shadowColor: colors.shadow }]}>
     <View style={styles.headerContent}>
-      <View style={styles.headerIconContainer}>
-        <MaterialIcons name={icon} size={28} color={PRIMARY_COLOR} />
+      <View style={[styles.headerIconContainer, { backgroundColor: colors.iconBg }]}>
+        <MaterialIcons name={icon} size={28} color={colors.primary} />
       </View>
       <View style={styles.headerTextContainer}>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <Text style={styles.headerSubtitle}>{subtitle}</Text>
+        <Text style={[styles.headerTitle, { color: colors.textMain }]}>{title}</Text>
+        <Text style={[styles.headerSubtitle, { color: colors.textSub }]}>{subtitle}</Text>
       </View>
     </View>
   </View>
 );
 
-
 const StudentHealthScreen = () => {
+  // Theme Hook
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const COLORS = isDark ? DarkColors : LightColors;
+
   const { user, isLoading: isAuthLoading } = useAuth();
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [isHealthLoading, setIsHealthLoading] = useState(true);
@@ -81,91 +108,94 @@ const StudentHealthScreen = () => {
   };
 
   if (isAuthLoading || isHealthLoading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    return <View style={[styles.centered, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
   }
   
   if (!healthData) {
       return (
-        <View style={styles.fullScreenContainer}>
+        <View style={[styles.fullScreenContainer, { backgroundColor: COLORS.background }]}>
             <ScreenHeader 
               icon="favorite"
               title="My Health Record"
               subtitle="Your personal health information"
+              colors={COLORS}
             />
             <View style={styles.centered}>
-              <Text style={styles.errorText}>Your health record has not been updated yet.</Text>
+              <Text style={[styles.errorText, { color: COLORS.textSub }]}>Your health record has not been updated yet.</Text>
             </View>
         </View>
       );
   }
 
   return (
-    <View style={styles.fullScreenContainer}>
+    <View style={[styles.fullScreenContainer, { backgroundColor: COLORS.background }]}>
+       <StatusBar backgroundColor={COLORS.background} barStyle={isDark ? 'light-content' : 'dark-content'} />
        <ScreenHeader 
           icon="favorite"
           title="My Health Record"
           subtitle="Your personal health information"
+          colors={COLORS}
         />
       <ScrollView style={styles.scrollContainer}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: COLORS.cardBg }]}>
           <View style={styles.grid}>
-            <InfoBox icon="opacity" label="Blood Group" value={healthData?.blood_group || 'N/A'} color="#e53935" />
-            <InfoBox icon="height" label="Height" value={healthData?.height_cm ? `${healthData.height_cm} cm` : 'N/A'} color="#1e88e5" />
-            <InfoBox icon="monitor-weight" label="Weight" value={healthData?.weight_kg ? `${healthData.weight_kg} kg` : 'N/A'} color="#fdd835" />
-            <InfoBox icon="calculate" label="BMI" value={calculatedBmi} color="#43a047" />
+            <InfoBox icon="opacity" label="Blood Group" value={healthData?.blood_group || 'N/A'} color="#e53935" colors={COLORS} />
+            <InfoBox icon="height" label="Height" value={healthData?.height_cm ? `${healthData.height_cm} cm` : 'N/A'} color="#1e88e5" colors={COLORS} />
+            <InfoBox icon="monitor-weight" label="Weight" value={healthData?.weight_kg ? `${healthData.weight_kg} kg` : 'N/A'} color="#fdd835" colors={COLORS} />
+            <InfoBox icon="calculate" label="BMI" value={calculatedBmi} color="#43a047" colors={COLORS} />
           </View>
-          <InfoBox icon="event" label="Last Checkup" value={formatDate(healthData?.last_checkup_date)} color="#8e24aa" isFullWidth />
+          <InfoBox icon="event" label="Last Checkup" value={formatDate(healthData?.last_checkup_date)} color="#8e24aa" isFullWidth colors={COLORS} />
         </View>
         
-        <Section title="Allergies" icon="warning" content={healthData?.allergies || 'None reported'} />
-        <Section title="Medical Conditions" icon="local-hospital" content={healthData?.medical_conditions || 'None reported'} />
-        <Section title="Medications" icon="healing" content={healthData?.medications || 'None'} />
+        <Section title="Allergies" icon="warning" content={healthData?.allergies || 'None reported'} colors={COLORS} />
+        <Section title="Medical Conditions" icon="local-hospital" content={healthData?.medical_conditions || 'None reported'} colors={COLORS} />
+        <Section title="Medications" icon="healing" content={healthData?.medications || 'None'} colors={COLORS} />
       </ScrollView>
     </View>
   );
 };
 
-const InfoBox = ({ icon, label, value, color, isFullWidth = false }) => (
-  <View style={[styles.infoBox, isFullWidth && styles.fullWidth]}>
+const InfoBox = ({ icon, label, value, color, isFullWidth = false, colors }) => (
+  <View style={[styles.infoBox, isFullWidth && styles.fullWidth, { backgroundColor: colors.infoBoxBg }]}>
     <MaterialIcons name={icon} size={28} color={color} />
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
+    <Text style={[styles.infoLabel, { color: colors.textSub }]}>{label}</Text>
+    <Text style={[styles.infoValue, { color: colors.textMain }]}>{value}</Text>
   </View>
 );
 
-const Section = ({ title, icon, content }) => (
-  <View style={styles.sectionCard}>
-    <View style={styles.sectionHeader}>
-      <MaterialIcons name={icon} size={22} color={PRIMARY_COLOR} />
-      <Text style={styles.sectionTitle}>{title}</Text>
+const Section = ({ title, icon, content, colors }) => (
+  <View style={[styles.sectionCard, { backgroundColor: colors.cardBg }]}>
+    <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+      <MaterialIcons name={icon} size={22} color={colors.primary} />
+      <Text style={[styles.sectionTitle, { color: colors.primary }]}>{title}</Text>
     </View>
-    <Text style={styles.sectionContent}>{content}</Text>
+    <Text style={[styles.sectionContent, { color: colors.textSub }]}>{content}</Text>
   </View>
 );
 
 const styles = StyleSheet.create({
-  fullScreenContainer: { flex: 1, backgroundColor: BACKGROUND_COLOR },
+  fullScreenContainer: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  errorText: { fontSize: 16, color: TEXT_COLOR_MEDIUM, textAlign: 'center' },
-  scrollContainer: { flex: 1, padding: 10, },
+  errorText: { fontSize: 16, textAlign: 'center' },
+  scrollContainer: { flex: 1, padding: 10 },
   // Header Styles
-  headerCard: { backgroundColor: '#fff', padding: 15, margin: 10, borderRadius: 10, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+  headerCard: { padding: 15, margin: 10, borderRadius: 10, elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5 },
   headerContent: { flexDirection: 'row', alignItems: 'center' },
-  headerIconContainer: { backgroundColor: '#e0f2f1', borderRadius: 25, width: 50, height: 50, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  headerIconContainer: { borderRadius: 25, width: 50, height: 50, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   headerTextContainer: { flex: 1 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: TEXT_COLOR_DARK },
-  headerSubtitle: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginTop: 2 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+  headerSubtitle: { fontSize: 14, marginTop: 2 },
   // Card Styles
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 15, elevation: 2 },
+  card: { borderRadius: 10, padding: 10, marginBottom: 15, elevation: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  infoBox: { width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 10 },
+  infoBox: { width: '48%', borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 10 },
   fullWidth: { width: '100%' },
-  infoLabel: { fontSize: 13, color: TEXT_COLOR_MEDIUM, marginTop: 5 },
-  infoValue: { fontSize: 16, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginTop: 2 },
-  sectionCard: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: PRIMARY_COLOR, marginLeft: 10 },
-  sectionContent: { fontSize: 14, color: TEXT_COLOR_MEDIUM, lineHeight: 20 },
+  infoLabel: { fontSize: 13, marginTop: 5 },
+  infoValue: { fontSize: 16, fontWeight: 'bold', marginTop: 2 },
+  sectionCard: { borderRadius: 10, padding: 15, marginBottom: 15, elevation: 2 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, paddingBottom: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
+  sectionContent: { fontSize: 14, lineHeight: 20 },
 });
 
 export default StudentHealthScreen;

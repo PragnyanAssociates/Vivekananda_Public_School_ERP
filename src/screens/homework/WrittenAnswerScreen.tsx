@@ -1,5 +1,3 @@
-// 📂 File: WrittenAnswerScreen.js (NO CHANGES NEEDED, VERIFIED)
-
 import React, { useState } from 'react';
 import {
   View,
@@ -11,16 +9,51 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  useColorScheme,
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
 
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION (Master Style Guide) ---
+const LightColors = {
+  primary: '#008080',
+  background: '#F5F7FA',
+  cardBg: '#FFFFFF',
+  textMain: '#263238',
+  textSub: '#546E7A',
+  border: '#CFD8DC',
+  inputBg: '#FAFAFA',
+  success: '#43A047',
+  headerIconBg: '#E0F2F1',
+  placeholder: '#B0BEC5'
+};
+
+const DarkColors = {
+  primary: '#008080',
+  background: '#121212',
+  cardBg: '#1E1E1E',
+  textMain: '#E0E0E0',
+  textSub: '#B0B0B0',
+  border: '#333333',
+  inputBg: '#2C2C2C',
+  success: '#66BB6A',
+  headerIconBg: '#333333',
+  placeholder: '#616161'
+};
+
 const WrittenAnswerScreen = ({ route }) => {
   const { assignment } = route.params;
   const { user } = useAuth();
   const navigation = useNavigation();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const COLORS = isDark ? DarkColors : LightColors;
 
   const [answer, setAnswer] = useState(assignment.written_answer || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,27 +87,40 @@ const WrittenAnswerScreen = ({ route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
+      
+      {/* Header Card */}
+      <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+        <View style={styles.headerContentWrapper}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
+                <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
+            </TouchableOpacity>
+            <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                 <MaterialIcons name="edit" size={24} color={COLORS.primary} />
+            </View>
+            <View style={styles.headerTextContainer}>
+                <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{assignment.title}</Text>
+                <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>
+                    {assignment.subject} | Due: {new Date(assignment.due_date).toLocaleDateString('en-GB')}
+                </Text>
+            </View>
+        </View>
+      </View>
+
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{assignment.title}</Text>
-          <Text style={styles.subject}>
-            {assignment.subject} | Due: {new Date(assignment.due_date).toLocaleDateString('en-GB')}
-          </Text>
+        <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+          <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Questions / Instructions</Text>
+          <Text style={[styles.description, { color: COLORS.textMain }]}>{assignment.description || 'No specific instructions provided.'}</Text>
         </View>
 
-        <View style={styles.questionBox}>
-          <Text style={styles.questionHeader}>Questions / Instructions</Text>
-          <Text style={styles.description}>{assignment.description || 'No specific instructions provided.'}</Text>
-        </View>
-
-        <View style={styles.answerBox}>
-          <Text style={styles.answerHeader}>Your Answer</Text>
+        <View style={[styles.answerBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+          <Text style={[styles.answerHeader, { color: COLORS.textMain }]}>Your Answer</Text>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
             multiline
             placeholder="Start typing your answer here..."
-            placeholderTextColor="#999"
+            placeholderTextColor={COLORS.placeholder}
             value={answer}
             onChangeText={setAnswer}
             editable={!isSubmitting}
@@ -82,9 +128,9 @@ const WrittenAnswerScreen = ({ route }) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: COLORS.background, borderTopColor: COLORS.border }]}>
         <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          style={[styles.submitButton, { backgroundColor: COLORS.success, opacity: isSubmitting ? 0.7 : 1 }]}
           onPress={handleSubmit}
           disabled={isSubmitting}>
           {isSubmitting ? (
@@ -104,97 +150,95 @@ const WrittenAnswerScreen = ({ route }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f4f6f8',
   },
+  
+  // Header Style
+  headerCard: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    width: '96%',
+    alignSelf: 'center',
+    marginTop: 15,
+    marginBottom: 10,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  headerContentWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  headerTextContainer: { justifyContent: 'center', flex: 1 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+  headerSubtitle: { fontSize: 12, marginTop: 1 },
+
   container: {
     padding: 15,
     paddingBottom: 100, // Space for the floating button
   },
-  header: {
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderLeftWidth: 5,
-    borderLeftColor: '#FF7043',
-    elevation: 2,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#263238',
-  },
-  subject: {
-    fontSize: 14,
-    color: '#546e7a',
-    marginTop: 5,
-  },
+  
   questionBox: {
     marginBottom: 20,
     padding: 15,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 12,
     elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 }
   },
   questionHeader: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#37474f',
     marginBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
     paddingBottom: 5,
   },
   description: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#333',
   },
+  
   answerBox: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 12,
     elevation: 2,
     padding: 15,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 }
   },
   answerHeader: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#37474f',
     marginBottom: 10,
   },
   textInput: {
     minHeight: 250,
     textAlignVertical: 'top',
     fontSize: 16,
-    color: '#212121',
     lineHeight: 24,
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    backgroundColor: '#fdfdfd',
   },
+  
   footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     padding: 15,
-    backgroundColor: '#f4f6f8',
     borderTopWidth: 1,
-    borderColor: '#e0e0e0',
   },
   submitButton: {
-    backgroundColor: '#28a745',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 15,
-    borderRadius: 8,
+    borderRadius: 12,
     elevation: 2,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#a5d6a7',
   },
   submitButtonText: {
     color: '#fff',

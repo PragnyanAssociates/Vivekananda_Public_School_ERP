@@ -9,11 +9,14 @@ import {
   Alert,
   Platform,
   FlatList,
-  Modal
+  Modal,
+  useColorScheme,
+  StatusBar,
+  Dimensions
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; // Added for Header consistency
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Animatable from 'react-native-animatable';
 import { useNavigation } from '@react-navigation/native';
@@ -22,22 +25,48 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',    
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
     success: '#43A047',
     error: '#E53935',
-    border: '#CFD8DC'
+    border: '#CFD8DC',
+    inputBg: '#FFFFFF',
+    iconBg: '#E0F2F1',
+    btnInactive: '#FFFFFF',
+    shadow: '#000'
+};
+
+const DarkColors = {
+    primary: '#008080',    
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    success: '#43A047',
+    error: '#EF5350',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconBg: '#333333',
+    btnInactive: '#2C2C2C',
+    shadow: '#000'
 };
 
 const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const MarkStudentAttendance = () => {
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     const { user } = useAuth();
     
@@ -49,12 +78,12 @@ const MarkStudentAttendance = () => {
     // --- State: Data & Logic ---
     const [viewState, setViewState] = useState('selection'); // 'selection' | 'success' | 'marking'
     const [isLoading, setIsLoading] = useState(false);
-    const [students, setStudents] = useState([]);
+    const [students, setStudents] = useState<any[]>([]);
     const [subjectName, setSubjectName] = useState(''); 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- Format Date Helper ---
-    const formatDate = (date) => {
+    const formatDate = (date: Date) => {
         const d = new Date(date);
         const day = String(d.getDate()).padStart(2, '0');
         const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -63,7 +92,7 @@ const MarkStudentAttendance = () => {
     };
 
     // --- Handlers ---
-    const handleDateChange = (event, date) => {
+    const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(Platform.OS === 'ios');
         if (date) setSelectedDate(date);
     };
@@ -84,7 +113,7 @@ const MarkStudentAttendance = () => {
 
             const timetableRes = await apiClient.get(`/timetable/${selectedClass}`);
             const slot = timetableRes.data.find(
-                s => s.day_of_week === dayOfWeek && s.period_number === periodNumber
+                (s: any) => s.day_of_week === dayOfWeek && s.period_number === periodNumber
             );
             
             const resolvedSubject = slot ? slot.subject_name : "General Attendance";
@@ -114,19 +143,19 @@ const MarkStudentAttendance = () => {
         }
     };
 
-    const fetchStudentSheet = async (periodNumber, dateString) => {
+    const fetchStudentSheet = async (periodNumber: number, dateString: string) => {
         const sheetRes = await apiClient.get('/attendance/sheet', {
             params: { class_group: selectedClass, date: dateString, period_number: periodNumber }
         });
 
-        const formattedData = sheetRes.data.map(student => ({
+        const formattedData = sheetRes.data.map((student: any) => ({
             ...student,
             status: student.status || 'Present' 
         }));
         setStudents(formattedData);
     };
 
-    const toggleStatus = (id, status) => {
+    const toggleStatus = (id: number, status: string) => {
         setStudents(prev => prev.map(s => s.id === id ? { ...s, status } : s));
     };
 
@@ -144,7 +173,7 @@ const MarkStudentAttendance = () => {
 
             await apiClient.post('/attendance', payload);
             setViewState('success');
-        } catch (error) {
+        } catch (error: any) {
             Alert.alert('Error', error.response?.data?.message || 'Failed to save.');
         } finally {
             setIsSubmitting(false);
@@ -155,7 +184,7 @@ const MarkStudentAttendance = () => {
 
     if (isLoading) {
         return (
-            <View style={styles.loaderContainer}>
+            <View style={[styles.loaderContainer, { backgroundColor: COLORS.background }]}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
                 <Text style={{marginTop: 10, color: COLORS.textSub}}>Checking records...</Text>
             </View>
@@ -165,39 +194,43 @@ const MarkStudentAttendance = () => {
     // --- VIEW 1: SELECTION ---
     if (viewState === 'selection') {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+                <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
                 
                 {/* --- HEADER CARD --- */}
-                <View style={styles.headerCard}>
+                <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                     <View style={styles.headerLeft}>
-                        <View style={styles.headerIconContainer}>
-                            <MaterialIcons name="assignment-turned-in" size={24} color="#008080" />
+                        <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
+                            <MaterialIcons name="assignment-turned-in" size={24} color={COLORS.primary} />
                         </View>
                         <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Mark Attendance</Text>
-                            <Text style={styles.headerSubtitle}>Daily Entry</Text>
+                            <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Mark Attendance</Text>
+                            <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Daily Entry</Text>
                         </View>
                     </View>
                 </View>
 
                 <View style={styles.contentContainer}>
-                    <Text style={styles.label}>Select Class</Text>
-                    <View style={styles.pickerWrapper}>
+                    <Text style={[styles.label, { color: COLORS.textSub }]}>Select Class</Text>
+                    <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                         <Picker
                             selectedValue={selectedClass}
                             onValueChange={(itemValue) => setSelectedClass(itemValue)}
                             dropdownIconColor={COLORS.textMain}
-                            style={styles.picker}
+                            style={[styles.picker, { color: COLORS.textMain }]}
                         >
                             {CLASS_GROUPS.map((cls) => (
-                                <Picker.Item key={cls} label={cls} value={cls} color={COLORS.textMain} />
+                                <Picker.Item key={cls} label={cls} value={cls} style={{fontSize: 14}} />
                             ))}
                         </Picker>
                     </View>
 
-                    <Text style={styles.label}>Select Date</Text>
-                    <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
-                        <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+                    <Text style={[styles.label, { color: COLORS.textSub }]}>Select Date</Text>
+                    <TouchableOpacity 
+                        style={[styles.datePickerBtn, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} 
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        <Text style={[styles.dateText, { color: COLORS.textMain }]}>{formatDate(selectedDate)}</Text>
                         <Icon name="calendar" size={20} color={COLORS.primary} />
                     </TouchableOpacity>
                     {showDatePicker && (
@@ -209,7 +242,7 @@ const MarkStudentAttendance = () => {
                         />
                     )}
 
-                    <TouchableOpacity style={styles.proceedBtn} onPress={handleProceed}>
+                    <TouchableOpacity style={[styles.proceedBtn, { backgroundColor: COLORS.primary }]} onPress={handleProceed}>
                         <Text style={styles.proceedBtnText}>PROCEED</Text>
                         <Icon name="arrow-right" size={20} color="#fff" />
                     </TouchableOpacity>
@@ -221,23 +254,23 @@ const MarkStudentAttendance = () => {
     // --- VIEW 2: SUCCESS ---
     if (viewState === 'success') {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
                 <View style={[styles.contentContainer, { justifyContent: 'center', alignItems: 'center', flex: 1 }]}>
                     <TouchableOpacity onPress={() => setViewState('selection')} style={styles.closeIcon}>
                         <Icon name="close" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
 
                     <Animatable.View animation="zoomIn" duration={600} style={{ alignItems: 'center', width: '100%' }}>
-                        <View style={styles.successCircle}>
+                        <View style={[styles.successCircle, { backgroundColor: COLORS.success }]}>
                             <Icon name="check" size={50} color="#fff" />
                         </View>
-                        <Text style={styles.successTitle}>Done!</Text>
-                        <Text style={styles.successSubtitle}>
-                            Attendance for <Text style={{fontWeight: 'bold'}}>{formatDate(selectedDate)}</Text> has been marked.
+                        <Text style={[styles.successTitle, { color: COLORS.textMain }]}>Done!</Text>
+                        <Text style={[styles.successSubtitle, { color: COLORS.textSub }]}>
+                            Attendance for <Text style={{fontWeight: 'bold', color: COLORS.textMain}}>{formatDate(selectedDate)}</Text> has been marked.
                         </Text>
                         
                         <TouchableOpacity 
-                            style={styles.editButton} 
+                            style={[styles.editButton, { backgroundColor: COLORS.primary }]} 
                             onPress={async () => {
                                 setIsLoading(true);
                                 await fetchStudentSheet(1, selectedDate.toISOString().split('T')[0]);
@@ -260,20 +293,20 @@ const MarkStudentAttendance = () => {
     // --- VIEW 3: MARKING LIST ---
     if (viewState === 'marking') {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
                 
                 {/* --- HEADER CARD (With Back) --- */}
-                <View style={styles.headerCard}>
+                <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={() => setViewState('selection')} style={{marginRight: 10, padding: 4}}>
-                            <MaterialIcons name="arrow-back" size={24} color="#333" />
+                            <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                         </TouchableOpacity>
-                        <View style={styles.headerIconContainer}>
-                            <MaterialIcons name="edit-note" size={24} color="#008080" />
+                        <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
+                            <MaterialIcons name="edit-note" size={24} color={COLORS.primary} />
                         </View>
                         <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>{selectedClass}</Text>
-                            <Text style={styles.headerSubtitle}>{students.length} Students • {formatDate(selectedDate)}</Text>
+                            <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{selectedClass}</Text>
+                            <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{students.length} Students • {formatDate(selectedDate)}</Text>
                         </View>
                     </View>
                 </View>
@@ -285,22 +318,32 @@ const MarkStudentAttendance = () => {
                     renderItem={({ item }) => {
                         const isPresent = item.status === 'Present';
                         return (
-                            <View style={styles.studentCard}>
+                            <View style={[styles.studentCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.rowName}>{item.full_name}</Text>
-                                    <Text style={styles.rowSubText}>{item.roll_no ? `Roll: ${item.roll_no}` : '-'}</Text>
+                                    <Text style={[styles.rowName, { color: COLORS.textMain }]}>{item.full_name}</Text>
+                                    <Text style={[styles.rowSubText, { color: COLORS.textSub }]}>{item.roll_no ? `Roll: ${item.roll_no}` : '-'}</Text>
                                 </View>
 
                                 <View style={styles.actionButtonsContainer}>
                                     <TouchableOpacity 
-                                        style={[styles.statusBtn, isPresent ? styles.btnPresent : styles.btnInactive]}
+                                        style={[
+                                            styles.statusBtn, 
+                                            isPresent 
+                                                ? { backgroundColor: COLORS.success, borderColor: COLORS.success } 
+                                                : { backgroundColor: COLORS.btnInactive, borderColor: COLORS.border }
+                                        ]}
                                         onPress={() => toggleStatus(item.id, 'Present')}
                                     >
                                         <Text style={[styles.statusText, isPresent ? {color: '#fff'} : {color: COLORS.success}]}>P</Text>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity 
-                                        style={[styles.statusBtn, !isPresent ? styles.btnAbsent : styles.btnInactive]}
+                                        style={[
+                                            styles.statusBtn, 
+                                            !isPresent 
+                                                ? { backgroundColor: COLORS.error, borderColor: COLORS.error } 
+                                                : { backgroundColor: COLORS.btnInactive, borderColor: COLORS.border }
+                                        ]}
                                         onPress={() => toggleStatus(item.id, 'Absent')}
                                     >
                                         <Text style={[styles.statusText, !isPresent ? {color: '#fff'} : {color: COLORS.error}]}>A</Text>
@@ -313,7 +356,7 @@ const MarkStudentAttendance = () => {
 
                 <View style={styles.footerContainer}>
                     <TouchableOpacity 
-                        style={styles.submitFooterButton}
+                        style={[styles.submitFooterButton, { backgroundColor: COLORS.primary }]}
                         onPress={handleSubmit}
                         disabled={isSubmitting}
                     >
@@ -332,12 +375,11 @@ const MarkStudentAttendance = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
-    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+    container: { flex: 1 },
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -349,14 +391,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -365,49 +405,46 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
 
     // --- SELECTION VIEW ---
     contentContainer: { padding: 20 },
-    label: { fontSize: 14, color: COLORS.textSub, marginBottom: 8, fontWeight: '600', marginTop: 10 },
-    pickerWrapper: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#fff', overflow: 'hidden' },
-    picker: { height: 50 },
+    label: { fontSize: 14, marginBottom: 8, fontWeight: '600', marginTop: 10 },
+    pickerWrapper: { borderWidth: 1, borderRadius: 8, overflow: 'hidden', height: 50, justifyContent: 'center' },
+    picker: { width: '100%' },
     
     datePickerBtn: { 
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        padding: 15, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#fff', marginBottom: 30 
+        padding: 15, borderWidth: 1, borderRadius: 8, marginBottom: 30 
     },
-    dateText: { fontSize: 16, color: COLORS.textMain, fontWeight: '500' },
+    dateText: { fontSize: 16, fontWeight: '500' },
     
     proceedBtn: { 
-        backgroundColor: COLORS.primary, padding: 16, borderRadius: 12, 
+        padding: 16, borderRadius: 12, 
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 3 
     },
     proceedBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 10 },
 
     // --- SUCCESS VIEW ---
     closeIcon: { position: 'absolute', top: 20, right: 20, padding: 10, zIndex: 10 },
-    successCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.success, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    successTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.textMain, marginBottom: 10 },
-    successSubtitle: { fontSize: 15, color: COLORS.textSub, textAlign: 'center', paddingHorizontal: 40, marginBottom: 30 },
-    editButton: { backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 25 },
+    successCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+    successTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
+    successSubtitle: { fontSize: 15, textAlign: 'center', paddingHorizontal: 40, marginBottom: 30 },
+    editButton: { paddingVertical: 12, paddingHorizontal: 40, borderRadius: 25 },
     editButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
     // --- MARKING LIST ---
     studentCard: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10,
-        elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: {width: 0, height: 1}
+        padding: 15, borderRadius: 12, marginBottom: 10,
+        elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: {width: 0, height: 1}
     },
-    rowName: { fontSize: 16, fontWeight: '600', color: COLORS.textMain },
-    rowSubText: { fontSize: 12, color: COLORS.textSub, marginTop: 4 },
+    rowName: { fontSize: 16, fontWeight: '600' },
+    rowSubText: { fontSize: 12, marginTop: 4 },
     
     actionButtonsContainer: { flexDirection: 'row', gap: 10 },
     statusBtn: { width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-    btnPresent: { backgroundColor: COLORS.success, borderColor: COLORS.success },
-    btnAbsent: { backgroundColor: COLORS.error, borderColor: COLORS.error },
-    btnInactive: { backgroundColor: '#fff', borderColor: '#E0E0E0' },
     statusText: { fontSize: 16, fontWeight: 'bold' },
 
     // Footer
@@ -415,7 +452,7 @@ const styles = StyleSheet.create({
         position: 'absolute', bottom: 20, left: 20, right: 20, 
     },
     submitFooterButton: { 
-        backgroundColor: COLORS.primary, paddingVertical: 15, borderRadius: 30,
+        paddingVertical: 15, borderRadius: 30,
         alignItems: 'center', justifyContent: 'center', elevation: 5,
         shadowColor: '#000', shadowOpacity: 0.2, shadowOffset: {width: 0, height: 3}
     },

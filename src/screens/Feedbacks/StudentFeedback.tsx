@@ -1,12 +1,65 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView,
-    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing
+    TouchableOpacity, ActivityIndicator, Alert, Modal, Animated, Easing,
+    Dimensions, useColorScheme, StatusBar, Platform, UIManager
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+
+// Enable Layout Animation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',    
+    background: '#F2F5F8', 
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    success: '#10b981',
+    average: '#3b82f6',
+    poor: '#ef4444',
+    warning: '#FFC107',
+    border: '#CFD8DC',
+    inputBg: '#FFFFFF',
+    iconBg: '#E0F2F1',
+    tableHeader: '#e0e7ff',
+    tableHeaderText: '#4338ca',
+    tableBorder: '#c7d2fe',
+    rowAlt: '#f8fafc',
+    track: '#F0F0F0',
+    modalOverlay: 'rgba(0,0,0,0.5)',
+    btnDisabled: '#E0E0E0'
+};
+
+const DarkColors = {
+    primary: '#008080',    
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    success: '#10b981',
+    average: '#3b82f6',
+    poor: '#ef4444',
+    warning: '#FFC107',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconBg: '#333333',
+    tableHeader: '#2C2C2C',
+    tableHeaderText: '#E0E0E0',
+    tableBorder: '#444',
+    rowAlt: '#252525',
+    track: '#333333',
+    modalOverlay: 'rgba(255,255,255,0.1)',
+    btnDisabled: '#424242'
+};
 
 // --- CONSTANTS ---
 const COL_WIDTHS = {
@@ -18,7 +71,7 @@ const COL_WIDTHS = {
 const TABLE_MIN_WIDTH = COL_WIDTHS.ROLL + COL_WIDTHS.NAME + COL_WIDTHS.STATUS + COL_WIDTHS.REMARKS; 
 
 // --- ANIMATED BAR COMPONENT ---
-const AnimatedBar = ({ percentage, rating, label, color }) => {
+const AnimatedBar = ({ percentage, rating, label, color, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -37,22 +90,27 @@ const AnimatedBar = ({ percentage, rating, label, color }) => {
 
     return (
         <View style={styles.barWrapper}>
-            <Text style={styles.barLabelTop}>{Math.round(percentage)}%</Text>
-            <View style={styles.barTrack}>
+            <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{Math.round(percentage)}%</Text>
+            <View style={[styles.barTrack, { backgroundColor: colors.track }]}>
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
             </View>
-            <Text style={styles.barLabelBottom} numberOfLines={1}>
+            <Text style={[styles.barLabelBottom, { color: colors.textMain }]} numberOfLines={1}>
                 {label.split(' ')[0]} 
             </Text>
             <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
-                 <Text style={{fontSize:10, fontWeight:'bold', color:'#555'}}>{rating}</Text>
-                 <MaterialIcons name="star" size={10} color="#FFC107" />
+                 <Text style={{fontSize:10, fontWeight:'bold', color: colors.textSub}}>{rating}</Text>
+                 <MaterialIcons name="star" size={10} color={colors.warning} />
             </View>
         </View>
     );
 };
 
 const StudentFeedback = () => {
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     
@@ -292,26 +350,33 @@ const StudentFeedback = () => {
         const opacity = isOverallView && !isSelected ? 0.3 : 1;
         return (
             <TouchableOpacity 
-                style={[styles.remarkBtn, { opacity }, isSelected ? { backgroundColor: color, borderColor: color } : { borderColor: '#E0E0E0', backgroundColor: '#FFF' }]}
+                style={[
+                    styles.remarkBtn, 
+                    { opacity }, 
+                    isSelected 
+                        ? { backgroundColor: color, borderColor: color } 
+                        : { borderColor: COLORS.border, backgroundColor: COLORS.cardBg }
+                ]}
                 onPress={onPress} disabled={disabled}
             >
-                <Text style={[styles.remarkBtnText, isSelected ? { color: '#FFF' } : { color: '#9e9e9e' }]}>{label}</Text>
+                <Text style={[styles.remarkBtnText, isSelected ? { color: '#FFF' } : { color: COLORS.textSub }]}>{label}</Text>
             </TouchableOpacity>
         );
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar backgroundColor={COLORS.background} barStyle={isDark ? 'light-content' : 'dark-content'} />
             
             {/* HEADER */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                         <MaterialIcons name="fact-check" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
+                         <MaterialIcons name="fact-check" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Behaviour</Text>
-                        <Text style={styles.headerSubtitle}>Student Tracking</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Behaviour</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Student Tracking</Text>
                     </View>
                 </View>
 
@@ -337,43 +402,46 @@ const StudentFeedback = () => {
             {/* FILTERS */}
             <View style={styles.filterContainer}>
                 {/* Row 1: Class (Full Width) */}
-                <View style={styles.pickerWrapper}>
+                <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                     <Picker
                         selectedValue={selectedClass}
                         onValueChange={setSelectedClass}
-                        style={styles.picker}
+                        style={[styles.picker, { color: COLORS.textMain }]}
+                        dropdownIconColor={COLORS.textMain}
                     >
-                        <Picker.Item label="Select Class" value="" color="#999" />
-                        {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                        <Picker.Item label="Select Class" value="" color={COLORS.textSub} />
+                        {allClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
                     </Picker>
                 </View>
 
                 {/* Row 2: Subject */}
                 {selectedClass !== '' && (
-                    <View style={styles.pickerWrapper}>
+                    <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                         <Picker
                             selectedValue={selectedSubject}
                             onValueChange={setSelectedSubject}
                             enabled={availableSubjects.length > 0}
-                            style={styles.picker}
+                            style={[styles.picker, { color: COLORS.textMain }]}
+                            dropdownIconColor={COLORS.textMain}
                         >
-                            <Picker.Item label="Select Subject" value="" color="#999" />
-                            {availableSubjects.map(s => <Picker.Item key={s} label={s} value={s} />)}
+                            <Picker.Item label="Select Subject" value="" color={COLORS.textSub} />
+                            {availableSubjects.map(s => <Picker.Item key={s} label={s} value={s} style={{fontSize: 14}} />)}
                         </Picker>
                     </View>
                 )}
 
                 {/* Row 3: Teacher (Admin only) */}
                 {user?.role === 'admin' && selectedSubject !== '' && !isOverallView && (
-                    <View style={styles.pickerWrapper}>
+                    <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                         <Picker
                             selectedValue={selectedTeacherId?.toString()}
                             onValueChange={(val) => val && setSelectedTeacherId(parseInt(val))}
                             enabled={availableTeachers.length > 0}
-                            style={styles.picker}
+                            style={[styles.picker, { color: COLORS.textMain }]}
+                            dropdownIconColor={COLORS.textMain}
                         >
-                            <Picker.Item label="Select Teacher" value="" color="#999" />
-                            {availableTeachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} />)}
+                            <Picker.Item label="Select Teacher" value="" color={COLORS.textSub} />
+                            {availableTeachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} style={{fontSize: 14}} />)}
                         </Picker>
                     </View>
                 )}
@@ -388,28 +456,32 @@ const StudentFeedback = () => {
                 >
                     <View style={{ minWidth: TABLE_MIN_WIDTH }}>
                         
-                        <View style={styles.tableHeader}>
-                            <Text style={[styles.th, { width: COL_WIDTHS.ROLL, textAlign: 'center' }]}>Roll</Text>
-                            <Text style={[styles.th, { width: COL_WIDTHS.NAME }]}>Student Name</Text>
-                            <Text style={[styles.th, { width: COL_WIDTHS.STATUS, textAlign: 'center' }]}>
+                        <View style={[styles.tableHeader, { backgroundColor: COLORS.tableHeader, borderColor: COLORS.tableBorder }]}>
+                            <Text style={[styles.th, { width: COL_WIDTHS.ROLL, textAlign: 'center', color: COLORS.tableHeaderText }]}>Roll</Text>
+                            <Text style={[styles.th, { width: COL_WIDTHS.NAME, color: COLORS.tableHeaderText }]}>Student Name</Text>
+                            <Text style={[styles.th, { width: COL_WIDTHS.STATUS, textAlign: 'center', color: COLORS.tableHeaderText }]}>
                                 {isOverallView ? 'Avg Rating' : 'Rating'}
                             </Text>
-                            <Text style={[styles.th, { width: COL_WIDTHS.REMARKS, textAlign: 'center' }]}>
+                            <Text style={[styles.th, { width: COL_WIDTHS.REMARKS, textAlign: 'center', color: COLORS.tableHeaderText }]}>
                                 {isOverallView ? 'Overall Remarks' : 'Remarks'}
                             </Text>
                         </View>
 
                         {loading ? (
-                            <ActivityIndicator size="large" color="#008080" style={{ marginTop: 40 }} />
+                            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
                         ) : (
                             <ScrollView contentContainerStyle={{ paddingBottom: 130 }}> 
                                 {students.length > 0 ? (
                                     students.map((item, index) => (
-                                        <View key={item.student_id} style={[styles.row, index % 2 === 1 && styles.rowAlt]}>
-                                            <Text style={[styles.td, { width: COL_WIDTHS.ROLL, textAlign: 'center', fontWeight: '700', color: '#111' }]}>
+                                        <View key={item.student_id} style={[
+                                            styles.row, 
+                                            { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border },
+                                            index % 2 === 1 && { backgroundColor: COLORS.rowAlt }
+                                        ]}>
+                                            <Text style={[styles.td, { width: COL_WIDTHS.ROLL, textAlign: 'center', fontWeight: '700', color: COLORS.textMain }]}>
                                                 {item.roll_no ? item.roll_no.toString().padStart(2, '0') : '-'}
                                             </Text>
-                                            <Text style={[styles.td, { width: COL_WIDTHS.NAME, color: '#444' }]} numberOfLines={1}>
+                                            <Text style={[styles.td, { width: COL_WIDTHS.NAME, color: COLORS.textSub }]} numberOfLines={1}>
                                                 {item.full_name}
                                             </Text>
                                             
@@ -424,23 +496,23 @@ const StudentFeedback = () => {
                                                         <MaterialIcons 
                                                             name={item.status_marks && item.status_marks >= star ? "star" : "star-border"} 
                                                             size={28} 
-                                                            color={item.status_marks && item.status_marks >= star ? "#FFC107" : "#CFD8DC"} 
+                                                            color={item.status_marks && item.status_marks >= star ? COLORS.warning : COLORS.border} 
                                                         />
                                                     </TouchableOpacity>
                                                 ))}
                                             </View>
 
                                             <View style={{ width: COL_WIDTHS.REMARKS, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
-                                                <RemarkButton label="G" targetValue="Good" currentValue={item.remarks_category} color="#10b981" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Good')} />
-                                                <RemarkButton label="A" targetValue="Average" currentValue={item.remarks_category} color="#3b82f6" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Average')} />
-                                                <RemarkButton label="P" targetValue="Poor" currentValue={item.remarks_category} color="#ef4444" disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Poor')} />
+                                                <RemarkButton label="G" targetValue="Good" currentValue={item.remarks_category} color={COLORS.success} disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Good')} />
+                                                <RemarkButton label="A" targetValue="Average" currentValue={item.remarks_category} color={COLORS.average} disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Average')} />
+                                                <RemarkButton label="P" targetValue="Poor" currentValue={item.remarks_category} color={COLORS.poor} disabled={user?.role === 'admin' || isOverallView} onPress={() => updateStudentFeedback(item.student_id, 'remarks_category', 'Poor')} />
                                             </View>
                                         </View>
                                     ))
                                 ) : (
                                     <View style={styles.emptyContainer}>
-                                        <MaterialIcons name="person-off" size={40} color="#CFD8DC" />
-                                        <Text style={styles.emptyText}>
+                                        <MaterialIcons name="person-off" size={40} color={COLORS.border} />
+                                        <Text style={[styles.emptyText, { color: COLORS.textSub }]}>
                                             {!selectedClass ? "Select a class." : "No data found."}
                                         </Text>
                                     </View>
@@ -454,7 +526,7 @@ const StudentFeedback = () => {
             {/* SAVE BUTTON */}
             {!isOverallView && user?.role === 'teacher' && hasChanges && (
                 <View style={styles.floatingSaveContainer}>
-                    <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
+                    <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary }]} onPress={handleSave} disabled={loading}>
                         {loading ? <ActivityIndicator color="#fff" size="small"/> : (
                             <Text style={styles.saveBtnText}>Save Changes</Text>
                         )}
@@ -463,18 +535,18 @@ const StudentFeedback = () => {
             )}
 
             {/* FOOTER LEGEND */}
-            <View style={styles.footerContainer}>
+            <View style={[styles.footerContainer, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
                 <View style={styles.legendGroup}>
-                    <Text style={styles.legendLabel}>Scale: </Text>
-                    <MaterialIcons name="star" size={14} color="#FFC107" />
-                    <Text style={styles.legendText}> (1-5)</Text>
+                    <Text style={[styles.legendLabel, { color: COLORS.textMain }]}>Scale: </Text>
+                    <MaterialIcons name="star" size={14} color={COLORS.warning} />
+                    <Text style={[styles.legendText, { color: COLORS.textSub }]}> (1-5)</Text>
                 </View>
-                <View style={styles.verticalDivider} />
+                <View style={[styles.verticalDivider, { backgroundColor: COLORS.border }]} />
                 <View style={styles.legendGroup}>
-                    <Text style={styles.legendLabel}>Note: </Text>
-                    <Text style={[styles.legendText, { color: '#10b981', fontWeight:'bold' }]}>G</Text><Text style={styles.legendText}>=Good, </Text>
-                    <Text style={[styles.legendText, { color: '#3b82f6', fontWeight:'bold' }]}>A</Text><Text style={styles.legendText}>=Avg, </Text>
-                    <Text style={[styles.legendText, { color: '#ef4444', fontWeight:'bold' }]}>P</Text><Text style={styles.legendText}>=Poor</Text>
+                    <Text style={[styles.legendLabel, { color: COLORS.textMain }]}>Note: </Text>
+                    <Text style={[styles.legendText, { color: COLORS.success, fontWeight:'bold' }]}>G</Text><Text style={[styles.legendText, { color: COLORS.textSub }]}>=Good, </Text>
+                    <Text style={[styles.legendText, { color: COLORS.average, fontWeight:'bold' }]}>A</Text><Text style={[styles.legendText, { color: COLORS.textSub }]}>=Avg, </Text>
+                    <Text style={[styles.legendText, { color: COLORS.poor, fontWeight:'bold' }]}>P</Text><Text style={[styles.legendText, { color: COLORS.textSub }]}>=Poor</Text>
                 </View>
             </View>
 
@@ -486,27 +558,28 @@ const StudentFeedback = () => {
                 animationType="slide"
                 onRequestClose={() => setShowCompareModal(false)}
             >
-                <SafeAreaView style={{flex:1, backgroundColor:'#FFF'}}>
+                <SafeAreaView style={{flex:1, backgroundColor: COLORS.background}}>
                     
                     {/* MODAL HEADER */}
-                    <View style={styles.modalHeader}>
+                    <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg }]}>
                         <TouchableOpacity onPress={() => setShowCompareModal(false)} style={{padding:5}}>
-                            <MaterialIcons name="close" size={26} color="#333" />
+                            <MaterialIcons name="close" size={26} color={COLORS.textMain} />
                         </TouchableOpacity>
-                        <Text style={styles.modalTitle}>Performance Analytics</Text>
+                        <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>Performance Analytics</Text>
                         <View style={{width:30}}/>
                     </View>
 
                     {/* MODAL FILTERS */}
-                    <View style={styles.modalFilterContainer}>
+                    <View style={[styles.modalFilterContainer, { backgroundColor: COLORS.inputBg, borderBottomColor: COLORS.border }]}>
                         {/* Subject Filter inside Modal */}
                         <View style={{marginBottom: 10}}>
-                            <Text style={styles.modalLabel}>Comparing Subject:</Text>
-                            <View style={styles.modalPickerWrap}>
+                            <Text style={[styles.modalLabel, { color: COLORS.textSub }]}>Comparing Subject:</Text>
+                            <View style={[styles.modalPickerWrap, { borderColor: COLORS.border, backgroundColor: COLORS.cardBg }]}>
                                 <Picker
                                     selectedValue={compareSubject}
                                     onValueChange={setCompareSubject}
-                                    style={{width:'100%'}}
+                                    style={{width:'100%', color: COLORS.textMain}}
+                                    dropdownIconColor={COLORS.textMain}
                                 >
                                     <Picker.Item label="All Subjects" value="All Subjects" />
                                     {availableSubjects
@@ -519,25 +592,25 @@ const StudentFeedback = () => {
 
                         {/* Sort Filter */}
                         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                            <Text style={styles.modalLabel}>Sort Order:</Text>
-                            <View style={{flexDirection:'row', backgroundColor:'#F5F5F5', borderRadius:8}}>
+                            <Text style={[styles.modalLabel, { color: COLORS.textSub }]}>Sort Order:</Text>
+                            <View style={{flexDirection:'row', backgroundColor: COLORS.cardBg, borderRadius:8, borderWidth: 1, borderColor: COLORS.border}}>
                                 <TouchableOpacity 
-                                    style={[styles.sortBtn, sortOrder==='roll' && styles.sortBtnActive]}
+                                    style={[styles.sortBtn, sortOrder==='roll' && { backgroundColor: COLORS.background }]}
                                     onPress={() => setSortOrder('roll')}
                                 >
-                                    <Text style={[styles.sortBtnText, sortOrder==='roll' && {color:'#008080', fontWeight:'bold'}]}>Roll No</Text>
+                                    <Text style={[styles.sortBtnText, { color: sortOrder==='roll' ? COLORS.primary : COLORS.textSub, fontWeight: sortOrder==='roll'?'bold':'normal' }]}>Roll No</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity 
-                                    style={[styles.sortBtn, sortOrder==='desc' && styles.sortBtnActive]}
+                                    style={[styles.sortBtn, sortOrder==='desc' && { backgroundColor: COLORS.background }]}
                                     onPress={() => setSortOrder('desc')}
                                 >
-                                    <Text style={[styles.sortBtnText, sortOrder==='desc' && {color:'#008080', fontWeight:'bold'}]}>High to Low</Text>
+                                    <Text style={[styles.sortBtnText, { color: sortOrder==='desc' ? COLORS.primary : COLORS.textSub, fontWeight: sortOrder==='desc'?'bold':'normal' }]}>High to Low</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity 
-                                    style={[styles.sortBtn, sortOrder==='asc' && styles.sortBtnActive]}
+                                    style={[styles.sortBtn, sortOrder==='asc' && { backgroundColor: COLORS.background }]}
                                     onPress={() => setSortOrder('asc')}
                                 >
-                                    <Text style={[styles.sortBtnText, sortOrder==='asc' && {color:'#008080', fontWeight:'bold'}]}>Low to High</Text>
+                                    <Text style={[styles.sortBtnText, { color: sortOrder==='asc' ? COLORS.primary : COLORS.textSub, fontWeight: sortOrder==='asc'?'bold':'normal' }]}>Low to High</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -546,7 +619,7 @@ const StudentFeedback = () => {
                     {/* GRAPH CONTENT */}
                     <View style={styles.graphContainer}>
                         {loadingAnalytics ? (
-                            <ActivityIndicator size="large" color="#008080" />
+                            <ActivityIndicator size="large" color={COLORS.primary} />
                         ) : analyticsData.length > 0 ? (
                             <ScrollView 
                                 horizontal 
@@ -554,9 +627,9 @@ const StudentFeedback = () => {
                                 contentContainerStyle={{paddingHorizontal: 10, alignItems:'flex-end'}}
                             >
                                 {analyticsData.map((item, idx) => {
-                                    let color = '#3b82f6';
-                                    if(item.percentage >= 85) color = '#10b981';
-                                    else if(item.percentage < 50) color = '#ef4444';
+                                    let color = COLORS.average;
+                                    if(item.percentage >= 85) color = COLORS.success;
+                                    else if(item.percentage < 50) color = COLORS.poor;
 
                                     return (
                                         <AnimatedBar 
@@ -565,31 +638,32 @@ const StudentFeedback = () => {
                                             rating={item.avg_rating}
                                             label={item.name}
                                             color={color}
+                                            colors={COLORS}
                                         />
                                     );
                                 })}
                             </ScrollView>
                         ) : (
                             <View style={{alignItems:'center'}}>
-                                <MaterialIcons name="bar-chart" size={50} color="#ddd" />
-                                <Text style={{color:'#999', marginTop: 10}}>No student data found.</Text>
+                                <MaterialIcons name="bar-chart" size={50} color={COLORS.border} />
+                                <Text style={{color: COLORS.textSub, marginTop: 10}}>No student data found.</Text>
                             </View>
                         )}
                     </View>
 
                     {/* MODAL LEGEND */}
-                    <View style={styles.modalFooter}>
+                    <View style={[styles.modalFooter, { borderTopColor: COLORS.border }]}>
                          <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
-                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#10b981'}}/>
-                             <Text style={{fontSize:12, color:'#555'}}>85-100%</Text>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor: COLORS.success}}/>
+                             <Text style={{fontSize:12, color: COLORS.textSub}}>85-100%</Text>
                          </View>
                          <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
-                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#3b82f6'}}/>
-                             <Text style={{fontSize:12, color:'#555'}}>50-85%</Text>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor: COLORS.average}}/>
+                             <Text style={{fontSize:12, color: COLORS.textSub}}>50-85%</Text>
                          </View>
                          <View style={{flexDirection:'row', alignItems:'center', gap:5}}>
-                             <View style={{width:10, height:10, borderRadius:5, backgroundColor:'#ef4444'}}/>
-                             <Text style={{fontSize:12, color:'#555'}}>0-50%</Text>
+                             <View style={{width:10, height:10, borderRadius:5, backgroundColor: COLORS.poor}}/>
+                             <Text style={{fontSize:12, color: COLORS.textSub}}>0-50%</Text>
                          </View>
                     </View>
 
@@ -601,84 +675,91 @@ const StudentFeedback = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F2F5F8' }, 
+    container: { flex: 1 }, 
     headerCard: {
-        backgroundColor: '#FFFFFF', paddingHorizontal: 15, paddingVertical: 12,
+        paddingHorizontal: 15, paddingVertical: 12,
         width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10,
         borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+        elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', borderRadius: 30, width: 45, height: 45,
+        borderRadius: 30, width: 45, height: 45,
         justifyContent: 'center', alignItems: 'center', marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
-    headerSubtitle: { fontSize: 13, color: '#666666' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
+    
     filterContainer: { paddingHorizontal: 20, marginBottom: 5 },
     pickerWrapper: {
-        borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 10,
-        backgroundColor: '#fff', overflow: 'hidden', height: 45, justifyContent: 'center'
+        borderWidth: 1, borderRadius: 8, marginBottom: 10,
+        overflow: 'hidden', height: 45, justifyContent: 'center'
     },
-    picker: { width: '100%', color: '#1f2937' },
+    picker: { width: '100%' },
+    
     comButton: {
         backgroundColor: '#ef4444', height: 45, paddingHorizontal: 15, borderRadius: 8,
         justifyContent: 'center', alignItems: 'center', flexDirection: 'row', elevation: 2
     },
     comBtnText: { color:'#fff', fontWeight:'bold', fontSize: 12 },
+    
     tableHeader: {
-        flexDirection: 'row', backgroundColor: '#e0e7ff', paddingVertical: 12,
-        borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#c7d2fe',
+        flexDirection: 'row', paddingVertical: 12,
+        borderTopWidth: 1, borderBottomWidth: 1,
         borderTopLeftRadius: 8, borderTopRightRadius: 8
     },
-    th: { fontWeight: '700', color: '#4338ca', fontSize: 13 },
+    th: { fontWeight: '700', fontSize: 13 },
     row: {
         flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
-        borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#FFF', minHeight: 65
+        borderBottomWidth: 1, minHeight: 65
     },
-    rowAlt: { backgroundColor: '#f8fafc' },
-    td: { fontSize: 13, color: '#374151' },
+    td: { fontSize: 13 },
     remarkBtn: { width: 36, height: 36, borderRadius: 6, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
     remarkBtnText: { fontWeight: 'bold', fontSize: 14 },
     floatingSaveContainer: {
         position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', paddingBottom: 10, zIndex: 10,
     },
     saveBtn: {
-        backgroundColor: '#008080', paddingVertical: 10, paddingHorizontal: 30, borderRadius: 25,
+        paddingVertical: 10, paddingHorizontal: 30, borderRadius: 25,
         elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: {width: 0, height: 2}
     },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, letterSpacing: 0.5 },
+    
     footerContainer: {
-        position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', 
-        borderTopWidth: 1, borderTopColor: '#f0f0f0', height: 45, 
+        position: 'absolute', bottom: 0, left: 0, right: 0, 
+        borderTopWidth: 1, height: 45, 
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center', 
         paddingHorizontal: 15, elevation: 10
     },
     legendGroup: { flexDirection: 'row', alignItems: 'center' },
-    legendLabel: { fontSize: 12, fontWeight: '700', color: '#333', marginRight: 4 },
-    legendText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
-    verticalDivider: { height: 16, width: 1, backgroundColor: '#e5e7eb', marginHorizontal: 12 },
+    legendLabel: { fontSize: 12, fontWeight: '700', marginRight: 4 },
+    legendText: { fontSize: 11, fontWeight: '500' },
+    verticalDivider: { height: 16, width: 1, marginHorizontal: 12 },
+    
     emptyContainer: { alignItems: 'center', marginTop: 50, width: '100%' },
-    emptyText: { textAlign: 'center', marginTop: 10, color: '#94a3b8', fontSize: 14 },
+    emptyText: { textAlign: 'center', marginTop: 10, fontSize: 14 },
+    
     modalHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 15, backgroundColor: '#fff', elevation: 2
+        padding: 15, elevation: 2
     },
-    modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-    modalFilterContainer: { padding: 15, backgroundColor: '#FAFAFA', borderBottomWidth: 1, borderBottomColor: '#eee' },
-    modalLabel: { fontSize: 12, fontWeight: 'bold', color: '#666', marginBottom: 5 },
-    modalPickerWrap: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, backgroundColor: '#fff', height: 45, justifyContent: 'center' },
+    modalTitle: { fontSize: 18, fontWeight: 'bold' },
+    modalFilterContainer: { padding: 15, borderBottomWidth: 1 },
+    modalLabel: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
+    modalPickerWrap: { borderWidth: 1, borderRadius: 8, height: 45, justifyContent: 'center' },
     sortBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
-    sortBtnActive: { backgroundColor: '#fff', elevation: 1 },
-    sortBtnText: { fontSize: 11, color: '#666' },
+    sortBtnActive: { elevation: 1 },
+    sortBtnText: { fontSize: 11 },
+    
     graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
-    modalFooter: { flexDirection: 'row', justifyContent: 'space-evenly', padding: 15, borderTopWidth: 1, borderTopColor: '#eee' },
+    modalFooter: { flexDirection: 'row', justifyContent: 'space-evenly', padding: 15, borderTopWidth: 1 },
+    
     barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 8, height: 280, justifyContent: 'flex-end' },
-    barLabelTop: { fontSize: 10, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-    barTrack: { width: 30, height: 220, backgroundColor: '#F0F0F0', borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
+    barLabelTop: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+    barTrack: { width: 30, height: 220, borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 0 },
-    barLabelBottom: { fontSize: 11, fontWeight: '600', color: '#333', marginTop: 6, textAlign:'center', width: '100%' },
+    barLabelBottom: { fontSize: 11, fontWeight: '600', marginTop: 6, textAlign:'center', width: '100%' },
 });
 
 export default StudentFeedback;

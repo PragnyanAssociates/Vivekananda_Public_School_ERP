@@ -1,13 +1,14 @@
 /**
  * File: src/screens/report/PerformanceFilter.tsx
  * Purpose: Filter students by Class, Exam & Subject.
- * Updated: Fixed Ranking & Sorting Logic to use Exact Scores instead of Rounded Percentages.
+ * Updated: Converted Exam & Subject filters to Dropdowns.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
-    TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager, Image
+    TouchableOpacity, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager, Image,
+    Dimensions, useColorScheme
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
@@ -19,25 +20,51 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- CONSTANTS ---
-const COLORS = {
-    primary: '#008080',      // Main Teal
-    background: '#F2F5F8',   // Light Blue-Grey Background
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',      
+    background: '#F2F5F8',   
     cardBg: '#FFFFFF',
     textMain: '#333333',
     textSub: '#666666',
-    
-    // Updated Status Colors
-    success: '#00C853',      // Vibrant Green (> 85%)
-    average: '#2979FF',      // Vibrant Blue (50% - 85%)
-    poor: '#FF5252',         // Soft Red (< 50%)
-    
-    // Rank Colors
+    border: '#E0E0E0',
+    inputBg: '#FAFAFA',
+    tabBg: '#E0E7FF',
+    iconBg: '#E0F2F1',
+    success: '#00C853',      // Above Average (> 85%)
+    average: '#2979FF',      // Average (50% - 85%)
+    poor: '#FF5252',         // Below Average (< 50%)
     gold: '#FFD700',
     silver: '#C0C0C0',
     bronze: '#CD7F32',
-    
-    border: '#E0E0E0',
+    progressTrack: '#ECEFF1',
+    teacherBadgeBg: '#FFF3E0',
+    teacherBadgeBorder: '#FFE0B2',
+    teacherBadgeText: '#E65100'
+};
+
+const DarkColors = {
+    primary: '#008080',      
+    background: '#121212',   
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    tabBg: '#2C2C2C',
+    iconBg: '#333333',
+    success: '#00C853',      
+    average: '#2979FF',      
+    poor: '#FF5252',         
+    gold: '#FFD700',
+    silver: '#C0C0C0',
+    bronze: '#CD7F32',
+    progressTrack: '#424242',
+    teacherBadgeBg: '#3E2723',
+    teacherBadgeBorder: '#FFB74D',
+    teacherBadgeText: '#FFB74D'
 };
 
 // Classes where AT/UT max marks are 20 (otherwise 25)
@@ -84,6 +111,11 @@ const getRoundedPercentage = (value: number | string): number => {
 };
 
 const PerformanceFilter = () => {
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     // Navigation Hook
     const navigation = useNavigation();
 
@@ -235,7 +267,7 @@ const PerformanceFilter = () => {
         if (activeTab === 'Below Average') {
             return list
                 .filter(s => s.percentage < 50)
-                // FIX: Sort by Raw Percentage ASCENDING (Low to High) so Rank 30 comes before Rank 29
+                // Sort by Raw Percentage ASCENDING (Low to High) for Below Average view
                 .sort((a, b) => a.rawPercentage - b.rawPercentage);
         }
 
@@ -259,7 +291,7 @@ const PerformanceFilter = () => {
         if (rank === 1) return COLORS.gold;
         if (rank === 2) return COLORS.silver;
         if (rank === 3) return COLORS.bronze;
-        return '#B0BEC5';
+        return COLORS.textSub;
     };
 
     const getInitials = (name: string) => {
@@ -282,9 +314,9 @@ const PerformanceFilter = () => {
         const rankColor = getRankColor(item.rank);
         
         return (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.rankContainer}>
-                    <View style={[styles.rankBadge, { borderColor: rankColor }]}>
+                    <View style={[styles.rankBadge, { borderColor: rankColor, backgroundColor: isDark ? '#333' : '#FAFAFA' }]}>
                         <Text style={[styles.rankText, { color: rankColor }]}>#{item.rank}</Text>
                     </View>
                 </View>
@@ -295,18 +327,18 @@ const PerformanceFilter = () => {
                             <Text style={[styles.avatarText, { color: color }]}>{getInitials(item.full_name)}</Text>
                         </View>
                         <View style={styles.textColumn}>
-                            <Text style={styles.name} numberOfLines={1}>{item.full_name}</Text>
-                            <Text style={styles.roll}>Roll No: {item.roll_no}</Text>
+                            <Text style={[styles.name, { color: COLORS.textMain }]} numberOfLines={1}>{item.full_name}</Text>
+                            <Text style={[styles.roll, { color: COLORS.textSub }]}>Roll No: {item.roll_no}</Text>
                         </View>
                     </View>
-                    <View style={styles.progressTrack}>
+                    <View style={[styles.progressTrack, { backgroundColor: COLORS.progressTrack }]}>
                         <View style={[styles.progressFill, { width: `${item.percentage}%`, backgroundColor: color }]} />
                     </View>
                 </View>
 
                 <View style={styles.scoreContainer}>
                     <Text style={[styles.percentage, { color: color }]}>{item.percentage}%</Text>
-                    <Text style={styles.marks}>{Math.round(item.obtained)}/{Math.round(item.max)}</Text>
+                    <Text style={[styles.marks, { color: COLORS.textSub }]}>{Math.round(item.obtained)}/{Math.round(item.max)}</Text>
                 </View>
             </View>
         );
@@ -316,22 +348,22 @@ const PerformanceFilter = () => {
     const TABS = ['All', 'Above Average', 'Average', 'Below Average'];
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
+            <StatusBar backgroundColor={COLORS.background} barStyle={isDark ? 'light-content' : 'dark-content'} />
             
-            {/* 1. Header Card (Updated Button Style) */}
-            <View style={styles.headerCard}>
-                <View style={styles.headerIconContainer}>
+            {/* 1. Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
+                <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
                     <Icon name="chart-box-outline" size={28} color={COLORS.primary} />
                 </View>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>Student Reports</Text>
-                    <Text style={styles.headerSubtitle}>Analyze class performance</Text>
+                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Student Reports</Text>
+                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Analyze class performance</Text>
                 </View>
 
                 {/* --- QUICK ACCESS BUTTON --- */}
                 <TouchableOpacity 
-                    style={styles.quickAccessBtn} 
+                    style={[styles.quickAccessBtn, { backgroundColor: COLORS.iconBg, borderColor: COLORS.primary }]} 
                     onPress={() => navigation.navigate('StudentPerformance' as never)}
                     activeOpacity={0.7}
                 >
@@ -345,15 +377,16 @@ const PerformanceFilter = () => {
             <View style={styles.bodyContainer}>
                 
                 {/* 2. Filter Card */}
-                <View style={styles.filterCard}>
-                    {/* Class Picker */}
-                    <View style={styles.pickerRow}>
-                        <Icon name="school-outline" size={20} color={COLORS.primary} style={{marginRight: 8}} />
-                        <View style={styles.pickerWrapper}>
+                <View style={[styles.filterCard, { backgroundColor: COLORS.cardBg }]}>
+                    
+                    {/* Class Dropdown */}
+                    <View style={styles.pickerContainer}>
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Select Class:</Text>
+                        <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                             <Picker
                                 selectedValue={selectedClass}
                                 onValueChange={setSelectedClass}
-                                style={styles.picker}
+                                style={{ color: COLORS.textMain }}
                                 dropdownIconColor={COLORS.textSub}
                                 mode="dropdown"
                             >
@@ -362,45 +395,41 @@ const PerformanceFilter = () => {
                         </View>
                     </View>
 
-                    {/* Exam Pills */}
-                    <View style={styles.pillContainer}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingVertical: 5}}>
-                            {EXAM_TYPES_DISPLAY.map((exam) => {
-                                const isActive = selectedExam === exam;
-                                return (
-                                    <TouchableOpacity 
-                                        key={exam} 
-                                        style={[styles.pill, isActive ? styles.pillActive : styles.pillInactive]}
-                                        onPress={() => setSelectedExam(exam)}
-                                    >
-                                        <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>{exam}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
+                    {/* Exam Dropdown */}
+                    <View style={styles.pickerContainer}>
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Exam:</Text>
+                        <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                            <Picker
+                                selectedValue={selectedExam}
+                                onValueChange={setSelectedExam}
+                                style={{ color: COLORS.textMain }}
+                                dropdownIconColor={COLORS.textSub}
+                                mode="dropdown"
+                            >
+                                {EXAM_TYPES_DISPLAY.map(exam => <Picker.Item key={exam} label={exam} value={exam} style={{fontSize: 14}} />)}
+                            </Picker>
+                        </View>
                     </View>
 
-                    {/* Subject Pills */}
-                    <View style={styles.pillContainer}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingVertical: 5}}>
-                            {currentSubjects.map((sub) => {
-                                const isActive = selectedSubject === sub;
-                                return (
-                                    <TouchableOpacity 
-                                        key={sub} 
-                                        style={[styles.pill, isActive ? styles.pillActive : styles.pillInactive]}
-                                        onPress={() => setSelectedSubject(sub)}
-                                    >
-                                        <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>{sub}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
+                    {/* Subject Dropdown */}
+                    <View style={styles.pickerContainer}>
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Subject:</Text>
+                        <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                            <Picker
+                                selectedValue={selectedSubject}
+                                onValueChange={setSelectedSubject}
+                                style={{ color: COLORS.textMain }}
+                                dropdownIconColor={COLORS.textSub}
+                                mode="dropdown"
+                            >
+                                {currentSubjects.map(sub => <Picker.Item key={sub} label={sub} value={sub} style={{fontSize: 14}} />)}
+                            </Picker>
+                        </View>
                     </View>
                 </View>
 
                 {/* 3. Tabs */}
-                <View style={styles.tabWrapper}>
+                <View style={[styles.tabWrapper, { backgroundColor: COLORS.tabBg }]}>
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab;
                         let iconName = 'poll';
@@ -411,7 +440,7 @@ const PerformanceFilter = () => {
                         return (
                             <TouchableOpacity
                                 key={tab}
-                                style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                                style={[styles.tabButton, isActive && { backgroundColor: COLORS.primary }]}
                                 onPress={() => setActiveTab(tab as any)}
                             >
                                 <Icon 
@@ -420,7 +449,7 @@ const PerformanceFilter = () => {
                                     color={isActive ? '#FFF' : COLORS.textSub} 
                                 />
                                 <Text 
-                                    style={[styles.tabText, isActive && styles.tabTextActive]}
+                                    style={[styles.tabText, { color: isActive ? '#FFF' : COLORS.textSub }]}
                                     numberOfLines={1}
                                     adjustsFontSizeToFit
                                     minimumFontScale={0.8}
@@ -440,11 +469,11 @@ const PerformanceFilter = () => {
                         <>
                             <View style={styles.listHeader}>
                                 <View style={styles.listHeaderLeft}>
-                                    <Text style={styles.listHeaderTitle}>
+                                    <Text style={[styles.listHeaderTitle, { color: COLORS.textMain }]}>
                                         {getListTitle()}
                                     </Text>
-                                    <View style={styles.badgeCount}>
-                                        <Text style={styles.badgeCountText}>
+                                    <View style={[styles.badgeCount, { backgroundColor: COLORS.inputBg }]}>
+                                        <Text style={[styles.badgeCountText, { color: COLORS.textMain }]}>
                                             {filteredList.length} / {processedList.length}
                                         </Text>
                                     </View>
@@ -452,9 +481,9 @@ const PerformanceFilter = () => {
 
                                 {/* TEACHER NAME SECTION */}
                                 {selectedSubject !== 'All Subjects' && currentTeacherName && (
-                                    <View style={styles.teacherBadge}>
-                                        <Icon name="account-tie" size={16} color="#EF6C00" />
-                                        <Text style={styles.teacherText} numberOfLines={1}>
+                                    <View style={[styles.teacherBadge, { backgroundColor: COLORS.teacherBadgeBg, borderColor: COLORS.teacherBadgeBorder }]}>
+                                        <Icon name="account-tie" size={16} color={COLORS.teacherBadgeText} />
+                                        <Text style={[styles.teacherText, { color: COLORS.teacherBadgeText }]} numberOfLines={1}>
                                             {currentTeacherName}
                                         </Text>
                                     </View>
@@ -467,12 +496,12 @@ const PerformanceFilter = () => {
                                 renderItem={renderStudentItem}
                                 contentContainerStyle={styles.listContent}
                                 showsVerticalScrollIndicator={false}
-                                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+                                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
                                 ListEmptyComponent={
                                     <View style={styles.emptyContainer}>
-                                        <Icon name="clipboard-text-off-outline" size={60} color="#CFD8DC" />
-                                        <Text style={styles.emptyText}>No Result Found</Text>
-                                        <Text style={styles.emptySubText}>Try changing the filters.</Text>
+                                        <Icon name="clipboard-text-off-outline" size={60} color={COLORS.border} />
+                                        <Text style={[styles.emptyText, { color: COLORS.textMain }]}>No Result Found</Text>
+                                        <Text style={[styles.emptySubText, { color: COLORS.textSub }]}>Try changing the filters.</Text>
                                     </View>
                                 }
                             />
@@ -480,16 +509,34 @@ const PerformanceFilter = () => {
                     )}
                 </View>
             </View>
+
+            {/* 5. Footer Legend */}
+            <View style={[styles.footerContainer, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
+                <View style={styles.legendRow}>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
+                        <Text style={[styles.legendText, { color: COLORS.textSub }]}>Above Avg (&gt;85%)</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: COLORS.average }]} />
+                        <Text style={[styles.legendText, { color: COLORS.textSub }]}>Avg (50-85%)</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: COLORS.poor }]} />
+                        <Text style={[styles.legendText, { color: COLORS.textSub }]}>Below Avg (&lt;50%)</Text>
+                    </View>
+                </View>
+            </View>
+
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1 },
 
     // --- Header Card Style ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
         paddingVertical: 10,
         width: '96%',
@@ -500,13 +547,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         elevation: 3,
-        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
     },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Light Teal Circle
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -519,35 +564,27 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     headerTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: 'bold',
-        color: '#333333',
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: '#666666',
+        fontSize: 13,
         marginTop: 1,
     },
-    // Updated Quick Access Button Styles
+    // Quick Access Button Styles
     quickAccessBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#E0F2F1', 
         paddingVertical: 6,
         paddingHorizontal: 8,
         marginLeft: 10,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#80CBC4',
         elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
     },
     quickAccessIcon: {
-        width: 28,
-        height: 28,
+        width: 24,
+        height: 24,
         resizeMode: 'contain',
     },
 
@@ -559,7 +596,6 @@ const styles = StyleSheet.create({
 
     // Filter Card
     filterCard: {
-        backgroundColor: COLORS.cardBg,
         borderRadius: 16,
         padding: 12,
         elevation: 2,
@@ -571,38 +607,28 @@ const styles = StyleSheet.create({
         width: '96%',
         alignSelf: 'center'
     },
-    pickerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F7FA',
-        borderRadius: 12,
-        paddingHorizontal: 10,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    pickerWrapper: { flex: 1, height: 45, justifyContent: 'center' },
-    picker: { width: '100%', color: COLORS.textMain },
     
-    // Pills
-    pillContainer: { marginBottom: 6 },
-    pill: {
-        paddingVertical: 6,
-        paddingHorizontal: 14,
-        borderRadius: 20,
-        marginRight: 8,
-        borderWidth: 1,
+    // Picker
+    pickerContainer: {
+        marginBottom: 8
     },
-    pillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-    pillInactive: { backgroundColor: '#F5F7FA', borderColor: '#E0E0E0' },
-    pillText: { fontSize: 12, fontWeight: '600' },
-    pillTextActive: { color: '#FFF' },
-    pillTextInactive: { color: COLORS.textSub },
+    inputLabel: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginBottom: 4,
+        marginLeft: 2
+    },
+    pickerWrapper: {
+        borderWidth: 1,
+        borderRadius: 10,
+        height: 45,
+        justifyContent: 'center',
+        overflow: 'hidden'
+    },
 
     // Tabs
     tabWrapper: {
         flexDirection: 'row',
-        backgroundColor: '#E0E7FF',
         borderRadius: 15,
         padding: 4,
         marginBottom: 10,
@@ -619,18 +645,12 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginHorizontal: 2, 
     },
-    tabButtonActive: {
-        backgroundColor: COLORS.primary,
-        elevation: 2,
-    },
     tabText: { 
         fontSize: 10,
         fontWeight: '700', 
-        color: COLORS.textSub,
         marginTop: 2,
         textAlign: 'center'
     },
-    tabTextActive: { color: '#FFF' },
 
     // Content
     contentArea: { flex: 1, width: '96%', alignSelf: 'center' },
@@ -650,50 +670,43 @@ const styles = StyleSheet.create({
     listHeaderTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: COLORS.textMain,
     },
     badgeCount: {
-        backgroundColor: '#E0E0E0',
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 10,
         marginLeft: 8,
     },
-    badgeCountText: { fontSize: 11, fontWeight: 'bold', color: COLORS.textMain },
+    badgeCountText: { fontSize: 11, fontWeight: 'bold' },
     
     // Teacher Badge
     teacherBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF3E0', 
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#FFE0B2', 
         maxWidth: '45%',
         justifyContent: 'flex-end'
     },
     teacherText: {
         fontSize: 11,
         fontWeight: 'bold',
-        color: '#E65100', 
         marginLeft: 4,
         flexShrink: 1
     },
 
-    listContent: { paddingBottom: 20 },
+    listContent: { paddingBottom: 60 }, // Increased padding for Footer
 
     // Student Card
     card: {
         flexDirection: 'row',
-        backgroundColor: COLORS.cardBg,
         borderRadius: 16,
         marginBottom: 10,
         padding: 12,
         alignItems: 'center',
         elevation: 2,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
@@ -710,7 +723,6 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#FAFAFA'
     },
     rankText: { fontSize: 12, fontWeight: '900' },
     infoContainer: { flex: 1, justifyContent: 'center' },
@@ -725,11 +737,10 @@ const styles = StyleSheet.create({
     },
     avatarText: { fontSize: 12, fontWeight: 'bold' },
     textColumn: { flex: 1 },
-    name: { fontSize: 14, fontWeight: 'bold', color: COLORS.textMain },
-    roll: { fontSize: 11, color: COLORS.textSub },
+    name: { fontSize: 14, fontWeight: 'bold' },
+    roll: { fontSize: 11 },
     progressTrack: {
         height: 5,
-        backgroundColor: '#ECEFF1',
         borderRadius: 3,
         overflow: 'hidden',
         width: '90%',
@@ -741,11 +752,42 @@ const styles = StyleSheet.create({
         minWidth: 50,
     },
     percentage: { fontSize: 16, fontWeight: 'bold' },
-    marks: { fontSize: 10, color: COLORS.textSub, marginTop: 2 },
+    marks: { fontSize: 10, marginTop: 2 },
 
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50 },
-    emptyText: { marginTop: 15, color: COLORS.textMain, fontSize: 16, fontWeight: 'bold' },
-    emptySubText: { marginTop: 5, color: COLORS.textSub, fontSize: 13, textAlign: 'center' }
+    emptyText: { marginTop: 15, fontSize: 16, fontWeight: 'bold' },
+    emptySubText: { marginTop: 5, fontSize: 13, textAlign: 'center' },
+
+    // Footer Legend
+    footerContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        borderTopWidth: 1,
+        elevation: 10,
+    },
+    legendRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: 5,
+    },
+    legendText: {
+        fontSize: 11,
+        fontWeight: '600',
+    }
 });
 
 export default PerformanceFilter;

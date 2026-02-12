@@ -1,13 +1,13 @@
 /**
  * File: src/screens/report/TeacherPerformanceScreen.js
  * Purpose: Teacher Performance Analytics with Table View, Class-wise Max Mark Logic, and Attendance Graph.
- * Updated: Back button is now hidden for Teachers and only visible for Admins.
+ * Updated: Responsive Design & Dark/Light Mode Support.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, ActivityIndicator,
     FlatList, TouchableOpacity, RefreshControl, LayoutAnimation, 
-    Platform, UIManager, Modal, ScrollView, Animated, Easing, Dimensions, Alert, StatusBar
+    Platform, UIManager, Modal, ScrollView, Animated, Easing, Dimensions, Alert, StatusBar, useColorScheme
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -36,22 +36,67 @@ const COL_WIDTHS = {
 
 const EXAM_TYPES = ['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'AT3', 'UT3', 'AT4', 'UT4', 'SA1', 'SA2', 'Pre-Final'];
 
-// --- COLORS (Fixed for Consistency in Dark/Light Mode) ---
-const COLORS = {
-    primary: '#008080',    // Teal
-    background: '#F2F5F8', // Light Grey-Blue
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',    
+    background: '#F2F5F8', 
     cardBg: '#FFFFFF',
-    textMain: '#263238',   // Dark Slate
-    textSub: '#546E7A',    // Muted Blue-Grey
+    textMain: '#263238',   
+    textSub: '#546E7A',    
     white: '#FFFFFF',
     
-    success: '#43A047',    // Green
-    average: '#1E88E5',    // Blue
-    poor: '#E53935',       // Red
+    success: '#43A047',    
+    average: '#1E88E5',    
+    poor: '#E53935',       
     
-    track: '#F5F5F5',      // Light Gray
+    track: '#ECEFF1',      
     border: '#CFD8DC',
-    graphBtn: '#FB8C00'    // Orange
+    graphBtn: '#FB8C00',
+    inputBg: '#FAFAFA',
+    modalOverlay: 'rgba(0,0,0,0.6)',
+    headerIconBg: '#E0F2F1',
+    tableHeader: '#008080',
+    tableRowAlt: '#F9FAFB',
+    subRowBorder: '#f0f0f0',
+    expandedBg: '#FAFAFA',
+    detailBorder: '#F0F0F0',
+    detailHeaderBorder: '#F5F5F5',
+    bdHeaderBg: '#F9FAFB',
+    pickerBorder: '#cbd5e1',
+    noteBg: '#FFF8E1',
+    noteBorder: '#FFE0B2',
+    noteText: '#F57C00'
+};
+
+const DarkColors = {
+    primary: '#008080',    
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',   
+    textSub: '#B0B0B0',    
+    white: '#E0E0E0',
+    
+    success: '#43A047',    
+    average: '#1E88E5',    
+    poor: '#E53935',       
+    
+    track: '#333333',      
+    border: '#333333',
+    graphBtn: '#FB8C00',
+    inputBg: '#2C2C2C',
+    modalOverlay: 'rgba(255,255,255,0.1)',
+    headerIconBg: '#333333',
+    tableHeader: '#004D40',
+    tableRowAlt: '#2C2C2C',
+    subRowBorder: '#424242',
+    expandedBg: '#252525',
+    detailBorder: '#333333',
+    detailHeaderBorder: '#424242',
+    bdHeaderBg: '#2C2C2C',
+    pickerBorder: '#424242',
+    noteBg: '#2C2C2C',
+    noteBorder: '#FFB74D',
+    noteText: '#FFB74D'
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
@@ -63,15 +108,15 @@ const getRoundedPercentage = (value) => {
 };
 
 // --- HELPER: GET COLOR ---
-const getStatusColor = (percentage) => {
+const getStatusColor = (percentage, colors) => {
     const val = getRoundedPercentage(percentage);
-    if (val >= 85) return COLORS.success; 
-    if (val >= 50) return COLORS.average;
-    return COLORS.poor; 
+    if (val >= 85) return colors.success; 
+    if (val >= 50) return colors.average;
+    return colors.poor; 
 };
 
 // --- COMPONENT: ANIMATED BAR ---
-const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260 }) => {
+const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
     const displayPercentage = getRoundedPercentage(percentage);
 
@@ -91,20 +136,25 @@ const AnimatedBar = ({ percentage, marks, label, subLabel, color, height = 260 }
 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
-            <Text style={styles.barLabelTop}>{displayPercentage}%</Text>
-            <View style={styles.barBackground}>
+            <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{displayPercentage}%</Text>
+            <View style={[styles.barBackground, { backgroundColor: colors.track }]}>
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
                 <View style={styles.barTextContainer}>
-                    <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
+                    <Text style={[styles.barInnerText, { color: colors.textMain }]} numberOfLines={1}>{marks}</Text>
                 </View>
             </View>
-            <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
-            {subLabel ? <Text style={styles.barSubLabel} numberOfLines={1}>{subLabel}</Text> : null}
+            <Text style={[styles.barLabelBottom, { color: colors.textMain }]} numberOfLines={1}>{label}</Text>
+            {subLabel ? <Text style={[styles.barSubLabel, { color: colors.textSub }]} numberOfLines={1}>{subLabel}</Text> : null}
         </View>
     );
 };
 
 const TeacherPerformanceScreen = () => {
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     // Navigation Hook
     const navigation = useNavigation();
 
@@ -192,17 +242,14 @@ const TeacherPerformanceScreen = () => {
         setLoadingAttGraph(true);
         
         try {
-            // UPDATED LOGIC: Calculate date range for the Academic Year (starting June)
             const now = new Date();
-            const currentMonth = now.getMonth(); // 0 (Jan) - 11 (Dec)
+            const currentMonth = now.getMonth(); 
             const currentYear = now.getFullYear();
 
-            // If current month is Jan-May (0-4), academic year started in prev year's June.
-            // If current month is June-Dec (5-11), academic year started in current year's June.
             const startYear = currentMonth < 5 ? currentYear - 1 : currentYear;
             
-            const startDate = `${startYear}-06-01`; // June 1st
-            const endDate = now.toISOString().split('T')[0]; // Today
+            const startDate = `${startYear}-06-01`; 
+            const endDate = now.toISOString().split('T')[0]; 
 
             const response = await apiClient.get(`/teacher-attendance/report/${tId}`, {
                 params: { 
@@ -219,20 +266,18 @@ const TeacherPerformanceScreen = () => {
                 const d = new Date(rec.date);
                 const monthIdx = d.getMonth(); 
                 const monthName = d.toLocaleString('default', { month: 'short' });
-                // Use YYYYMM format for numerical sorting across years
                 const sortKey = d.getFullYear() * 100 + monthIdx;
 
                 if (!monthsMap[sortKey]) {
                     monthsMap[sortKey] = { name: monthName, present: 0, total: 0 };
                 }
                 
-                // Status 'P' = Present, 'A' = Absent, 'L' = Late/Leave (Assuming total includes all)
                 if (['P', 'A', 'L'].includes(rec.status)) monthsMap[sortKey].total++;
                 if (rec.status === 'P') monthsMap[sortKey].present++;
             });
 
             const processed = Object.keys(monthsMap)
-                .sort((a, b) => a - b) // Sort by sortKey (YYYYMM)
+                .sort((a, b) => a - b)
                 .map(key => {
                     const m = monthsMap[key];
                     const pct = m.total > 0 ? (m.present / m.total) * 100 : 0;
@@ -327,7 +372,7 @@ const TeacherPerformanceScreen = () => {
             if (compareSortBy === 'low-high') {
                 return a.percentage - b.percentage;
             }
-            return b.percentage - a.percentage; // Default: High to Low
+            return b.percentage - a.percentage; 
         });
     };
 
@@ -380,9 +425,9 @@ const TeacherPerformanceScreen = () => {
     const renderTableView = () => {
         return (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContainer}>
-                <View style={styles.tableContainer}>
+                <View style={[styles.tableContainer, { borderColor: COLORS.border, backgroundColor: COLORS.cardBg }]}>
                     {/* Header Row */}
-                    <View style={styles.tableHeaderRow}>
+                    <View style={[styles.tableHeaderRow, { backgroundColor: COLORS.tableHeader, borderBottomColor: COLORS.border }]}>
                         <View style={[styles.headerCellContainer, { width: COL_WIDTHS.no }]}>
                             <Text style={styles.tableHeaderCell}>No</Text>
                         </View>
@@ -406,31 +451,35 @@ const TeacherPerformanceScreen = () => {
                             const attPercentageStr = attendanceData[item.id] !== undefined && attendanceData[item.id] !== 'N/A' 
                                 ? `${attendanceData[item.id]}%` : '-';
                             const attVal = attendanceData[item.id] !== 'N/A' ? attendanceData[item.id] : 0;
-                            const attColor = getStatusColor(attVal);
+                            const attColor = getStatusColor(attVal, COLORS);
 
                             return (
-                                <View key={item.uniqueKey} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
+                                <View key={item.uniqueKey} style={[
+                                    styles.tableRow, 
+                                    { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border },
+                                    index % 2 === 1 && { backgroundColor: COLORS.tableRowAlt }
+                                ]}>
                                     
                                     {/* NO */}
                                     <View style={[styles.cellContainer, { width: COL_WIDTHS.no }]}>
-                                        <Text style={styles.tableCell}>{index + 1}</Text>
+                                        <Text style={[styles.tableCell, { color: COLORS.textMain }]}>{index + 1}</Text>
                                     </View>
                                     
                                     {/* NAME */}
                                     <View style={[styles.cellContainer, { width: COL_WIDTHS.name, alignItems: 'flex-start', paddingLeft: 10 }]}>
-                                        <Text style={[styles.tableCell, { fontWeight: 'bold', textAlign: 'left' }]} numberOfLines={2}>{item.name}</Text>
+                                        <Text style={[styles.tableCell, { fontWeight: 'bold', textAlign: 'left', color: COLORS.textMain }]} numberOfLines={2}>{item.name}</Text>
                                     </View>
                                     
                                     {/* SUBJECT / CLASS LIST */}
                                     <View style={[styles.cellContainer, { width: COL_WIDTHS.subject }]}>
                                         {item.details && item.details.length > 0 ? (
                                             item.details.map((d, i) => (
-                                                <View key={i} style={styles.subRowItem}>
-                                                    <Text style={styles.detailRowText}>{d.class_group} - {d.subject}</Text>
+                                                <View key={i} style={[styles.subRowItem, { borderBottomColor: COLORS.subRowBorder }]}>
+                                                    <Text style={[styles.detailRowText, { color: COLORS.textSub }]}>{d.class_group} - {d.subject}</Text>
                                                 </View>
                                             ))
                                         ) : (
-                                            <View style={styles.subRowItem}><Text style={styles.detailRowText}>N/A</Text></View>
+                                            <View style={[styles.subRowItem, { borderBottomColor: COLORS.subRowBorder }]}><Text style={[styles.detailRowText, { color: COLORS.textSub }]}>N/A</Text></View>
                                         )}
                                     </View>
                                     
@@ -440,13 +489,13 @@ const TeacherPerformanceScreen = () => {
                                             item.details.map((d, i) => {
                                                 const dPerc = getRoundedPercentage(d.average_marks);
                                                 return (
-                                                    <View key={i} style={styles.subRowItem}>
-                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusColor(dPerc) }}>{dPerc}%</Text>
+                                                    <View key={i} style={[styles.subRowItem, { borderBottomColor: COLORS.subRowBorder }]}>
+                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusColor(dPerc, COLORS) }}>{dPerc}%</Text>
                                                     </View>
                                                 )
                                             })
                                         ) : (
-                                            <View style={styles.subRowItem}><Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.poor }}>0%</Text></View>
+                                            <View style={[styles.subRowItem, { borderBottomColor: COLORS.subRowBorder }]}><Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.poor }}>0%</Text></View>
                                         )}
                                     </View>
                                     
@@ -474,14 +523,14 @@ const TeacherPerformanceScreen = () => {
     // --- RENDER CARDS ---
     const renderItem = ({ item }) => {
         const rankStripColor = getRankColor(item.performanceRank);
-        const performanceColor = getStatusColor(item.percentage);
+        const performanceColor = getStatusColor(item.percentage, COLORS);
         const isExpanded = expandedId === item.uniqueKey;
         const percentage = item.percentage;
         const teacherAttPct = attendanceData[item.id] !== undefined ? attendanceData[item.id] : 'N/A';
-        const attColor = getStatusColor(teacherAttPct === 'N/A' ? 0 : teacherAttPct);
+        const attColor = getStatusColor(teacherAttPct === 'N/A' ? 0 : teacherAttPct, COLORS);
 
         return (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <TouchableOpacity style={styles.cardContent} onPress={() => toggleExpand(item.uniqueKey)} activeOpacity={0.8}>
                     <View style={[styles.rankStrip, { backgroundColor: rankStripColor }]}>
                         <Text style={styles.rankText}>#{item.performanceRank}</Text>
@@ -489,29 +538,29 @@ const TeacherPerformanceScreen = () => {
                     <View style={styles.cardBody}>
                         <View style={styles.cardTopRow}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.teacherName}>{item.name}</Text>
-                                {item.subName && <Text style={styles.subName}>{item.subName}</Text>}
+                                <Text style={[styles.teacherName, { color: COLORS.textMain }]}>{item.name}</Text>
+                                {item.subName && <Text style={[styles.subName, { color: COLORS.textSub }]}>{item.subName}</Text>}
                             </View>
                             <View style={[styles.circleBadge, { borderColor: performanceColor }]}>
                                 <Text style={[styles.circleText, { color: performanceColor }]}>{percentage}%</Text>
                             </View>
                         </View>
-                        <Text style={styles.marksLabel}>Total: <Text style={styles.marksValue}>{Math.round(item.totalManaged)} / {Math.round(item.maxPossible)}</Text></Text>
-                        <View style={styles.progressTrack}>
+                        <Text style={[styles.marksLabel, { color: COLORS.textSub }]}>Total: <Text style={[styles.marksValue, { color: COLORS.textMain }]}>{Math.round(item.totalManaged)} / {Math.round(item.maxPossible)}</Text></Text>
+                        <View style={[styles.progressTrack, { backgroundColor: COLORS.track }]}>
                             <View style={[styles.progressFill, { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: performanceColor }]} />
                         </View>
                         <View style={styles.expandRow}>
-                            <Text style={styles.perfLabel}>Performance: {percentage}%</Text>
+                            <Text style={[styles.perfLabel, { color: COLORS.textSub }]}>Performance: {percentage}%</Text>
                             <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={COLORS.textSub} />
                         </View>
                     </View>
                 </TouchableOpacity>
 
                 {isExpanded && (
-                    <View style={styles.expandedSection}>
+                    <View style={[styles.expandedSection, { backgroundColor: COLORS.expandedBg, borderTopColor: COLORS.border }]}>
                         {userRole === 'admin' && (
-                            <View style={styles.attRow}>
-                                <Text style={styles.attLabel}>Overall Attendance:</Text>
+                            <View style={[styles.attRow, { borderBottomColor: COLORS.border }]}>
+                                <Text style={[styles.attLabel, { color: COLORS.textMain }]}>Overall Attendance:</Text>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <Text style={[styles.attValue, { color: attColor, marginRight: 10 }]}>{teacherAttPct}%</Text>
                                     <TouchableOpacity 
@@ -531,28 +580,28 @@ const TeacherPerformanceScreen = () => {
                                 item.details.map((detail, idx) => {
                                     const dPerc = getRoundedPercentage(detail.average_marks);
                                     return (
-                                        <View key={idx} style={styles.detailBlock}>
-                                            <View style={styles.detailHeader}>
+                                        <View key={idx} style={[styles.detailBlock, { backgroundColor: COLORS.cardBg, borderColor: COLORS.detailBorder }]}>
+                                            <View style={[styles.detailHeader, { borderBottomColor: COLORS.detailHeaderBorder }]}>
                                                 <View style={{ flex: 1 }}>
-                                                    <Text style={styles.detailTitle} numberOfLines={1}>{detail.class_group} - {detail.subject}</Text>
+                                                    <Text style={[styles.detailTitle, { color: COLORS.primary }]} numberOfLines={1}>{detail.class_group} - {detail.subject}</Text>
                                                 </View>
                                                 <TouchableOpacity style={styles.iconButton} onPress={() => handleOpenIndividualGraph(`${detail.class_group} - ${detail.subject}`, detail.exam_breakdown)}>
                                                     <Icon name="chart-bar" size={18} color="#fff" />
                                                 </TouchableOpacity>
                                                 <View style={{ alignItems: 'flex-end' }}>
-                                                    <Text style={styles.detailMarks}>{Math.round(detail.total_marks)} / {Math.round(detail.max_possible_marks)}</Text>
-                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusColor(dPerc) }}>{dPerc}%</Text>
+                                                    <Text style={[styles.detailMarks, { color: COLORS.textSub }]}>{Math.round(detail.total_marks)} / {Math.round(detail.max_possible_marks)}</Text>
+                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusColor(dPerc, COLORS) }}>{dPerc}%</Text>
                                                 </View>
                                             </View>
                                             {renderExamBreakdown(detail.exam_breakdown)}
                                         </View>
                                     );
                                 })
-                            ) : <Text style={styles.emptyText}>No detailed records found.</Text>
+                            ) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No detailed records found.</Text>
                         ) : (
-                            <View style={styles.detailBlock}>
-                                <View style={styles.detailHeader}>
-                                    <Text style={styles.detailTitle}>Exam Analysis</Text>
+                            <View style={[styles.detailBlock, { backgroundColor: COLORS.cardBg, borderColor: COLORS.detailBorder }]}>
+                                <View style={[styles.detailHeader, { borderBottomColor: COLORS.detailHeaderBorder }]}>
+                                    <Text style={[styles.detailTitle, { color: COLORS.primary }]}>Exam Analysis</Text>
                                     <TouchableOpacity style={[styles.iconButton, {flexDirection: 'row', width: 'auto', paddingHorizontal: 10}]} onPress={() => handleOpenIndividualGraph(`${item.name} - ${item.subName}`, item.examBreakdown)}>
                                         <Icon name="chart-bar" size={18} color="#fff" />
                                         <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', marginLeft: 5}}>GRAPH</Text>
@@ -569,19 +618,19 @@ const TeacherPerformanceScreen = () => {
 
     const renderExamBreakdown = (exams) => (
         <View style={styles.breakdownContainer}>
-            <View style={styles.bdHeader}>
-                <Text style={[styles.bdHeaderTxt, { flex: 1.5 }]}>Exam</Text>
-                <Text style={[styles.bdHeaderTxt, { flex: 2, textAlign: 'center' }]}>Marks</Text>
-                <Text style={[styles.bdHeaderTxt, { flex: 1.5, textAlign: 'right' }]}>Perf %</Text>
+            <View style={[styles.bdHeader, { backgroundColor: COLORS.bdHeaderBg }]}>
+                <Text style={[styles.bdHeaderTxt, { flex: 1.5, color: COLORS.textSub }]}>Exam</Text>
+                <Text style={[styles.bdHeaderTxt, { flex: 2, textAlign: 'center', color: COLORS.textSub }]}>Marks</Text>
+                <Text style={[styles.bdHeaderTxt, { flex: 1.5, textAlign: 'right', color: COLORS.textSub }]}>Perf %</Text>
             </View>
             {exams.map((exam, idx) => {
                 const ePerc = getRoundedPercentage(exam.percentage);
                 return (
-                    <View key={idx} style={styles.bdRow}>
-                        <Text style={[styles.bdTxt, { flex: 1.5, fontWeight: '600' }]}>{exam.exam_type}</Text>
-                        <Text style={[styles.bdTxt, { flex: 2, textAlign: 'center' }]}>{Math.round(exam.total_obtained)} / {Math.round(exam.total_possible)}</Text>
+                    <View key={idx} style={[styles.bdRow, { borderBottomColor: COLORS.detailBorder }]}>
+                        <Text style={[styles.bdTxt, { flex: 1.5, fontWeight: '600', color: COLORS.textMain }]}>{exam.exam_type}</Text>
+                        <Text style={[styles.bdTxt, { flex: 2, textAlign: 'center', color: COLORS.textMain }]}>{Math.round(exam.total_obtained)} / {Math.round(exam.total_possible)}</Text>
                         <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
-                            <View style={[styles.percentagePill, { backgroundColor: getStatusColor(ePerc) }]}>
+                            <View style={[styles.percentagePill, { backgroundColor: getStatusColor(ePerc, COLORS) }]}>
                                 <Text style={styles.pillText}>{ePerc}%</Text>
                             </View>
                         </View>
@@ -592,11 +641,11 @@ const TeacherPerformanceScreen = () => {
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar backgroundColor={COLORS.background} barStyle="dark-content" />
+        <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar backgroundColor={COLORS.background} barStyle={isDark ? "light-content" : "dark-content"} />
             
             {/* --- HEADER --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
                     {/* BACK BUTTON - Only for Admin */}
                     {userRole === 'admin' && (
@@ -608,21 +657,21 @@ const TeacherPerformanceScreen = () => {
                         </TouchableOpacity>
                     )}
 
-                    <View style={styles.headerIconContainer}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
                         <Icon name="poll" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>{userRole === 'admin' ? 'Teacher Performance' : 'Class Performance'}</Text>
-                        <Text style={styles.headerSubtitle}>Analytics & Reports</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{userRole === 'admin' ? 'Teacher Performance' : 'Class Performance'}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Analytics & Reports</Text>
                     </View>
                 </View>
                 
                 {userRole === 'admin' && (
                     <View style={{flexDirection: 'row', gap: 10}}>
-                         <TouchableOpacity style={styles.headerActionBtn} onPress={() => setIsTableView(!isTableView)}>
+                         <TouchableOpacity style={[styles.headerActionBtn, { backgroundColor: isDark ? '#333' : '#f0fdfa', borderColor: isDark ? '#444' : '#ccfbf1' }]} onPress={() => setIsTableView(!isTableView)}>
                             <Icon name={isTableView ? "card-bulleted-outline" : "table-large"} size={22} color={COLORS.primary} />
                          </TouchableOpacity>
-                         <TouchableOpacity style={styles.headerActionBtn} onPress={() => setIsCompareVisible(true)}>
+                         <TouchableOpacity style={[styles.headerActionBtn, { backgroundColor: isDark ? '#333' : '#f0fdfa', borderColor: isDark ? '#444' : '#ccfbf1' }]} onPress={() => setIsCompareVisible(true)}>
                             <Icon name="scale-balance" size={22} color={COLORS.primary} />
                          </TouchableOpacity>
                     </View>
@@ -631,11 +680,11 @@ const TeacherPerformanceScreen = () => {
 
             {/* Filter Section */}
             <View style={styles.filterContainer}>
-                <View style={styles.pickerWrapper}>
+                <View style={[styles.pickerWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.pickerBorder }]}>
                     <Picker 
                         selectedValue={sortBy} 
                         onValueChange={setSortBy} 
-                        style={styles.picker} 
+                        style={[styles.picker, { color: COLORS.textMain }]}
                         dropdownIconColor={COLORS.textMain}
                     >
                         <Picker.Item label="Sort: High to Low" value="high-low" style={{fontSize: 14}} />
@@ -645,8 +694,8 @@ const TeacherPerformanceScreen = () => {
             </View>
 
             {/* Note Section */}
-            <View style={styles.noteContainer}>
-                <Text style={styles.noteText}>
+            <View style={[styles.noteContainer, { backgroundColor: COLORS.noteBg, borderColor: COLORS.noteBorder }]}>
+                <Text style={[styles.noteText, { color: COLORS.noteText }]}>
                     Note: Performance based on exam-wise marks of all students.
                 </Text>
             </View>
@@ -662,24 +711,24 @@ const TeacherPerformanceScreen = () => {
                         keyExtractor={(item) => item.uniqueKey}
                         renderItem={renderItem}
                         contentContainerStyle={styles.listPadding}
-                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-                        ListEmptyComponent={<Text style={styles.emptyText}>No data found.</Text>}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
+                        ListEmptyComponent={<Text style={[styles.emptyText, { color: COLORS.textSub }]}>No data found.</Text>}
                     />
                 )
             )}
 
             {/* Modal: Individual Graph */}
             <Modal visible={isGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsGraphVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.graphModalCard}>
+                <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
+                    <View style={[styles.graphModalCard, { backgroundColor: COLORS.cardBg }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalHeaderTitle}>Performance Stats</Text>
+                            <Text style={[styles.modalHeaderTitle, { color: COLORS.textMain }]}>Performance Stats</Text>
                             <TouchableOpacity onPress={() => setIsGraphVisible(false)}>
                                 <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
                             </TouchableOpacity>
                         </View>
-                        <Text style={styles.graphSubTitle}>{individualGraphData?.title}</Text>
-                        <View style={styles.graphViewArea}>
+                        <Text style={[styles.graphSubTitle, { color: COLORS.textSub }]}>{individualGraphData?.title}</Text>
+                        <View style={[styles.graphViewArea, { borderBottomColor: COLORS.border }]}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
                                 {individualGraphData?.exams && individualGraphData.exams.map((exam, idx) => (
                                     <AnimatedBar 
@@ -687,16 +736,17 @@ const TeacherPerformanceScreen = () => {
                                         percentage={exam.percentage} 
                                         marks={`${Math.round(exam.total_obtained)}/${Math.round(exam.total_possible)}`}
                                         label={exam.exam_type} 
-                                        color={getStatusColor(exam.percentage)}
+                                        color={getStatusColor(exam.percentage, COLORS)}
                                         height={260}
+                                        colors={COLORS}
                                     />
                                 ))}
                             </ScrollView>
                         </View>
                         <View style={styles.legendRow}>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>85-100%</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>50-85%</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>0-50%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>85-100%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>50-85%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>0-50%</Text></View>
                         </View>
                     </View>
                 </View>
@@ -704,16 +754,16 @@ const TeacherPerformanceScreen = () => {
 
             {/* Modal: Attendance Graph */}
             <Modal visible={isAttGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsAttGraphVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.graphModalCard}>
+                <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
+                    <View style={[styles.graphModalCard, { backgroundColor: COLORS.cardBg }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalHeaderTitle}>Attendance Stats</Text>
+                            <Text style={[styles.modalHeaderTitle, { color: COLORS.textMain }]}>Attendance Stats</Text>
                             <TouchableOpacity onPress={() => setIsAttGraphVisible(false)}>
                                 <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
                             </TouchableOpacity>
                         </View>
-                        <Text style={styles.graphSubTitle}>{attGraphData?.title}</Text>
-                        <View style={styles.graphViewArea}>
+                        <Text style={[styles.graphSubTitle, { color: COLORS.textSub }]}>{attGraphData?.title}</Text>
+                        <View style={[styles.graphViewArea, { borderBottomColor: COLORS.border }]}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
                                 {attGraphData?.data && attGraphData.data.length > 0 ? attGraphData.data.map((att, idx) => (
                                     <AnimatedBar 
@@ -721,16 +771,17 @@ const TeacherPerformanceScreen = () => {
                                         percentage={att.percentage} 
                                         marks={`${att.present}/${att.total}`}
                                         label={att.month} 
-                                        color={getStatusColor(att.percentage)}
+                                        color={getStatusColor(att.percentage, COLORS)}
                                         height={260}
+                                        colors={COLORS}
                                     />
-                                )) : <Text style={styles.noDataTxt}>No attendance records found.</Text>}
+                                )) : <Text style={[styles.noDataTxt, { color: COLORS.textSub }]}>No attendance records found.</Text>}
                             </ScrollView>
                         </View>
                         <View style={styles.legendRow}>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>85-100%</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>50-85%</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>0-50%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>85-100%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>50-85%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={[styles.legendTxt, {color: COLORS.textSub}]}>0-50%</Text></View>
                         </View>
                     </View>
                 </View>
@@ -738,28 +789,28 @@ const TeacherPerformanceScreen = () => {
 
             {/* Modal: Global Comparison */}
             <Modal visible={isCompareVisible} animationType="slide" onRequestClose={() => setIsCompareVisible(false)}>
-                <View style={styles.fullScreenContainer}>
-                    <View style={styles.fsHeader}>
-                        <Text style={styles.fsTitle}>Teacher Comparison</Text>
+                <View style={[styles.fullScreenContainer, { backgroundColor: COLORS.background }]}>
+                    <View style={[styles.fsHeader, { backgroundColor: COLORS.cardBg }]}>
+                        <Text style={[styles.fsTitle, { color: COLORS.textMain }]}>Teacher Comparison</Text>
                         <TouchableOpacity onPress={() => setIsCompareVisible(false)} style={styles.closeFsBtn}>
                             <Icon name="close" size={24} color={COLORS.textMain} />
                         </TouchableOpacity>
                     </View>
-                    <View style={styles.compareControls}>
+                    <View style={[styles.compareControls, { backgroundColor: COLORS.cardBg }]}>
                         <View style={styles.compareControlRow}>
-                            <Text style={styles.controlLabel}>Exam Type:</Text>
-                            <View style={styles.controlPicker}>
-                                <Picker selectedValue={compareExam} onValueChange={setCompareExam} dropdownIconColor={COLORS.textMain}>
+                            <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Exam Type:</Text>
+                            <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                                <Picker selectedValue={compareExam} onValueChange={setCompareExam} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
                                     {EXAM_TYPES.map(t => <Picker.Item key={t} label={t} value={t} style={{fontSize: 14}} />)}
                                 </Picker>
                             </View>
                         </View>
                         
-                        {/* NEW: Sort Filter */}
+                        {/* Sort Filter */}
                         <View style={styles.compareControlRow}>
-                            <Text style={styles.controlLabel}>Sort Order:</Text>
-                            <View style={styles.controlPicker}>
-                                <Picker selectedValue={compareSortBy} onValueChange={setCompareSortBy} dropdownIconColor={COLORS.textMain}>
+                            <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Sort Order:</Text>
+                            <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                                <Picker selectedValue={compareSortBy} onValueChange={setCompareSortBy} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
                                     <Picker.Item label="High to Low" value="high-low" style={{fontSize: 14}} />
                                     <Picker.Item label="Low to High" value="low-high" style={{fontSize: 14}} />
                                 </Picker>
@@ -768,9 +819,9 @@ const TeacherPerformanceScreen = () => {
 
                         {compareExam !== 'Overall' && (
                             <View style={styles.compareControlRow}>
-                                <Text style={styles.controlLabel}>Class:</Text>
-                                <View style={styles.controlPicker}>
-                                    <Picker selectedValue={compareClass} onValueChange={setCompareClass} dropdownIconColor={COLORS.textMain}>
+                                <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Class:</Text>
+                                <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                                    <Picker selectedValue={compareClass} onValueChange={setCompareClass} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
                                         {availableClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
                                     </Picker>
                                 </View>
@@ -778,7 +829,7 @@ const TeacherPerformanceScreen = () => {
                         )}
                     </View>
                     <View style={styles.compareGraphArea}>
-                        <Text style={styles.compareGraphTitle}>Ranking by {compareExam} {compareClass !== 'All Classes' ? `(${compareClass})` : ''}</Text>
+                        <Text style={[styles.compareGraphTitle, { color: COLORS.primary }]}>Ranking by {compareExam} {compareClass !== 'All Classes' ? `(${compareClass})` : ''}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end' }}>
                             {getComparisonData().length > 0 ? (
                                 getComparisonData().map((item, idx) => {
@@ -790,15 +841,16 @@ const TeacherPerformanceScreen = () => {
                                             marks={`${Math.round(item.total_obtained)}/${Math.round(item.total_possible)}`}
                                             label={shortName}
                                             subLabel={item.subject}
-                                            color={getStatusColor(item.percentage)}
+                                            color={getStatusColor(item.percentage, COLORS)}
                                             height={320}
+                                            colors={COLORS}
                                         />
                                     );
                                 })
                             ) : (
                                 <View style={styles.noDataContainer}>
-                                    <Icon name="chart-bar-stacked" size={40} color="#CCC" />
-                                    <Text style={styles.noDataTxt}>No data available for this selection.</Text>
+                                    <Icon name="chart-bar-stacked" size={40} color={COLORS.border} />
+                                    <Text style={[styles.noDataTxt, { color: COLORS.textSub }]}>No data available for this selection.</Text>
                                 </View>
                             )}
                         </ScrollView>
@@ -810,11 +862,10 @@ const TeacherPerformanceScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -826,20 +877,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1, 
+        shadowRadius: 4,
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    // Back Button Style
     backButton: {
         marginRight: 4,
         padding: 5,
         marginLeft: -3,
     },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -848,14 +896,12 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 19, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 19, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
     headerActionBtn: {
         padding: 6,
-        backgroundColor: '#f0fdfa',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#ccfbf1',
         alignItems: 'center',
         justifyContent: 'center'
     },
@@ -863,44 +909,38 @@ const styles = StyleSheet.create({
     // --- FILTERS & NOTE ---
     filterContainer: { paddingHorizontal: 15, marginBottom: 5 },
     pickerWrapper: {
-        borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginBottom: 5,
-        backgroundColor: COLORS.white, overflow: 'hidden', height: 45, justifyContent: 'center'
+        borderWidth: 1, borderRadius: 8, marginBottom: 5,
+        overflow: 'hidden', height: 45, justifyContent: 'center'
     },
-    picker: { width: '100%', color: COLORS.textMain },
+    picker: { width: '100%' },
     
     noteContainer: {
-        backgroundColor: '#FFF8E1', 
         marginHorizontal: 15,
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#FFE0B2', 
         marginBottom: 10
     },
-    noteText: { fontSize: 11, color: '#F57C00', fontWeight: 'bold', textAlign: 'center' },
+    noteText: { fontSize: 11, fontWeight: 'bold', textAlign: 'center' },
 
     // --- GENERAL ---
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     listPadding: { paddingHorizontal: 15, paddingBottom: 40 },
-    emptyText: { textAlign: 'center', color: COLORS.textSub, marginTop: 30, fontStyle: 'italic' },
+    emptyText: { textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
 
-    // --- TABLE STYLES (Fixed Alignment) ---
+    // --- TABLE STYLES ---
     tableScrollContainer: { paddingHorizontal: 15, paddingBottom: 20 },
     tableContainer: { 
-        backgroundColor: COLORS.cardBg, 
         borderRadius: 8, 
         overflow: 'hidden', 
         elevation: 2, 
         borderWidth: 1,
-        borderColor: COLORS.border
     },
     tableHeaderRow: { 
         flexDirection: 'row', 
-        backgroundColor: COLORS.primary, 
         paddingVertical: 10,
         borderBottomWidth: 1,
-        borderBottomColor: COLORS.border
     },
     headerCellContainer: {
         justifyContent: 'center',
@@ -908,20 +948,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 2
     },
     tableHeaderCell: { 
-        color: COLORS.white, 
+        color: '#FFFFFF', 
         fontWeight: 'bold', 
         fontSize: 11, 
         textAlign: 'center' 
     },
     tableRow: { 
         flexDirection: 'row', 
-        backgroundColor: COLORS.white, 
         borderBottomWidth: 1, 
-        borderBottomColor: '#EEE', 
         alignItems: 'center', 
         minHeight: 50 
     },
-    tableRowAlt: { backgroundColor: '#F9FAFB' },
     
     cellContainer: {
         justifyContent: 'center',
@@ -931,23 +968,20 @@ const styles = StyleSheet.create({
     },
     tableCell: { 
         fontSize: 12, 
-        color: COLORS.textMain, 
         textAlign: 'center' 
     },
     
-    // Sub-items inside a table cell (Subject list)
     subRowItem: {
         width: '100%',
         paddingVertical: 4,
         borderBottomWidth: 0.5,
-        borderBottomColor: '#f0f0f0',
         alignItems: 'center',
         justifyContent: 'center'
     },
-    detailRowText: { fontSize: 11, color: COLORS.textSub, textAlign: 'center' },
+    detailRowText: { fontSize: 11, textAlign: 'center' },
     
     tableGraphBtn: {
-        backgroundColor: COLORS.graphBtn,
+        backgroundColor: '#FB8C00',
         padding: 4,
         borderRadius: 4,
         alignItems: 'center',
@@ -957,83 +991,83 @@ const styles = StyleSheet.create({
     },
 
     // --- CARDS ---
-    card: { backgroundColor: COLORS.cardBg, borderRadius: 12, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
+    card: { borderRadius: 12, marginBottom: 15, elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
     cardContent: { flexDirection: 'row' },
     rankStrip: { width: 36, justifyContent: 'center', alignItems: 'center' },
     rankText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, transform: [{ rotate: '-90deg' }], width: 60, textAlign: 'center' },
     cardBody: { flex: 1, padding: 15 },
     cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
-    teacherName: { fontSize: 16, fontWeight: '700', color: COLORS.textMain },
-    subName: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
+    teacherName: { fontSize: 16, fontWeight: '700' },
+    subName: { fontSize: 13, marginTop: 2 },
     circleBadge: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
     circleText: { fontSize: 13, fontWeight: 'bold' },
-    marksLabel: { fontSize: 12, color: COLORS.textSub, marginTop: 8, marginBottom: 4 },
-    marksValue: { fontWeight: 'bold', color: COLORS.textMain },
-    progressTrack: { height: 6, backgroundColor: COLORS.track, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+    marksLabel: { fontSize: 12, marginTop: 8, marginBottom: 4 },
+    marksValue: { fontWeight: 'bold' },
+    progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
     progressFill: { height: '100%', borderRadius: 3 },
     expandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    perfLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSub },
+    perfLabel: { fontSize: 11, fontWeight: '600' },
     
     // Expanded Section
-    expandedSection: { backgroundColor: '#FAFAFA', borderTopWidth: 1, borderTopColor: '#EEE', padding: 15 },
+    expandedSection: { borderTopWidth: 1, padding: 15 },
     
     // --- ATTENDANCE ROW ---
-    attRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-    attLabel: { fontSize: 14, fontWeight: '600', color: COLORS.textMain },
+    attRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1 },
+    attLabel: { fontSize: 14, fontWeight: '600' },
     attValue: { fontSize: 16, fontWeight: 'bold' },
     btnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
 
     // Details
-    detailBlock: { marginBottom: 20, backgroundColor: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#F0F0F0' },
-    detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-    detailTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
-    detailMarks: { fontSize: 11, color: COLORS.textSub, fontWeight: '600', marginBottom: 2 },
+    detailBlock: { marginBottom: 20, padding: 10, borderRadius: 8, borderWidth: 1 },
+    detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1 },
+    detailTitle: { fontSize: 14, fontWeight: 'bold' },
+    detailMarks: { fontSize: 11, fontWeight: '600', marginBottom: 2 },
     iconButton: { flexDirection: 'row', backgroundColor: '#FB8C00', padding: 6, borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginHorizontal: 10 },
     breakdownContainer: { paddingHorizontal: 4 },
-    bdHeader: { flexDirection: 'row', marginBottom: 6, backgroundColor: '#F9FAFB', paddingVertical: 6, borderRadius: 4 },
-    bdHeaderTxt: { fontSize: 11, fontWeight: '700', color: COLORS.textSub },
-    bdRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', alignItems: 'center' },
-    bdTxt: { fontSize: 12, color: COLORS.textMain },
+    bdHeader: { flexDirection: 'row', marginBottom: 6, paddingVertical: 6, borderRadius: 4 },
+    bdHeaderTxt: { fontSize: 11, fontWeight: '700' },
+    bdRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, alignItems: 'center' },
+    bdTxt: { fontSize: 12 },
     percentagePill: { paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 },
     pillText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
     // --- MODAL ---
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-    graphModalCard: { width: '90%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 15, maxHeight: SCREEN_HEIGHT * 0.8 },
+    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    graphModalCard: { width: '90%', borderRadius: 16, padding: 20, elevation: 15, maxHeight: SCREEN_HEIGHT * 0.8 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
-    graphSubTitle: { textAlign: 'center', color: COLORS.textSub, marginBottom: 25, fontSize: 14, fontWeight: '600', textTransform: 'uppercase' },
-    graphViewArea: { height: 300, borderBottomWidth: 1, borderBottomColor: '#ECEFF1', paddingBottom: 10 },
+    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold' },
+    graphSubTitle: { textAlign: 'center', marginBottom: 25, fontSize: 14, fontWeight: '600', textTransform: 'uppercase' },
+    graphViewArea: { height: 300, borderBottomWidth: 1, paddingBottom: 10 },
     
     // --- BARS ---
     barWrapper: { width: 45, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 12 },
-    barLabelTop: { marginBottom: 6, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
-    barBackground: { width: 34, height: '80%', backgroundColor: '#F5F5F5', borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
+    barLabelTop: { marginBottom: 6, fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+    barBackground: { width: 34, height: '80%', borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
     barFill: { width: '100%', borderRadius: 6 },
     barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-    barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#000', transform: [{ rotate: '-90deg' }], width: 200, textAlign: 'center' },
-    barLabelBottom: { marginTop: 10, fontSize: 12, fontWeight: 'bold', color: COLORS.textMain, textAlign: 'center', width: 60 },
-    barSubLabel: { marginTop: 0, fontSize: 10, fontWeight: '500', color: COLORS.textSub, textAlign: 'center', width: 60 },
+    barInnerText: { fontSize: 10, fontWeight: 'bold', transform: [{ rotate: '-90deg' }], width: 200, textAlign: 'center' },
+    barLabelBottom: { marginTop: 10, fontSize: 12, fontWeight: 'bold', textAlign: 'center', width: 60 },
+    barSubLabel: { marginTop: 0, fontSize: 10, fontWeight: '500', textAlign: 'center', width: 60 },
     
     // --- LEGEND ---
     legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
     dot: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
-    legendTxt: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
+    legendTxt: { fontSize: 12, fontWeight: '500' },
 
     // Full Screen Compare
-    fullScreenContainer: { flex: 1, backgroundColor: COLORS.background },
-    fsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFF', elevation: 3 },
-    fsTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
+    fullScreenContainer: { flex: 1 },
+    fsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, elevation: 3 },
+    fsTitle: { fontSize: 18, fontWeight: 'bold' },
     closeFsBtn: { padding: 4 },
-    compareControls: { padding: 16, backgroundColor: '#FFF', marginBottom: 10 },
+    compareControls: { padding: 16, marginBottom: 10 },
     compareControlRow: { marginBottom: 12 },
-    controlLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSub, marginBottom: 6 },
-    controlPicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, backgroundColor: '#FAFAFA', height: 45, justifyContent: 'center' },
+    controlLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+    controlPicker: { borderWidth: 1, borderRadius: 8, height: 45, justifyContent: 'center' },
     compareGraphArea: { flex: 1, paddingVertical: 20 },
-    compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginBottom: 20 },
+    compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
     noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', width: SCREEN_WIDTH },
-    noDataTxt: { marginTop: 10, color: COLORS.textSub },
+    noDataTxt: { marginTop: 10 },
 });
 
 export default TeacherPerformanceScreen;

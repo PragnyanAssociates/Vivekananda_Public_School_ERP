@@ -1,12 +1,12 @@
 /**
  * File: src/screens/report/ClassListScreen.js
  * Purpose: Displays a list of all classes with performance summaries for Teachers/Admins.
- * Updated: Responsive Design & Error Handling.
+ * Updated: Responsive Design, Dark Mode Support & Error Handling.
  */
 import React, { useState, useEffect } from 'react';
 import { 
     View, Text, FlatList, TouchableOpacity, StyleSheet, 
-    ActivityIndicator, Dimensions, StatusBar 
+    ActivityIndicator, Dimensions, StatusBar, useColorScheme 
 } from 'react-native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -14,7 +14,43 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 const { width } = Dimensions.get('window');
 
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    textMuted: '#95a5a6',
+    border: '#f0f0f0',
+    iconBg: '#F5F7FA',
+    headerIconBg: '#E0F2F1',
+    classSectionBg: '#008080', // Teal
+    classText: '#ffffff',
+    error: '#e74c3c'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    textMuted: '#7f8c8d',
+    border: '#333333',
+    iconBg: '#333333',
+    headerIconBg: '#333333',
+    classSectionBg: '#004d4d', // Darker Teal
+    classText: '#e0e0e0',
+    error: '#cf6679'
+};
+
 const ClassListScreen = ({ navigation }) => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const [classSummaries, setClassSummaries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -41,15 +77,19 @@ const ClassListScreen = ({ navigation }) => {
     };
 
     if (loading) {
-        return <View style={styles.loaderContainer}><ActivityIndicator size="large" color="#008080" /></View>;
+        return (
+            <View style={[styles.loaderContainer, { backgroundColor: theme.background }]}>
+                <ActivityIndicator size="large" color={theme.primary} />
+            </View>
+        );
     }
 
     if (error) {
         return (
-            <View style={styles.loaderContainer}>
-                <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
-                <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={fetchClassSummaries}>
+            <View style={[styles.loaderContainer, { backgroundColor: theme.background }]}>
+                <Icon name="alert-circle-outline" size={50} color={theme.error} />
+                <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+                <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.primary }]} onPress={fetchClassSummaries}>
                     <Text style={styles.retryText}>Try Again</Text>
                 </TouchableOpacity>
             </View>
@@ -58,45 +98,51 @@ const ClassListScreen = ({ navigation }) => {
 
     const renderItem = ({ item }) => (
         <TouchableOpacity
-            style={styles.cardContainer}
+            style={[styles.cardContainer, { backgroundColor: theme.cardBg, shadowColor: theme.textMain }]}
             onPress={() => navigation.navigate('MarksEntry', { classGroup: item.class_group })}
             activeOpacity={0.9}
         >
             {/* Left Side: Class Name */}
-            <View style={styles.classSection}>
-                <Text style={styles.classText}>{item.class_group}</Text>
+            <View style={[styles.classSection, { backgroundColor: theme.classSectionBg }]}>
+                <Text style={[styles.classText, { color: theme.classText }]}>{item.class_group}</Text>
                 <Icon name="chevron-right" size={24} color="rgba(255,255,255,0.7)" style={{ marginTop: 5 }} />
             </View>
 
             {/* Right Side: Stats */}
             <View style={styles.statsSection}>
                 <View style={styles.statRow}>
-                    <Icon name="sigma" size={18} color="#008080" style={styles.icon} />
+                    <View style={[styles.iconWrapper, { backgroundColor: theme.iconBg }]}>
+                        <Icon name="sigma" size={18} color={theme.primary} />
+                    </View>
                     <View style={styles.textWrapper}>
-                        <Text style={styles.statLabel}>Total Marks</Text>
-                        <Text style={styles.statValue}>{item.totalClassMarks}</Text>
+                        <Text style={[styles.statLabel, { color: theme.textSub }]}>Total Marks</Text>
+                        <Text style={[styles.statValue, { color: theme.textMain }]}>{item.totalClassMarks}</Text>
                     </View>
                 </View>
 
-                <View style={styles.divider} />
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
                 <View style={styles.statRow}>
-                    <Icon name="trophy-variant" size={18} color="#e67e22" style={styles.icon} />
+                    <View style={[styles.iconWrapper, { backgroundColor: theme.iconBg }]}>
+                        <Icon name="trophy-variant" size={18} color="#e67e22" />
+                    </View>
                     <View style={styles.textWrapper}>
-                        <Text style={styles.statLabel}>Top Student</Text>
-                        <Text style={styles.statValue} numberOfLines={1}>
+                        <Text style={[styles.statLabel, { color: theme.textSub }]}>Top Student</Text>
+                        <Text style={[styles.statValue, { color: theme.textMain }]} numberOfLines={1}>
                             {item.topStudent?.name ? `${item.topStudent.name} (${item.topStudent.marks})` : 'N/A'}
                         </Text>
                     </View>
                 </View>
 
-                <View style={styles.divider} />
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
                 <View style={styles.statRow}>
-                    <Icon name="book-open-page-variant" size={18} color="#2980b9" style={styles.icon} />
+                    <View style={[styles.iconWrapper, { backgroundColor: theme.iconBg }]}>
+                        <Icon name="book-open-page-variant" size={18} color="#2980b9" />
+                    </View>
                     <View style={styles.textWrapper}>
-                        <Text style={styles.statLabel}>Top Subject</Text>
-                        <Text style={styles.statValue} numberOfLines={1}>
+                        <Text style={[styles.statLabel, { color: theme.textSub }]}>Top Subject</Text>
+                        <Text style={[styles.statValue, { color: theme.textMain }]} numberOfLines={1}>
                             {item.topSubject?.name ? `${item.topSubject.name} (${item.topSubject.marks})` : 'N/A'}
                         </Text>
                     </View>
@@ -106,18 +152,18 @@ const ClassListScreen = ({ navigation }) => {
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar backgroundColor="#F2F5F8" barStyle="dark-content" />
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+            <StatusBar backgroundColor={theme.background} barStyle={isDark ? "light-content" : "dark-content"} />
             
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.textMain }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="class" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.headerIconBg }]}>
+                        <MaterialIcons name="class" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Class Reports</Text>
-                        <Text style={styles.headerSubtitle}>Performance Summaries</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Class Reports</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Performance Summaries</Text>
                     </View>
                 </View>
             </View>
@@ -126,7 +172,7 @@ const ClassListScreen = ({ navigation }) => {
                 data={classSummaries}
                 renderItem={renderItem}
                 keyExtractor={(item) => item.class_group}
-                ListEmptyComponent={<Text style={styles.emptyText}>No classes with students were found.</Text>}
+                ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textMuted }]}>No classes with students were found.</Text>}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
             />
         </View>
@@ -136,7 +182,6 @@ const ClassListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F2F5F8'
     },
     loaderContainer: {
         flex: 1,
@@ -147,7 +192,6 @@ const styles = StyleSheet.create({
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
         paddingVertical: 15,
         width: '94%', 
@@ -159,14 +203,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1',
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -175,24 +217,21 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333333' },
-    headerSubtitle: { fontSize: 13, color: '#666666' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
 
     // --- LIST CARD STYLES ---
     cardContainer: {
         flexDirection: 'row',
-        backgroundColor: '#ffffff',
         marginBottom: 15,
         borderRadius: 12,
         elevation: 3,
-        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.08,
         shadowRadius: 3,
         overflow: 'hidden',
     },
     classSection: {
-        backgroundColor: '#008080', // Teal
         padding: 10,
         justifyContent: 'center',
         alignItems: 'center',
@@ -201,7 +240,6 @@ const styles = StyleSheet.create({
     classText: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#ffffff',
         textAlign: 'center'
     },
     statsSection: {
@@ -214,9 +252,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginVertical: 4,
     },
-    icon: {
+    iconWrapper: {
         marginRight: 10,
-        backgroundColor: '#F5F7FA',
         padding: 6,
         borderRadius: 8,
         overflow: 'hidden'
@@ -226,7 +263,6 @@ const styles = StyleSheet.create({
     },
     statLabel: {
         fontSize: 11,
-        color: '#7f8c8d',
         marginBottom: 2,
         fontWeight: '600',
         textTransform: 'uppercase'
@@ -234,31 +270,27 @@ const styles = StyleSheet.create({
     statValue: {
         fontSize: 14,
         fontWeight: 'bold',
-        color: '#2c3e50',
     },
     divider: {
         height: 1,
-        backgroundColor: '#f0f0f0',
         marginVertical: 4
     },
     emptyText: {
         textAlign: 'center',
         marginTop: 50,
         fontSize: 15,
-        color: '#95a5a6',
         fontStyle: 'italic'
     },
     errorText: {
         fontSize: 16,
-        color: '#e74c3c',
         textAlign: 'center',
         marginVertical: 10
     },
     retryButton: {
-        backgroundColor: '#008080',
         paddingHorizontal: 20,
         paddingVertical: 10,
-        borderRadius: 20
+        borderRadius: 20,
+        marginTop: 10
     },
     retryText: {
         color: '#fff',

@@ -1,16 +1,15 @@
 /**
  * File: src/screens/staff/StaffDetailScreen.js
- * Purpose: Staff Details with updated UI (Header Card, Profile Card).
- * Updated: Strict Color Logic (0-50 Red, 50-85 Blue, 85-100 Green).
- * Updated: Custom Rounding (94.5 -> 94, 94.6 -> 95).
+ * Purpose: Staff Details with updated UI, Performance Analytics, and Theme Support.
  */
-import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, ActivityIndicator, Image,
-    TouchableOpacity, Modal, Pressable, Platform, UIManager, LayoutAnimation, Alert, Animated, Easing, SafeAreaView, Dimensions
+    TouchableOpacity, Modal, Pressable, Platform, UIManager, LayoutAnimation, Alert, Animated, Easing, SafeAreaView, Dimensions, useColorScheme, StatusBar
 } from 'react-native';
 import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
+// Assuming TimetableScreen exists in the same directory
 import TimetableScreen from './TimetableScreen'; 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,24 +20,44 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal 
-    background: '#F2F5F8', // Light Grey Blue
+const { width } = Dimensions.get('window');
+
+// --- THEME DEFINITIONS ---
+const LightColors = {
+    primary: '#008080',     // Teal 
+    background: '#F2F5F8',  // Light Grey Blue
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
-    
-    // Updated Status Colors
-    success: '#43A047',    // Green (85% - 100%)
-    average: '#1E88E5',    // Blue (50% - 85%)
-    poor: '#E53935',       // Red (0% - 50%)
-    
-    track: '#ECEFF1',      // Light Grey
-    border: '#CFD8DC'
+    border: '#CFD8DC',
+    success: '#43A047',     // Green
+    average: '#1E88E5',     // Blue
+    poor: '#E53935',        // Red
+    track: '#ECEFF1',
+    headerIconBg: '#E0F2F1',
+    inputBg: '#FAFAFA',
+    modalOverlay: 'rgba(0,0,0,0.5)',
+    iconColor: '#546E7A'
 };
 
-// --- HELPER: Date Formatter ---
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    success: '#66BB6A',
+    average: '#42A5F5',
+    poor: '#EF5350',
+    track: '#2C2C2C',
+    headerIconBg: '#333333',
+    inputBg: '#2C2C2C',
+    modalOverlay: 'rgba(255,255,255,0.1)',
+    iconColor: '#B0B0B0'
+};
+
+// --- HELPERS ---
 const formatDate = (date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -48,21 +67,12 @@ const formatDate = (date) => {
     return `${day}/${month}/${year}`;
 };
 
-const getCurrentAcademicYear = () => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    return currentMonth >= 5 ? `${currentYear}-${currentYear + 1}` : `${currentYear - 1}-${currentYear}`;
-};
-
-// --- HELPER: CUSTOM ROUNDING ---
 // Rule: 94.5% -> 94%, 94.6% -> 95%
 const getRoundedPercentage = (value) => {
     const floatVal = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(floatVal)) return 0;
     
     const decimalPart = floatVal - Math.floor(floatVal);
-    
     if (decimalPart > 0.5) {
         return Math.ceil(floatVal);
     } else {
@@ -70,20 +80,16 @@ const getRoundedPercentage = (value) => {
     }
 };
 
-// --- HELPER: STATUS COLOR LOGIC ---
-// 85-100: Green, 50-85: Blue, 0-50: Red
-const getStatusColor = (percentage) => {
+const getStatusColor = (percentage, colors) => {
     const val = getRoundedPercentage(percentage);
-    if (val >= 85) return COLORS.success; 
-    if (val >= 50) return COLORS.average; 
-    return COLORS.poor; 
+    if (val >= 85) return colors.success; 
+    if (val >= 50) return colors.average; 
+    return colors.poor; 
 };
 
 // --- COMPONENT: ANIMATED BAR ---
-const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
+const AnimatedBar = ({ percentage, marks, label, color, height = 200, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
-
-    // Use rounded integer for display and logic
     const displayPercentage = getRoundedPercentage(percentage);
 
     useEffect(() => {
@@ -102,40 +108,42 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 200 }) => {
 
     return (
         <View style={[styles.barWrapper, { height: height }]}>
-            <Text style={styles.barLabelTop}>{displayPercentage}%</Text>
-            <View style={styles.barBackground}>
+            <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{displayPercentage}%</Text>
+            <View style={[styles.barBackground, { backgroundColor: colors.track }]}>
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
                 <View style={styles.barTextContainer}>
                     <Text style={styles.barInnerText} numberOfLines={1}>{marks}</Text>
                 </View>
             </View>
-            <Text style={styles.barLabelBottom} numberOfLines={1}>{label}</Text>
+            <Text style={[styles.barLabelBottom, { color: colors.textMain }]} numberOfLines={1}>{label}</Text>
         </View>
     );
 };
 
-// --- SUB-COMPONENTS FOR ATTENDANCE ---
-const SummaryCard = ({ label, value, color, width = '23%' }) => (
-    <Animatable.View animation="zoomIn" duration={500} style={[styles.attSummaryBox, { width: width }]}>
+// --- SUB-COMPONENTS ---
+const SummaryCard = ({ label, value, color, colors, width = '23%' }) => (
+    <Animatable.View animation="zoomIn" duration={500} style={[styles.attSummaryBox, { width: width, borderColor: colors.border }]}>
         <Text style={[styles.attSummaryValue, { color }]}>{value}</Text>
-        <Text style={styles.attSummaryLabel}>{label}</Text>
+        <Text style={[styles.attSummaryLabel, { color: colors.textSub }]}>{label}</Text>
     </Animatable.View>
 );
 
-const DailyStatusCard = ({ record, date }) => {
+const DailyStatusCard = ({ record, date, colors }) => {
     const hasRecord = !!record;
     const status = hasRecord ? record.status : null;
-    let bgColor = '#9E9E9E'; let iconName = "help-circle-outline"; let statusText = "No Record";
+    let bgColor = colors.border; 
+    let iconName = "help-circle-outline"; 
+    let statusText = "No Record";
 
-    if (status === 'P') { bgColor = '#43A047'; iconName = "check-circle-outline"; statusText = "Present"; }
-    else if (status === 'A') { bgColor = '#E53935'; iconName = "close-circle-outline"; statusText = "Absent"; }
-    else if (status === 'L') { bgColor = '#F57C00'; iconName = "clock-alert-outline"; statusText = "Late / Leave"; }
+    if (status === 'P') { bgColor = colors.success; iconName = "check-circle-outline"; statusText = "Present"; }
+    else if (status === 'A') { bgColor = colors.poor; iconName = "close-circle-outline"; statusText = "Absent"; }
+    else if (status === 'L') { bgColor = colors.average; iconName = "clock-alert-outline"; statusText = "Late / Leave"; }
 
     return (
-        <Animatable.View animation="flipInX" duration={600} style={[styles.dailyCard, { backgroundColor: hasRecord ? bgColor : '#FFFFFF', borderColor: bgColor }]}>
+        <Animatable.View animation="flipInX" duration={600} style={[styles.dailyCard, { backgroundColor: hasRecord ? bgColor : colors.cardBg, borderColor: bgColor }]}>
             <Icon name={iconName} size={50} color={hasRecord ? '#FFFFFF' : bgColor} />
             <Text style={[styles.dailyStatusText, { color: hasRecord ? '#FFFFFF' : bgColor }]}>{statusText.toUpperCase()}</Text>
-            <Text style={[styles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : '#566573' }]}>{formatDate(date)}</Text>
+            <Text style={[styles.dailyDateText, { color: hasRecord ? 'rgba(255,255,255,0.9)' : colors.textSub }]}>{formatDate(date)}</Text>
         </Animatable.View>
     );
 };
@@ -143,6 +151,12 @@ const DailyStatusCard = ({ record, date }) => {
 // --- MAIN COMPONENT ---
 const StaffDetailScreen = ({ route, navigation }) => {
     const { staffId } = route.params;
+    
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [staffDetails, setStaffDetails] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isViewerVisible, setViewerVisible] = useState(false);
@@ -153,15 +167,15 @@ const StaffDetailScreen = ({ route, navigation }) => {
     const [isPerformanceExpanded, setIsPerformanceExpanded] = useState(false);
     const [isAttendanceExpanded, setIsAttendanceExpanded] = useState(false);
 
-    // Performance State
+    // Performance Data
     const [performanceDetails, setPerformanceDetails] = useState([]);
     const [performanceLoading, setPerformanceLoading] = useState(false);
     
-    // Graph Modal State
+    // Graph Modal
     const [isGraphVisible, setIsGraphVisible] = useState(false);
     const [graphData, setGraphData] = useState(null);
 
-    // Attendance State
+    // Attendance
     const [attendanceReport, setAttendanceReport] = useState(null);
     const [attendanceLoading, setAttendanceLoading] = useState(false);
     const [attendanceViewMode, setAttendanceViewMode] = useState('daily');
@@ -169,14 +183,13 @@ const StaffDetailScreen = ({ route, navigation }) => {
     const [attFromDate, setAttFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
     const [attToDate, setAttToDate] = useState(new Date());
 
-    // Pickers
     const [showMainPicker, setShowMainPicker] = useState(false);
     const [showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
 
     const scrollViewRef = useRef(null);
 
-    // --- HIDE NATIVE HEADER ---
+    // Hide default header to use custom one
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
@@ -189,6 +202,7 @@ const StaffDetailScreen = ({ route, navigation }) => {
                 setStaffDetails(response.data);
             } catch (error) {
                 console.error('Error fetching staff details:', error);
+                Alert.alert("Error", "Failed to load staff details.");
             } finally {
                 setLoading(false);
             }
@@ -198,7 +212,7 @@ const StaffDetailScreen = ({ route, navigation }) => {
     
     const scrollToBottom = () => { setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150); };
 
-    // --- TOGGLES ---
+    // Toggles
     const handleProfessionalToggle = () => { if (!isProfessionalExpanded) scrollToBottom(); setIsProfessionalExpanded(p => !p); };
     const handleTimetableToggle = () => { if (!isTimetableExpanded) scrollToBottom(); setIsTimetableExpanded(p => !p); };
 
@@ -206,11 +220,13 @@ const StaffDetailScreen = ({ route, navigation }) => {
         if (!isPerformanceExpanded) {
             setPerformanceLoading(true);
             try {
-                const academicYear = getCurrentAcademicYear();
-                const response = await apiClient.get(`/performance/teacher/${staffId}/${academicYear}`);
-                setPerformanceDetails(response.data);
+                // FIXED: Removed academicYear from URL to match backend route
+                const response = await apiClient.get(`/performance/teacher/${staffId}`);
+                setPerformanceDetails(response.data || []);
             } catch (error) {
                 console.error("Failed to fetch performance data:", error);
+                // Optionally set empty array on error to show 'No Data' instead of spinning forever
+                setPerformanceDetails([]);
             } finally {
                 setPerformanceLoading(false);
             }
@@ -224,13 +240,24 @@ const StaffDetailScreen = ({ route, navigation }) => {
         setIsAttendanceExpanded(p => !p);
     };
 
-    // --- GRAPH HANDLER ---
     const handleOpenGraph = (title, exams) => {
         setGraphData({ title, exams });
         setIsGraphVisible(true);
     };
 
-    // --- ATTENDANCE LOGIC ---
+    const handleMenuPress = () => {
+        Alert.alert(
+            "Staff Options",
+            `Manage ${staffDetails?.full_name || 'Staff'}`,
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Edit Profile", onPress: () => console.log("Edit Pressed") }, 
+                { text: "Reset Password", onPress: () => console.log("Reset Password Pressed") }
+            ]
+        );
+    };
+
+    // Attendance Fetcher
     const fetchAttendanceReport = useCallback(async () => {
         if (!staffId) return;
         setAttendanceLoading(true);
@@ -253,11 +280,14 @@ const StaffDetailScreen = ({ route, navigation }) => {
     const onFromDateChange = (event, date) => { setShowFromPicker(Platform.OS === 'ios'); if (date) setAttFromDate(date); };
     const onToDateChange = (event, date) => { setShowToPicker(Platform.OS === 'ios'); if (date) setAttToDate(date); };
 
-    // --- STATS CALCULATION ---
+    // Calculations
     const overallStats = useMemo(() => {
         if (!performanceDetails || performanceDetails.length === 0) return { totalObtained: 0, totalPossible: 0, percentage: 0 };
         let totalObtained = 0; let totalPossible = 0;
-        performanceDetails.forEach(item => { totalObtained += parseFloat(item.total_marks) || 0; totalPossible += parseFloat(item.max_possible_marks) || 0; });
+        performanceDetails.forEach(item => { 
+            totalObtained += parseFloat(item.total_marks) || 0; 
+            totalPossible += parseFloat(item.max_possible_marks) || 0; 
+        });
         const percentage = totalPossible > 0 ? (totalObtained / totalPossible) * 100 : 0;
         return { totalObtained, totalPossible, percentage };
     }, [performanceDetails]);
@@ -265,39 +295,58 @@ const StaffDetailScreen = ({ route, navigation }) => {
     const attendanceSummary = useMemo(() => attendanceReport?.stats || { overallPercentage: '0.0', daysPresent: 0, daysAbsent: 0, totalDays: 0 }, [attendanceReport]);
     const dailyRecord = (attendanceViewMode === 'daily' && attendanceReport?.detailedHistory?.length) ? attendanceReport.detailedHistory.find(r => r.date === attSelectedDate.toISOString().slice(0, 10)) || attendanceReport.detailedHistory[0] : null;
 
-    const DetailRow = ({ label, value }) => (<View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value || 'Not Provided'}</Text></View>);
+    const DetailRow = ({ label, value }) => (
+        <View style={[styles.detailRow, { borderBottomColor: COLORS.border }]}>
+            <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>{label}</Text>
+            <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{value || 'Not Provided'}</Text>
+        </View>
+    );
 
-    if (loading) return <View style={styles.loaderContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
-    if (!staffDetails) return <View style={styles.loaderContainer}><Text>Could not load staff details.</Text></View>;
+    if (loading) return <View style={[styles.loaderContainer, { backgroundColor: COLORS.background }]}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    if (!staffDetails) return <View style={[styles.loaderContainer, { backgroundColor: COLORS.background }]}><Text style={{color: COLORS.textMain}}>Could not load staff details.</Text></View>;
 
     const imageUrl = staffDetails.profile_image_url ? `${SERVER_URL}${staffDetails.profile_image_url}` : null;
     const displayRole = staffDetails.role === 'admin' ? staffDetails.class_group : staffDetails.role;
     const subjectsDisplay = staffDetails.subjects_taught && Array.isArray(staffDetails.subjects_taught) && staffDetails.subjects_taught.length > 0 ? staffDetails.subjects_taught.join(', ') : 'Not Provided';
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
+            
             <Modal visible={isViewerVisible} transparent={true} onRequestClose={() => setViewerVisible(false)} animationType="fade">
-                <Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}><View style={styles.modalContent}><Image source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} style={styles.enlargedAvatar} resizeMode="contain" /><TouchableOpacity style={styles.closeButton} onPress={() => setViewerVisible(false)}><Text style={styles.closeButtonText}>Close</Text></TouchableOpacity></View></Pressable>
+                <Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}>
+                    <View style={styles.modalContent}>
+                        <Image source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} style={styles.enlargedAvatar} resizeMode="contain" />
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setViewerVisible(false)}>
+                            <Text style={styles.closeButtonText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
             </Modal>
             
-            {/* Header Card with Back Button */}
-            <View style={styles.headerCard}>
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#000' }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.6}>
-                    <MaterialIcons name="arrow-back" size={24} color="#333" />
+                    <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                 </TouchableOpacity>
-                <View style={styles.headerIconContainer}>
-                    <MaterialIcons name="assignment-ind" size={28} color="#008080" />
+                <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                    <MaterialIcons name="assignment-ind" size={28} color={COLORS.primary} />
                 </View>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>Staff Profile</Text>
-                    <Text style={styles.headerSubtitle}>View detailed information</Text>
+                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Staff Profile</Text>
+                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>View detailed information</Text>
                 </View>
+                
+                {/* 3 DOTS MENU */}
+                <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
+                    <MaterialIcons name="more-vert" size={26} color={COLORS.iconColor} />
+                </TouchableOpacity>
             </View>
 
             <ScrollView ref={scrollViewRef} style={styles.scrollContainer} contentContainerStyle={styles.scrollContentContainer}>
                 
-                {/* Floating Profile Card */}
-                <View style={styles.profileCard}>
+                {/* Profile Card */}
+                <View style={[styles.profileCard, { backgroundColor: COLORS.primary }]}>
                     <TouchableOpacity onPress={() => setViewerVisible(true)} style={styles.avatarWrapper}>
                         <Image 
                             source={imageUrl ? { uri: imageUrl } : require('../assets/default_avatar.png')} 
@@ -311,34 +360,55 @@ const StaffDetailScreen = ({ route, navigation }) => {
                     </View>
                 </View>
                 
-                {/* Static Details */}
-                <View style={styles.card}><Text style={styles.cardTitle}>Personal Details</Text><DetailRow label="Username" value={staffDetails.username} />{staffDetails.role === 'teacher' && (<DetailRow label="Subjects Taught" value={subjectsDisplay} />)}<DetailRow label="Date of Birth" value={staffDetails.dob} /><DetailRow label="Gender" value={staffDetails.gender} /></View>
-                <View style={styles.card}><Text style={styles.cardTitle}>Contact Details</Text><DetailRow label="Mobile No" value={staffDetails.phone} /><DetailRow label="Email Address" value={staffDetails.email} /><DetailRow label="Address" value={staffDetails.address} /></View>
+                {/* Details */}
+                <View style={[styles.card, { backgroundColor: COLORS.cardBg }]}>
+                    <Text style={[styles.cardTitle, { color: COLORS.primary, borderBottomColor: COLORS.border }]}>Personal Details</Text>
+                    <DetailRow label="Username" value={staffDetails.username} />
+                    {staffDetails.role === 'teacher' && (<DetailRow label="Subjects" value={subjectsDisplay} />)}
+                    <DetailRow label="Date of Birth" value={staffDetails.dob} />
+                    <DetailRow label="Gender" value={staffDetails.gender} />
+                </View>
+                
+                <View style={[styles.card, { backgroundColor: COLORS.cardBg }]}>
+                    <Text style={[styles.cardTitle, { color: COLORS.primary, borderBottomColor: COLORS.border }]}>Contact Details</Text>
+                    <DetailRow label="Mobile No" value={staffDetails.phone} />
+                    <DetailRow label="Email Address" value={staffDetails.email} />
+                    <DetailRow label="Address" value={staffDetails.address} />
+                </View>
 
-                {/* Collapsible: Professional */}
-                <View style={styles.collapsibleCard}>
+                {/* Professional Info */}
+                <View style={[styles.collapsibleCard, { backgroundColor: COLORS.cardBg }]}>
                     <TouchableOpacity style={styles.collapsibleHeader} onPress={handleProfessionalToggle} activeOpacity={0.8}>
-                        <Text style={styles.collapsibleTitle}>Professional Details</Text><Text style={styles.arrowIcon}>{isProfessionalExpanded ? '▲' : '▼'}</Text>
+                        <Text style={[styles.collapsibleTitle, { color: COLORS.primary }]}>Professional Details</Text>
+                        <Text style={[styles.arrowIcon, { color: COLORS.primary }]}>{isProfessionalExpanded ? '▲' : '▼'}</Text>
                     </TouchableOpacity>
                     {isProfessionalExpanded && (
-                        <View style={styles.cardContent}><DetailRow label="Aadhar No." value={staffDetails.aadhar_no} /><DetailRow label="Joining Date" value={staffDetails.joining_date} /><DetailRow label="Previous Salary" value={staffDetails.previous_salary} /><DetailRow label="Present Salary" value={staffDetails.present_salary} /><DetailRow label="Experience" value={staffDetails.experience} /></View>
+                        <View style={styles.cardContent}>
+                            <DetailRow label="Aadhar No." value={staffDetails.aadhar_no} />
+                            <DetailRow label="Joining Date" value={staffDetails.joining_date} />
+                            <DetailRow label="Previous Salary" value={staffDetails.previous_salary} />
+                            <DetailRow label="Present Salary" value={staffDetails.present_salary} />
+                            <DetailRow label="Experience" value={staffDetails.experience} />
+                        </View>
                     )}
                 </View>
 
                 {staffDetails.role === 'teacher' && (
                     <>
-                        {/* Collapsible: Timetable */}
-                        <View style={styles.collapsibleCard}>
+                        {/* Timetable */}
+                        <View style={[styles.collapsibleCard, { backgroundColor: COLORS.cardBg }]}>
                             <TouchableOpacity style={styles.collapsibleHeader} onPress={handleTimetableToggle} activeOpacity={0.8}>
-                                <Text style={styles.collapsibleTitle}>Timetable</Text><Text style={styles.arrowIcon}>{isTimetableExpanded ? '▲' : '▼'}</Text>
+                                <Text style={[styles.collapsibleTitle, { color: COLORS.primary }]}>Timetable</Text>
+                                <Text style={[styles.arrowIcon, { color: COLORS.primary }]}>{isTimetableExpanded ? '▲' : '▼'}</Text>
                             </TouchableOpacity>
                             {isTimetableExpanded && <TimetableScreen teacherId={staffId} isEmbedded={true} />}
                         </View>
                         
-                        {/* Collapsible: Performance with Graph */}
-                        <View style={styles.collapsibleCard}>
+                        {/* Performance Section */}
+                        <View style={[styles.collapsibleCard, { backgroundColor: COLORS.cardBg }]}>
                             <TouchableOpacity style={styles.collapsibleHeader} onPress={handlePerformanceToggle} activeOpacity={0.8}>
-                                <Text style={styles.collapsibleTitle}>Performance</Text><Text style={styles.arrowIcon}>{isPerformanceExpanded ? '▲' : '▼'}</Text>
+                                <Text style={[styles.collapsibleTitle, { color: COLORS.primary }]}>Performance</Text>
+                                <Text style={[styles.arrowIcon, { color: COLORS.primary }]}>{isPerformanceExpanded ? '▲' : '▼'}</Text>
                             </TouchableOpacity>
                             
                             {isPerformanceExpanded && (
@@ -348,14 +418,15 @@ const StaffDetailScreen = ({ route, navigation }) => {
                                             <Text style={styles.teacherNameHeader}>{staffDetails.full_name}</Text>
                                             <View style={styles.teacherStatsContainer}>
                                                 <Text style={styles.overallStat}>Marks: <Text style={styles.overallValue}>{Math.round(overallStats.totalObtained)}</Text></Text>
-                                                {/* Display Rounded Integer Percentage */}
-                                                <Text style={styles.overallStat}>Perf: <Text style={[styles.averageValue, { color: getStatusColor(overallStats.percentage) }]}>{getRoundedPercentage(overallStats.percentage)}%</Text></Text>
+                                                <Text style={styles.overallStat}>Perf: <Text style={[styles.averageValue, { color: getStatusColor(overallStats.percentage, COLORS) }]}>
+                                                    {getRoundedPercentage(overallStats.percentage)}%
+                                                </Text></Text>
                                             </View>
                                         </View>
                                         
                                         {performanceDetails.length > 0 ? (
                                             <>
-                                                <View style={styles.detailHeaderRow}>
+                                                <View style={[styles.detailHeaderRow, { backgroundColor: COLORS.background, borderBottomColor: COLORS.border }]}>
                                                     <Text style={[styles.detailHeaderText, { flex: 3 }]}>Class / Subject</Text>
                                                     <Text style={[styles.detailHeaderText, { flex: 2, textAlign: 'center' }]}>Score</Text>
                                                     <Text style={[styles.detailHeaderText, { flex: 1.5, textAlign: 'right' }]}>Avg %</Text>
@@ -363,38 +434,37 @@ const StaffDetailScreen = ({ route, navigation }) => {
                                                 {performanceDetails.map((detail, index) => {
                                                     const dPerc = getRoundedPercentage(detail.average_marks);
                                                     return (
-                                                        <View key={index} style={[styles.detailRowPerformance, index === performanceDetails.length - 1 && styles.lastDetailRow]}>
+                                                        <View key={index} style={[styles.detailRowPerformance, { borderBottomColor: COLORS.border }, index === performanceDetails.length - 1 && styles.lastDetailRow]}>
                                                             <View style={{flex: 3, flexDirection: 'row', alignItems: 'center'}}>
-                                                                <Text style={styles.detailColumnSubject} numberOfLines={1}>{`${detail.class_group} - ${detail.subject}`}</Text>
-                                                                {/* GRAPH BUTTON */}
+                                                                <Text style={[styles.detailColumnSubject, { color: COLORS.textMain }]} numberOfLines={1}>{`${detail.class_group} - ${detail.subject}`}</Text>
                                                                 <TouchableOpacity style={styles.inlineGraphBtn} onPress={() => handleOpenGraph(`${detail.class_group} - ${detail.subject}`, detail.exam_breakdown)}>
                                                                     <Icon name="chart-bar" size={16} color="#FFF" />
                                                                 </TouchableOpacity>
                                                             </View>
-                                                            <Text style={styles.detailColumnTotal}>{Math.round(detail.total_marks)}/{Math.round(detail.max_possible_marks)}</Text>
-                                                            {/* Display Rounded Integer Percentage */}
-                                                            <Text style={[styles.detailColumnAverage, { color: getStatusColor(dPerc) }]}>{dPerc}%</Text>
+                                                            <Text style={[styles.detailColumnTotal, { color: COLORS.textMain }]}>{Math.round(detail.total_marks)}/{Math.round(detail.max_possible_marks)}</Text>
+                                                            <Text style={[styles.detailColumnAverage, { color: getStatusColor(dPerc, COLORS) }]}>{dPerc}%</Text>
                                                         </View>
                                                     );
                                                 })}
                                             </>
-                                        ) : <View style={styles.noDataContainer}><Text style={styles.noDataText}>No performance data available.</Text></View>}
+                                        ) : <View style={styles.noDataContainer}><Text style={[styles.noDataText, { color: COLORS.textSub }]}>No performance data available.</Text></View>}
                                     </View>
                                 )
                             )}
                         </View>
                         
-                        {/* Collapsible: Attendance */}
-                        <View style={styles.collapsibleCard}>
+                        {/* Attendance Section */}
+                        <View style={[styles.collapsibleCard, { backgroundColor: COLORS.cardBg }]}>
                             <TouchableOpacity style={styles.collapsibleHeader} onPress={handleAttendanceToggle} activeOpacity={0.8}>
-                                <Text style={styles.collapsibleTitle}>Attendance</Text><Text style={styles.arrowIcon}>{isAttendanceExpanded ? '▲' : '▼'}</Text>
+                                <Text style={[styles.collapsibleTitle, { color: COLORS.primary }]}>Attendance</Text>
+                                <Text style={[styles.arrowIcon, { color: COLORS.primary }]}>{isAttendanceExpanded ? '▲' : '▼'}</Text>
                             </TouchableOpacity>
                             {isAttendanceExpanded && (
                                 <View>
-                                    <View style={styles.attToggleContainer}>
+                                    <View style={[styles.attToggleContainer, { borderBottomColor: COLORS.border }]}>
                                         {['daily', 'monthly', 'yearly', 'custom'].map(m => (
-                                            <TouchableOpacity key={m} style={[styles.attToggleButton, attendanceViewMode === m && styles.attToggleButtonActive]} onPress={() => setAttendanceViewMode(m)}>
-                                                <Text style={[styles.attToggleButtonText, attendanceViewMode === m && styles.attToggleButtonTextActive]}>{m.charAt(0).toUpperCase() + m.slice(1)}</Text>
+                                            <TouchableOpacity key={m} style={[styles.attToggleButton, { backgroundColor: COLORS.track }, attendanceViewMode === m && { backgroundColor: COLORS.primary }]} onPress={() => setAttendanceViewMode(m)}>
+                                                <Text style={[styles.attToggleButtonText, { color: COLORS.textMain }, attendanceViewMode === m && { color: '#FFFFFF' }]}>{m.charAt(0).toUpperCase() + m.slice(1)}</Text>
                                             </TouchableOpacity>
                                         ))}
                                         {attendanceViewMode !== 'custom' && (
@@ -402,18 +472,18 @@ const StaffDetailScreen = ({ route, navigation }) => {
                                         )}
                                     </View>
                                     <View style={styles.attSubtitleContainer}>
-                                        {attendanceViewMode === 'daily' && <Text style={styles.attSubtitle}>Date: {formatDate(attSelectedDate)}</Text>}
-                                        {attendanceViewMode === 'monthly' && <Text style={styles.attSubtitle}>Month: {attSelectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
-                                        {attendanceViewMode === 'yearly' && <Text style={styles.attSubtitle}>Year: {attSelectedDate.getFullYear()}</Text>}
-                                        {attendanceViewMode === 'custom' && <Text style={styles.attSubtitle}>Custom Range</Text>}
+                                        {attendanceViewMode === 'daily' && <Text style={[styles.attSubtitle, { color: COLORS.textSub }]}>Date: {formatDate(attSelectedDate)}</Text>}
+                                        {attendanceViewMode === 'monthly' && <Text style={[styles.attSubtitle, { color: COLORS.textSub }]}>Month: {attSelectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>}
+                                        {attendanceViewMode === 'yearly' && <Text style={[styles.attSubtitle, { color: COLORS.textSub }]}>Year: {attSelectedDate.getFullYear()}</Text>}
+                                        {attendanceViewMode === 'custom' && <Text style={[styles.attSubtitle, { color: COLORS.textSub }]}>Custom Range</Text>}
                                     </View>
 
                                     {attendanceViewMode === 'custom' && (
-                                        <Animatable.View animation="fadeIn" duration={300} style={styles.attRangeContainer}>
-                                            <TouchableOpacity style={styles.attDateInputBox} onPress={() => setShowFromPicker(true)}><Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/><Text style={styles.attDateInputText}>{formatDate(attFromDate)}</Text></TouchableOpacity>
-                                            <Icon name="arrow-right" size={20} color="#566573" />
-                                            <TouchableOpacity style={styles.attDateInputBox} onPress={() => setShowToPicker(true)}><Icon name="calendar-today" size={18} color="#566573" style={{marginRight:5}}/><Text style={styles.attDateInputText}>{formatDate(attToDate)}</Text></TouchableOpacity>
-                                            <TouchableOpacity style={styles.attGoButton} onPress={fetchAttendanceReport}><Text style={styles.attGoButtonText}>Go</Text></TouchableOpacity>
+                                        <Animatable.View animation="fadeIn" duration={300} style={[styles.attRangeContainer, { backgroundColor: COLORS.background, borderBottomColor: COLORS.border }]}>
+                                            <TouchableOpacity style={[styles.attDateInputBox, { backgroundColor: COLORS.inputBg }]} onPress={() => setShowFromPicker(true)}><Icon name="calendar-today" size={18} color={COLORS.textSub} style={{marginRight:5}}/><Text style={[styles.attDateInputText, { color: COLORS.textMain }]}>{formatDate(attFromDate)}</Text></TouchableOpacity>
+                                            <Icon name="arrow-right" size={20} color={COLORS.textSub} />
+                                            <TouchableOpacity style={[styles.attDateInputBox, { backgroundColor: COLORS.inputBg }]} onPress={() => setShowToPicker(true)}><Icon name="calendar-today" size={18} color={COLORS.textSub} style={{marginRight:5}}/><Text style={[styles.attDateInputText, { color: COLORS.textMain }]}>{formatDate(attToDate)}</Text></TouchableOpacity>
+                                            <TouchableOpacity style={[styles.attGoButton, { backgroundColor: COLORS.success }]} onPress={fetchAttendanceReport}><Text style={styles.attGoButtonText}>Go</Text></TouchableOpacity>
                                         </Animatable.View>
                                     )}
 
@@ -424,13 +494,13 @@ const StaffDetailScreen = ({ route, navigation }) => {
                                     {attendanceLoading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ padding: 20 }} /> : (
                                         <>
                                             {attendanceViewMode === 'daily' ? (
-                                                <View style={{ padding: 20, alignItems: 'center' }}><DailyStatusCard record={dailyRecord} date={attSelectedDate} /></View>
+                                                <View style={{ padding: 20, alignItems: 'center' }}><DailyStatusCard record={dailyRecord} date={attSelectedDate} colors={COLORS} /></View>
                                             ) : (
                                                 <View style={styles.attSummaryContainer}>
-                                                    <SummaryCard label="Overall %" value={`${attendanceSummary.overallPercentage}%`} color={COLORS.average} />
-                                                    <SummaryCard label="Working Days" value={attendanceSummary.totalDays || 0} color="#F57C00" />
-                                                    <SummaryCard label="Days Present" value={attendanceSummary.daysPresent || 0} color={COLORS.success} />
-                                                    <SummaryCard label="Days Absent" value={attendanceSummary.daysAbsent || 0} color={COLORS.poor} />
+                                                    <SummaryCard label="Overall %" value={`${attendanceSummary.overallPercentage}%`} color={COLORS.average} colors={COLORS} />
+                                                    <SummaryCard label="Working Days" value={attendanceSummary.totalDays || 0} color="#F57C00" colors={COLORS} />
+                                                    <SummaryCard label="Days Present" value={attendanceSummary.daysPresent || 0} color={COLORS.success} colors={COLORS} />
+                                                    <SummaryCard label="Days Absent" value={attendanceSummary.daysAbsent || 0} color={COLORS.poor} colors={COLORS} />
                                                 </View>
                                             )}
                                         </>
@@ -442,20 +512,20 @@ const StaffDetailScreen = ({ route, navigation }) => {
                 )}
             </ScrollView>
 
-            {/* --- MODAL: GRAPH VISUALIZATION --- */}
+            {/* Modal Graph */}
             <Modal visible={isGraphVisible} transparent={true} animationType="fade" onRequestClose={() => setIsGraphVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.graphModalCard}>
+                <View style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
+                    <View style={[styles.graphModalCard, { backgroundColor: COLORS.cardBg }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalHeaderTitle}>Performance Stats</Text>
+                            <Text style={[styles.modalHeaderTitle, { color: COLORS.textMain }]}>Performance Stats</Text>
                             <TouchableOpacity onPress={() => setIsGraphVisible(false)}>
                                 <Icon name="close-circle-outline" size={28} color={COLORS.textSub} />
                             </TouchableOpacity>
                         </View>
                         
-                        <Text style={styles.graphSubTitle}>{graphData?.title}</Text>
+                        <Text style={[styles.graphSubTitle, { color: COLORS.textSub }]}>{graphData?.title}</Text>
 
-                        <View style={styles.graphViewArea}>
+                        <View style={[styles.graphViewArea, { borderBottomColor: COLORS.border }]}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'flex-end' }}>
                                 {graphData?.exams && graphData.exams.length > 0 ? graphData.exams.map((exam, idx) => (
                                     <AnimatedBar 
@@ -463,18 +533,18 @@ const StaffDetailScreen = ({ route, navigation }) => {
                                         percentage={exam.percentage} 
                                         marks={`${Math.round(exam.total_obtained)}/${Math.round(exam.total_possible)}`}
                                         label={exam.exam_type} 
-                                        color={getStatusColor(exam.percentage)}
+                                        color={getStatusColor(exam.percentage, COLORS)}
+                                        colors={COLORS}
                                         height={240}
                                     />
-                                )) : <Text style={styles.noDataText}>No exam data found.</Text>}
+                                )) : <Text style={[styles.noDataText, { color: COLORS.textSub }]}>No exam data found.</Text>}
                             </ScrollView>
                         </View>
 
-                        {/* Updated Legend */}
                         <View style={styles.legendRow}>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={styles.legendTxt}>85-100% (Topper)</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={styles.legendTxt}>50-85% (Avg)</Text></View>
-                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={styles.legendTxt}>0-50% (Least)</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.success}]} /><Text style={[styles.legendTxt, { color: COLORS.textSub }]}>85-100%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.average}]} /><Text style={[styles.legendTxt, { color: COLORS.textSub }]}>50-85%</Text></View>
+                            <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: COLORS.poor}]} /><Text style={[styles.legendTxt, { color: COLORS.textSub }]}>0-50%</Text></View>
                         </View>
                     </View>
                 </View>
@@ -484,151 +554,118 @@ const StaffDetailScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Light Blue Grey
+    container: { flex: 1 },
+    scrollContainer: { flex: 1 },
     scrollContentContainer: { paddingBottom: 20 },
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // Header Card Style
+    // Header Card
     headerCard: {
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        width: '96%',
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center',
+        marginTop: 15, marginBottom: 10, borderRadius: 12,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
     },
-    backButton: {
-        marginRight: 8,
-        padding: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Light Teal Circle
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    backButton: { marginRight: 8, padding: 8, justifyContent: 'center', alignItems: 'center' },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
-    headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#333333' },
-    headerSubtitle: { fontSize: 14, color: '#666666', marginTop: 1 },
+    headerTitle: { fontSize: 22, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 14, marginTop: 1 },
+    menuButton: { padding: 8 },
 
-    // Floating Profile Card
+    // Profile Card
     profileCard: {
-        alignItems: 'center',
-        backgroundColor: '#008080', // Teal Background for Profile Card
-        marginHorizontal: 15,
-        borderRadius: 16,
-        paddingVertical: 25,
-        marginBottom: 10,
-        elevation: 4,
+        alignItems: 'center', marginHorizontal: 15, borderRadius: 16,
+        paddingVertical: 25, marginBottom: 10, elevation: 4,
         shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 5,
     },
     avatarWrapper: {
-        borderRadius: 65,
-        borderWidth: 4,
-        borderColor: 'rgba(255,255,255,0.3)',
-        padding: 4,
-        marginBottom: 10,
+        borderRadius: 65, borderWidth: 4, borderColor: 'rgba(255,255,255,0.3)',
+        padding: 4, marginBottom: 10,
     },
     avatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#bdc3c7' },
     fullName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 5 },
     badge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
     badgeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-    card: { backgroundColor: '#ffffff', borderRadius: 12, marginHorizontal: 15, marginTop: 15, paddingHorizontal: 15, paddingBottom: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', marginBottom: 5 },
+    // Details Cards
+    card: { borderRadius: 12, marginHorizontal: 15, marginTop: 15, paddingHorizontal: 15, paddingBottom: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+    cardTitle: { fontSize: 18, fontWeight: 'bold', paddingVertical: 15, borderBottomWidth: 1, marginBottom: 5 },
     cardContent: { paddingHorizontal: 15, paddingBottom: 5 },
-    detailRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f2f5', alignItems: 'center' },
-    detailLabel: { fontSize: 15, color: '#7f8c8d', flex: 2 },
-    detailValue: { fontSize: 15, color: '#2c3e50', flex: 3, fontWeight: '500', textAlign: 'right' },
+    detailRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, alignItems: 'center' },
+    detailLabel: { fontSize: 15, flex: 2 },
+    detailValue: { fontSize: 15, flex: 3, fontWeight: '500', textAlign: 'right' },
     
     // Collapsible
-    collapsibleCard: { backgroundColor: '#ffffff', borderRadius: 12, marginHorizontal: 15, marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, overflow: 'hidden' },
+    collapsibleCard: { borderRadius: 12, marginHorizontal: 15, marginTop: 15, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, overflow: 'hidden' },
     collapsibleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-    collapsibleTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary },
-    arrowIcon: { fontSize: 20, color: COLORS.primary },
+    collapsibleTitle: { fontSize: 18, fontWeight: 'bold' },
+    arrowIcon: { fontSize: 20 },
     
-    // Performance Styles
+    // Performance
     teacherHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#34495e' },
     teacherNameHeader: { fontSize: 18, fontWeight: '600', color: '#ffffff', flexShrink: 1 },
     teacherStatsContainer: { alignItems: 'flex-end' },
     overallStat: { fontSize: 14, color: '#ecf0f1', lineHeight: 20 },
     overallValue: { fontWeight: 'bold', color: '#ffffff' },
-    averageValue: { fontWeight: 'bold', color: '#2ecc71' },
-    detailHeaderRow: { flexDirection: 'row', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#f8f9fa', borderBottomWidth: 2, borderBottomColor: '#e9ecef' },
+    averageValue: { fontWeight: 'bold' },
+    detailHeaderRow: { flexDirection: 'row', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 2 },
     detailHeaderText: { fontSize: 12, fontWeight: 'bold', color: '#6c757d', textTransform: 'uppercase', letterSpacing: 0.5 },
-    detailRowPerformance: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+    detailRowPerformance: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
     lastDetailRow: { borderBottomWidth: 0 },
-    detailColumnSubject: { fontSize: 15, color: '#34495e', maxWidth: '85%' },
-    detailColumnTotal: { flex: 2, fontSize: 15, color: '#2c3e50', textAlign: 'center' },
-    detailColumnAverage: { flex: 1.5, fontSize: 15, fontWeight: 'bold', color: COLORS.primary, textAlign: 'right' },
+    detailColumnSubject: { fontSize: 15, maxWidth: '85%' },
+    detailColumnTotal: { flex: 2, fontSize: 15, textAlign: 'center' },
+    detailColumnAverage: { flex: 1.5, fontSize: 15, fontWeight: 'bold', textAlign: 'right' },
     inlineGraphBtn: { backgroundColor: '#FB8C00', padding: 4, borderRadius: 4, marginLeft: 8 },
     
-    // Modal Styles (Graph)
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-    graphModalCard: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 10 },
+    // Graph Modal
+    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+    graphModalCard: { width: '100%', borderRadius: 16, padding: 20, elevation: 10 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
-    graphSubTitle: { textAlign: 'center', color: COLORS.textSub, marginBottom: 15, fontSize: 14, fontWeight: '500' },
-    graphViewArea: { height: 250, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: 10 },
+    modalHeaderTitle: { fontSize: 18, fontWeight: 'bold' },
+    graphSubTitle: { textAlign: 'center', marginBottom: 15, fontSize: 14, fontWeight: '500' },
+    graphViewArea: { height: 250, borderBottomWidth: 1, paddingBottom: 10 },
     
-    // Animated Bar Styles
+    // Bar Graph
     barWrapper: { width: 55, alignItems: 'center', justifyContent: 'flex-end', marginHorizontal: 8 },
-    barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: COLORS.textMain },
-    barBackground: { width: 30, height: '80%', backgroundColor: COLORS.track, borderRadius: 15, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
-    barFill: { width: '100%', borderRadius: 15 },
+    barLabelTop: { marginBottom: 4, fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+    barBackground: { width: 30, height: '80%', borderRadius: 1, overflow: 'hidden', justifyContent: 'flex-end', position: 'relative' },
+    barFill: { width: '100%', borderRadius: 1 },
     barTextContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
     barInnerText: { fontSize: 10, fontWeight: 'bold', color: '#0e0e0eff', transform: [{ rotate: '-90deg' }], width: 120, textAlign: 'center' },
-    barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', color: COLORS.textMain, textAlign: 'center', width: '100%' },
+    barLabelBottom: { marginTop: 8, fontSize: 11, fontWeight: '600', textAlign: 'center', width: '100%' },
     
-    // Legend
     legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20, gap: 15 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
     dot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-    legendTxt: { fontSize: 12, color: COLORS.textSub },
+    legendTxt: { fontSize: 12 },
 
-    // Profile Modal
+    // Modal Profile
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center' },
     modalContent: { width: '90%', height: '70%', justifyContent: 'center', alignItems: 'center' },
     enlargedAvatar: { width: '100%', height: '100%', borderRadius: 10 },
     closeButton: { position: 'absolute', bottom: -20, backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 35, borderRadius: 25 },
     closeButtonText: { color: '#2c3e50', fontSize: 16, fontWeight: 'bold' },
 
-    // Misc
     noDataContainer: { padding: 20, alignItems: 'center', justifyContent: 'center' },
-    noDataText: { fontSize: 16, color: '#7f8c8d', textAlign: 'center' },
+    noDataText: { fontSize: 16, textAlign: 'center' },
     
-    // Attendance Specific
-    attToggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E0E0E0', alignItems: 'center', flexWrap: 'wrap' },
-    attToggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, backgroundColor: '#E0E0E0', marginBottom: 5 },
-    attToggleButtonActive: { backgroundColor: COLORS.primary },
-    attToggleButtonText: { color: '#37474F', fontWeight: '600', fontSize: 13 },
-    attToggleButtonTextActive: { color: '#FFFFFF' },
+    // Attendance
+    attToggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 10, borderBottomWidth: 1, alignItems: 'center', flexWrap: 'wrap' },
+    attToggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 3, marginBottom: 5 },
+    attToggleButtonText: { fontWeight: '600', fontSize: 13 },
     attCalendarButton: { padding: 8, marginLeft: 5 },
     attSubtitleContainer: { alignItems: 'center', paddingVertical: 5 },
-    attSubtitle: { fontSize: 14, color: '#566573' },
-    attRangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, backgroundColor: '#f9f9f9', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-    attDateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', padding: 10, borderRadius: 6, marginHorizontal: 5, justifyContent: 'center' },
-    attDateInputText: { color: '#37474F', fontSize: 13, fontWeight: '500' },
-    attGoButton: { backgroundColor: COLORS.success, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
+    attSubtitle: { fontSize: 14 },
+    attRangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderBottomWidth: 1 },
+    attDateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 6, marginHorizontal: 5, justifyContent: 'center' },
+    attDateInputText: { fontSize: 13, fontWeight: '500' },
+    attGoButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
     attGoButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
     attSummaryContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', paddingVertical: 15 },
-    attSummaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2 },
+    attSummaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2, borderWidth: 1, borderRadius: 8 },
     attSummaryValue: { fontSize: 20, fontWeight: 'bold' },
-    attSummaryLabel: { fontSize: 12, color: '#566573', marginTop: 5, textAlign: 'center' },
+    attSummaryLabel: { fontSize: 12, marginTop: 5, textAlign: 'center' },
     dailyCard: { width: '100%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, elevation: 2 },
     dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
     dailyDateText: { fontSize: 16, marginTop: 5 },

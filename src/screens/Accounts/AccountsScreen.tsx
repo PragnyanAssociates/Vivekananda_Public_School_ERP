@@ -8,7 +8,9 @@ import {
     FlatList,
     Image,
     Platform,
-    UIManager
+    UIManager,
+    useColorScheme,
+    StatusBar
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -17,6 +19,31 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+// --- THEME COLORS ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#333333',
+    textSub: '#666666',
+    iconBg: '#E0F2F1',
+    imageBg: '#F7FAFC',
+    border: '#E0E0E0',
+    shadow: '#000'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    iconBg: '#2C2C2C',
+    imageBg: '#252525',
+    border: '#333333',
+    shadow: '#000' // Shadow is less visible in dark mode, but kept for consistency
+};
 
 // Define the structure for each item in our accounts dashboard
 interface AccountModule {
@@ -68,6 +95,11 @@ const accountModules: AccountModule[] = [
 
 const AccountsScreen = () => {
     const navigation = useNavigation();
+    
+    // Theme Logic
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
 
     const handleNavigation = (navigateTo: string) => {
         navigation.navigate(navigateTo as never);
@@ -75,32 +107,36 @@ const AccountsScreen = () => {
 
     const renderModuleCard = ({ item }: { item: AccountModule }) => (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.shadow }]}
             onPress={() => handleNavigation(item.navigateTo)}
             activeOpacity={0.8}
         >
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, { backgroundColor: COLORS.imageBg }]}>
                 <Image
                     source={{ uri: item.imageSource }}
                     style={styles.cardImage}
                     resizeMode="contain"
                 />
             </View>
-            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{item.title}</Text>
         </TouchableOpacity>
     );
 
     return (
-        <SafeAreaView style={styles.container}>
-            
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar 
+                barStyle={isDark ? 'light-content' : 'dark-content'} 
+                backgroundColor={COLORS.background} 
+            />
+
             {/* Header Card */}
-            <View style={styles.headerCard}>
-                <View style={styles.headerIconContainer}>
-                    <Icon name="account-balance-wallet" size={28} color="#008080" />
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.shadow }]}>
+                <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
+                    <Icon name="account-balance-wallet" size={28} color={COLORS.primary} />
                 </View>
                 <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>Accounts</Text>
-                    <Text style={styles.headerSubtitle}>Manage financial records</Text>
+                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Accounts</Text>
+                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Manage financial records</Text>
                 </View>
             </View>
 
@@ -119,12 +155,11 @@ const AccountsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F2F5F8', 
+        // Background color handled dynamically in component
     },
     
     // --- HEADER STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
         paddingVertical: 10, // REDUCED Padding (Smaller box height)
         width: '96%', 
@@ -135,19 +170,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
+        // Background and ShadowColor handled dynamically
     },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1',
         borderRadius: 30,
         width: 45, // Slightly smaller circle to match reduced height
         height: 45,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
+        // Background color handled dynamically
     },
     headerTextContainer: {
         justifyContent: 'center',
@@ -155,12 +190,12 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 22, // INCREASED Font Size
         fontWeight: 'bold',
-        color: '#333333',
+        // Color handled dynamically
     },
     headerSubtitle: {
         fontSize: 14,
-        color: '#666666',
         marginTop: 1,
+        // Color handled dynamically
     },
 
     // --- GRID STYLES ---
@@ -174,20 +209,19 @@ const styles = StyleSheet.create({
         height: 150,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
         borderRadius: 16,
         padding: 10,
         elevation: 3,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
+        // Background and ShadowColor handled dynamically
     },
     imageContainer: {
         marginBottom: 15,
         padding: 10,
-        backgroundColor: '#F7FAFC', 
         borderRadius: 50,
+        // Background color handled dynamically
     },
     cardImage: {
         width: 50,
@@ -196,8 +230,8 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#2D3748',
         textAlign: 'center',
+        // Color handled dynamically
     },
 });
 

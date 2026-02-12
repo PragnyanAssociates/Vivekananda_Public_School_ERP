@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useAuth } from '../../context/AuthContext';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { SERVER_URL } from '../../../apiConfig';
 import apiClient from '../../api/client';
@@ -26,14 +25,16 @@ const LightColors = {
     textMain: '#263238',
     textSub: '#546E7A',
     border: '#CFD8DC',
-    inputBg: '#FFFFFF',
+    inputBg: '#FAFAFA',
     success: '#43A047',
     danger: '#E53935',
     orange: '#FFA000',
     blue: '#1E88E5',
-    pendingBg: '#FFF3E0', pendingText: '#FF9800',
-    approvedBg: '#E8F5E9', approvedText: '#4CAF50',
-    rejectedBg: '#FFEBEE', rejectedText: '#F44336',
+    iconGrey: '#90A4AE',
+    pendingBg: '#FFF3E0', pendingText: '#E67E22',
+    approvedBg: '#E8F5E9', approvedText: '#2E7D32',
+    rejectedBg: '#FFEBEE', rejectedText: '#C62828',
+    placeholder: '#B0BEC5' // Dull grey for examples
 };
 
 const DarkColors = {
@@ -48,9 +49,11 @@ const DarkColors = {
     danger: '#EF5350',
     orange: '#FFA726',
     blue: '#42A5F5',
+    iconGrey: '#757575',
     pendingBg: 'rgba(255, 152, 0, 0.15)', pendingText: '#FFB74D',
     approvedBg: 'rgba(76, 175, 80, 0.15)', approvedText: '#81C784',
     rejectedBg: 'rgba(244, 67, 54, 0.15)', rejectedText: '#E57373',
+    placeholder: '#616161' // Dull grey for dark mode
 };
 
 // --- TYPES ---
@@ -74,23 +77,19 @@ interface PreAdmissionRecord {
     status: Status; 
 }
 
-// --- HELPER FUNCTIONS ---
-// Fixed date formatting to DD/MM/YYYY
+// --- HELPERS ---
 const formatDate = (dateString?: string): string => { 
     if (!dateString) return 'N/A'; 
     const date = new Date(dateString); 
     if (isNaN(date.getTime())) return 'N/A';
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); 
 };
-
-// Convert for Input Field (YYYY-MM-DD)
 const toYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
 const getCurrentYear = () => new Date().getFullYear();
 
 // --- COMPONENTS ---
 
-// Status Pill
-const StatusPill = ({ status, colors }: { status: Status, colors: typeof LightColors }) => { 
+const StatusPill = ({ status, colors }: { status: Status, colors: any }) => { 
     let bg, text;
     if (status === 'Approved') { bg = colors.approvedBg; text = colors.approvedText; }
     else if (status === 'Rejected') { bg = colors.rejectedBg; text = colors.rejectedText; }
@@ -98,12 +97,41 @@ const StatusPill = ({ status, colors }: { status: Status, colors: typeof LightCo
 
     return (
         <View style={[styles.statusPill, { backgroundColor: bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: text }]} />
             <Text style={[styles.statusPillText, { color: text }]}>{status}</Text>
         </View>
     ); 
 };
 
-// Image Modal
+const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false, placeholder = "" }: any) => (
+    <View style={styles.formRow}>
+        <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
+        <TextInput 
+            style={[
+                styles.input, 
+                { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textMain }, 
+                multiline && { height: 80, textAlignVertical: 'top' }
+            ]} 
+            value={value || ''} 
+            onChangeText={onChange} 
+            keyboardType={kType} 
+            multiline={multiline}
+            placeholder={placeholder}
+            placeholderTextColor={colors.placeholder}
+        />
+    </View>
+);
+
+const InfoRow = ({ icon, label, value, isMultiLine = false, colors }: any) => (
+    <View style={[styles.infoRow, isMultiLine && { alignItems: 'flex-start' }]}>
+        <FontAwesome name={icon} size={14} color={colors.textSub} style={[styles.infoIcon, isMultiLine && { marginTop: 3 }]} />
+        <Text style={[styles.infoLabel, { color: colors.textMain }]}>{label}:</Text>
+        <Text style={[styles.infoValue, { color: colors.textSub }]} numberOfLines={isMultiLine ? undefined : 1}>{value || 'N/A'}</Text>
+    </View>
+);
+
+// --- MODALS ---
+
 const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () => void }> = ({ visible, uri, onClose }) => {
     if (!uri || !visible) return null;
     return (
@@ -118,7 +146,6 @@ const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () 
     );
 };
 
-// Year Picker
 const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedValue: string, onSelect: (year: string) => void, onClose: () => void, colors: any }> = ({ visible, years, selectedValue, onSelect, onClose, colors }) => {
     const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
     return (
@@ -143,9 +170,67 @@ const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedVal
     );
 }
 
+// --- CARD ITEM ---
+
+const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, onEdit: any, onDelete: any, isExpanded: boolean, onPress: any, onDpPress: any }> = ({ item, colors, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
+    const imageUri = item.photo_url ? `${SERVER_URL}${item.photo_url}` : undefined;
+
+    const handleMenuPress = () => {
+        Alert.alert(
+            "Manage Application",
+            `Options for "${item.student_name}"`,
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Edit Details", onPress: () => onEdit(item) },
+                { text: "Delete Record", onPress: () => onDelete(item.id), style: 'destructive' }
+            ]
+        );
+    };
+
+    return (
+        <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg }]} onPress={onPress} activeOpacity={0.9}>
+            <View style={styles.cardHeader}>
+                 <TouchableOpacity onPress={(e) => { e.stopPropagation(); if (imageUri) onDpPress(item.photo_url!); }} disabled={!imageUri} style={styles.avatarWrapper}>
+                    {imageUri ? <Image source={{ uri: imageUri }} style={[styles.avatarImage, { borderColor: colors.border }]} /> : <View style={[styles.avatarImage, styles.avatarFallback]}><FontAwesome name="user" size={30} color="#fff" /></View>}
+                </TouchableOpacity>
+
+                <View style={styles.cardHeaderText}>
+                    <Text style={[styles.cardTitle, { color: colors.textMain }]} numberOfLines={1}>{item.student_name}</Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textSub }]}>Joining: {item.joining_grade}</Text>
+                </View>
+                
+                <View style={styles.centerStatusArea}>
+                    <StatusPill status={item.status} colors={colors} />
+                </View>
+
+                <View style={styles.rightActionArea}>
+                    <TouchableOpacity 
+                        style={styles.menuButton} 
+                        onPress={(e) => { e.stopPropagation(); handleMenuPress(); }}
+                        hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
+                    >
+                        <MaterialIcons name="more-vert" size={26} color={colors.iconGrey} />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {isExpanded && (
+                <View style={[styles.expandedContainer, { borderTopColor: colors.border }]}>
+                    <InfoRow icon="id-card" label="Admission No" value={item.admission_no} colors={colors} />
+                    <InfoRow icon="calendar" label="Submitted" value={formatDate(item.submission_date)} colors={colors} />
+                    <InfoRow icon="birthday-cake" label="D.O.B" value={formatDate(item.dob)} colors={colors} />
+                    <InfoRow icon="phone" label="Phone" value={item.phone_no} colors={colors} />
+                    <InfoRow icon="user" label="Parent" value={item.parent_name} colors={colors} />
+                    <InfoRow icon="graduation-cap" label="Prev. Grade" value={item.previous_grade} colors={colors} />
+                    <InfoRow icon="map-marker" label="Address" value={item.address} isMultiLine colors={colors} />
+                </View>
+            )}
+        </TouchableOpacity>
+    );
+};
+
 // --- MAIN SCREEN ---
 const PreAdmissionsScreen: React.FC = () => {
-    // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
@@ -155,10 +240,8 @@ const PreAdmissionsScreen: React.FC = () => {
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     
-    // Form Management (Partial Update Logic)
-    const initialFormState: Partial<PreAdmissionRecord> = {};
-    const [originalData, setOriginalData] = useState<Partial<PreAdmissionRecord>>(initialFormState);
-    const [formData, setFormData] = useState<Partial<PreAdmissionRecord>>(initialFormState);
+    const [formData, setFormData] = useState<Partial<PreAdmissionRecord>>({});
+    const [originalData, setOriginalData] = useState<Partial<PreAdmissionRecord>>({});
     const [currentItemId, setCurrentItemId] = useState<number | null>(null);
 
     const [selectedImage, setSelectedImage] = useState<Asset | null>(null);
@@ -166,14 +249,12 @@ const PreAdmissionsScreen: React.FC = () => {
     const [pickerTarget, setPickerTarget] = useState<'dob' | null>(null);
     const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
 
-    // Search/Filter
     const [searchText, setSearchText] = useState<string>('');
     const [filterYear, setFilterYear] = useState<string>(getCurrentYear().toString()); 
     const [yearPickerVisible, setYearPickerVisible] = useState<boolean>(false);
     const [isSearching, setIsSearching] = useState<boolean>(false);
     const [availableYears, setAvailableYears] = useState<string[]>([]); 
     
-    // Image Enlarge
     const [enlargeModalVisible, setEnlargeModalVisible] = useState<boolean>(false);
     const [enlargeImageUri, setEnlargeImageUri] = useState<string>('');
     
@@ -198,18 +279,17 @@ const PreAdmissionsScreen: React.FC = () => {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleCardPress = (id: number) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpandedCardId(prevId => (prevId === id ? null : id)); };
+    const handleCardPress = (id: number) => { 
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); 
+        setExpandedCardId(prevId => (prevId === id ? null : id)); 
+    };
     
     const handleOpenModal = (item: PreAdmissionRecord | null = null) => { 
         setSelectedImage(null); 
         if (item) { 
             setIsEditing(true); 
             setCurrentItemId(item.id);
-            // Normalize for comparison
-            const normalized = {
-                ...item,
-                dob: item.dob ? toYYYYMMDD(new Date(item.dob)) : undefined
-            };
+            const normalized = { ...item, dob: item.dob ? toYYYYMMDD(new Date(item.dob)) : undefined };
             setFormData(normalized); 
             setOriginalData(normalized);
         } 
@@ -228,15 +308,15 @@ const PreAdmissionsScreen: React.FC = () => {
         }); 
     };
     
-    // --- OPTIMIZED SAVE (PARTIAL UPDATES) ---
     const handleSave = async () => {
-        if (!formData.admission_no || !formData.student_name || !formData.joining_grade) { return Alert.alert('Validation Error', 'Admission No, Name, and Grade are required.'); }
+        if (!formData.admission_no || !formData.student_name || !formData.joining_grade) { 
+            return Alert.alert('Validation Error', 'Admission No, Name, and Grade are required.'); 
+        }
         
         const body = new FormData();
         let hasChanges = false;
 
         if (isEditing && currentItemId) {
-            // Check changes
             Object.keys(formData).forEach(key => {
                 const k = key as keyof PreAdmissionRecord;
                 const newVal = formData[k];
@@ -263,7 +343,6 @@ const PreAdmissionsScreen: React.FC = () => {
             } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Update failed.'); }
 
         } else {
-            // New Record
             Object.keys(formData).forEach(key => {
                 const val = formData[key as keyof PreAdmissionRecord];
                 if (val !== null && val !== undefined) body.append(key, String(val));
@@ -280,7 +359,16 @@ const PreAdmissionsScreen: React.FC = () => {
     };
 
     const handleDelete = (id: number) => {
-        Alert.alert("Confirm Delete", "Are you sure?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await apiClient.delete(`/preadmissions/${id}`); Alert.alert("Success", "Deleted"); fetchData(); } catch (error: any) { Alert.alert('Error', error.response?.data?.message); }}}]);
+        Alert.alert("Confirm Delete", "Are you sure?", [
+            { text: "Cancel", style: "cancel" }, 
+            { text: "Delete", style: "destructive", onPress: async () => { 
+                try { 
+                    await apiClient.delete(`/preadmissions/${id}`); 
+                    Alert.alert("Success", "Deleted"); 
+                    fetchData(); 
+                } catch (error: any) { Alert.alert('Error', error.response?.data?.message); }
+            }}
+        ]);
     };
 
     const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => { 
@@ -296,7 +384,7 @@ const PreAdmissionsScreen: React.FC = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
             
-            {/* --- HEADER --- */}
+            {/* HEADER */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
@@ -313,7 +401,7 @@ const PreAdmissionsScreen: React.FC = () => {
                 </TouchableOpacity>
             </View>
             
-            {/* --- SEARCH & FILTER --- */}
+            {/* SEARCH & FILTER */}
             <View style={styles.searchFilterContainer}>
                 <View style={[styles.searchWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                     <MaterialIcons name="search" size={20} color={COLORS.textSub} style={{marginRight: 8}} />
@@ -333,7 +421,7 @@ const PreAdmissionsScreen: React.FC = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* --- LIST --- */}
+            {/* FLATLIST */}
             <FlatList
                 data={data}
                 keyExtractor={(item) => item.id.toString()}
@@ -352,7 +440,7 @@ const PreAdmissionsScreen: React.FC = () => {
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 100 }}
             />
             
-            {/* --- MODAL --- */}
+            {/* MODAL */}
             <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
                 <SafeAreaView style={{flex: 1, backgroundColor: COLORS.background}}>
                     <ScrollView style={styles.modalContainer} contentContainerStyle={{paddingBottom: 50}}>
@@ -370,20 +458,40 @@ const PreAdmissionsScreen: React.FC = () => {
                             <TouchableOpacity style={[styles.imagePickerButton, { backgroundColor: COLORS.primary }]} onPress={handleChoosePhoto}><MaterialIcons name="camera-alt" size={16} color="#fff" /><Text style={styles.imagePickerButtonText}>Photo</Text></TouchableOpacity>
                         </View>
                         
-                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} />
-                        <InputField label="Student Name*" value={formData.student_name} onChange={(t: string) => setFormData(p => ({...p, student_name: t}))} colors={COLORS} />
+                        {/* --- STUDENT INFO --- */}
+                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Student Details</Text>
+                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} placeholder="e.g., 2025-001" />
+                        <InputField label="Student Name*" value={formData.student_name} onChange={(t: string) => setFormData(p => ({...p, student_name: t}))} colors={COLORS} placeholder="e.g., Rahul Kumar" />
                         
                         <View style={styles.formRow}>
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Date of Birth</Text>
                             <TouchableOpacity onPress={() => setPickerTarget('dob')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Text style={{ color: COLORS.textMain }}>{formData.dob ? formatDate(formData.dob) : 'Select Date'}</Text>
+                                <Text style={{ color: formData.dob ? COLORS.textMain : COLORS.placeholder }}>{formData.dob ? formatDate(formData.dob) : 'dd-mm-yyyy'}</Text>
                             </TouchableOpacity>
                         </View>
                         
-                        <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} />
+                        <View style={styles.row}>
+                            <View style={styles.halfWidth}>
+                                <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9876543210" />
+                            </View>
+                            <View style={styles.halfWidth}>
+                                <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t}))} colors={COLORS} placeholder="e.g., PEN123456" />
+                            </View>
+                        </View>
+                        <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t}))} kType="numeric" colors={COLORS} placeholder="e.g., 1234 5678 9012" />
+
+                        {/* --- ACADEMIC INFO --- */}
+                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Academic Information</Text>
+                        <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} placeholder="e.g., Class 5" />
+                        <InputField label="Previous Institute" value={formData.previous_institute} onChange={(t: string) => setFormData(p => ({...p, previous_institute: t}))} colors={COLORS} placeholder="e.g., St. Mary's School" />
+                        <InputField label="Previous Grade" value={formData.previous_grade} onChange={(t: string) => setFormData(p => ({...p, previous_grade: t}))} colors={COLORS} placeholder="e.g., Class 4" />
+
+                        {/* --- PARENT INFO --- */}
+                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Parent Information</Text>
+                        <InputField label="Parent Name" value={formData.parent_name} onChange={(t: string) => setFormData(p => ({...p, parent_name: t}))} colors={COLORS} placeholder="e.g., Ramesh Kumar" />
+                        <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9876543210" />
                         
-                        <InputField label="Phone No" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} />
-                        <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} />
+                        <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} placeholder="e.g., H.No 1-23, Street Name, City" />
 
                         <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Status</Text>
                         <View style={styles.statusSelector}>
@@ -410,62 +518,7 @@ const PreAdmissionsScreen: React.FC = () => {
     );
 };
 
-// --- SUB COMPONENTS ---
-
-const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false }: any) => (
-    <View style={styles.formRow}>
-        <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
-        <TextInput 
-            style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textMain }, multiline && { height: 80, textAlignVertical: 'top' }]} 
-            value={value || ''} onChangeText={onChange} keyboardType={kType} multiline={multiline}
-        />
-    </View>
-);
-
-const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, onEdit: any, onDelete: any, isExpanded: boolean, onPress: any, onDpPress: any }> = ({ item, colors, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
-    const imageUri = item.photo_url ? `${SERVER_URL}${item.photo_url}` : undefined;
-    return (
-        <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg }]} onPress={onPress} activeOpacity={0.9}>
-            <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-                 <TouchableOpacity onPress={(e) => { e.stopPropagation(); if (imageUri) onDpPress(item.photo_url!); }} disabled={!imageUri} style={styles.avatarWrapper}>
-                    {imageUri ? <Image source={{ uri: imageUri }} style={[styles.avatarImage, { borderColor: colors.border }]} /> : <View style={[styles.avatarImage, styles.avatarFallback]}><FontAwesome name="user" size={30} color="#fff" /></View>}
-                </TouchableOpacity>
-
-                <View style={styles.cardHeaderText}>
-                    <Text style={[styles.cardTitle, { color: colors.textMain }]}>{item.student_name}</Text>
-                    <Text style={[styles.cardSubtitle, { color: colors.textSub }]}>Joining: {item.joining_grade}</Text>
-                </View>
-                <View style={styles.cardActions}>
-                    <StatusPill status={item.status} colors={colors} />
-                    <View style={styles.buttonGroup}>
-                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onEdit(item); }} style={styles.iconButton}><MaterialIcons name="edit" size={20} color={colors.orange} /></TouchableOpacity>
-                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); onDelete(item.id); }} style={styles.iconButton}><MaterialIcons name="delete" size={20} color={colors.danger} /></TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-
-            {isExpanded && (
-                <View style={[styles.expandedContainer, { borderTopColor: colors.border }]}>
-                    <InfoRow icon="id-card" label="Admission No" value={item.admission_no} colors={colors} />
-                    <InfoRow icon="calendar" label="Submitted" value={formatDate(item.submission_date)} colors={colors} />
-                    <InfoRow icon="birthday-cake" label="D.O.B" value={formatDate(item.dob)} colors={colors} />
-                    <InfoRow icon="phone" label="Phone" value={item.phone_no} colors={colors} />
-                    <InfoRow icon="user" label="Parent" value={item.parent_name} colors={colors} />
-                    <InfoRow icon="graduation-cap" label="Prev. Grade" value={item.previous_grade} colors={colors} />
-                    <InfoRow icon="map-marker" label="Address" value={item.address} isMultiLine colors={colors} />
-                </View>
-            )}
-        </TouchableOpacity>
-    );
-};
-
-const InfoRow = ({ icon, label, value, isMultiLine = false, colors }: any) => (
-    <View style={[styles.infoRow, isMultiLine && { alignItems: 'flex-start' }]}>
-        <FontAwesome name={icon} size={14} color={colors.textSub} style={[styles.infoIcon, isMultiLine && { marginTop: 3 }]} />
-        <Text style={[styles.infoLabel, { color: colors.textMain }]}>{label}:</Text>
-        <Text style={[styles.infoValue, { color: colors.textSub }]} numberOfLines={isMultiLine ? undefined : 1}>{value || 'N/A'}</Text>
-    </View>
-);
+// --- STYLES ---
 
 const styles = StyleSheet.create({ 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
@@ -482,19 +535,25 @@ const styles = StyleSheet.create({
     searchInput: { flex: 1, fontSize: 16 },
     filterButton: { marginLeft: 10, paddingHorizontal: 12, height: 45, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' },
     filterButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, marginRight: 4 },
-    card: { borderRadius: 12, marginVertical: 6, elevation: 2, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 }, 
-    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 15, borderBottomWidth: 1 }, 
-    avatarWrapper: { marginRight: 12 },
+    
+    // CARD STYLES
+    card: { borderRadius: 12, marginVertical: 6, elevation: 2, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, width: '96%', alignSelf: 'center' }, 
+    cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 12 }, 
+    avatarWrapper: { marginRight: 10 },
     avatarImage: { width: 50, height: 50, borderRadius: 25, borderWidth: 1, backgroundColor: '#f0f0f0' },
     avatarFallback: { backgroundColor: '#B0BEC5', justifyContent: 'center', alignItems: 'center' },
-    cardHeaderText: { flex: 1, justifyContent: 'center', marginTop: 2 }, 
+    cardHeaderText: { flex: 1.5, justifyContent: 'center' }, 
     cardTitle: { fontSize: 16, fontWeight: 'bold' }, 
     cardSubtitle: { fontSize: 13, marginTop: 2 },
-    cardActions: { alignItems: 'flex-end' }, 
-    buttonGroup: { flexDirection: 'row', marginTop: 5 }, 
-    iconButton: { marginLeft: 12, padding: 4 }, 
-    statusPill: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10, alignItems: 'center', marginBottom: 5 }, 
-    statusPillText: { fontSize: 10, fontWeight: 'bold' }, 
+    
+    centerStatusArea: { flex: 1.2, alignItems: 'center', justifyContent: 'center' },
+    statusPill: { borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 1 }, 
+    statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+    statusPillText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }, 
+    
+    rightActionArea: { flex: 0.4, alignItems: 'flex-end' },
+    menuButton: { padding: 6 },
+    
     expandedContainer: { paddingHorizontal: 15, paddingBottom: 15, borderTopWidth: 1, paddingTop: 10 }, 
     infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 }, 
     infoIcon: { width: 22, textAlign: 'center', marginRight: 8 }, 
@@ -502,6 +561,8 @@ const styles = StyleSheet.create({
     infoValue: { fontSize: 13, flex: 1 }, 
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 50, opacity: 0.7 }, 
     emptyText: { fontSize: 16, fontWeight: '600', marginTop: 10 }, 
+    
+    // MODAL STYLES
     modalContainer: { padding: 20 }, 
     modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 22, fontWeight: 'bold' }, 
@@ -514,8 +575,10 @@ const styles = StyleSheet.create({
     profileImage: { width: 100, height: 100, borderRadius: 50, marginBottom: 10, borderWidth: 2, justifyContent: 'center', alignItems: 'center' }, 
     imagePickerButton: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, alignItems: 'center' }, 
     imagePickerButtonText: { color: '#fff', marginLeft: 6, fontWeight: 'bold', fontSize: 12 }, 
-    sectionHeader: { fontSize: 16, fontWeight: 'bold', marginTop: 15, marginBottom: 10, paddingBottom: 5, borderBottomWidth: 1 },
+    sectionHeader: { fontSize: 16, fontWeight: 'bold', marginTop: 20, marginBottom: 10, paddingBottom: 5, borderBottomWidth: 1 },
     formRow: { marginBottom: 15 },
+    row: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+    halfWidth: { flex: 1 },
     statusSelector: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 }, 
     statusButton: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center', marginHorizontal: 4 }, 
     statusButtonText: { fontWeight: '600' }, 

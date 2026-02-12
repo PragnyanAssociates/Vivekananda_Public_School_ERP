@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, FlatList, Alert } from 'react-native';
+import { 
+    View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, 
+    ScrollView, FlatList, Alert, useColorScheme, StatusBar, Dimensions 
+} from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -8,6 +11,43 @@ import * as Progress from 'react-native-progress';
 import { createStackNavigator } from '@react-navigation/stack';
 
 const Stack = createStackNavigator();
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION (Master Style Guide) ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F5F7FA',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#CFD8DC',
+    inputBg: '#FAFAFA',
+    iconGrey: '#90A4AE',
+    danger: '#E53935',
+    success: '#43A047',
+    warning: '#FFA000',
+    headerIconBg: '#E0F2F1',
+    divider: '#f0f2f5',
+    progressUnfilled: '#E0F2F1'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconGrey: '#757575',
+    danger: '#EF5350',
+    success: '#66BB6A',
+    warning: '#FFA726',
+    headerIconBg: '#333333',
+    divider: '#2C2C2C',
+    progressUnfilled: '#37474F'
+};
+
 const FILTER_TYPES = ["Overall", "AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
 
 // Helper for DD/MM/YYYY
@@ -17,6 +57,7 @@ const formatDate = (isoString) => {
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
 };
 
+// --- NAVIGATOR ---
 const StudentSyllabusNavigator = () => (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="StudentDashboard" component={StudentSyllabusDashboardScreen} />
@@ -24,8 +65,13 @@ const StudentSyllabusNavigator = () => (
     </Stack.Navigator>
 );
 
+// --- DASHBOARD SCREEN ---
 const StudentSyllabusDashboardScreen = ({ navigation }) => {
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
+
     const [summary, setSummary] = useState({ Done: 0, Missed: 0, Pending: 0, Total: 0 });
     const [subjects, setSubjects] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -71,60 +117,96 @@ const StudentSyllabusDashboardScreen = ({ navigation }) => {
     const overallProgress = summary.Total > 0 ? summary.Done / summary.Total : 0;
 
     return (
-        <ScrollView style={styles.container}>
-            
-            {/* --- NEW HEADER CARD --- */}
-            <View style={styles.headerCard}>
-                <View style={styles.headerIconContainer}>
-                    <MaterialIcons name="school" size={24} color="#008080" />
-                </View>
-                <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>{user?.class_group || 'Student'}</Text>
-                    <Text style={styles.headerSubtitle}>Syllabus Tracking</Text>
-                </View>
-            </View>
-
-            {isLoading ? <ActivityIndicator size="large" style={{ marginTop: 40 }} color="#3b82f6" /> :
-            <View style={styles.contentContainer}>
-                {/* Main Progress Card */}
-                <View style={styles.mainCard}>
-                    <Text style={styles.cardTitle}>Overall Progress</Text>
-                    <View style={styles.progressBarRow}>
-                        <Progress.Bar progress={overallProgress} width={null} color="#3b82f6" unfilledColor="#eff6ff" borderWidth={0} height={10} style={{flex: 1, borderRadius: 5}} />
-                        <Text style={styles.percentText}>{Math.round(overallProgress * 100)}%</Text>
-                    </View>
-                    <View style={styles.statsRow}>
-                        <View style={styles.statPill}><View style={[styles.dot, {backgroundColor:'#10b981'}]}/><Text style={styles.statText}>{summary.Done} Done</Text></View>
-                        <View style={styles.statPill}><View style={[styles.dot, {backgroundColor:'#ef4444'}]}/><Text style={styles.statText}>{summary.Missed} Missed</Text></View>
-                        <View style={styles.statPill}><View style={[styles.dot, {backgroundColor:'#f59e0b'}]}/><Text style={styles.statText}>{summary.Pending} Left</Text></View>
-                    </View>
-                </View>
+        <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={COLORS.background} />
+            <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
                 
-                <Text style={styles.sectionTitle}>Subjects</Text>
-                {subjects.map(subject => {
-                    const subjectProgress = subject.Total > 0 ? subject.Done / subject.Total : 0;
-                    return (
-                        <TouchableOpacity key={subject.id} style={styles.subjectCard} onPress={() => navigation.navigate('StudentLessonList', { syllabusId: subject.id, subjectName: subject.name })}>
-                            <View style={styles.subjectRow}>
-                                <Text style={styles.subjectName}>{subject.name}</Text>
-                                <Text style={styles.subjectPercent}>{Math.round(subjectProgress * 100)}%</Text>
+                {/* Header Card */}
+                <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                        <MaterialIcons name="school" size={24} color={COLORS.primary} />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{user?.class_group || 'Student'}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Syllabus Tracking</Text>
+                    </View>
+                </View>
+
+                {isLoading ? <ActivityIndicator size="large" style={{ marginTop: 40 }} color={COLORS.primary} /> :
+                <View style={styles.contentContainer}>
+                    {/* Main Progress Card */}
+                    <View style={[styles.mainCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+                        <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>Overall Progress</Text>
+                        <View style={styles.progressBarRow}>
+                            <Progress.Bar 
+                                progress={overallProgress} 
+                                width={null} 
+                                color={COLORS.primary} 
+                                unfilledColor={COLORS.progressUnfilled} 
+                                borderWidth={0} 
+                                height={10} 
+                                style={{flex: 1, borderRadius: 5}} 
+                            />
+                            <Text style={[styles.percentText, { color: COLORS.primary }]}>{Math.round(overallProgress * 100)}%</Text>
+                        </View>
+                        <View style={styles.statsRow}>
+                            <View style={[styles.statPill, { backgroundColor: isDark ? COLORS.inputBg : '#f0fdf4' }]}>
+                                <View style={[styles.dot, {backgroundColor: COLORS.success}]}/>
+                                <Text style={[styles.statText, { color: COLORS.textSub }]}>{summary.Done} Done</Text>
                             </View>
-                            <Progress.Bar progress={subjectProgress} width={null} color="#3b82f6" unfilledColor="#f1f5f9" borderWidth={0} height={6} borderRadius={3} style={{marginTop: 8}} />
-                            <Text style={styles.miniStats}>{subject.Done} done • {subject.Pending} remaining</Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-            }
-        </ScrollView>
+                            <View style={[styles.statPill, { backgroundColor: isDark ? COLORS.inputBg : '#fef2f2' }]}>
+                                <View style={[styles.dot, {backgroundColor: COLORS.danger}]}/>
+                                <Text style={[styles.statText, { color: COLORS.textSub }]}>{summary.Missed} Missed</Text>
+                            </View>
+                            <View style={[styles.statPill, { backgroundColor: isDark ? COLORS.inputBg : '#fffbeb' }]}>
+                                <View style={[styles.dot, {backgroundColor: COLORS.warning}]}/>
+                                <Text style={[styles.statText, { color: COLORS.textSub }]}>{summary.Pending} Left</Text>
+                            </View>
+                        </View>
+                    </View>
+                    
+                    <Text style={[styles.sectionTitle, { color: COLORS.textMain }]}>Subjects</Text>
+                    {subjects.map(subject => {
+                        const subjectProgress = subject.Total > 0 ? subject.Done / subject.Total : 0;
+                        return (
+                            <TouchableOpacity 
+                                key={subject.id} 
+                                style={[styles.subjectCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} 
+                                onPress={() => navigation.navigate('StudentLessonList', { syllabusId: subject.id, subjectName: subject.name })}
+                            >
+                                <View style={styles.subjectRow}>
+                                    <Text style={[styles.subjectName, { color: COLORS.textMain }]}>{subject.name}</Text>
+                                    <Text style={[styles.subjectPercent, { color: COLORS.primary }]}>{Math.round(subjectProgress * 100)}%</Text>
+                                </View>
+                                <Progress.Bar 
+                                    progress={subjectProgress} 
+                                    width={null} 
+                                    color={COLORS.primary} 
+                                    unfilledColor={COLORS.progressUnfilled} 
+                                    borderWidth={0} 
+                                    height={6} 
+                                    borderRadius={3} 
+                                    style={{marginTop: 8}} 
+                                />
+                                <Text style={[styles.miniStats, { color: COLORS.textSub }]}>{subject.Done} done • {subject.Pending} remaining</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+                }
+            </ScrollView>
+        </View>
     );
 };
 
+// --- LESSON LIST SCREEN ---
 const StudentLessonListScreen = ({ route, navigation }) => {
     const { syllabusId, subjectName } = route.params;
     const { user } = useAuth();
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
     
-    // State for data and filtering
     const [fullList, setFullList] = useState([]);
     const [filteredList, setFilteredList] = useState([]);
     const [selectedFilter, setSelectedFilter] = useState("Overall");
@@ -136,7 +218,7 @@ const StudentLessonListScreen = ({ route, navigation }) => {
             try {
                 const response = await apiClient.get(`/syllabus/student/subject-details/${syllabusId}/${user.id}`);
                 setFullList(response.data.lessons);
-                setFilteredList(response.data.lessons); // Default to Overall
+                setFilteredList(response.data.lessons); 
             } catch (error) { Alert.alert("Error", "Failed to load details."); }
             finally { setIsLoading(false); }
         };
@@ -153,35 +235,35 @@ const StudentLessonListScreen = ({ route, navigation }) => {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: COLORS.background }]}>
             
-            {/* --- NEW HEADER CARD (With Back Button) --- */}
-            <View style={styles.headerCard}>
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerContentWrapper}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color="#333333" />
+                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
 
-                    <View style={styles.headerIconContainer}>
-                         <MaterialIcons name="menu-book" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
+                         <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
                     </View>
                     
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>{subjectName}</Text>
-                        <Text style={styles.headerSubtitle}>Lesson Details</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{subjectName}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Lesson Details</Text>
                     </View>
                 </View>
             </View>
             
             {/* Filter Bar */}
-            <View style={styles.filterBarContainer}>
+            <View style={[styles.filterBarContainer, { backgroundColor: COLORS.cardBg }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
                      {FILTER_TYPES.map(type => (
                         <TouchableOpacity 
                             key={type} 
                             onPress={() => handleFilter(type)}
-                            style={[styles.filterTab, selectedFilter === type && styles.filterTabActive]}>
-                            <Text style={[styles.filterText, selectedFilter === type && styles.filterTextActive]}>{type}</Text>
+                            style={[styles.filterTab, selectedFilter === type ? { backgroundColor: COLORS.primary } : { backgroundColor: isDark ? COLORS.inputBg : '#f1f5f9' }]}>
+                            <Text style={[styles.filterText, { color: selectedFilter === type ? '#FFF' : COLORS.textSub }]}>{type}</Text>
                         </TouchableOpacity>
                      ))}
                 </ScrollView>
@@ -195,123 +277,97 @@ const StudentLessonListScreen = ({ route, navigation }) => {
                     const isDone = item.status === 'Completed';
                     const isMissed = item.status === 'Missed';
                     return (
-                        <View style={styles.lessonItem}>
+                        <View style={[styles.lessonItem, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                            <View style={styles.iconContainer}>
                                 <MaterialIcons 
                                     name={isDone ? 'check-circle' : isMissed ? 'cancel' : 'radio-button-unchecked'} 
                                     size={24} 
-                                    color={isDone ? '#10b981' : isMissed ? '#ef4444' : '#cbd5e1'} 
+                                    color={isDone ? COLORS.success : isMissed ? COLORS.danger : COLORS.iconGrey} 
                                 />
-                                {item.status !== 'Pending' && <View style={{height: '100%', width: 2, backgroundColor: '#f1f5f9', position: 'absolute', top: 30, left: 11, zIndex: -1}} />}
+                                {item.status !== 'Pending' && <View style={{height: '100%', width: 2, backgroundColor: COLORS.divider, position: 'absolute', top: 30, left: 11, zIndex: -1}} />}
                            </View>
                            <View style={styles.lessonContent}>
-                                <Text style={[styles.lessonName, isDone && {textDecorationLine: 'line-through', color: '#94a3b8'}]}>{item.lesson_name}</Text>
-                                <Text style={styles.examBadge}>{item.exam_type}</Text>
-                                <Text style={styles.lessonDate}>
+                                <Text style={[styles.lessonName, { color: isDone ? COLORS.textSub : COLORS.textMain, textDecorationLine: isDone ? 'line-through' : 'none' }]}>{item.lesson_name}</Text>
+                                <Text style={[styles.examBadge, { color: COLORS.primary }]}>{item.exam_type}</Text>
+                                <Text style={[styles.lessonDate, { color: COLORS.textSub }]}>
                                     Due: {formatDate(item.from_date)} - {formatDate(item.to_date)}
                                 </Text>
                            </View>
-                           <View style={[styles.statusTag, {backgroundColor: isDone ? '#dcfce7' : isMissed ? '#fee2e2' : '#f1f5f9'}]}>
-                               <Text style={[styles.statusTagText, {color: isDone ? '#166534' : isMissed ? '#991b1b' : '#64748b'}]}>{item.status}</Text>
+                           <View style={[styles.statusTag, { backgroundColor: isDone ? (isDark ? '#052e16' : '#dcfce7') : isMissed ? (isDark ? '#450a0a' : '#fee2e2') : (isDark ? COLORS.inputBg : '#f1f5f9') }]}>
+                               <Text style={[styles.statusTagText, { color: isDone ? COLORS.success : isMissed ? COLORS.danger : COLORS.textSub }]}>{item.status}</Text>
                            </View>
                         </View>
                     )
                 }}
-                ListEmptyComponent={!isLoading && <Text style={styles.emptyText}>No lessons found.</Text>}
+                ListEmptyComponent={!isLoading && <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
                 refreshing={isLoading}
             />
         </View>
     );
 };
 
+// --- STYLES ---
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F2F5F8' }, // Matching background
+    container: { flex: 1 },
     
-    // --- HEADER CARD STYLES ---
+    // Header Style
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
-        paddingVertical: 10,
-        width: '96%', 
+        paddingVertical: 12,
+        width: '96%',
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
         shadowOffset: { width: 0, height: 2 },
     },
-    headerContentWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    headerTextContainer: {
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#333333',
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: '#666666',
-        marginTop: 1,
-    },
-    // ----------------------------
-
+    headerContentWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    headerTextContainer: { justifyContent: 'center' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
+    
+    // Content
     contentContainer: { paddingHorizontal: 15, paddingBottom: 20 },
-    
-    // Cards
-    mainCard: { backgroundColor: '#fff', padding: 20, borderRadius: 20, shadowColor: '#3b82f6', shadowOpacity: 0.1, shadowRadius: 10, elevation: 3, marginBottom: 25 },
-    cardTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 15 },
+    mainCard: { padding: 20, borderRadius: 20, elevation: 3, marginBottom: 25, shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+    cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 15 },
     progressBarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-    percentText: { marginLeft: 10, fontWeight: 'bold', color: '#3b82f6' },
+    percentText: { marginLeft: 10, fontWeight: 'bold' },
     statsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    statPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 8, borderRadius: 10 },
+    statPill: { flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 10 },
     dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-    statText: { fontSize: 12, fontWeight: '600', color: '#475569' },
-
-    sectionTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', marginBottom: 15, marginLeft: 5 },
+    statText: { fontSize: 12, fontWeight: '600' },
+    sectionTitle: { fontSize: 20, fontWeight: '700', marginBottom: 15, marginLeft: 5 },
     
-    // Subject List
-    subjectCard: { backgroundColor: '#fff', padding: 16, borderRadius: 16, marginBottom: 12, shadowColor: '#64748b', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+    // Subjects
+    subjectCard: { padding: 16, borderRadius: 16, marginBottom: 12, elevation: 2, shadowOpacity: 0.05, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
     subjectRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    subjectName: { fontSize: 16, fontWeight: '600', color: '#334155' },
-    subjectPercent: { fontWeight: '700', color: '#3b82f6' },
-    miniStats: { fontSize: 12, color: '#94a3b8', marginTop: 6 },
+    subjectName: { fontSize: 16, fontWeight: '600' },
+    subjectPercent: { fontWeight: '700' },
+    miniStats: { fontSize: 12, marginTop: 6 },
 
-    // Filter Bar
-    filterBarContainer: { backgroundColor: '#fff', height: 60, elevation: 2, marginBottom: 10 },
+    // Filter
+    filterBarContainer: { height: 60, elevation: 2, marginBottom: 10, justifyContent: 'center' },
     filterScroll: { alignItems: 'center', paddingHorizontal: 10 },
-    filterTab: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, marginRight: 10, backgroundColor: '#f1f5f9' },
-    filterTabActive: { backgroundColor: '#3b82f6' },
-    filterText: { color: '#64748b', fontWeight: '600' },
-    filterTextActive: { color: '#fff' },
+    filterTab: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
+    filterText: { fontWeight: '600' },
 
-    lessonItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 16, marginBottom: 10, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, elevation: 1, marginHorizontal: 2 },
+    // Lesson Item
+    lessonItem: { flexDirection: 'row', alignItems: 'center', padding: 16, marginBottom: 10, borderRadius: 12, elevation: 1, marginHorizontal: 15, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
     iconContainer: { marginRight: 15, alignItems: 'center' },
     lessonContent: { flex: 1 },
-    lessonName: { fontSize: 16, fontWeight: '500', color: '#1e293b' },
-    lessonDate: { fontSize: 12, color: '#64748b', marginTop: 2 },
-    examBadge: { fontSize: 10, color: '#3b82f6', fontWeight:'700', marginBottom: 2 },
+    lessonName: { fontSize: 16, fontWeight: '500' },
+    lessonDate: { fontSize: 12, marginTop: 2 },
+    examBadge: { fontSize: 10, fontWeight:'700', marginBottom: 2 },
     statusTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
     statusTagText: { fontSize: 11, fontWeight: '700' },
-    emptyText: { textAlign: 'center', marginTop: 50, color: '#94a3b8' }
+    emptyText: { textAlign: 'center', marginTop: 50 }
 });
 
 export default StudentSyllabusNavigator;

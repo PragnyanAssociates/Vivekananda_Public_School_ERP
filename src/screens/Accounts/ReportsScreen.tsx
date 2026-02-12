@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
-    ActivityIndicator, Alert, ScrollView, Platform, PermissionsAndroid
+    ActivityIndicator, Alert, ScrollView, Platform, PermissionsAndroid,
+    useColorScheme, Dimensions, StatusBar
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -14,8 +15,10 @@ import RNFS from 'react-native-fs';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import apiClient from '../../api/client';
 
-// --- COLORS ---
-const COLORS = {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// --- THEME DEFINITIONS ---
+const LightColors = {
     primary: '#008080',    // Teal
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
@@ -25,7 +28,24 @@ const COLORS = {
     success: '#43A047',
     danger: '#E53935',
     blue: '#1E88E5',
-    warning: '#F59E0B'
+    warning: '#F59E0B',
+    inputBg: '#F8F9FA',
+    segmentBg: '#F5F5F5'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    success: '#66BB6A',
+    danger: '#EF5350',
+    blue: '#42A5F5',
+    warning: '#FFB74D',
+    inputBg: '#2C2C2C',
+    segmentBg: '#2C2C2C'
 };
 
 // --- Helper: Format Currency ---
@@ -41,6 +61,11 @@ const ReportsScreen = () => {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
     const viewShotRef = useRef(null);
+
+    // Theme Hook
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const COLORS = isDark ? DarkColors : LightColors;
 
     const [reportData, setReportData] = useState({ debit: 0, credit: 0 });
     const [isLoading, setIsLoading] = useState(true);
@@ -155,7 +180,7 @@ const ReportsScreen = () => {
                 <html>
                 <head>
                     <style>
-                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #fff; }
                         .report-container { width: 100%; max-width: 800px; margin: auto; padding: 20px; box-sizing: border-box; }
                         .header { text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
                         .school-name { font-size: 24px; font-weight: bold; }
@@ -224,7 +249,7 @@ const ReportsScreen = () => {
                     fill={'white'}
                     textAnchor={'middle'}
                     alignmentBaseline={'middle'}
-                    fontSize={16}
+                    fontSize={14}
                     fontWeight={'bold'}
                 >
                     {`${percentage.toFixed(0)}%`}
@@ -233,76 +258,78 @@ const ReportsScreen = () => {
         });
     };
 
+    const chartSize = SCREEN_WIDTH * 0.6; // Responsive Chart Size (60% of width)
+
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
             
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#888' }]}>
                 <View style={styles.headerLeft}>
-                    {/* Back Button */}
                     <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color="#333" />
+                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
 
-                    <View style={styles.headerIconContainer}>
-                        <MaterialCommunityIcons name="chart-pie" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
+                        <MaterialCommunityIcons name="chart-pie" size={24} color={COLORS.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Financial Reports</Text>
-                        <Text style={styles.headerSubtitle}>Summary & Analytics</Text>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Financial Reports</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Summary & Analytics</Text>
                     </View>
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.filterContainer}>
-                    <View style={styles.segmentControl}>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <View style={[styles.filterContainer, { backgroundColor: COLORS.cardBg }]}>
+                    <View style={[styles.segmentControl, { backgroundColor: COLORS.segmentBg }]}>
                         {['Daily', 'Monthly', 'Overall'].map(p => (
-                            <TouchableOpacity key={p} style={[styles.segmentButton, activePeriod === p.toLowerCase() && styles.segmentActive]} onPress={() => handlePeriodChange(p.toLowerCase())}>
-                                <Text style={[styles.segmentText, activePeriod === p.toLowerCase() && styles.segmentTextActive]}>{p}</Text>
+                            <TouchableOpacity key={p} style={[styles.segmentButton, activePeriod === p.toLowerCase() && { backgroundColor: COLORS.primary }]} onPress={() => handlePeriodChange(p.toLowerCase())}>
+                                <Text style={[styles.segmentText, { color: activePeriod === p.toLowerCase() ? '#FFF' : COLORS.textMain }]}>{p}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
                     <View style={styles.dateRangeContainer}>
-                        <TouchableOpacity style={styles.dateButton} onPress={() => showDatePicker('start')}>
+                        <TouchableOpacity style={[styles.dateButton, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} onPress={() => showDatePicker('start')}>
                             <MaterialIcons name="calendar-today" size={16} color={COLORS.textSub} />
-                            <Text style={styles.dateText}>{dateRange.start ? dateRange.start.split('-').reverse().join('/') : 'From Date'}</Text>
+                            <Text style={[styles.dateText, { color: COLORS.textMain }]}>{dateRange.start ? dateRange.start.split('-').reverse().join('/') : 'From Date'}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.dateButton} onPress={() => showDatePicker('end')}>
+                        <TouchableOpacity style={[styles.dateButton, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} onPress={() => showDatePicker('end')}>
                             <MaterialIcons name="calendar-today" size={16} color={COLORS.textSub} />
-                            <Text style={styles.dateText}>{dateRange.end ? dateRange.end.split('-').reverse().join('/') : 'To Date'}</Text>
+                            <Text style={[styles.dateText, { color: COLORS.textMain }]}>{dateRange.end ? dateRange.end.split('-').reverse().join('/') : 'To Date'}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
                 {isLoading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ flex: 1, marginTop: 50 }} /> : (
                     <>
-                        <View style={styles.reportCard}>
+                        <View style={[styles.reportCard, { backgroundColor: COLORS.cardBg }]}>
                             <View style={styles.reportHeader}>
-                                <Text style={styles.schoolName}>Vivekananda Public School</Text>
-                                <Text style={styles.managedBy}>Managed by Vivekananda Education Center</Text>
+                                <Text style={[styles.schoolName, { color: COLORS.textMain }]}>Vivekananda Public School</Text>
+                                <Text style={[styles.managedBy, { color: COLORS.textSub }]}>Managed by Vivekananda Education Center</Text>
                             </View>
 
-                            <Text style={styles.reportDateDisplay}>{displayDate}</Text>
+                            <Text style={[styles.reportDateDisplay, { color: COLORS.textSub }]}>{displayDate}</Text>
 
-                            <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9, result: 'data-uri' }}>
+                            <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9, result: 'data-uri' }} style={{ backgroundColor: COLORS.cardBg }}>
                                 <View style={styles.chartContainer}>
                                     {grossTotal > 0 && pieData.length > 0 ? (
                                         <PieChart
-                                            style={{ height: 250, width: 250 }}
+                                            style={{ height: chartSize, width: chartSize }}
                                             data={pieData}
-                                            innerRadius={'30%'}
+                                            innerRadius={'35%'}
                                             padAngle={0.02}
                                         >
                                             <Labels />
                                         </PieChart>
                                     ) : (
-                                        <Text style={styles.noDataText}>No data available for this period.</Text>
+                                        <Text style={[styles.noDataText, { color: COLORS.textSub }]}>No data available for this period.</Text>
                                     )}
                                 </View>
                             </ViewShot>
 
-                            <View style={styles.legendContainer}>
+                            <View style={[styles.legendContainer, { borderTopColor: COLORS.border }]}>
                                 {Object.keys(reportColors).map(key => {
                                     const isDebit = key === 'debit';
                                     const isIncome = key === 'credit';
@@ -311,24 +338,25 @@ const ReportsScreen = () => {
                                         <View key={key} style={styles.legendItem}>
                                             <View style={styles.legendLabelContainer}>
                                                 <View style={[styles.legendColor, { backgroundColor: reportColors[key] }]} />
-                                                <Text style={styles.legendLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}:</Text>
+                                                <Text style={[styles.legendLabel, { color: COLORS.textSub }]}>{key.charAt(0).toUpperCase() + key.slice(1)}:</Text>
                                             </View>
                                             <View style={styles.legendAmountContainer}>
-                                                {isDebit && hasValue && <Text style={styles.debitSymbol}>- </Text>}
-                                                {isIncome && hasValue && <Text style={styles.creditSymbol}>+ </Text>}
-                                                <Text style={styles.legendAmount}>₹{formatCurrency(reportData[key])}</Text>
+                                                {isDebit && hasValue && <Text style={[styles.debitSymbol, { color: COLORS.danger }]}>- </Text>}
+                                                {isIncome && hasValue && <Text style={[styles.creditSymbol, { color: COLORS.success }]}>+ </Text>}
+                                                <Text style={[styles.legendAmount, { color: COLORS.textMain }]}>₹{formatCurrency(reportData[key])}</Text>
                                             </View>
                                         </View>
                                     );
                                 })}
                             </View>
 
-                            <View style={styles.totalRow}>
-                                <Text style={styles.totalLabel}>Total Amount</Text>
-                                <Text style={styles.totalAmount}>₹{formatCurrency(netTotal)}</Text>
+                            <View style={[styles.totalRow, { borderTopColor: COLORS.border }]}>
+                                <Text style={[styles.totalLabel, { color: COLORS.textMain }]}>Total Amount</Text>
+                                <Text style={[styles.totalAmount, { color: COLORS.textMain }]}>₹{formatCurrency(netTotal)}</Text>
                             </View>
                         </View>
-                        <TouchableOpacity style={styles.downloadButton} onPress={downloadReport}>
+                        
+                        <TouchableOpacity style={[styles.downloadButton, { backgroundColor: COLORS.blue }]} onPress={downloadReport}>
                             <MaterialIcons name="download" size={20} color="#FFF" />
                             <Text style={styles.downloadButtonText}>Download Report</Text>
                         </TouchableOpacity>
@@ -342,30 +370,27 @@ const ReportsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '95%', 
         alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 4,
+        marginTop: 10,
+        marginBottom: 10,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -374,44 +399,48 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
 
-    scrollContent: { padding: 15 },
+    scrollContent: { padding: 15, paddingBottom: 50 },
     
     // Filters
-    filterContainer: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 15, elevation: 2, marginBottom: 20 },
-    segmentControl: { flexDirection: 'row', backgroundColor: '#F5F5F5', borderRadius: 8, marginBottom: 12 },
+    filterContainer: { borderRadius: 12, padding: 15, elevation: 2, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+    segmentControl: { flexDirection: 'row', borderRadius: 8, marginBottom: 12 },
     segmentButton: { flex: 1, paddingVertical: 10, borderRadius: 7 },
-    segmentActive: { backgroundColor: COLORS.primary },
-    segmentText: { textAlign: 'center', fontWeight: '600', color: COLORS.textMain },
-    segmentTextActive: { color: '#FFFFFF' },
+    segmentText: { textAlign: 'center', fontWeight: '600', fontSize: 13 },
+    
     dateRangeContainer: { flexDirection: 'row', alignItems: 'center' },
-    dateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA', padding: 10, borderRadius: 8, marginRight: 10, borderWidth: 1, borderColor: COLORS.border },
-    dateText: { marginLeft: 8, color: COLORS.textMain },
+    dateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, marginRight: 10, borderWidth: 1 },
+    dateText: { marginLeft: 8, fontSize: 12, fontWeight: '500' },
     
     // Report Card
-    reportCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    reportCard: { borderRadius: 12, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
     reportHeader: { alignItems: 'center' },
-    schoolName: { fontSize: 22, fontWeight: 'bold', color: COLORS.textMain },
-    managedBy: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
-    reportDateDisplay: { textAlign: 'center', fontSize: 14, fontWeight: '500', color: COLORS.textSub, marginTop: 10 },
-    chartContainer: { alignItems: 'center', justifyContent: 'center', minHeight: 250, marginVertical: 15, backgroundColor: 'white' },
-    noDataText: { fontSize: 16, color: COLORS.textSub },
-    legendContainer: { marginTop: 20, paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 15 },
-    legendItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    schoolName: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
+    managedBy: { fontSize: 12, marginTop: 2 },
+    reportDateDisplay: { textAlign: 'center', fontSize: 14, fontWeight: '500', marginTop: 10 },
+    
+    chartContainer: { alignItems: 'center', justifyContent: 'center', marginVertical: 20 },
+    noDataText: { fontSize: 16, textAlign: 'center', marginVertical: 20 },
+    
+    legendContainer: { marginTop: 10, paddingHorizontal: 5, borderTopWidth: 1, paddingTop: 15 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
     legendLabelContainer: { flexDirection: 'row', alignItems: 'center' },
     legendColor: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
-    legendLabel: { fontSize: 16, color: COLORS.textSub },
+    legendLabel: { fontSize: 15 },
+    
     legendAmountContainer: { flexDirection: 'row', alignItems: 'center' },
-    legendAmount: { fontSize: 16, fontWeight: '600', color: COLORS.textMain },
-    debitSymbol: { fontSize: 16, fontWeight: 'bold', color: COLORS.danger },
-    creditSymbol: { fontSize: 16, fontWeight: 'bold', color: COLORS.success },
-    totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingTop: 15, borderTopWidth: 2, borderTopColor: '#333', paddingHorizontal: 10 },
-    totalLabel: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
-    totalAmount: { fontSize: 18, fontWeight: 'bold', color: COLORS.textMain },
-    downloadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.blue, paddingVertical: 15, borderRadius: 8, marginTop: 25 },
-    downloadButtonText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
+    legendAmount: { fontSize: 15, fontWeight: '600' },
+    debitSymbol: { fontSize: 15, fontWeight: 'bold' },
+    creditSymbol: { fontSize: 15, fontWeight: 'bold' },
+    
+    totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 15, borderTopWidth: 1, paddingHorizontal: 5 },
+    totalLabel: { fontSize: 17, fontWeight: 'bold' },
+    totalAmount: { fontSize: 17, fontWeight: 'bold' },
+    
+    downloadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 8, marginTop: 20, marginBottom: 10 },
+    downloadButtonText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 15 },
 });
 
 export default ReportsScreen;

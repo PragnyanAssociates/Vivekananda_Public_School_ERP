@@ -13,7 +13,8 @@ import {
   UIManager,
   LayoutAnimation,
   Dimensions,
-  StatusBar
+  StatusBar,
+  useColorScheme
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -30,17 +31,43 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // --- Constants ---
 const { width } = Dimensions.get('window');
-const PRIMARY_COLOR = '#008080'; // Teal
-const BACKGROUND_COLOR = '#F2F5F8';
-const CARD_BG = '#FFFFFF';
-const TEXT_COLOR_DARK = '#263238';
-const TEXT_COLOR_MEDIUM = '#546E7A';
-const BORDER_COLOR = '#CFD8DC';
-const GREEN = '#43A047';
-const RED = '#E53935';
-const BLUE = '#1E88E5';
-const YELLOW = '#FDD835';
-const WHITE = '#FFFFFF';
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',    
+    background: '#F2F5F8', 
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    success: '#43A047',
+    error: '#E53935',
+    warning: '#FDD835',
+    blue: '#1E88E5',
+    border: '#CFD8DC',
+    inputBg: '#FFFFFF',
+    iconBg: '#E0F2F1',
+    toggleInactive: '#E0E0E0',
+    white: '#FFFFFF',
+    shadow: '#000'
+};
+
+const DarkColors = {
+    primary: '#008080',    
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    success: '#43A047',
+    error: '#EF5350',
+    warning: '#FBC02D',
+    blue: '#2196F3',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    iconBg: '#333333',
+    toggleInactive: '#424242',
+    white: '#E0E0E0',
+    shadow: '#000'
+};
 
 const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
@@ -57,22 +84,27 @@ const formatDate = (date) => {
 const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 
 // --- Responsive Summary Card ---
-const SummaryCard = ({ label, value, color, delay }) => (
-    <Animatable.View animation="zoomIn" duration={500} delay={delay} style={styles.summaryBox}>
+const SummaryCard = ({ label, value, color, delay, colors }) => (
+    <Animatable.View animation="zoomIn" duration={500} delay={delay} style={[styles.summaryBox, { backgroundColor: colors.cardBg }]}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
-        <Text style={styles.summaryLabel} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+        <Text style={[styles.summaryLabel, { color: colors.textSub }]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </Animatable.View>
 );
 
-const HistoryDayCard = ({ item, index }) => {
+const HistoryDayCard = ({ item, index, colors }) => {
     const isPresent = item.status === 'Present';
     const dayStatus = isPresent ? 'Present' : 'Absent';
-    const statusColor = isPresent ? GREEN : RED;
+    const statusColor = isPresent ? colors.success : colors.error;
 
     return (
-        <Animatable.View animation="fadeInUp" duration={400} delay={index * 100} style={styles.historyDayCard}>
+        <Animatable.View 
+            animation="fadeInUp" 
+            duration={400} 
+            delay={index * 100} 
+            style={[styles.historyDayCard, { backgroundColor: colors.cardBg }]}
+        >
             <View style={styles.historyDayHeader}>
-                <Text style={styles.historyDate}>{formatDate(item.attendance_date)}</Text>
+                <Text style={[styles.historyDate, { color: colors.textMain }]}>{formatDate(item.attendance_date)}</Text>
                 <Text style={[styles.historyStatus, { color: statusColor }]}>{dayStatus}</Text>
             </View>
         </Animatable.View>
@@ -82,7 +114,14 @@ const HistoryDayCard = ({ item, index }) => {
 // --- Main Router ---
 const AttendanceScreen = ({ route }) => {
   const { user } = useAuth();
-  if (!user) return <View style={styles.loaderContainer}><Text style={styles.noDataText}>User not found.</Text></View>;
+  // We handle theme inside each sub-component, or we could pass it down. 
+  // Since sub-components are distinct, we will handle it inside them for cleaner props.
+  
+  if (!user) return (
+      <View style={[styles.loaderContainer, { backgroundColor: '#F2F5F8' }]}>
+          <Text style={{color: '#546E7A'}}>User not found.</Text>
+      </View>
+  );
 
   switch (user.role) {
     case 'teacher':
@@ -92,12 +131,20 @@ const AttendanceScreen = ({ route }) => {
     case 'admin':
       return <AdminAttendanceView />;
     default:
-      return <View style={styles.loaderContainer}><Text style={styles.noDataText}>No attendance view available.</Text></View>;
+      return (
+          <View style={[styles.loaderContainer, { backgroundColor: '#F2F5F8' }]}>
+              <Text style={{color: '#546E7A'}}>No attendance view available.</Text>
+          </View>
+      );
   }
 };
 
 // --- Student View (UPDATED with No Record Animation) ---
 const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const colors = isDark ? DarkColors : LightColors;
+
     const [viewMode, setViewMode] = useState('daily');
     const [data, setData] = useState({ summary: {}, history: [] });
     const [isLoading, setIsLoading] = useState(true);
@@ -158,29 +205,29 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
     const isDailyNoRecord = viewMode === 'daily' && (!data.history || data.history.length === 0);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar backgroundColor={BACKGROUND_COLOR} barStyle="dark-content" />
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar backgroundColor={colors.background} barStyle={isDark ? 'light-content' : 'dark-content'} />
             
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: colors.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
                     {onBack && (
                         <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}>
-                            <MaterialIcons name="arrow-back" size={24} color="#333" />
+                            <MaterialIcons name="arrow-back" size={24} color={colors.textMain} />
                         </TouchableOpacity>
                     )}
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="history" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: colors.iconBg }]}>
+                        <MaterialIcons name="history" size={24} color={colors.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>{headerTitle}</Text>
-                        <Text style={styles.headerSubtitle}>{subTitle}</Text>
+                        <Text style={[styles.headerTitle, { color: colors.textMain }]}>{headerTitle}</Text>
+                        <Text style={[styles.headerSubtitle, { color: colors.textSub }]}>{subTitle}</Text>
                     </View>
                 </View>
                 
                 {viewMode !== 'custom' && (
-                    <TouchableOpacity style={styles.headerActionBtn} onPress={() => setShowMainPicker(true)}>
-                        <MaterialIcons name="calendar-today" size={20} color="#008080" />
+                    <TouchableOpacity style={[styles.headerActionBtn, { borderColor: colors.primary, backgroundColor: isDark ? '#333' : '#f0fdfa' }]} onPress={() => setShowMainPicker(true)}>
+                        <MaterialIcons name="calendar-today" size={20} color={colors.primary} />
                     </TouchableOpacity>
                 )}
             </View>
@@ -190,10 +237,10 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                 {['daily', 'monthly', 'yearly', 'custom'].map(mode => (
                     <TouchableOpacity 
                         key={mode}
-                        style={[styles.toggleButton, viewMode === mode && styles.toggleButtonActive]} 
+                        style={[styles.toggleButton, { backgroundColor: viewMode === mode ? colors.primary : colors.toggleInactive }]} 
                         onPress={() => setViewMode(mode)}
                     >
-                        <Text style={[styles.toggleButtonText, viewMode === mode && styles.toggleButtonTextActive]}>
+                        <Text style={[styles.toggleButtonText, { color: viewMode === mode ? colors.white : colors.textMain }]}>
                             {capitalize(mode)}
                         </Text>
                     </TouchableOpacity>
@@ -203,14 +250,14 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
             {/* Range Inputs */}
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={styles.rangeContainer}>
-                    <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowFromPicker(true)}>
-                        <Text style={styles.dateInputText}>{formatDate(fromDate)}</Text>
+                    <TouchableOpacity style={[styles.dateInputBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowFromPicker(true)}>
+                        <Text style={[styles.dateInputText, { color: colors.textMain }]}>{formatDate(fromDate)}</Text>
                     </TouchableOpacity>
-                    <Icon name="arrow-right" size={20} color={TEXT_COLOR_MEDIUM} />
-                    <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowToPicker(true)}>
-                        <Text style={styles.dateInputText}>{formatDate(toDate)}</Text>
+                    <Icon name="arrow-right" size={20} color={colors.textSub} />
+                    <TouchableOpacity style={[styles.dateInputBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowToPicker(true)}>
+                        <Text style={[styles.dateInputText, { color: colors.textMain }]}>{formatDate(toDate)}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.goButton} onPress={fetchHistory}>
+                    <TouchableOpacity style={[styles.goButton, { backgroundColor: colors.success }]} onPress={fetchHistory}>
                         <Text style={styles.goButtonText}>Go</Text>
                     </TouchableOpacity>
                 </Animatable.View>
@@ -220,31 +267,31 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
             {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
             {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
 
-            {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={PRIMARY_COLOR} /> : (
+            {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={colors.primary} /> : (
                 <FlatList
                     data={data.history}
                     keyExtractor={(item) => item.attendance_date}
                     ListHeaderComponent={
                         <>
                             {isDailyNoRecord ? (
-                                <Animatable.View animation="zoomIn" duration={400} style={styles.noRecordCard}>
-                                    <Icon name="help-circle-outline" size={70} color="#B0BEC5" style={{marginBottom: 10}} />
-                                    <Text style={styles.noRecordTitle}>NO RECORD</Text>
-                                    <Text style={styles.noRecordDate}>{formatDate(selectedDate)}</Text>
+                                <Animatable.View animation="zoomIn" duration={400} style={[styles.noRecordCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                                    <Icon name="help-circle-outline" size={70} color={colors.textSub} style={{marginBottom: 10}} />
+                                    <Text style={[styles.noRecordTitle, { color: colors.textSub }]}>NO RECORD</Text>
+                                    <Text style={[styles.noRecordDate, { color: colors.textSub }]}>{formatDate(selectedDate)}</Text>
                                 </Animatable.View>
                             ) : (
-                                <View style={styles.summaryContainer}>
-                                    <SummaryCard label="Overall" value={`${percentage}%`} color={BLUE} delay={100} />
-                                    <SummaryCard label="Present" value={data.summary.present_days || 0} color={GREEN} delay={200} />
-                                    <SummaryCard label="Absent" value={data.summary.absent_days || 0} color={RED} delay={300} />
+                                <View style={[styles.summaryContainer, { backgroundColor: colors.cardBg }]}>
+                                    <SummaryCard label="Overall" value={`${percentage}%`} color={colors.blue} delay={100} colors={colors} />
+                                    <SummaryCard label="Present" value={data.summary.present_days || 0} color={colors.success} delay={200} colors={colors} />
+                                    <SummaryCard label="Absent" value={data.summary.absent_days || 0} color={colors.error} delay={300} colors={colors} />
                                 </View>
                             )}
                         </>
                     }
-                    renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} />}
+                    renderItem={({ item, index }) => <HistoryDayCard item={item} index={index} colors={colors} />}
                     ListEmptyComponent={
                         <View style={{ marginTop: 20, alignItems: 'center' }}>
-                             <Text style={styles.noDataText}>No records found.</Text>
+                             <Text style={[styles.noDataText, { color: colors.textSub }]}>No records found.</Text>
                         </View>
                     }
                     contentContainerStyle={{ paddingBottom: 20 }}
@@ -267,6 +314,10 @@ const GenericSummaryView = ({
     onRangeFetch,          
     onSelectStudent
 }) => {
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const colors = isDark ? DarkColors : LightColors;
+
     const summary = summaryData?.overallSummary ?? {};
     
     const [showMainPicker, setShowMainPicker] = useState(false);
@@ -311,41 +362,41 @@ const GenericSummaryView = ({
     const isDailyNoRecord = viewMode === 'daily' && (!listData || listData.length === 0);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar backgroundColor={BACKGROUND_COLOR} barStyle="dark-content" />
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar backgroundColor={colors.background} barStyle={isDark ? 'light-content' : 'dark-content'} />
 
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: colors.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="assessment" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: colors.iconBg }]}>
+                        <MaterialIcons name="assessment" size={24} color={colors.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Attendance Report</Text>
-                        <Text style={styles.headerSubtitle}>{subTitle}</Text>
+                        <Text style={[styles.headerTitle, { color: colors.textMain }]}>Attendance Report</Text>
+                        <Text style={[styles.headerSubtitle, { color: colors.textSub }]}>{subTitle}</Text>
                     </View>
                 </View>
                 {viewMode !== 'custom' && (
-                    <TouchableOpacity style={styles.headerActionBtn} onPress={() => setShowMainPicker(true)}>
-                        <MaterialIcons name="calendar-today" size={20} color="#008080" />
+                    <TouchableOpacity style={[styles.headerActionBtn, { borderColor: colors.primary, backgroundColor: isDark ? '#333' : '#f0fdfa' }]} onPress={() => setShowMainPicker(true)}>
+                        <MaterialIcons name="calendar-today" size={20} color={colors.primary} />
                     </TouchableOpacity>
                 )}
             </View>
 
             {/* Pickers & Filters */}
             <View style={styles.pickerContainer}>
-                <View style={styles.pickerWrapper}>{picker1}</View>
-                {picker2 && <View style={styles.pickerWrapper}>{picker2}</View>} 
+                <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>{picker1}</View>
+                {picker2 && <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>{picker2}</View>} 
             </View>
 
             <View style={styles.toggleContainer}>
                 {['daily', 'monthly', 'yearly', 'custom'].map(mode => (
                     <TouchableOpacity 
                         key={mode}
-                        style={[styles.toggleButton, viewMode === mode && styles.toggleButtonActive]} 
+                        style={[styles.toggleButton, { backgroundColor: viewMode === mode ? colors.primary : colors.toggleInactive }]} 
                         onPress={() => setViewMode(mode)}
                     >
-                        <Text style={[styles.toggleButtonText, viewMode === mode && styles.toggleButtonTextActive]}>
+                        <Text style={[styles.toggleButtonText, { color: viewMode === mode ? colors.white : colors.textMain }]}>
                             {capitalize(mode)}
                         </Text>
                     </TouchableOpacity>
@@ -355,14 +406,14 @@ const GenericSummaryView = ({
             {/* Range Inputs */}
             {viewMode === 'custom' && (
                 <Animatable.View animation="fadeIn" duration={300} style={styles.rangeContainer}>
-                    <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowFromPicker(true)}>
-                        <Text style={styles.dateInputText}>{formatDate(fromDate)}</Text>
+                    <TouchableOpacity style={[styles.dateInputBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowFromPicker(true)}>
+                        <Text style={[styles.dateInputText, { color: colors.textMain }]}>{formatDate(fromDate)}</Text>
                     </TouchableOpacity>
-                    <Icon name="arrow-right" size={20} color={TEXT_COLOR_MEDIUM} />
-                    <TouchableOpacity style={styles.dateInputBox} onPress={() => setShowToPicker(true)}>
-                        <Text style={styles.dateInputText}>{formatDate(toDate)}</Text>
+                    <Icon name="arrow-right" size={20} color={colors.textSub} />
+                    <TouchableOpacity style={[styles.dateInputBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowToPicker(true)}>
+                        <Text style={[styles.dateInputText, { color: colors.textMain }]}>{formatDate(toDate)}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.goButton} onPress={onRangeFetch}>
+                    <TouchableOpacity style={[styles.goButton, { backgroundColor: colors.success }]} onPress={onRangeFetch}>
                         <Text style={styles.goButtonText}>Go</Text>
                     </TouchableOpacity>
                 </Animatable.View>
@@ -372,37 +423,37 @@ const GenericSummaryView = ({
             {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
             {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
 
-            {isLoading ? <ActivityIndicator size="large" color={PRIMARY_COLOR} style={styles.loaderContainer} /> : (
+            {isLoading ? <ActivityIndicator size="large" color={colors.primary} style={styles.loaderContainer} /> : (
                 <FlatList
                     data={filteredListData}
                     keyExtractor={(item) => item.student_id.toString()}
                     ListHeaderComponent={
                         <>
                             {isDailyNoRecord ? (
-                                <Animatable.View animation="zoomIn" duration={400} style={styles.noRecordCard}>
-                                    <Icon name="help-circle-outline" size={70} color="#B0BEC5" style={{marginBottom: 10}} />
-                                    <Text style={styles.noRecordTitle}>NO RECORD</Text>
-                                    <Text style={styles.noRecordDate}>{formatDate(selectedDate)}</Text>
+                                <Animatable.View animation="zoomIn" duration={400} style={[styles.noRecordCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                                    <Icon name="help-circle-outline" size={70} color={colors.textSub} style={{marginBottom: 10}} />
+                                    <Text style={[styles.noRecordTitle, { color: colors.textSub }]}>NO RECORD</Text>
+                                    <Text style={[styles.noRecordDate, { color: colors.textSub }]}>{formatDate(selectedDate)}</Text>
                                 </Animatable.View>
                             ) : (
                                 <>
-                                    <View style={styles.summaryContainer}>
-                                        <SummaryCard label="Attendance %" value={valOverall} color={BLUE} delay={100} />
-                                        <SummaryCard label={labelGreen} value={valGreen} color={GREEN} delay={200} />
-                                        <SummaryCard label={labelRed} value={valRed} color={RED} delay={300} />
+                                    <View style={[styles.summaryContainer, { backgroundColor: colors.cardBg }]}>
+                                        <SummaryCard label="Attendance %" value={valOverall} color={colors.blue} delay={100} colors={colors} />
+                                        <SummaryCard label={labelGreen} value={valGreen} color={colors.success} delay={200} colors={colors} />
+                                        <SummaryCard label={labelRed} value={valRed} color={colors.error} delay={300} colors={colors} />
                                     </View>
                                     
-                                    <View style={styles.searchBarContainer}>
-                                        <Icon name="magnify" size={20} color={TEXT_COLOR_MEDIUM} style={styles.searchIcon} />
+                                    <View style={[styles.searchBarContainer, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                                        <Icon name="magnify" size={20} color={colors.textSub} style={styles.searchIcon} />
                                         <TextInput
-                                            style={styles.searchBar}
+                                            style={[styles.searchBar, { color: colors.textMain }]}
                                             placeholder="Search student..."
                                             value={searchQuery}
                                             onChangeText={(text) => {
                                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                                                 setSearchQuery(text);
                                             }}
-                                            placeholderTextColor="#999"
+                                            placeholderTextColor={colors.textSub}
                                         />
                                     </View>
                                 </>
@@ -411,14 +462,14 @@ const GenericSummaryView = ({
                     }
                     renderItem={({ item, index }) => {
                         const studentPercentage = item.total_days > 0 ? (item.present_days / item.total_days) * 100 : 0;
-                        const percentageColor = studentPercentage >= 75 ? GREEN : studentPercentage >= 50 ? YELLOW : RED;
+                        const percentageColor = studentPercentage >= 75 ? colors.success : studentPercentage >= 50 ? colors.warning : colors.error;
                         return (
                             <Animatable.View animation="fadeInUp" duration={400} delay={index * 50}>
                                 <TouchableOpacity onPress={() => onSelectStudent && onSelectStudent(item)}>
-                                    <View style={styles.summaryStudentRow}>
+                                    <View style={[styles.summaryStudentRow, { backgroundColor: colors.cardBg }]}>
                                         <View style={{flex: 1}}>
-                                            <Text style={styles.studentName}>{item.full_name}</Text>
-                                            <Text style={styles.studentDetailText}>
+                                            <Text style={[styles.studentName, { color: colors.textMain }]}>{item.full_name}</Text>
+                                            <Text style={[styles.studentDetailText, { color: colors.textSub }]}>
                                                 Roll: {item.roll_no || '-'} | {item.present_days}/{item.total_days} Days
                                             </Text>
                                         </View>
@@ -432,7 +483,7 @@ const GenericSummaryView = ({
                     }}
                     ListEmptyComponent={
                         <View style={{ marginTop: 20, alignItems: 'center' }}>
-                             <Text style={styles.noDataText}>No records found.</Text>
+                             <Text style={[styles.noDataText, { color: colors.textSub }]}>No records found.</Text>
                         </View>
                     }
                     contentContainerStyle={{ paddingBottom: 20 }}
@@ -444,6 +495,10 @@ const GenericSummaryView = ({
 
 // --- Teacher View Wrapper ---
 const TeacherSummaryView = ({ teacher }) => {
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const colors = isDark ? DarkColors : LightColors;
+
     const [assignments, setAssignments] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
@@ -510,13 +565,13 @@ const TeacherSummaryView = ({ teacher }) => {
     };
 
     const picker1 = (
-        <Picker selectedValue={selectedClass} onValueChange={handleClassChange} enabled={uniqueClasses.length > 0} style={styles.picker}>
+        <Picker selectedValue={selectedClass} onValueChange={handleClassChange} enabled={uniqueClasses.length > 0} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
             {uniqueClasses.length > 0 ? uniqueClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />) : <Picker.Item label="No classes" value="" enabled={false} />}
         </Picker>
     );
 
     const picker2 = (
-        <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} enabled={subjectsForSelectedClass.length > 0} style={styles.picker}>
+        <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} enabled={subjectsForSelectedClass.length > 0} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
              {subjectsForSelectedClass.length > 0 ? subjectsForSelectedClass.map(s => <Picker.Item key={s} label={s} value={s} style={{fontSize: 14}} />) : <Picker.Item label="No subjects" value="" enabled={false} />}
         </Picker>
     );
@@ -541,6 +596,10 @@ const TeacherSummaryView = ({ teacher }) => {
 
 // --- Admin View Wrapper ---
 const AdminAttendanceView = () => {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const colors = isDark ? DarkColors : LightColors;
+
   const [selectedClass, setSelectedClass] = useState(CLASS_GROUPS[0]);
   const [summaryData, setSummaryData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -579,7 +638,7 @@ const AdminAttendanceView = () => {
   }
 
   const picker1 = (
-    <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={styles.picker}>
+    <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
         {CLASS_GROUPS.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
     </Picker>
   );
@@ -604,6 +663,10 @@ const AdminAttendanceView = () => {
 
 // --- Teacher Live Attendance View (For Redirection) ---
 const TeacherLiveAttendanceView = ({ route, teacher }) => {
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const colors = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     const { class_group, subject_name, date, period_number } = route?.params || {};
     
@@ -668,17 +731,17 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
         }
     };
 
-    if (isLoading) return <View style={styles.loaderContainer}><ActivityIndicator size="large" color={PRIMARY_COLOR} /></View>;
+    if (isLoading) return <View style={[styles.loaderContainer, {backgroundColor: colors.background}]}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
     if (attendanceAlreadyMarked) {
         return (
-            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }]}>
                 <Animatable.View animation="zoomIn" duration={600} style={{ alignItems: 'center' }}>
                     <View style={styles.successCircle}>
-                        <Icon name="check" size={60} color={WHITE} />
+                        <Icon name="check" size={60} color={colors.white} />
                     </View>
-                    <Text style={styles.successTitle}>Done!</Text>
-                    <Text style={styles.successSubtitle}>Attendance for {formatDate(date)} saved.</Text>
+                    <Text style={[styles.successTitle, { color: colors.textMain }]}>Done!</Text>
+                    <Text style={[styles.successSubtitle, { color: colors.textSub }]}>Attendance for {formatDate(date)} saved.</Text>
                     <TouchableOpacity style={styles.editButton} onPress={() => setAttendanceAlreadyMarked(false)}>
                         <Text style={styles.editButtonText}>Edit</Text>
                     </TouchableOpacity>
@@ -688,16 +751,16 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header Card */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: colors.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="edit-note" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: colors.iconBg }]}>
+                        <MaterialIcons name="edit-note" size={24} color={colors.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>{class_group}</Text>
-                        <Text style={styles.headerSubtitle}>Live Attendance</Text>
+                        <Text style={[styles.headerTitle, { color: colors.textMain }]}>{class_group}</Text>
+                        <Text style={[styles.headerSubtitle, { color: colors.textSub }]}>Live Attendance</Text>
                     </View>
                 </View>
             </View>
@@ -709,17 +772,17 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
                 renderItem={({ item }) => {
                     const isPresent = item.status === 'Present';
                     return (
-                        <View style={styles.summaryStudentRow}>
+                        <View style={[styles.summaryStudentRow, { backgroundColor: colors.cardBg }]}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.studentName}>{item.full_name}</Text>
-                                <Text style={styles.studentDetailText}>{item.subject || 'Subject'}</Text>
+                                <Text style={[styles.studentName, { color: colors.textMain }]}>{item.full_name}</Text>
+                                <Text style={[styles.studentDetailText, { color: colors.textSub }]}>{item.subject || 'Subject'}</Text>
                             </View>
                             <View style={{flexDirection: 'row', gap: 10}}>
-                                <TouchableOpacity style={[styles.statusBtn, isPresent ? styles.btnPresent : styles.btnInactive]} onPress={() => setStatus(item.id, 'Present')}>
-                                    <Text style={[styles.statusText, isPresent ? {color: '#fff'} : {color: GREEN}]}>P</Text>
+                                <TouchableOpacity style={[styles.statusBtn, isPresent ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => setStatus(item.id, 'Present')}>
+                                    <Text style={[styles.statusText, isPresent ? {color: '#fff'} : {color: colors.success}]}>P</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.statusBtn, !isPresent ? styles.btnAbsent : styles.btnInactive]} onPress={() => setStatus(item.id, 'Absent')}>
-                                    <Text style={[styles.statusText, !isPresent ? {color: '#fff'} : {color: RED}]}>A</Text>
+                                <TouchableOpacity style={[styles.statusBtn, !isPresent ? { backgroundColor: colors.error, borderColor: colors.error } : { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => setStatus(item.id, 'Absent')}>
+                                    <Text style={[styles.statusText, !isPresent ? {color: '#fff'} : {color: colors.error}]}>A</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -729,7 +792,7 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
 
             <View style={styles.footerContainer}>
                 <TouchableOpacity style={styles.submitFooterButton} onPress={handleSubmit} disabled={isSubmitting}>
-                    {isSubmitting ? <ActivityIndicator color={WHITE} /> : <Text style={styles.submitFooterText}>SUBMIT</Text>}
+                    {isSubmitting ? <ActivityIndicator color={colors.white} /> : <Text style={styles.submitFooterText}>SUBMIT</Text>}
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -739,25 +802,21 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
 // --- Styles ---
 const styles = StyleSheet.create({
   container: { 
-      flex: 1, 
-      backgroundColor: BACKGROUND_COLOR 
+      flex: 1
   },
   loaderContainer: { 
       flex: 1, 
       justifyContent: 'center', 
-      alignItems: 'center', 
-      backgroundColor: BACKGROUND_COLOR 
+      alignItems: 'center'
   },
   noDataText: { 
       textAlign: 'center', 
       marginTop: 20, 
-      color: TEXT_COLOR_MEDIUM, 
       fontSize: 16 
   },
   
   // --- HEADER CARD STYLES ---
   headerCard: {
-      backgroundColor: CARD_BG,
       paddingHorizontal: 15,
       paddingVertical: 12,
       width: '95%', 
@@ -769,9 +828,6 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       justifyContent: 'space-between',
       elevation: 2,
-      shadowColor: '#000', 
-      shadowOpacity: 0.1, 
-      shadowRadius: 3, 
       shadowOffset: { width: 0, height: 1 },
   },
   headerLeft: { 
@@ -780,7 +836,6 @@ const styles = StyleSheet.create({
       flex: 1 
   },
   headerIconContainer: {
-      backgroundColor: '#E0F2F1', // Teal bg
       borderRadius: 25,
       width: 45,
       height: 45,
@@ -795,18 +850,14 @@ const styles = StyleSheet.create({
   headerTitle: { 
       fontSize: 18, 
       fontWeight: 'bold', 
-      color: TEXT_COLOR_DARK 
   },
   headerSubtitle: { 
       fontSize: 12, 
-      color: TEXT_COLOR_MEDIUM 
   },
   headerActionBtn: {
       padding: 8,
-      backgroundColor: '#f0fdfa',
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#ccfbf1'
   },
 
   // Pickers & Filters
@@ -820,16 +871,13 @@ const styles = StyleSheet.create({
   pickerWrapper: { 
       flex: 1, 
       borderWidth: 1, 
-      borderColor: BORDER_COLOR, 
       borderRadius: 8, 
-      backgroundColor: '#FFF', 
       height: 45, 
       justifyContent: 'center',
       marginHorizontal: 2 
   },
   picker: { 
       width: '100%', 
-      color: TEXT_COLOR_DARK 
   },
   
   // Summary Cards
@@ -840,7 +888,6 @@ const styles = StyleSheet.create({
       width: '95%',
       alignSelf: 'center',
       marginBottom: 10, 
-      backgroundColor: CARD_BG, 
       borderRadius: 12, 
       elevation: 2,
       paddingHorizontal: 5
@@ -856,7 +903,6 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { 
       fontSize: 11, 
-      color: TEXT_COLOR_MEDIUM, 
       marginTop: 4, 
       fontWeight: '500', 
       textAlign: 'center' 
@@ -866,20 +912,17 @@ const styles = StyleSheet.create({
   searchBarContainer: { 
       flexDirection: 'row', 
       alignItems: 'center', 
-      backgroundColor: CARD_BG, 
       width: '95%',
       alignSelf: 'center',
       marginBottom: 10, 
       borderRadius: 8, 
       borderWidth: 1, 
-      borderColor: BORDER_COLOR, 
       paddingHorizontal: 10, 
       height: 45 
   },
   searchBar: { 
       flex: 1, 
       fontSize: 14, 
-      color: TEXT_COLOR_DARK 
   },
   searchIcon: { 
       marginRight: 8 
@@ -889,7 +932,6 @@ const styles = StyleSheet.create({
   summaryStudentRow: { 
       flexDirection: 'row', 
       alignItems: 'center', 
-      backgroundColor: CARD_BG, 
       padding: 15, 
       width: '95%',
       alignSelf: 'center',
@@ -899,12 +941,10 @@ const styles = StyleSheet.create({
   },
   studentName: { 
       fontSize: 15, 
-      color: TEXT_COLOR_DARK, 
       fontWeight: '600' 
   },
   studentDetailText: { 
       fontSize: 12, 
-      color: TEXT_COLOR_MEDIUM, 
       marginTop: 2 
   },
   percentageBadge: { 
@@ -934,18 +974,10 @@ const styles = StyleSheet.create({
       borderRadius: 20, 
       marginHorizontal: 3,
       marginVertical: 2, 
-      backgroundColor: '#E0E0E0' 
-  },
-  toggleButtonActive: { 
-      backgroundColor: PRIMARY_COLOR 
   },
   toggleButtonText: { 
-      color: TEXT_COLOR_DARK, 
       fontWeight: '600', 
       fontSize: 12 
-  },
-  toggleButtonTextActive: { 
-      color: WHITE 
   },
   
   // Range
@@ -961,35 +993,30 @@ const styles = StyleSheet.create({
       flex: 1, 
       flexDirection: 'row', 
       alignItems: 'center', 
-      backgroundColor: '#FFF', 
       padding: 8, 
       borderRadius: 6, 
       marginHorizontal: 5, 
       borderWidth: 1, 
-      borderColor: BORDER_COLOR, 
       justifyContent: 'center' 
   },
   dateInputText: { 
-      color: TEXT_COLOR_DARK, 
       fontSize: 12, 
       fontWeight: '500' 
   },
   goButton: { 
-      backgroundColor: GREEN, 
       paddingVertical: 8, 
       paddingHorizontal: 15, 
       borderRadius: 6, 
       marginLeft: 5 
   },
   goButtonText: { 
-      color: WHITE, 
+      color: '#FFF', 
       fontWeight: 'bold', 
       fontSize: 12 
   },
 
   // History List
   historyDayCard: { 
-      backgroundColor: CARD_BG, 
       width: '95%',
       alignSelf: 'center',
       marginVertical: 6, 
@@ -1003,7 +1030,6 @@ const styles = StyleSheet.create({
   historyDate: { 
       fontSize: 14, 
       fontWeight: '600', 
-      color: TEXT_COLOR_DARK 
   },
   historyStatus: { 
       fontSize: 14, 
@@ -1012,14 +1038,12 @@ const styles = StyleSheet.create({
 
   // --- NO RECORD CARD STYLES ---
   noRecordCard: {
-      backgroundColor: '#fff',
       width: '95%',
       alignSelf: 'center',
       paddingVertical: 40,
       alignItems: 'center',
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: '#ECEFF1',
       elevation: 2,
       shadowColor: '#000',
       shadowOpacity: 0.1,
@@ -1031,12 +1055,10 @@ const styles = StyleSheet.create({
   noRecordTitle: {
       fontSize: 22,
       fontWeight: 'bold',
-      color: '#B0BEC5', 
       marginBottom: 5
   },
   noRecordDate: {
       fontSize: 16,
-      color: '#546E7A',
       fontWeight: '500'
   },
 
@@ -1045,7 +1067,7 @@ const styles = StyleSheet.create({
       width: 80, 
       height: 80, 
       borderRadius: 40, 
-      backgroundColor: GREEN, 
+      backgroundColor: '#43A047', 
       justifyContent: 'center', 
       alignItems: 'center', 
       marginBottom: 20 
@@ -1053,23 +1075,21 @@ const styles = StyleSheet.create({
   successTitle: { 
       fontSize: 20, 
       fontWeight: 'bold', 
-      color: TEXT_COLOR_DARK, 
       marginBottom: 8 
   },
   successSubtitle: { 
       fontSize: 14, 
-      color: TEXT_COLOR_MEDIUM, 
       textAlign: 'center', 
       marginBottom: 25 
   },
   editButton: { 
-      backgroundColor: PRIMARY_COLOR, 
+      backgroundColor: '#008080', 
       paddingVertical: 10, 
       paddingHorizontal: 30, 
       borderRadius: 8 
   },
   editButtonText: { 
-      color: WHITE, 
+      color: '#FFF', 
       fontSize: 14, 
       fontWeight: 'bold' 
   },
@@ -1083,15 +1103,12 @@ const styles = StyleSheet.create({
       alignItems: 'center', 
       borderWidth: 1 
   },
-  btnPresent: { backgroundColor: GREEN, borderColor: GREEN },
-  btnAbsent: { backgroundColor: RED, borderColor: RED },
-  btnInactive: { backgroundColor: '#fff', borderColor: '#E0E0E0' },
   statusText: { fontSize: 14, fontWeight: 'bold' },
 
   // Footer
   footerContainer: { position: 'absolute', bottom: 20, left: 20, right: 20 },
-  submitFooterButton: { backgroundColor: PRIMARY_COLOR, paddingVertical: 15, borderRadius: 30, alignItems: 'center', justifyContent: 'center', elevation: 5 },
-  submitFooterText: { color: WHITE, fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  submitFooterButton: { backgroundColor: '#008080', paddingVertical: 15, borderRadius: 30, alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  submitFooterText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
 });
 
 export default AttendanceScreen;

@@ -7116,7 +7116,6 @@ app.get('/api/performance/teacher/:teacherId', [verifyToken], async (req, res) =
 
 // --- ADMIN ONLY ROUTES ---
 
-// GET: Get all teachers for assignment dropdown
 app.get('/api/reports/teachers', [verifyToken, isAdmin], async (req, res) => {
     try {
         const query = "SELECT id, full_name, username FROM users WHERE role = 'teacher' ORDER BY full_name";
@@ -7128,7 +7127,6 @@ app.get('/api/reports/teachers', [verifyToken, isAdmin], async (req, res) => {
     }
 });
 
-// GET: Get teacher assignments for a class
 app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], async (req, res) => {
     const { classGroup } = req.params;
     try {
@@ -7146,7 +7144,6 @@ app.get('/api/reports/teacher-assignments/:classGroup', [verifyToken, isAdmin], 
     }
 });
 
-// POST: Assign teacher to subject
 app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res) => {
     const { teacherId, classGroup, subject } = req.body;
     
@@ -7158,13 +7155,11 @@ app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res)
     try {
         await connection.beginTransaction();
 
-        // 1. DELETE any existing assignment for this class & subject (Replaces old teacher)
         await connection.query(
             "DELETE FROM report_teacher_assignments WHERE class_group = ? AND subject = ?",
             [classGroup, subject]
         );
 
-        // 2. INSERT the new assignment
         await connection.query(
             `INSERT INTO report_teacher_assignments (teacher_id, class_group, subject)
              VALUES (?, ?, ?)`,
@@ -7182,7 +7177,6 @@ app.post('/api/reports/assign-teacher', [verifyToken, isAdmin], async (req, res)
     }
 });
 
-// DELETE: Remove teacher assignment
 app.delete('/api/reports/teacher-assignments/:assignmentId', [verifyToken, isAdmin], async (req, res) => {
     const { assignmentId } = req.params;
     try {
@@ -7196,7 +7190,6 @@ app.delete('/api/reports/teacher-assignments/:assignmentId', [verifyToken, isAdm
 
 // --- TEACHER / ADMIN ROUTES ---
 
-// GET: A list of all unique student classes
 app.get('/api/reports/classes', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     try {
         const query = "SELECT DISTINCT class_group FROM users WHERE role = 'student' AND class_group IS NOT NULL AND class_group != '' ORDER BY class_group";
@@ -7236,6 +7229,7 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
             [studentIds]
         );
         
+        // Removed academic_year from select
         const [attendance] = await db.query(
             "SELECT student_id, month, working_days, present_days FROM report_student_attendance WHERE student_id IN (?)",
             [studentIds]
@@ -7257,8 +7251,7 @@ app.get('/api/reports/class-data/:classGroup', [verifyToken, isTeacherOrAdmin], 
     }
 });
 
-// POST: Bulk save/update marks for multiple students
-// UPDATED: No academic_year
+// POST: Bulk save/update marks
 app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { marksPayload } = req.body;
 
@@ -7305,8 +7298,8 @@ app.post('/api/reports/marks/bulk', [verifyToken, isTeacherOrAdmin], async (req,
     }
 });
 
-// POST: Bulk save/update attendance for multiple students
-// UPDATED: No academic_year
+// POST: Bulk save/update attendance
+// UPDATED: Completely removed academic_year
 app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async (req, res) => {
     const { attendancePayload } = req.body;
     
@@ -7318,7 +7311,6 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
     try {
         await connection.beginTransaction();
         
-        // Ensure your report_student_attendance table also does not have academic_year (or allows NULL)
         const query = `
             INSERT INTO report_student_attendance (student_id, month, working_days, present_days)
             VALUES ? 
@@ -7340,6 +7332,7 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
                 if (!isNaN(p)) present = p;
             }
             
+            // Note: NO academic_year here
             return [
                 a.student_id, 
                 a.month,
@@ -7362,7 +7355,6 @@ app.post('/api/reports/attendance/bulk', [verifyToken, isTeacherOrAdmin], async 
 
 // --- STUDENT ROUTES ---
 
-// GET: Student's own report card
 app.get('/api/reports/my-report-card', verifyToken, async (req, res) => {
     const studentId = req.user.id;
     
@@ -8457,23 +8449,27 @@ app.delete('/api/sports/messages/:id', verifyToken, async (req, res) => {
 app.get('/api/dictionary/search', verifyToken, async (req, res) => {
     const { query } = req.query;
 
-    // If query is empty, usually we return empty, but for the "A" default view
-    // we might send 'A' from frontend. So we keep this check generic.
-    if (!query) {
-        return res.json([]);
-    }
-
     try {
-        // Search for words STARTING with the query
-        // Increased LIMIT to 100 to show more words when selecting a letter
-        const sql = `
-            SELECT id, word, part_of_speech, definition_en, definition_te 
-            FROM dictionary 
-            WHERE word LIKE ? 
-            ORDER BY word ASC 
-            LIMIT 100
-        `;
-        const [results] = await db.query(sql, [`${query}%`]);
+        let sql;
+        let params;
+
+        if (!query) {
+            // Default load (usually 'A')
+            sql = `SELECT id, word, part_of_speech, definition_en, definition_te FROM dictionary ORDER BY word ASC LIMIT 50`;
+            params = [];
+        } else {
+            // Search for words STARTING with the query
+            sql = `
+                SELECT id, word, part_of_speech, definition_en, definition_te 
+                FROM dictionary 
+                WHERE word LIKE ? 
+                ORDER BY word ASC 
+                LIMIT 100
+            `;
+            params = [`${query}%`];
+        }
+        
+        const [results] = await db.query(sql, params);
         res.status(200).json(results);
     } catch (error) {
         console.error("Dictionary Search Error:", error);
@@ -8481,9 +8477,8 @@ app.get('/api/dictionary/search', verifyToken, async (req, res) => {
     }
 });
 
-// 2. Add Word (Restricted to Admin & Teacher) -> SAME AS BEFORE
+// 2. Add Word (Restricted to Admin & Teacher)
 app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) => {
-    // ... (Keep your existing Add Word logic here) ...
     const { word, part_of_speech, definition_en, definition_te } = req.body;
     const added_by = req.user.id; 
 
@@ -8495,6 +8490,7 @@ app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) 
     try {
         await connection.beginTransaction();
 
+        // Check for duplicates
         const [existing] = await connection.query('SELECT id FROM dictionary WHERE word = ?', [word]);
         if (existing.length > 0) {
             connection.release();
@@ -8516,6 +8512,53 @@ app.post('/api/dictionary/add', verifyToken, isTeacherOrAdmin, async (req, res) 
         res.status(500).json({ message: "Error adding word." });
     } finally {
         connection.release();
+    }
+});
+
+// 3. Edit Word (Restricted to Admin & Teacher)
+app.put('/api/dictionary/edit/:id', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { word, part_of_speech, definition_en, definition_te } = req.body;
+
+    if (!word || !part_of_speech || !definition_en || !definition_te) {
+        return res.status(400).json({ message: "All fields are required." });
+    }
+
+    try {
+        const sql = `
+            UPDATE dictionary 
+            SET word = ?, part_of_speech = ?, definition_en = ?, definition_te = ? 
+            WHERE id = ?
+        `;
+        const [result] = await db.query(sql, [word, part_of_speech, definition_en, definition_te, id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Word not found." });
+        }
+
+        res.status(200).json({ message: "Word updated successfully!" });
+    } catch (error) {
+        console.error("Dictionary Edit Error:", error);
+        res.status(500).json({ message: "Error updating word." });
+    }
+});
+
+// 4. Delete Word (Restricted to Admin & Teacher)
+app.delete('/api/dictionary/delete/:id', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const sql = `DELETE FROM dictionary WHERE id = ?`;
+        const [result] = await db.query(sql, [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Word not found." });
+        }
+
+        res.status(200).json({ message: "Word deleted successfully!" });
+    } catch (error) {
+        console.error("Dictionary Delete Error:", error);
+        res.status(500).json({ message: "Error deleting word." });
     }
 });
 
