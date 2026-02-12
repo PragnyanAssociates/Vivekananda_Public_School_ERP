@@ -1,7 +1,13 @@
-import React, { useState, useCallback } from 'react';
+/**
+ * File: src/screens/library/AdminActionScreen.js
+ * Purpose: Admin interface to manage library book requests (Approve, Reject, Mark Returned).
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ */
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, 
-    TextInput, RefreshControl, Alert, StatusBar, ActivityIndicator, SafeAreaView
+    TextInput, RefreshControl, Alert, StatusBar, ActivityIndicator, 
+    SafeAreaView, useColorScheme, Platform 
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client'; 
@@ -9,9 +15,9 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
     textMain: '#263238',
@@ -20,12 +26,53 @@ const COLORS = {
     success: '#43A047',
     danger: '#E53935',
     blue: '#1E88E5',
-    warning: '#F59E0B'
+    warning: '#F59E0B',
+    iconBg: '#E0F2F1',
+    inputBg: '#FFFFFF',
+    tabBg: '#FFFFFF',
+    tabActiveBg: '#E0F2F1',
+    dateRowBg: '#F8FAFC',
+    dateRowBorder: '#f0f0f0',
+    badgePendingBg: '#FEF3C7',
+    badgeIssuedBg: '#DBEAFE',
+    white: '#ffffff'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    success: '#4CAF50',
+    danger: '#EF5350',
+    blue: '#42A5F5',
+    warning: '#FFB300',
+    iconBg: '#333333',
+    inputBg: '#2C2C2C',
+    tabBg: '#2C2C2C',
+    tabActiveBg: '#004D40',
+    dateRowBg: '#252525',
+    dateRowBorder: '#333333',
+    badgePendingBg: '#42381A',
+    badgeIssuedBg: '#1A365D',
+    white: '#ffffff'
 };
 
 const AdminActionScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
+
     // --- State ---
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -126,29 +173,39 @@ const AdminActionScreen = () => {
 
         return (
             <Animatable.View animation="fadeInUp" duration={500} delay={index * 50}>
-                <View style={styles.card}>
+                <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                     <View style={styles.cardHeader}>
                         <View style={{flex: 1, paddingRight: 10}}>
-                            <Text style={styles.bookTitle} numberOfLines={2}>{item.book_title || "Unknown Book"}</Text>
-                            <Text style={styles.studentDetails}>{item.full_name} ({item.roll_no})</Text>
-                            <Text style={styles.classDetails}>Class: {item.class_name || 'N/A'}</Text>
+                            <Text style={[styles.bookTitle, { color: theme.textMain }]} numberOfLines={2}>
+                                {item.book_title || "Unknown Book"}
+                            </Text>
+                            <Text style={[styles.studentDetails, { color: theme.textSub }]}>
+                                {item.full_name} ({item.roll_no})
+                            </Text>
+                            <Text style={[styles.classDetails, { color: theme.textSub }]}>
+                                Class: {item.class_name || 'N/A'}
+                            </Text>
                         </View>
 
-                        <View style={[styles.badge, { backgroundColor: item.status === 'pending' ? '#FEF3C7' : '#DBEAFE' }]}>
-                            <Text style={[styles.badgeText, { color: item.status === 'pending' ? COLORS.warning : COLORS.blue }]}>
+                        <View style={[styles.badge, { backgroundColor: item.status === 'pending' ? theme.badgePendingBg : theme.badgeIssuedBg }]}>
+                            <Text style={[styles.badgeText, { color: item.status === 'pending' ? theme.warning : theme.blue }]}>
                                 {item.status.toUpperCase()}
                             </Text>
                         </View>
                     </View>
 
-                    <View style={styles.dateRow}>
+                    <View style={[styles.dateRow, { backgroundColor: theme.dateRowBg, borderColor: theme.dateRowBorder }]}>
                         <View style={styles.dateItem}>
-                            <MaterialIcons name="event" size={14} color={COLORS.textSub} />
-                            <Text style={styles.dateText}> Borrow: {formatDate(item.borrow_date)}</Text>
+                            <MaterialIcons name="event" size={14} color={theme.textSub} />
+                            <Text style={[styles.dateText, { color: theme.textMain }]}> Borrow: {formatDate(item.borrow_date)}</Text>
                         </View>
                         <View style={styles.dateItem}>
-                            <MaterialIcons name="event-available" size={14} color={overdue && item.status === 'approved' ? COLORS.danger : COLORS.textSub} />
-                            <Text style={[styles.dateText, overdue && item.status === 'approved' && { color: COLORS.danger, fontWeight: 'bold' }]}>
+                            <MaterialIcons name="event-available" size={14} color={overdue && item.status === 'approved' ? theme.danger : theme.textSub} />
+                            <Text style={[
+                                styles.dateText, 
+                                { color: theme.textMain },
+                                overdue && item.status === 'approved' && { color: theme.danger, fontWeight: 'bold' }
+                            ]}>
                                 Return: {formatDate(item.expected_return_date)}
                             </Text>
                         </View>
@@ -157,18 +214,18 @@ const AdminActionScreen = () => {
                     <View style={styles.actionRow}>
                         {item.status === 'pending' && (
                             <>
-                                <TouchableOpacity style={[styles.btn, styles.btnApprove]} onPress={() => handleAction(item.id, 'approved')}>
-                                    <Text style={styles.btnText}>Approve</Text>
+                                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.success }]} onPress={() => handleAction(item.id, 'approved')}>
+                                    <Text style={[styles.btnText, { color: theme.white }]}>Approve</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.btn, styles.btnReject]} onPress={() => handleAction(item.id, 'rejected')}>
-                                    <Text style={styles.btnText}>Reject</Text>
+                                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.danger }]} onPress={() => handleAction(item.id, 'rejected')}>
+                                    <Text style={[styles.btnText, { color: theme.white }]}>Reject</Text>
                                 </TouchableOpacity>
                             </>
                         )}
 
                         {(item.status === 'approved') && (
-                            <TouchableOpacity style={[styles.btn, styles.btnReturn]} onPress={() => handleAction(item.id, 'returned')}>
-                                <Text style={styles.btnText}>Mark Returned</Text>
+                            <TouchableOpacity style={[styles.btn, { backgroundColor: theme.blue }]} onPress={() => handleAction(item.id, 'returned')}>
+                                <Text style={[styles.btnText, { color: theme.white }]}>Mark Returned</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -178,50 +235,57 @@ const AdminActionScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar backgroundColor={COLORS.background} barStyle="dark-content" />
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <StatusBar backgroundColor={theme.background} barStyle={isDark ? "light-content" : "dark-content"} />
             
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color="#333" />
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
                     </TouchableOpacity>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="pending-actions" size={24} color="#008080" />
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
+                        <MaterialIcons name="pending-actions" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Action Center</Text>
-                        <Text style={styles.headerSubtitle}>Library Requests</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Action Center</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Library Requests</Text>
                     </View>
                 </View>
                 
-                <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('LibraryHistoryScreen')}>
-                    <MaterialIcons name="history" size={20} color="#fff" />
+                <TouchableOpacity style={[styles.headerBtn, { backgroundColor: theme.primary }]} onPress={() => navigation.navigate('LibraryHistoryScreen')}>
+                    <MaterialIcons name="history" size={20} color={theme.white} />
                 </TouchableOpacity>
             </View>
 
             {/* --- SEARCH & TABS --- */}
             <View style={styles.filterContainer}>
-                <View style={styles.searchBox}>
-                    <MaterialIcons name="search" size={20} color={COLORS.textSub} style={{marginRight: 8}} />
+                <View style={[styles.searchBox, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+                    <MaterialIcons name="search" size={20} color={theme.textSub} style={styles.searchIcon} />
                     <TextInput 
                         placeholder="Search Student, ID, or Book..." 
-                        style={styles.searchInput}
+                        style={[styles.searchInput, { color: theme.textMain }]}
                         value={searchText}
                         onChangeText={setSearchText}
-                        placeholderTextColor={COLORS.textSub}
+                        placeholderTextColor={theme.textSub}
                     />
                 </View>
 
-                <View style={styles.tabContainer}>
+                <View style={[styles.tabContainer, { backgroundColor: theme.tabBg, borderColor: theme.border }]}>
                     {['PENDING', 'ISSUED', 'OVERDUE'].map(tab => (
                         <TouchableOpacity 
                             key={tab}
-                            style={[styles.tab, activeTab === tab && styles.tabActive]}
+                            style={[
+                                styles.tab, 
+                                activeTab === tab && { backgroundColor: theme.tabActiveBg }
+                            ]}
                             onPress={() => setActiveTab(tab)}
                         >
-                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                            <Text style={[
+                                styles.tabText, 
+                                { color: theme.textSub },
+                                activeTab === tab && { color: theme.primary, fontWeight: 'bold' }
+                            ]}>
                                 {tab.charAt(0) + tab.slice(1).toLowerCase()}
                             </Text>
                         </TouchableOpacity>
@@ -230,7 +294,7 @@ const AdminActionScreen = () => {
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 40}} />
+                <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
             ) : (
                 <FlatList
                     data={getFilteredData()}
@@ -238,12 +302,19 @@ const AdminActionScreen = () => {
                     keyExtractor={item => item.id.toString()}
                     contentContainerStyle={styles.listContent}
                     refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} colors={[COLORS.primary]} />
+                        <RefreshControl 
+                            refreshing={refreshing} 
+                            onRefresh={() => { setRefreshing(true); fetchData(); }} 
+                            colors={[theme.primary]} 
+                            tintColor={theme.primary}
+                        />
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <MaterialCommunityIcons name="playlist-check" size={50} color={COLORS.border} />
-                            <Text style={styles.emptyText}>No {activeTab.toLowerCase()} requests found.</Text>
+                            <MaterialCommunityIcons name="playlist-check" size={50} color={theme.border} />
+                            <Text style={[styles.emptyText, { color: theme.textSub }]}>
+                                No {activeTab.toLowerCase()} requests found.
+                            </Text>
                         </View>
                     }
                 />
@@ -253,11 +324,11 @@ const AdminActionScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
+    loader: { marginTop: 40 },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -269,14 +340,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    backButton: { marginRight: 10, padding: 4 },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -285,10 +355,9 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13 },
     headerBtn: {
-        backgroundColor: COLORS.primary,
         padding: 8,
         borderRadius: 20,
         alignItems: 'center',
@@ -297,41 +366,66 @@ const styles = StyleSheet.create({
 
     // --- FILTERS ---
     filterContainer: { paddingHorizontal: 15, marginBottom: 10 },
-    searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 10, paddingHorizontal: 10, borderWidth: 1, borderColor: COLORS.border, height: 45, marginBottom: 15 },
-    searchInput: { flex: 1, height: 45, fontSize: 15, color: COLORS.textMain },
+    searchBox: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        borderRadius: 10, 
+        paddingHorizontal: 10, 
+        borderWidth: 1, 
+        height: 45, 
+        marginBottom: 15 
+    },
+    searchIcon: { marginRight: 8 },
+    searchInput: { flex: 1, height: 45, fontSize: 15 },
 
     // Tabs
-    tabContainer: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FFF', borderRadius: 8, padding: 4, borderWidth: 1, borderColor: COLORS.border },
+    tabContainer: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        borderRadius: 8, 
+        padding: 4, 
+        borderWidth: 1 
+    },
     tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6 },
-    tabActive: { backgroundColor: '#E0F2F1' },
-    tabText: { color: COLORS.textSub, fontSize: 13, fontWeight: '600' },
-    tabTextActive: { color: COLORS.primary, fontWeight: 'bold' },
+    tabText: { fontSize: 13, fontWeight: '600' },
 
     // --- CARD STYLES ---
     listContent: { paddingHorizontal: 15, paddingBottom: 20 },
-    card: { backgroundColor: '#FFF', borderRadius: 12, padding: 15, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+    card: { 
+        borderRadius: 12, 
+        padding: 15, 
+        marginBottom: 12, 
+        elevation: 2, 
+        shadowOpacity: 0.05, 
+        shadowRadius: 3, 
+        shadowOffset: { width: 0, height: 1 } 
+    },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-    bookTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textMain, marginBottom: 4 },
-    studentDetails: { fontSize: 13, color: COLORS.textSub, fontWeight: '600' },
-    classDetails: { fontSize: 12, color: '#999', marginTop: 2 },
+    bookTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+    studentDetails: { fontSize: 13, fontWeight: '600' },
+    classDetails: { fontSize: 12, marginTop: 2 },
     
     badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, height: 24, justifyContent: 'center' },
     badgeText: { fontSize: 10, fontWeight: 'bold' },
 
-    dateRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8, marginVertical: 10, borderWidth: 1, borderColor: '#f0f0f0' },
+    dateRow: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        padding: 10, 
+        borderRadius: 8, 
+        marginVertical: 10, 
+        borderWidth: 1 
+    },
     dateItem: { flexDirection: 'row', alignItems: 'center' },
-    dateText: { fontSize: 12, color: COLORS.textMain, fontWeight: '500', marginLeft: 4 },
+    dateText: { fontSize: 12, fontWeight: '500', marginLeft: 4 },
 
     // Buttons
     actionRow: { flexDirection: 'row', gap: 10 },
     btn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-    btnApprove: { backgroundColor: COLORS.success },
-    btnReject: { backgroundColor: COLORS.danger },
-    btnReturn: { backgroundColor: COLORS.blue },
-    btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+    btnText: { fontWeight: 'bold', fontSize: 13 },
 
     emptyContainer: { alignItems: 'center', marginTop: 60 },
-    emptyText: { color: COLORS.textSub, fontSize: 16, marginTop: 10 }
+    emptyText: { fontSize: 16, marginTop: 10 }
 });
 
 export default AdminActionScreen;

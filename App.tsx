@@ -2,9 +2,9 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect } from 'react'; // ✅ Import useEffect
-import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'; // ✅ Import useNavigationContainerRef
+import { NavigationContainer, useNavigationContainerRef, DefaultTheme, DarkTheme } from '@react-navigation/native'; // ✅ Import useNavigationContainerRef & Themes
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native'; // ✅ Import Linking
+import { View, ActivityIndicator, StyleSheet, Linking, useColorScheme, StatusBar } from 'react-native'; // ✅ Import Linking & useColorScheme
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 // --- Screen Imports (Your full list) ---
@@ -157,6 +157,31 @@ import TeacherFeedback from './src/screens/Feedbacks/TeacherFeedback';
 
 const Stack = createStackNavigator();
 
+// --- Theme Helper ---
+// You can define your specific colors here to be consistent across the app
+const CUSTOM_THEME = {
+  light: {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: '#f8f8ff',
+      headerBg: '#e0f2f7',
+      headerTint: '#008080',
+      text: '#333333',
+    },
+  },
+  dark: {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: '#121212',
+      headerBg: '#1e1e1e', // Dark header
+      headerTint: '#008080', // Keep teal or use #FFFFFF for contrast
+      text: '#ffffff',
+    },
+  },
+};
+
 // --- STACK 1: Screens available BEFORE a user logs in ---
 const PublicStack = () => (
   <Stack.Navigator initialRouteName="WelcomePage" screenOptions={{ headerShown: false }}>
@@ -172,68 +197,83 @@ const PublicStack = () => (
 );
 
 // --- THIS IS THE NESTED NAVIGATOR FOR THE GALLERY ---
-const GalleryNavigator = () => (
-    <Stack.Navigator>
-        <Stack.Screen
-            name="GalleryAlbums"
-            component={GalleryScreen}
-            options={{ 
-              title: 'Gallery ',
-              headerStyle: {
-                backgroundColor: '#e0f2f7', // Light teal background from your dashboard
-              },
-              headerTintColor: '#008080', // Dark teal color for the title and back button
-              headerTitleStyle: {
-                fontWeight: 'bold', // Make the title bold
-              },
-            }}
-        />
-        <Stack.Screen
-            name="AlbumDetail"
-            component={AlbumDetailScreen}
-            options={({ route }: any) => ({ 
-              title: route.params.title,
-              headerStyle: {
-                backgroundColor: '#e0f2f7',
-              },
-              headerTintColor: '#008080',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-            })}
-        />
-    </Stack.Navigator>
-);
+const GalleryNavigator = () => {
+    const isDarkMode = useColorScheme() === 'dark';
+    const themeColors = isDarkMode ? CUSTOM_THEME.dark.colors : CUSTOM_THEME.light.colors;
+
+    return (
+        <Stack.Navigator>
+            <Stack.Screen
+                name="GalleryAlbums"
+                component={GalleryScreen}
+                options={{ 
+                  title: 'Gallery ',
+                  headerStyle: {
+                    backgroundColor: themeColors.headerBg, 
+                  },
+                  headerTintColor: themeColors.headerTint, 
+                  headerTitleStyle: {
+                    fontWeight: 'bold', 
+                  },
+                }}
+            />
+            <Stack.Screen
+                name="AlbumDetail"
+                component={AlbumDetailScreen}
+                options={({ route }: any) => ({ 
+                  title: route.params.title,
+                  headerStyle: {
+                    backgroundColor: themeColors.headerBg,
+                  },
+                  headerTintColor: themeColors.headerTint,
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                })}
+            />
+        </Stack.Navigator>
+    );
+};
 
 // ★★★ MODIFIED: Moved this navigator definition to the top level for best practice ★★★
-const StudentHomeworkNavigator = () => (
-    <Stack.Navigator>
-        <Stack.Screen 
-            name="HomeworkList"
-            component={StudentHomeworkScreen} 
-            options={{ 
-                title: 'Assignments & Homework',
-                headerStyle: { backgroundColor: '#e0f2f7' }, // Light orange theme
-                headerTintColor: '#008080',
-                headerTitleStyle: { fontWeight: 'bold' },
-            }}
-        />
-        <Stack.Screen 
-            name="WrittenAnswerScreen" 
-            component={WrittenAnswerScreen}
-            options={({ route }: any) => ({ 
-                title: route.params?.assignment?.title || 'Answer Homework',
-                headerStyle: { backgroundColor: '#e0f2f7' },
-                headerTintColor: '#008080',
-                headerTitleStyle: { fontWeight: 'bold' },
-            })}
-        />
-    </Stack.Navigator>
-);
+const StudentHomeworkNavigator = () => {
+    const isDarkMode = useColorScheme() === 'dark';
+    const themeColors = isDarkMode ? CUSTOM_THEME.dark.colors : CUSTOM_THEME.light.colors;
+
+    return (
+        <Stack.Navigator>
+            <Stack.Screen 
+                name="HomeworkList"
+                component={StudentHomeworkScreen} 
+                options={{ 
+                    title: 'Assignments & Homework',
+                    headerStyle: { backgroundColor: themeColors.headerBg }, 
+                    headerTintColor: themeColors.headerTint,
+                    headerTitleStyle: { fontWeight: 'bold' },
+                }}
+            />
+            <Stack.Screen 
+                name="WrittenAnswerScreen" 
+                component={WrittenAnswerScreen}
+                options={({ route }: any) => ({ 
+                    title: route.params?.assignment?.title || 'Answer Homework',
+                    headerStyle: { backgroundColor: themeColors.headerBg },
+                    headerTintColor: themeColors.headerTint,
+                    headerTitleStyle: { fontWeight: 'bold' },
+                })}
+            />
+        </Stack.Navigator>
+    );
+};
 
 // --- STACK 2: Screens available ONLY AFTER a user logs in ---
 const AuthenticatedStack = () => {
   const { user } = useAuth();
+  
+  // Theme Hooks for Authenticated Stack
+  const isDarkMode = useColorScheme() === 'dark';
+  const themeColors = isDarkMode ? CUSTOM_THEME.dark.colors : CUSTOM_THEME.light.colors;
+
   const getInitialRouteName = () => {
     switch (user?.role) {
       case 'admin':   return 'AdminDashboard';
@@ -294,8 +334,8 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
       <Stack.Screen name="ChatFeature" component={ChatStackNavigator} options={{ headerShown: true, 
           title: 'Group chat',
-          headerStyle: { backgroundColor: '#e0f2f7' },
-          headerTintColor: '#008080',
+          headerStyle: { backgroundColor: themeColors.headerBg },
+          headerTintColor: themeColors.headerTint,
           headerTitleStyle: { fontWeight: 'bold' } }} />
       <Stack.Screen name="TeacherAttendanceMarkingScreen" component={TeacherAttendanceMarkingScreen} />
       <Stack.Screen name="TeacherAttendanceReportScreen" component={TeacherAttendanceReportScreen} />
@@ -349,8 +389,8 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="TeacherFilter" component={TeacherFilter} />
       <Stack.Screen name="ReportScreen" component={ReportNavigator} options={{ headerShown: false, 
           title: 'Progress Reports',
-          headerStyle: { backgroundColor: '#e0f2f7' },
-          headerTintColor: '#008080',
+          headerStyle: { backgroundColor: themeColors.headerBg },
+          headerTintColor: themeColors.headerTint,
           headerTitleStyle: { fontWeight: 'bold' } }} />
       <Stack.Screen name="StudentProgressReport" component={StudentReportNavigator} options={{ headerShown: false }} />
 
@@ -377,8 +417,8 @@ const AuthenticatedStack = () => {
         options={{ 
           headerShown: true, 
           title: 'Create Advertisement',
-          headerStyle: { backgroundColor: '#e0f2f7' },
-          headerTintColor: '#008080',
+          headerStyle: { backgroundColor: themeColors.headerBg },
+          headerTintColor: themeColors.headerTint,
           headerTitleStyle: { fontWeight: 'bold' }
         }} 
       />
@@ -388,8 +428,8 @@ const AuthenticatedStack = () => {
         options={{ 
           headerShown: true, 
           title: 'Ads Management',
-          headerStyle: { backgroundColor: '#e0f2f7' },
-          headerTintColor: '#008080',
+          headerStyle: { backgroundColor: themeColors.headerBg },
+          headerTintColor: themeColors.headerTint,
           headerTitleStyle: { fontWeight: 'bold' }
         }} 
       />
@@ -403,6 +443,7 @@ const AuthenticatedStack = () => {
 const AppNavigator = () => {
   const { user, isLoading } = useAuth();
   const navigationRef = useNavigationContainerRef();
+  const scheme = useColorScheme();
 
   const linking = {
     prefixes: ['vspngo://'],
@@ -425,7 +466,7 @@ const AppNavigator = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { backgroundColor: scheme === 'dark' ? '#121212' : '#f8f8ff' }]}>
         <ActivityIndicator size="large" color="#008080" />
       </View>
     );
@@ -433,12 +474,21 @@ const AppNavigator = () => {
 
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef} linking={linking} fallback={<ActivityIndicator color="#008080" />}>
+      <NavigationContainer 
+        ref={navigationRef} 
+        linking={linking} 
+        theme={scheme === 'dark' ? CUSTOM_THEME.dark : CUSTOM_THEME.light}
+        fallback={<ActivityIndicator color="#008080" />}
+      >
+        <StatusBar 
+            barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} 
+            backgroundColor={scheme === 'dark' ? '#1e1e1e' : '#e0f2f7'}
+        />
         {user ? <AuthenticatedStack /> : <PublicStack />}
       </NavigationContainer>
       
-      This is the "small key". It will now float on top of all screens.
-      We add a check to only show it if a user is logged in.
+      {/* This is the "small key". It will now float on top of all screens.
+      We add a check to only show it if a user is logged in. */}
       {user && <AdDisplay />}
     </View>
   );
@@ -457,6 +507,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8ff'
+    // backgroundColor handled dynamically above
   }
 });

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-// Make sure ImageBackground is imported
 import {
   View,
   Text,
@@ -9,7 +8,9 @@ import {
   SafeAreaView,
   Animated,
   Dimensions,
-  ImageBackground 
+  ImageBackground,
+  useColorScheme,
+  StatusBar
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/AntDesign';
@@ -17,10 +18,39 @@ import Icon from 'react-native-vector-icons/AntDesign';
 // Get screen dimensions for responsive design
 const { width, height } = Dimensions.get('window');
 
+// --- THEME COLORS CONFIGURATION ---
+const COLORS = {
+  light: {
+    background: '#FFFFFF',
+    text: '#333333',
+    // Light mode: White wash over image, dark text
+    overlay: 'rgba(255, 255, 255, 0.65)', 
+    primary: '#008080', // Teal to match dashboards
+    buttonText: '#FFFFFF',
+    shadow: '#000000',
+    textShadow: 'rgba(255, 255, 255, 0.5)',
+  },
+  dark: {
+    background: '#121212',
+    text: '#E0E0E0',
+    // Dark mode: Dark wash over image, light text
+    overlay: 'rgba(0, 0, 0, 0.75)', 
+    primary: '#008080', // Teal
+    buttonText: '#FFFFFF',
+    shadow: '#000000',
+    textShadow: 'rgba(0, 0, 0, 0.8)',
+  }
+};
+
 const WelcomePage = () => {
   const navigation = useNavigation();
 
-  // Animation values remain the same for a dynamic entry effect
+  // --- THEME HOOKS ---
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const theme = isDarkMode ? COLORS.dark : COLORS.light;
+
+  // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideUpAnim = useRef(new Animated.Value(50)).current;
   const logoScaleAnim = useRef(new Animated.Value(0.5)).current;
@@ -47,12 +77,11 @@ const WelcomePage = () => {
     ]).start();
   }, [fadeAnim, slideUpAnim, logoScaleAnim]);
 
-
   const handleGetStarted = () => {
     navigation.navigate('HomeScreen');
   };
 
-  // Animated styles remain the same
+  // Animated styles
   const animatedContainerStyle = {
     opacity: fadeAnim,
   };
@@ -66,29 +95,51 @@ const WelcomePage = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <StatusBar 
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'} 
+        backgroundColor="transparent" 
+        translucent 
+      />
+      
       <ImageBackground
         source={require('../assets/background-4.jpg')}
         style={styles.backgroundImage}
-        // resizeMode="cover"
-        // CHANGE: The 'blurRadius' property has been removed from here.
+        resizeMode="cover"
       >
-        {/* The overlay is still here to ensure text readability */}
-        <Animated.View style={[styles.overlay, animatedContainerStyle]}>
+        {/* Dynamic Overlay based on Theme */}
+        <Animated.View style={[styles.overlay, animatedContainerStyle, { backgroundColor: theme.overlay }]}>
+          
           <Animated.Image
             source={require("../assets/logo.png")}
             style={[styles.logo, animatedLogoStyle]}
             resizeMode="contain"
           />
-          <Animated.Text style={[styles.tagline, animatedContentStyle]}>
+          
+          <Animated.Text 
+            style={[
+              styles.tagline, 
+              animatedContentStyle, 
+              { 
+                color: theme.text,
+                textShadowColor: theme.textShadow 
+              }
+            ]}
+          >
             The unified platform to manage your institution's resources and operations.
           </Animated.Text>
+          
           <Animated.View style={animatedContentStyle}>
-            <TouchableOpacity style={styles.button} onPress={handleGetStarted} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>Get Started</Text>
-              <Icon name="arrowright" size={24} color="#FFFFFF" />
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: theme.primary, shadowColor: theme.shadow }]} 
+              onPress={handleGetStarted} 
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Get Started</Text>
+              <Icon name="arrowright" size={24} color={theme.buttonText} />
             </TouchableOpacity>
           </Animated.View>
+
         </Animated.View>
       </ImageBackground>
     </SafeAreaView>
@@ -98,52 +149,43 @@ const WelcomePage = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Fallback color
   },
   backgroundImage: {
     flex: 1,
     width: '100%',
     height: '100%',
   },
-  // This overlay sits on top of the background image
+  // The overlay layout logic
   overlay: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    // A semi-transparent white background makes content pop
-    backgroundColor: 'rgba(255, 255, 255, 0.5)', 
+    paddingHorizontal: width * 0.05, // 5% of screen width
   },
   logo: {
-    width: 350,
-    height: 300,
-    marginBottom: -70,
+    width: width * 0.85, // Responsive: 85% of screen width
+    height: width * 0.7, // Keep aspect ratio roughly consistent
+    marginBottom: -height * 0.08, // Adjust overlap dynamically
   },
   tagline: {
-    fontSize: 18,
-    // Dark color for high contrast against the light overlay
-    color: '#333333', 
-    fontWeight: '500', // Slightly bolder for readability
+    fontSize: width > 360 ? 18 : 16, // Smaller font for smaller screens
+    fontWeight: '500',
     textAlign: 'center',
     lineHeight: 26,
     maxWidth: '95%',
     fontStyle: "italic",
-    marginBottom: 60,
-    margintop: 0,
-    // Adding a subtle text shadow to lift it off the background
-    textShadowColor: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: height * 0.08, // Responsive margin
+    marginTop: 0,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   button: {
-    backgroundColor: '#007AFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 30,
-    shadowColor: "#000000", // Shadow is more effective against an image
     shadowOffset: {
       width: 0,
       height: 8,
@@ -153,7 +195,6 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   buttonText: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
     marginRight: 12,

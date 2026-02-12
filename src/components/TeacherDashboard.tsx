@@ -76,7 +76,8 @@ const COLORS = {
         secondary: '#e0f2f7',
         headerIconBg: '#E0F2F1',
         subCardBg: '#FFFFFF',
-        subCardImageBg: '#F7FAFC'
+        subCardImageBg: '#F7FAFC',
+        shadow: '#000000',
     },
     dark: {
         background: '#121212',
@@ -84,10 +85,11 @@ const COLORS = {
         textPrimary: '#ffffff',
         textSecondary: '#bbbbbb',
         border: '#333333',
-        secondary: '#2C2C2C',
+        secondary: '#1e1e1e',
         headerIconBg: 'rgba(0, 128, 128, 0.2)',
         subCardBg: '#2C2C2C',
-        subCardImageBg: '#3A3A3A'
+        subCardImageBg: '#3A3A3A',
+        shadow: '#000000',
     }
 };
 
@@ -299,7 +301,7 @@ const TeacherDashboard = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.contentScrollViewContainer}>
           
           {/* --- HEADER CARD --- */}
-          <View style={[styles.headerCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+          <View style={[styles.headerCard, { backgroundColor: theme.cardBg, borderColor: theme.border, shadowColor: theme.shadow }]}>
               <View style={[styles.headerIconContainer, { backgroundColor: theme.headerIconBg }]}>
                   <MaterialCommunityIcons 
                     name="view-dashboard" 
@@ -317,11 +319,11 @@ const TeacherDashboard = ({ navigation }) => {
               {MAIN_CATEGORIES.map((category) => (
                   <TouchableOpacity 
                     key={category.id} 
-                    style={[styles.categoryCard, { backgroundColor: theme.cardBg }]} 
+                    style={[styles.categoryCard, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]} 
                     onPress={() => handleCategoryPress(category)}
                     activeOpacity={0.8}
                   >
-                      <View style={styles.categoryIconCircle}>
+                      <View style={[styles.categoryIconCircle, { backgroundColor: theme.headerIconBg }]}>
                          <Image source={{ uri: category.imageSource }} style={styles.categoryImage} resizeMode="contain" />
                       </View>
                       <Text style={[styles.categoryTitle, { color: theme.textPrimary }]}>{category.title}</Text>
@@ -339,7 +341,7 @@ const TeacherDashboard = ({ navigation }) => {
     return (
         <View style={{ flex: 1, backgroundColor: theme.background }}>
             {/* Header Card */}
-            <View style={[styles.subHeaderCard, { backgroundColor: theme.cardBg }]}>
+            <View style={[styles.subHeaderCard, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]}>
                 <View style={[styles.subHeaderIconContainer, { backgroundColor: theme.headerIconBg }]}>
                     <Image source={{ uri: selectedCategory.imageSource }} style={{ width: 28, height: 28 }} resizeMode="contain" />
                 </View>
@@ -361,7 +363,7 @@ const TeacherDashboard = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => (
                     <TouchableOpacity
-                        style={[styles.subCard, { backgroundColor: theme.subCardBg }]}
+                        style={[styles.subCard, { backgroundColor: theme.subCardBg, shadowColor: theme.shadow }]}
                         onPress={() => handleSubModuleNavigation(item)}
                         activeOpacity={0.8}
                     >
@@ -434,7 +436,7 @@ const TeacherDashboard = ({ navigation }) => {
         
         {/* TOP BAR: Only show on Main Dashboard */}
         {activeTab === 'home' && currentView === 'dashboard' && (
-          <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border }]}>
+          <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
             <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
               <FastImage source={profileImageSource} style={[styles.profileImage, { borderColor: PRIMARY_COLOR, backgroundColor: theme.cardBg }]} />
               <View style={styles.profileTextContainer}>
@@ -459,7 +461,7 @@ const TeacherDashboard = ({ navigation }) => {
         </View>
 
         {isBottomNavVisible && (
-          <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border }]}>
+          <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
             <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} onPress={() => switchTab('home')} theme={theme} />
             <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} onPress={() => switchTab('calendar')} theme={theme} />
             <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} onPress={() => switchTab('profile')} theme={theme} />
@@ -496,7 +498,7 @@ const styles = StyleSheet.create({
   mainContent: { flex: 1 },
   
   // --- TOP BAR ---
-  topBar: { paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 12 : 15, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#455A64', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3, borderBottomWidth: 1 },
+  topBar: { paddingHorizontal: 15, paddingVertical: Platform.OS === 'ios' ? 12 : 15, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 3, borderBottomWidth: 1 },
   profileContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
   profileImage: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2 },
   profileTextContainer: { marginLeft: 12, flex: 1 },
@@ -520,7 +522,6 @@ const styles = StyleSheet.create({
       padding: 16,
       borderRadius: 20, 
       marginBottom: 20,
-      shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,
       shadowRadius: 4,
@@ -547,7 +548,6 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 15,
     alignItems: 'center',
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
@@ -572,7 +572,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     elevation: 3,
-    shadowColor: '#000', 
     shadowOpacity: 0.1, 
     shadowRadius: 4, 
     shadowOffset: { width: 0, height: 2 },
@@ -599,7 +598,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 10,
     elevation: 3,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -610,7 +608,7 @@ const styles = StyleSheet.create({
   subCardTitle: { fontSize: 15, fontWeight: '600', textAlign: 'center', },
 
   // --- BOTTOM NAV ---
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingVertical: Platform.OS === 'ios' ? 10 : 8, paddingBottom: Platform.OS === 'ios' ? 20 : 8, minHeight: BOTTOM_NAV_HEIGHT, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 5 },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingVertical: Platform.OS === 'ios' ? 10 : 8, paddingBottom: Platform.OS === 'ios' ? 20 : 8, minHeight: BOTTOM_NAV_HEIGHT, shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 5 },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 5 },
   navText: { fontSize: 10, marginTop: 3 },
 

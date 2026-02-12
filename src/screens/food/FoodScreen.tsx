@@ -1,12 +1,16 @@
-// 📂 File: src/screens/food/FoodScreen.tsx
-
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+/**
+ * File: src/screens/food/FoodScreen.tsx
+ * Purpose: Manage and view the weekly food menu and lunch schedule.
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Change Log: Removed Back Button from Header.
+ */
+import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     Alert, ActivityIndicator, SafeAreaView, Modal, TextInput,
-    Dimensions, useColorScheme, Platform
+    Dimensions, useColorScheme, Platform, StatusBar
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -16,22 +20,44 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 const { width } = Dimensions.get('window');
 
 // --- DYNAMIC THEME HELPERS ---
-const getTheme = (scheme: string | null | undefined) => {
-    const isDark = scheme === 'dark';
-    return {
-        isDark,
-        primary: '#008080',    // Teal
-        background: isDark ? '#121212' : '#F2F5F8', 
-        cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
-        textMain: isDark ? '#E0E0E0' : '#263238',
-        textSub: isDark ? '#B0BEC5' : '#546E7A',
-        border: isDark ? '#424242' : '#CFD8DC',
-        success: '#43A047',
-        danger: '#E53935',
-        inputBg: isDark ? '#2C2C2C' : '#FFFFFF',
-        modalOverlay: 'rgba(0,0,0,0.6)',
-        lightAccent: isDark ? '#333' : '#f8f9fa'
-    };
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8', 
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#CFD8DC',
+    success: '#43A047',
+    danger: '#E53935',
+    inputBg: '#F8FAFC',
+    inputBorder: '#E2E8F0',
+    iconBg: '#E0F2F1',
+    modalOverlay: 'rgba(0,0,0,0.6)',
+    lightAccent: '#f8f9fa',
+    white: '#ffffff',
+    headerRow: '#008080',
+    headerText: '#FFFFFF',
+    dayCellBg: '#FAFAFA'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    success: '#4CAF50',
+    danger: '#EF5350',
+    inputBg: '#2C2C2C',
+    inputBorder: '#555555',
+    iconBg: '#333333',
+    modalOverlay: 'rgba(0,0,0,0.7)',
+    lightAccent: '#252525',
+    white: '#ffffff',
+    headerRow: '#004D40',
+    headerText: '#E0F2F1',
+    dayCellBg: '#252525'
 };
 
 const ORDERED_DAYS = [
@@ -40,11 +66,20 @@ const ORDERED_DAYS = [
 ];
 
 const FoodScreen = () => {
-    const { user } = useAuth();
+    // Theme Hooks
     const colorScheme = useColorScheme();
-    const theme = getTheme(colorScheme);
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
 
-    const [menuData, setMenuData] = useState<any>({});
+    const { user } = useAuth();
+    const navigation = useNavigation();
+
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
+
+    const [menuData, setMenuData] = useState({});
     const [loading, setLoading] = useState(true);
     const [itemModalInfo, setItemModalInfo] = useState({ visible: false, mode: null, data: null });
     const [isTimeModalVisible, setIsTimeModalVisible] = useState(false);
@@ -57,21 +92,24 @@ const FoodScreen = () => {
             .finally(() => setLoading(false));
     }, []);
 
-    useFocusEffect(fetchMenu);
+    useFocusEffect(
+        useCallback(() => {
+            fetchMenu();
+        }, [])
+    );
 
     const displayTime = useMemo(() => {
         for (const day of ORDERED_DAYS) {
-            // @ts-ignore
-            const meal = menuData[day.full]?.find((m: any) => m.meal_type === 'Lunch' && m.meal_time);
+            const meal = menuData[day.full]?.find((m) => m.meal_type === 'Lunch' && m.meal_time);
             if (meal) { return meal.meal_time; }
         }
         return 'Not Set';
     }, [menuData]);
 
-    const openItemModal = (mode: any, data: any) => setItemModalInfo({ visible: true, mode, data });
+    const openItemModal = (mode, data) => setItemModalInfo({ visible: true, mode, data });
     const closeItemModal = () => setItemModalInfo({ visible: false, mode: null, data: null });
 
-    const handleCellPress = (meal: any, day: string) => {
+    const handleCellPress = (meal, day) => {
         if (meal) {
             openItemModal('edit', meal);
         } else {
@@ -79,16 +117,14 @@ const FoodScreen = () => {
         }
     };
     
-    const handleSaveItem = (values: any) => {
+    const handleSaveItem = (values) => {
         if (!user) return;
         const { mode, data } = itemModalInfo;
         
-        // @ts-ignore
         const requestBody = { ...values, editorId: user.id };
         let request;
 
         if (mode === 'edit') {
-            // @ts-ignore
             request = apiClient.put(`/food-menu/${data.id}`, { 
                 food_item: requestBody.food_item, 
                 editorId: requestBody.editorId 
@@ -96,9 +132,7 @@ const FoodScreen = () => {
         } else {
             const addRequestBody = { 
                 ...requestBody, 
-                // @ts-ignore
                 day_of_week: data.day_of_week, 
-                // @ts-ignore
                 meal_type: data.meal_type,
                 meal_time: displayTime === 'Not Set' ? '' : displayTime
             };
@@ -108,28 +142,26 @@ const FoodScreen = () => {
         closeItemModal();
         request
             .then(() => fetchMenu())
-            .catch((error: any) => {
+            .catch((error) => {
                 const errorMessage = error.response?.data?.message || "An error occurred while saving.";
                 Alert.alert("Error", errorMessage);
             });
     };
 
-    const handleSaveTime = (newTime: string) => {
+    const handleSaveTime = (newTime) => {
         if (!user) return;
         setIsTimeModalVisible(false);
 
-        // @ts-ignore
         apiClient.put('/food-menu/time', {
             meal_type: 'Lunch',
             meal_time: newTime,
-            // @ts-ignore
             editorId: user.id
         })
         .then(() => {
             Alert.alert("Success", "Lunch time has been updated for the week.");
             fetchMenu();
         })
-        .catch((err: any) => {
+        .catch((err) => {
             const msg = err.response?.data?.message || "Failed to update the lunch time.";
             Alert.alert("Error", msg);
         });
@@ -140,10 +172,12 @@ const FoodScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             
             {/* --- HEADER CARD --- */}
             <View style={styles.headerCard}>
                 <View style={styles.headerLeft}>
+                    {/* Back Button Removed Here */}
                     <View style={styles.headerIconContainer}>
                         <MaterialIcons name="restaurant-menu" size={24} color={theme.primary} />
                     </View>
@@ -158,7 +192,6 @@ const FoodScreen = () => {
                 <ScrollView contentContainerStyle={styles.scrollContainer}>
                     <FoodMenuTable 
                         menuData={menuData} 
-                        // @ts-ignore
                         isAdmin={user?.role === 'admin'} 
                         onCellPress={handleCellPress} 
                         onHeaderPress={() => setIsTimeModalVisible(true)}
@@ -195,8 +228,8 @@ const FoodScreen = () => {
 
 // --- COMPONENTS ---
 
-const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayTime, theme, styles }: any) => {
-    const getMealForCell = (day: string, mealType: string) => menuData[day]?.find((m: any) => m.meal_type === mealType);
+const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayTime, theme, styles }) => {
+    const getMealForCell = (day, mealType) => menuData[day]?.find((m) => m.meal_type === mealType);
 
     return (
         <View style={styles.table}>
@@ -239,7 +272,7 @@ const FoodMenuTable = ({ menuData, isAdmin, onCellPress, onHeaderPress, displayT
     );
 };
 
-const EditMenuModal = ({ modalInfo, onClose, onSave, theme, styles }: any) => {
+const EditMenuModal = ({ modalInfo, onClose, onSave, theme, styles }) => {
     const { mode, data } = modalInfo;
     const [foodItem, setFoodItem] = useState(data?.food_item || '');
 
@@ -276,23 +309,21 @@ const EditMenuModal = ({ modalInfo, onClose, onSave, theme, styles }: any) => {
 };
 
 // --- UPDATED TIME MODAL WITH PICKERS ---
-const EditTimeModal = ({ visible, onClose, onSave, initialTime, theme, styles }: any) => {
-    // Helper to format Date -> "HH:MM AM/PM"
-    const formatTime = (date: Date) => {
+const EditTimeModal = ({ visible, onClose, onSave, initialTime, theme, styles }) => {
+    const formatTime = (date) => {
         let hours = date.getHours();
         const minutes = date.getMinutes();
         const ampm = hours >= 12 ? 'PM' : 'AM';
         hours = hours % 12;
-        hours = hours ? hours : 12; // the hour '0' should be '12'
+        hours = hours ? hours : 12; 
         const strMinutes = minutes < 10 ? '0' + minutes : minutes;
         return `${hours}:${strMinutes} ${ampm}`;
     };
 
-    // Helper to parse "1:00 PM - 1:45 PM" into two Date objects
     const parseInitialTime = () => {
         const now = new Date();
-        const defaultStart = new Date(now); defaultStart.setHours(13, 0, 0); // 1:00 PM
-        const defaultEnd = new Date(now); defaultEnd.setHours(13, 45, 0);   // 1:45 PM
+        const defaultStart = new Date(now); defaultStart.setHours(13, 0, 0); 
+        const defaultEnd = new Date(now); defaultEnd.setHours(13, 45, 0); 
 
         if (!initialTime || initialTime === 'Not Set' || !initialTime.includes('-')) {
             return { start: defaultStart, end: defaultEnd };
@@ -300,11 +331,10 @@ const EditTimeModal = ({ visible, onClose, onSave, initialTime, theme, styles }:
 
         try {
             const parts = initialTime.split('-');
-            const startPart = parts[0].trim(); // e.g., "1:00 PM"
-            const endPart = parts[1].trim();   // e.g., "1:45 PM"
+            const startPart = parts[0].trim(); 
+            const endPart = parts[1].trim(); 
 
-            // Simple parser for "HH:MM AM/PM"
-            const parsePart = (timeStr: string) => {
+            const parsePart = (timeStr) => {
                 const [time, modifier] = timeStr.split(' ');
                 let [hours, minutes] = time.split(':');
                 let h = parseInt(hours, 10);
@@ -329,12 +359,12 @@ const EditTimeModal = ({ visible, onClose, onSave, initialTime, theme, styles }:
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
 
-    const onStartChange = (event: any, selectedDate?: Date) => {
+    const onStartChange = (event, selectedDate) => {
         if (Platform.OS === 'android') setShowStartPicker(false);
         if (selectedDate) setStartTime(selectedDate);
     };
 
-    const onEndChange = (event: any, selectedDate?: Date) => {
+    const onEndChange = (event, selectedDate) => {
         if (Platform.OS === 'android') setShowEndPicker(false);
         if (selectedDate) setEndTime(selectedDate);
     };
@@ -397,16 +427,16 @@ const EditTimeModal = ({ visible, onClose, onSave, initialTime, theme, styles }:
 };
 
 // --- STYLES DEFINITION ---
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme) => StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
-    scrollContainer: { paddingHorizontal: 15, paddingBottom: 20 },
+    scrollContainer: { paddingHorizontal: width * 0.04, paddingBottom: 20 },
     
     // Header
     headerCard: {
         backgroundColor: theme.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '98%', // Responsive width
+        width: '96%',
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 15,
@@ -419,12 +449,11 @@ const getStyles = (theme: any) => StyleSheet.create({
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
-        borderWidth: theme.isDark ? 1 : 0,
-        borderColor: theme.border
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    // Removed backButton style as it is no longer used
     headerIconContainer: {
-        backgroundColor: 'rgba(0, 128, 128, 0.1)', 
+        backgroundColor: theme.iconBg, 
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -446,7 +475,7 @@ const getStyles = (theme: any) => StyleSheet.create({
         elevation: 2 
     },
     tableRow: { flexDirection: 'row', width: '100%', borderTopWidth: 1, borderColor: theme.border },
-    tableHeaderRow: { flexDirection: 'row', backgroundColor: theme.primary, borderTopWidth: 0 },
+    tableHeaderRow: { flexDirection: 'row', backgroundColor: theme.headerRow, borderTopWidth: 0 },
     tableCell: { justifyContent: 'center', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8 },
     tableHeaderCell: { paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)' },
     
@@ -454,11 +483,11 @@ const getStyles = (theme: any) => StyleSheet.create({
     mealHeaderCell: { flex: 1.3 },
     lastCell: { borderRightWidth: 0 },
     
-    headerDayText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' },
-    headerMealTypeText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' },
+    headerDayText: { color: theme.headerText, fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' },
+    headerMealTypeText: { color: theme.headerText, fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' },
     headerMealTimeText: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 11, fontWeight: '600', marginTop: 2 },
     
-    dayCell: { flex: 0.7, alignItems: 'flex-start', paddingLeft: 15, borderRightWidth: 1, borderColor: theme.border, backgroundColor: theme.isDark ? theme.inputBg : '#FAFAFA' },
+    dayCell: { flex: 0.7, alignItems: 'flex-start', paddingLeft: 15, borderRightWidth: 1, borderColor: theme.border, backgroundColor: theme.dayCellBg },
     dayCellText: { fontWeight: 'bold', fontSize: 14, color: theme.primary },
     
     mealCell: { flex: 1.3, borderRightWidth: 1, borderColor: theme.border, minHeight: 65, paddingVertical: 12 },
@@ -468,7 +497,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     // Modal
     modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.modalOverlay },
     modalContent: { 
-        width: width * 0.9, // Responsive 90% width
+        width: width * 0.9, 
         backgroundColor: theme.cardBg, 
         borderRadius: 12, 
         padding: 25, 
@@ -501,7 +530,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     pickerButtonText: { fontSize: 16, color: theme.textMain },
     
     saveButton: { backgroundColor: theme.primary, padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 10 },
-    saveButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+    saveButtonText: { color: theme.white, fontSize: 16, fontWeight: 'bold' },
     
     clearButton: { backgroundColor: theme.lightAccent, padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: theme.border },
     clearButtonText: { color: theme.danger, fontSize: 16, fontWeight: 'bold' },

@@ -1,30 +1,73 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * File: src/screens/dictionary/DictionaryScreen.tsx
+ * Purpose: English-Telugu Dictionary with Search and Admin Management.
+ * Updated: Back Button Removed, Responsive Design, Dark/Light Mode.
+ */
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
     View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator,
-    TouchableOpacity, Keyboard, Modal, Alert, ScrollView, SafeAreaView, StatusBar, Dimensions
+    TouchableOpacity, Keyboard, Modal, Alert, ScrollView, SafeAreaView, 
+    StatusBar, Dimensions, useColorScheme, KeyboardAvoidingView, Platform
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 import * as Animatable from 'react-native-animatable';
 
-// --- CONSTANTS ---
 const { width } = Dimensions.get('window');
+const ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-// --- COLORS ---
-const COLORS = {
-    primary: '#008080',    // Teal
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
-    border: '#CFD8DC',
-    success: '#43A047',
-    blue: '#1E88E5',
-    iconGrey: '#90A4AE'    // Subtle grey for the 3-dots
+    border: '#cbd5e1',
+    inputBg: '#FFFFFF',
+    inputBorder: '#CFD8DC',
+    iconBg: '#E0F2F1',
+    textPlaceholder: '#90A4AE',
+    white: '#ffffff',
+    engBadgeBg: '#E3F2FD',
+    engBadgeText: '#1565C0',
+    telBadgeBg: '#E8F5E9',
+    telBadgeText: '#2E7D32',
+    alphabetBg: '#FFFFFF',
+    letterBg: '#F0F0F0',
+    letterText: '#555',
+    divider: '#EEEEEE',
+    cancelBtnBg: '#E0E0E0',
+    cancelBtnText: '#333333',
+    modalOverlay: 'rgba(0,0,0,0.5)'
 };
 
-const ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212', 
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    inputBorder: '#555555',
+    iconBg: '#333333',
+    textPlaceholder: '#64748b',
+    white: '#ffffff',
+    engBadgeBg: '#153140',
+    engBadgeText: '#64B5F6',
+    telBadgeBg: '#1B3320',
+    telBadgeText: '#81C784',
+    alphabetBg: '#1E1E1E',
+    letterBg: '#2C2C2C',
+    letterText: '#B0B0B0',
+    divider: '#333333',
+    cancelBtnBg: '#333333',
+    cancelBtnText: '#E0E0E0',
+    modalOverlay: 'rgba(0,0,0,0.7)'
+};
 
 interface DictionaryItem {
     id: number;
@@ -35,9 +78,20 @@ interface DictionaryItem {
 }
 
 const DictionaryScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
+    const navigation = useNavigation();
     const { user } = useAuth();
     const userRole = user?.role || 'student';
     const canManage = userRole === 'admin' || userRole === 'teacher';
+
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     // Search & Filter States
     const [searchQuery, setSearchQuery] = useState('');
@@ -195,11 +249,11 @@ const DictionaryScreen = () => {
     // --- RENDER ITEM ---
     const renderItem = ({ item, index }: { item: DictionaryItem, index: number }) => (
         <Animatable.View animation="fadeInUp" duration={500} delay={index * 50}>
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.cardHeader}>
                     <View style={{flexDirection: 'row', alignItems: 'baseline', flex: 1}}>
-                        <Text style={styles.word}>{item.word}</Text>
-                        <Text style={styles.pos}>({item.part_of_speech})</Text>
+                        <Text style={[styles.word, { color: theme.textMain }]}>{item.word}</Text>
+                        <Text style={[styles.pos, { color: theme.textSub }]}>({item.part_of_speech})</Text>
                     </View>
                     
                     {/* THREE DOTS MENU - Only for Admins/Teachers */}
@@ -207,85 +261,94 @@ const DictionaryScreen = () => {
                         <TouchableOpacity 
                             style={styles.menuButton} 
                             onPress={() => handleMenuPress(item)}
-                            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}} // Easier to tap
+                            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
                         >
-                            <MaterialIcons name="more-vert" size={24} color={COLORS.iconGrey} />
+                            <MaterialIcons name="more-vert" size={24} color={theme.textSub} />
                         </TouchableOpacity>
                     )}
                 </View>
 
-                <View style={styles.divider} />
+                <View style={[styles.divider, { backgroundColor: theme.divider }]} />
                 
                 <View style={styles.meaningRow}>
-                    <View style={[styles.langBadge, { backgroundColor: '#E3F2FD' }]}>
-                        <Text style={[styles.langText, { color: '#1565C0' }]}>ENG</Text>
+                    <View style={[styles.langBadge, { backgroundColor: theme.engBadgeBg }]}>
+                        <Text style={[styles.langText, { color: theme.engBadgeText }]}>ENG</Text>
                     </View>
-                    <Text style={styles.definitionText}>{item.definition_en}</Text>
+                    <Text style={[styles.definitionText, { color: theme.textMain }]}>{item.definition_en}</Text>
                 </View>
                 
                 <View style={styles.meaningRow}>
-                    <View style={[styles.langBadge, { backgroundColor: '#E8F5E9' }]}>
-                        <Text style={[styles.langText, { color: '#2E7D32' }]}>TEL</Text>
+                    <View style={[styles.langBadge, { backgroundColor: theme.telBadgeBg }]}>
+                        <Text style={[styles.langText, { color: theme.telBadgeText }]}>TEL</Text>
                     </View>
-                    <Text style={[styles.definitionText, styles.teluguText]}>{item.definition_te}</Text>
+                    <Text style={[styles.definitionText, styles.teluguText, { color: theme.telBadgeText }]}>{item.definition_te}</Text>
                 </View>
             </View>
         </Animatable.View>
     );
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#F2F5F8" />
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.background} />
             
             {/* --- HEADER CARD --- */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <View style={styles.headerIconContainer}>
-                        <MaterialIcons name="menu-book" size={24} color="#008080" />
+                    {/* Back Button Removed */}
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
+                        <MaterialIcons name="menu-book" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Dictionary</Text>
-                        <Text style={styles.headerSubtitle}>English & Telugu Definitions</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Dictionary</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>English & Telugu Definitions</Text>
                     </View>
                 </View>
                 
                 {canManage && (
-                    <TouchableOpacity style={styles.headerBtn} onPress={openAddModal}>
-                        <MaterialIcons name="add" size={18} color="#fff" />
-                        <Text style={styles.headerBtnText}>Add</Text>
+                    <TouchableOpacity style={[styles.headerBtn, { backgroundColor: theme.primary }]} onPress={openAddModal}>
+                        <MaterialIcons name="add" size={18} color={theme.white} />
+                        <Text style={[styles.headerBtnText, { color: theme.white }]}>Add</Text>
                     </TouchableOpacity>
                 )}
             </View>
 
             {/* --- SEARCH BAR --- */}
-            <View style={styles.searchContainer}>
-                <MaterialIcons name="search" size={22} color={COLORS.textSub} style={styles.searchIcon} />
+            <View style={[styles.searchContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+                <MaterialIcons name="search" size={22} color={theme.textSub} style={styles.searchIcon} />
                 <TextInput
-                    style={styles.searchInput}
+                    style={[styles.searchInput, { color: theme.textMain }]}
                     placeholder="Search a word..."
-                    placeholderTextColor={COLORS.textSub}
+                    placeholderTextColor={theme.textPlaceholder}
                     value={searchQuery}
                     onChangeText={handleSearch}
                 />
                 {searchQuery.length > 0 && (
                     <TouchableOpacity onPress={() => { setSearchQuery(''); Keyboard.dismiss(); fetchDefinitions(activeLetter); }}>
-                        <MaterialIcons name="close" size={20} color={COLORS.textSub} />
+                        <MaterialIcons name="close" size={20} color={theme.textSub} />
                     </TouchableOpacity>
                 )}
             </View>
 
             {/* --- ALPHABET SELECTOR --- */}
-            <View style={styles.alphabetContainer}>
+            <View style={[styles.alphabetContainer, { backgroundColor: theme.alphabetBg }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal: 10}}>
                     {ALPHABETS.map((letter) => {
                         const isActive = activeLetter === letter && searchQuery === '';
                         return (
                             <TouchableOpacity 
                                 key={letter} 
-                                style={[styles.letterButton, isActive && styles.letterButtonActive]}
+                                style={[
+                                    styles.letterButton, 
+                                    { backgroundColor: theme.letterBg },
+                                    isActive && { backgroundColor: theme.primary }
+                                ]}
                                 onPress={() => handleLetterPress(letter)}
                             >
-                                <Text style={[styles.letterText, isActive && styles.letterTextActive]}>{letter}</Text>
+                                <Text style={[
+                                    styles.letterText, 
+                                    { color: theme.letterText },
+                                    isActive && { color: theme.white }
+                                ]}>{letter}</Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -296,8 +359,8 @@ const DictionaryScreen = () => {
             <View style={styles.contentContainer}>
                 {loading ? (
                     <View style={styles.centerView}>
-                        <ActivityIndicator size="large" color={COLORS.primary} />
-                        <Text style={styles.loadingText}>Loading Dictionary...</Text>
+                        <ActivityIndicator size="large" color={theme.primary} />
+                        <Text style={[styles.loadingText, { color: theme.textSub }]}>Loading Dictionary...</Text>
                     </View>
                 ) : (
                     <FlatList
@@ -307,8 +370,8 @@ const DictionaryScreen = () => {
                         contentContainerStyle={styles.listContent}
                         ListEmptyComponent={
                             <View style={styles.centerView}>
-                                <MaterialIcons name="auto-stories" size={60} color="#CFD8DC" />
-                                <Text style={styles.emptyText}>
+                                <MaterialIcons name="auto-stories" size={60} color={theme.border} />
+                                <Text style={[styles.emptyText, { color: theme.textSub }]}>
                                     No words found for "{searchQuery || activeLetter}"
                                 </Text>
                             </View>
@@ -319,83 +382,86 @@ const DictionaryScreen = () => {
 
             {/* --- ADD/EDIT WORD MODAL --- */}
             <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>
+                            <Text style={[styles.modalTitle, { color: theme.textMain }]}>
                                 {editingId ? "Edit Word" : "Add New Word"}
                             </Text>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <MaterialIcons name="close" size={24} color="#546E7A" />
+                                <MaterialIcons name="close" size={24} color={theme.textSub} />
                             </TouchableOpacity>
                         </View>
                         
                         <ScrollView contentContainerStyle={{paddingBottom: 20}}>
-                            <Text style={styles.label}>Word</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Word</Text>
                             <TextInput 
-                                style={styles.modalInput} 
+                                style={[styles.modalInput, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="e.g. Village" 
-                                placeholderTextColor="#90A4AE"
+                                placeholderTextColor={theme.textPlaceholder}
                                 value={newWord} 
                                 onChangeText={setNewWord} 
                             />
                             
-                            <Text style={styles.label}>Part of Speech</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Part of Speech</Text>
                             <TextInput 
-                                style={styles.modalInput} 
+                                style={[styles.modalInput, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="e.g. Noun, Verb" 
-                                placeholderTextColor="#90A4AE"
+                                placeholderTextColor={theme.textPlaceholder}
                                 value={newPOS} 
                                 onChangeText={setNewPOS} 
                             />
 
-                            <Text style={styles.label}>English Definition</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>English Definition</Text>
                             <TextInput 
-                                style={[styles.modalInput, styles.textArea]} 
+                                style={[styles.modalInput, styles.textArea, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="Meaning in English" 
-                                placeholderTextColor="#90A4AE"
+                                placeholderTextColor={theme.textPlaceholder}
                                 value={newDefEn} 
                                 onChangeText={setNewDefEn} 
                                 multiline 
                             />
 
-                            <Text style={styles.label}>Telugu Definition</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Telugu Definition</Text>
                             <TextInput 
-                                style={[styles.modalInput, styles.textArea]} 
+                                style={[styles.modalInput, styles.textArea, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="Meaning in Telugu (గ్రామం)" 
-                                placeholderTextColor="#90A4AE"
+                                placeholderTextColor={theme.textPlaceholder}
                                 value={newDefTe} 
                                 onChangeText={setNewDefTe} 
                                 multiline 
                             />
 
                             <TouchableOpacity 
-                                style={[styles.submitButton, submitting && {backgroundColor: '#B0BEC5'}]} 
+                                style={[
+                                    styles.submitButton, 
+                                    { backgroundColor: theme.primary },
+                                    submitting && { backgroundColor: theme.inputBorder }
+                                ]} 
                                 onPress={handleSubmitWord} 
                                 disabled={submitting}
                             >
                                 {submitting ? (
-                                    <ActivityIndicator color="#FFF" />
+                                    <ActivityIndicator color={theme.white} />
                                 ) : (
-                                    <Text style={styles.submitButtonText}>
+                                    <Text style={[styles.submitButtonText, { color: theme.white }]}>
                                         {editingId ? "UPDATE WORD" : "SAVE WORD"}
                                     </Text>
                                 )}
                             </TouchableOpacity>
                         </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        backgroundColor: COLORS.cardBg,
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
@@ -407,14 +473,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    // Back Button style removed
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Teal bg
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -422,11 +487,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
-    headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textMain },
-    headerSubtitle: { fontSize: 13, color: COLORS.textSub },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13, marginTop: 2 },
     headerBtn: {
-        backgroundColor: COLORS.primary,
         paddingVertical: 6,
         paddingHorizontal: 12,
         borderRadius: 20,
@@ -435,26 +499,24 @@ const styles = StyleSheet.create({
         gap: 4,
         marginLeft: 10,
     },
-    headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+    headerBtnText: { fontSize: 12, fontWeight: '600' },
 
     // --- SEARCH BAR ---
     searchContainer: { 
         flexDirection: 'row', 
         alignItems: 'center', 
-        backgroundColor: '#FFFFFF', 
         borderRadius: 10, 
         marginHorizontal: 15, 
         marginBottom: 10, 
         paddingHorizontal: 10, 
         height: 50, 
         borderWidth: 1, 
-        borderColor: COLORS.border 
     },
     searchIcon: { marginRight: 8 },
-    searchInput: { flex: 1, fontSize: 16, color: COLORS.textMain },
+    searchInput: { flex: 1, fontSize: 16 },
 
     // --- ALPHABET BAR ---
-    alphabetContainer: { backgroundColor: '#FFFFFF', paddingVertical: 10, marginBottom: 5, elevation: 1 },
+    alphabetContainer: { paddingVertical: 10, marginBottom: 5, elevation: 1 },
     letterButton: { 
         width: 36, 
         height: 36, 
@@ -462,25 +524,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         marginHorizontal: 4, 
-        backgroundColor: '#F0F0F0' 
     },
-    letterButtonActive: { backgroundColor: COLORS.primary },
-    letterText: { fontSize: 14, fontWeight: '600', color: '#555' },
-    letterTextActive: { color: '#FFF', fontWeight: 'bold' },
+    letterText: { fontSize: 14, fontWeight: '600' },
 
     contentContainer: { flex: 1 },
     listContent: { paddingHorizontal: 15, paddingBottom: 20, paddingTop: 5 },
     
     // Card
     card: { 
-        backgroundColor: COLORS.cardBg, 
         borderRadius: 12, 
         padding: 16, 
         marginBottom: 12, 
         elevation: 2, 
-        shadowColor: '#000', 
         shadowOpacity: 0.05, 
-        shadowRadius: 2 
+        shadowRadius: 2,
+        shadowOffset: { width: 0, height: 1 }
     },
     cardHeader: { 
         flexDirection: 'row', 
@@ -491,50 +549,45 @@ const styles = StyleSheet.create({
     word: { 
         fontSize: 20, 
         fontWeight: 'bold', 
-        color: COLORS.textMain, 
         textTransform: 'capitalize',
         flexShrink: 1 
     },
     pos: { 
         fontSize: 14, 
-        color: COLORS.textSub, 
         marginLeft: 8, 
         fontStyle: 'italic', 
-        top: 4 
+        top: 2
     },
     menuButton: {
         padding: 4,
-        marginRight: -8 // Aligns with the edge nicely
+        marginRight: -8 
     },
-    divider: { height: 1, backgroundColor: '#EEEEEE', marginBottom: 10 },
+    divider: { height: 1, marginBottom: 10 },
     
     meaningRow: { flexDirection: 'row', marginBottom: 8, alignItems: 'flex-start' },
     langBadge: { paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4, marginRight: 10, marginTop: 2 },
     langText: { fontSize: 10, fontWeight: 'bold' },
-    definitionText: { fontSize: 15, color: COLORS.textMain, flex: 1, lineHeight: 22 },
-    teluguText: { fontSize: 16, color: '#2E7D32' },
+    definitionText: { fontSize: 15, flex: 1, lineHeight: 22 },
+    teluguText: { fontSize: 16 },
 
     centerView: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-    emptyText: { marginTop: 10, color: '#90A4AE', fontSize: 16 },
-    loadingText: { marginTop: 10, color: '#546E7A' },
+    emptyText: { marginTop: 10, fontSize: 16 },
+    loadingText: { marginTop: 10 },
 
     // Modal
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-    modalContent: { backgroundColor: '#FFF', borderRadius: 15, padding: 20, maxHeight: '90%' },
+    modalOverlay: { flex: 1, justifyContent: 'center', padding: 20 },
+    modalContent: { borderRadius: 15, padding: 20, maxHeight: '90%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary },
-    label: { fontSize: 14, fontWeight: '600', color: '#546E7A', marginBottom: 5, marginTop: 10 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold' },
+    label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     modalInput: { 
-        backgroundColor: '#F5F7FA', 
         borderWidth: 1, 
-        borderColor: '#CFD8DC', 
         borderRadius: 8, 
         padding: 10, 
-        color: '#333' 
     },
     textArea: { height: 80, textAlignVertical: 'top' },
-    submitButton: { backgroundColor: COLORS.primary, padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 25 },
-    submitButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+    submitButton: { padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 25 },
+    submitButtonText: { fontWeight: 'bold', fontSize: 16 }
 });
 
 export default DictionaryScreen;

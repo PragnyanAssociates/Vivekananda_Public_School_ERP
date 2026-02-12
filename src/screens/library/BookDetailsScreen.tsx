@@ -1,19 +1,80 @@
-import React, { useState } from 'react';
+/**
+ * File: src/screens/library/BookDetailsScreen.js
+ * Purpose: Display detailed information about a book, with admin controls and borrow requests.
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ */
+import React, { useState, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, Image, ScrollView, 
-    TouchableOpacity, Alert, ActivityIndicator 
+    TouchableOpacity, Alert, ActivityIndicator, SafeAreaView, 
+    useColorScheme, StatusBar, Dimensions 
 } from 'react-native';
-import apiClient from '../../api/client'; // Adjust path based on your folder structure
-import { SERVER_URL } from '../../../apiConfig'; // Adjust path based on your folder structure
+import apiClient from '../../api/client';
+import { SERVER_URL } from '../../../apiConfig';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useAuth } from '../../context/AuthContext'; // Adjust path based on your folder structure
+import { useAuth } from '../../context/AuthContext';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#1E293B',
+    textSub: '#64748B',
+    border: '#E2E8F0',
+    iconBg: '#E0F2F1',
+    imageWrapperBg: '#F1F5F9',
+    itemBg: '#F8FAFC',
+    successBg: '#DCFCE7',
+    successText: '#166534',
+    dangerBg: '#FEE2E2',
+    dangerText: '#991B1B',
+    editBtn: '#3B82F6',
+    deleteBtn: '#EF4444',
+    white: '#FFFFFF',
+    disabledBtn: '#94A3B8'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#94A3B8',
+    border: '#333333',
+    iconBg: '#333333',
+    imageWrapperBg: '#1A1A1A',
+    itemBg: '#252525',
+    successBg: '#14532D',
+    successText: '#4ADE80',
+    dangerBg: '#7F1D1D',
+    dangerText: '#F87171',
+    editBtn: '#3B82F6',
+    deleteBtn: '#EF4444',
+    white: '#FFFFFF',
+    disabledBtn: '#475569'
+};
 
 const BookDetailsScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     const route = useRoute();
-    const { book } = route.params; // Get book data passed from BookListScreen
+    const { book } = route.params; 
     
     const [loading, setLoading] = useState(false);
+    
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
     
     // 1. Get User Role to show Admin buttons
     const { user } = useAuth();
@@ -51,12 +112,8 @@ const BookDetailsScreen = () => {
     };
 
     // 4. LOGIC FOR BORROW REQUEST
-    // If available -> Go to Form Screen
-    // If not -> Show Alert or Button is disabled
     const handleBorrowPress = () => {
         if (book.available_copies > 0) {
-            // Navigate to the form screen (BorrowRequestScreen)
-            // We pass the book ID and Title so the form knows which book is being requested
             navigation.navigate('BorrowRequestScreen', { 
                 bookId: book.id, 
                 bookTitle: book.title 
@@ -74,145 +131,198 @@ const BookDetailsScreen = () => {
     const isAvailable = book.available_copies > 0;
 
     return (
-        <ScrollView style={styles.container} bounces={false} showsVerticalScrollIndicator={false}>
-            {/* --- Cover Image --- */}
-            <View style={styles.imageWrapper}>
-                <Image source={{ uri: imageUrl }} style={styles.cover} resizeMode="contain" />
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+
+            {/* --- HEADER CARD --- */}
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
+                    </TouchableOpacity>
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
+                        <MaterialCommunityIcons name="book-open-page-variant" size={24} color={theme.primary} />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Book Details</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Library Info</Text>
+                    </View>
+                </View>
             </View>
 
-            <View style={styles.contentContainer}>
-                
-                {/* --- Admin Action Buttons (Edit/Delete) --- */}
-                {isAdmin && (
-                    <View style={styles.adminRow}>
-                        <TouchableOpacity style={[styles.adminBtn, styles.editBtn]} onPress={handleEdit}>
-                            <Text style={styles.adminBtnText}>Edit Book</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.adminBtn, styles.deleteBtn]} onPress={handleDelete}>
-                            <Text style={styles.adminBtnText}>Delete Book</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+            <ScrollView style={styles.container} bounces={false} showsVerticalScrollIndicator={false}>
+                {/* --- Cover Image --- */}
+                <View style={[styles.imageWrapper, { backgroundColor: theme.imageWrapperBg, borderColor: theme.border }]}>
+                    <Image source={{ uri: imageUrl }} style={styles.cover} resizeMode="contain" />
+                </View>
 
-                {/* --- Header Section (Title, Author, Status) --- */}
-                <View style={styles.headerSection}>
-                    <Text style={styles.title}>{book.title}</Text>
-                    <Text style={styles.author}>by {book.author}</Text>
+                <View style={styles.contentContainer}>
                     
-                    <View style={styles.statusRow}>
-                        <View style={[styles.pill, isAvailable ? styles.bgGreen : styles.bgRed]}>
-                            <Text style={styles.pillText}>{isAvailable ? 'Available' : 'Out of Stock'}</Text>
+                    {/* --- Admin Action Buttons (Edit/Delete) --- */}
+                    {isAdmin && (
+                        <View style={styles.adminRow}>
+                            <TouchableOpacity style={[styles.adminBtn, { backgroundColor: theme.editBtn }]} onPress={handleEdit}>
+                                <Text style={styles.adminBtnText}>Edit Book</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.adminBtn, { backgroundColor: theme.deleteBtn }]} onPress={handleDelete}>
+                                <Text style={styles.adminBtnText}>Delete Book</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.stockText}>
-                            {book.available_copies} of {book.total_copies} copies left
-                        </Text>
-                    </View>
-                </View>
-
-                {/* --- Details Grid --- */}
-                <Text style={styles.sectionHeader}>Book Details</Text>
-                <View style={styles.grid}>
-                    <DetailItem label="Book No." value={book.book_no} />
-                    <DetailItem label="Rack No." value={book.rack_no} />
-                    <DetailItem label="Category" value={book.category} />
-                    <DetailItem label="Publisher" value={book.publisher} />
-                    <DetailItem label="Language" value={book.language || 'English'} />
-                    <DetailItem label="Edition" value={book.edition || 'Standard'} />
-                </View>
-
-                {/* --- Main Action Button (Borrow) --- */}
-                {/* 
-                    Logic: 
-                    - If loading: Show Spinner
-                    - If Copies > 0: Show "Request to Borrow" (Clicking opens form)
-                    - If Copies = 0: Show "No copies left, please wait" (Disabled)
-                */}
-                <TouchableOpacity 
-                    style={[styles.btn, (!isAvailable || loading) && styles.disabledBtn]} 
-                    onPress={handleBorrowPress}
-                    disabled={!isAvailable || loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#FFF" />
-                    ) : (
-                        <Text style={styles.btnText}>
-                            {isAvailable ? "Request to Borrow" : "No copies left, please wait"}
-                        </Text>
                     )}
-                </TouchableOpacity>
 
-            </View>
-        </ScrollView>
+                    {/* --- Header Section (Title, Author, Status) --- */}
+                    <View style={[styles.headerSection, { borderColor: theme.imageWrapperBg }]}>
+                        <Text style={[styles.title, { color: theme.textMain }]}>{book.title}</Text>
+                        <Text style={[styles.author, { color: theme.textSub }]}>by {book.author}</Text>
+                        
+                        <View style={styles.statusRow}>
+                            <View style={[
+                                styles.pill, 
+                                { backgroundColor: isAvailable ? theme.successBg : theme.dangerBg }
+                            ]}>
+                                <Text style={[
+                                    styles.pillText, 
+                                    { color: isAvailable ? theme.successText : theme.dangerText }
+                                ]}>
+                                    {isAvailable ? 'Available' : 'Out of Stock'}
+                                </Text>
+                            </View>
+                            <Text style={[styles.stockText, { color: theme.textSub }]}>
+                                {book.available_copies} of {book.total_copies} copies left
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* --- Details Grid --- */}
+                    <Text style={[styles.sectionHeader, { color: theme.textMain }]}>Book Info</Text>
+                    <View style={styles.grid}>
+                        <DetailItem label="Book No." value={book.book_no} theme={theme} />
+                        <DetailItem label="Rack No." value={book.rack_no} theme={theme} />
+                        <DetailItem label="Category" value={book.category} theme={theme} />
+                        <DetailItem label="Publisher" value={book.publisher} theme={theme} />
+                        <DetailItem label="Language" value={book.language || 'English'} theme={theme} />
+                        <DetailItem label="Edition" value={book.edition || 'Standard'} theme={theme} />
+                    </View>
+
+                    {/* --- Main Action Button (Borrow) --- */}
+                    <TouchableOpacity 
+                        style={[
+                            styles.btn, 
+                            { backgroundColor: theme.primary },
+                            (!isAvailable || loading) && { backgroundColor: theme.disabledBtn, elevation: 0 }
+                        ]} 
+                        onPress={handleBorrowPress}
+                        disabled={!isAvailable || loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={theme.white} />
+                        ) : (
+                            <Text style={[styles.btnText, { color: theme.white }]}>
+                                {isAvailable ? "Request to Borrow" : "No copies left, please wait"}
+                            </Text>
+                        )}
+                    </TouchableOpacity>
+
+                </View>
+            </ScrollView>
+        </SafeAreaView>
     );
 };
 
 // Helper Component for Grid Items
-const DetailItem = ({ label, value }) => (
-    <View style={styles.item}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value} numberOfLines={1}>{value || '-'}</Text>
+const DetailItem = ({ label, value, theme }) => (
+    <View style={[styles.item, { backgroundColor: theme.itemBg }]}>
+        <Text style={[styles.label, { color: theme.textSub }]}>{label}</Text>
+        <Text style={[styles.value, { color: theme.textMain }]} numberOfLines={1}>{value || '-'}</Text>
     </View>
 );
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFF' },
+    safeArea: { flex: 1 },
+    container: { flex: 1 },
+    
+    // --- HEADER CARD STYLES ---
+    headerCard: {
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 0, // 0 to stick seamlessly with the scrollview
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        elevation: 3,
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+        zIndex: 10
+    },
+    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    backButton: { marginRight: 10, padding: 4 },
+    headerIconContainer: {
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13, marginTop: 2 },
+
     imageWrapper: { 
-        backgroundColor: '#F1F5F9', 
         paddingVertical: 30, 
         alignItems: 'center', 
         borderBottomWidth: 1, 
-        borderColor: '#E2E8F0' 
+        marginTop: 10
     },
     cover: { 
-        width: 160, 
-        height: 240, 
+        width: width * 0.45, // Responsive width
+        height: width * 0.65, // Responsive height based on aspect ratio
         borderRadius: 8, 
         elevation: 10, 
         shadowColor: '#000', 
         shadowOpacity: 0.3, 
         shadowRadius: 10 
     },
-    contentContainer: { padding: 24 },
+    contentContainer: { padding: width * 0.06 }, // Responsive padding
     
     // Admin Styles
     adminRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 20 },
     adminBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, marginLeft: 10 },
-    editBtn: { backgroundColor: '#3B82F6' },
-    deleteBtn: { backgroundColor: '#EF4444' },
     adminBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
 
-    // Header Styles
-    headerSection: { marginBottom: 24, borderBottomWidth: 1, borderColor: '#F1F5F9', paddingBottom: 20 },
-    title: { fontSize: 24, fontWeight: '800', color: '#1E293B', marginBottom: 6 },
-    author: { fontSize: 16, color: '#64748B', fontWeight: '500' },
+    // Details Header Styles
+    headerSection: { marginBottom: 24, borderBottomWidth: 1, paddingBottom: 20 },
+    title: { fontSize: 24, fontWeight: '800', marginBottom: 6 },
+    author: { fontSize: 16, fontWeight: '500' },
     statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
     pill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginRight: 10 },
-    bgGreen: { backgroundColor: '#DCFCE7' }, 
-    bgRed: { backgroundColor: '#FEE2E2' },
-    pillText: { fontSize: 12, fontWeight: 'bold', color: '#1E293B' },
-    stockText: { fontSize: 14, color: '#64748B' },
+    pillText: { fontSize: 12, fontWeight: 'bold' },
+    stockText: { fontSize: 14 },
     
     // Details Grid Styles
-    sectionHeader: { fontSize: 18, fontWeight: '700', color: '#334155', marginBottom: 15 },
+    sectionHeader: { fontSize: 18, fontWeight: '700', marginBottom: 15 },
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    item: { width: '48%', backgroundColor: '#F8FAFC', padding: 15, borderRadius: 12, marginBottom: 12 },
-    label: { fontSize: 11, color: '#94A3B8', marginBottom: 4, textTransform: 'uppercase', fontWeight:'700' },
-    value: { fontSize: 14, fontWeight: '600', color: '#334155' },
+    item: { width: '48%', padding: 15, borderRadius: 12, marginBottom: 12 },
+    label: { fontSize: 11, marginBottom: 4, textTransform: 'uppercase', fontWeight:'700' },
+    value: { fontSize: 14, fontWeight: '600' },
     
     // Main Button Styles
     btn: { 
-        backgroundColor: '#2563EB', 
         paddingVertical: 18, 
         borderRadius: 14, 
         alignItems: 'center', 
         marginTop: 30, 
+        marginBottom: 20,
         elevation: 4,
-        shadowColor: '#2563EB',
         shadowOpacity: 0.3,
         shadowOffset: {width:0, height:4}
     },
-    disabledBtn: { backgroundColor: '#94A3B8', elevation: 0, shadowOpacity: 0 },
-    btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16, letterSpacing: 0.5 }
+    btnText: { fontWeight: 'bold', fontSize: 16, letterSpacing: 0.5 }
 });
 
 export default BookDetailsScreen;

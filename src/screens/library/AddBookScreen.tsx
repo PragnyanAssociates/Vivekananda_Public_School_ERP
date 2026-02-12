@@ -1,17 +1,67 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * File: src/screens/library/AddBookScreen.js
+ * Purpose: Screen to Add or Edit a Book in the Library.
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ */
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
-    Alert, Image, ActivityIndicator, Platform, KeyboardAvoidingView
+    Alert, Image, ActivityIndicator, Platform, KeyboardAvoidingView, 
+    SafeAreaView, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#cbd5e1',
+    inputBg: '#F8FAFC',
+    inputBorder: '#E2E8F0',
+    iconBg: '#E0F2F1',
+    textPlaceholder: '#94A3B8',
+    imagePickerBg: '#E2E8F0',
+    white: '#ffffff'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    inputBorder: '#555555',
+    iconBg: '#333333',
+    textPlaceholder: '#64748b',
+    imagePickerBg: '#252525',
+    white: '#ffffff'
+};
 
 const AddBookScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     const route = useRoute();
     
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
+
     // Check if we are in Edit Mode
     const isEditMode = route.params?.book ? true : false;
     const bookToEdit = route.params?.book || {};
@@ -112,56 +162,145 @@ const AddBookScreen = () => {
     const previewSource = getPreviewSource();
 
     return (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-                
-                <Text style={styles.header}>{isEditMode ? 'Edit Book' : 'Add New Book'}</Text>
-
-                <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-                    {previewSource ? (
-                        <Image source={previewSource} style={styles.previewImage} />
-                    ) : (
-                        <View style={styles.placeholder}>
-                            <Text style={styles.plusIcon}>+</Text>
-                            <Text style={styles.placeholderText}>Upload Cover</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-
-                <View style={styles.card}>
-                    <InputLabel label="Book Title *" placeholder="e.g. Clean Code" value={formData.title} onChangeText={t => handleInputChange('title', t)} />
-                    <InputLabel label="Author *" placeholder="e.g. Robert C. Martin" value={formData.author} onChangeText={t => handleInputChange('author', t)} />
-                    
-                    <View style={styles.row}>
-                        <InputLabel containerStyle={{flex:1, marginRight:10}} label="Book No. *" placeholder="e.g. BK-101" value={formData.book_no} onChangeText={t => handleInputChange('book_no', t)} />
-                        <InputLabel containerStyle={{flex:1}} label="Category" placeholder="e.g. Tech" value={formData.category} onChangeText={t => handleInputChange('category', t)} />
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+            
+            {/* Header Card */}
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
+                    </TouchableOpacity>
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
+                        <MaterialIcons name="library-books" size={24} color={theme.primary} />
                     </View>
-
-                    <View style={styles.row}>
-                        <InputLabel containerStyle={{flex:1, marginRight:10}} label="Total Copies *" placeholder="10" keyboardType="numeric" value={formData.total_copies} onChangeText={t => handleInputChange('total_copies', t)} />
-                        <InputLabel containerStyle={{flex:1}} label="Rack No" placeholder="A-1" value={formData.rack_no} onChangeText={t => handleInputChange('rack_no', t)} />
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>
+                            {isEditMode ? 'Edit Book' : 'Add New Book'}
+                        </Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Library Management</Text>
                     </View>
-
-                    <InputLabel label="Publisher" placeholder="Optional" value={formData.publisher} onChangeText={t => handleInputChange('publisher', t)} />
                 </View>
+            </View>
 
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>{isEditMode ? 'Update Book' : 'Save Book'}</Text>}
-                </TouchableOpacity>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                style={styles.container}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+                    
+                    {/* Image Picker */}
+                    <TouchableOpacity 
+                        style={[styles.imagePicker, { backgroundColor: theme.imagePickerBg, borderColor: theme.border }]} 
+                        onPress={pickImage}
+                    >
+                        {previewSource ? (
+                            <Image source={previewSource} style={styles.previewImage} />
+                        ) : (
+                            <View style={styles.placeholder}>
+                                <Text style={[styles.plusIcon, { color: theme.textSub }]}>+</Text>
+                                <Text style={[styles.placeholderText, { color: theme.textSub }]}>Upload Cover</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
 
-            </ScrollView>
-        </KeyboardAvoidingView>
+                    {/* Form Card */}
+                    <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                        <InputLabel 
+                            label="Book Title *" 
+                            placeholder="e.g. Clean Code" 
+                            value={formData.title} 
+                            onChangeText={t => handleInputChange('title', t)} 
+                            theme={theme}
+                        />
+                        <InputLabel 
+                            label="Author *" 
+                            placeholder="e.g. Robert C. Martin" 
+                            value={formData.author} 
+                            onChangeText={t => handleInputChange('author', t)} 
+                            theme={theme}
+                        />
+                        
+                        <View style={styles.row}>
+                            <InputLabel 
+                                containerStyle={{flex:1, marginRight:10}} 
+                                label="Book No. *" 
+                                placeholder="e.g. BK-101" 
+                                value={formData.book_no} 
+                                onChangeText={t => handleInputChange('book_no', t)} 
+                                theme={theme}
+                            />
+                            <InputLabel 
+                                containerStyle={{flex:1}} 
+                                label="Category" 
+                                placeholder="e.g. Tech" 
+                                value={formData.category} 
+                                onChangeText={t => handleInputChange('category', t)} 
+                                theme={theme}
+                            />
+                        </View>
+
+                        <View style={styles.row}>
+                            <InputLabel 
+                                containerStyle={{flex:1, marginRight:10}} 
+                                label="Total Copies *" 
+                                placeholder="10" 
+                                keyboardType="numeric" 
+                                value={formData.total_copies} 
+                                onChangeText={t => handleInputChange('total_copies', t)} 
+                                theme={theme}
+                            />
+                            <InputLabel 
+                                containerStyle={{flex:1}} 
+                                label="Rack No" 
+                                placeholder="A-1" 
+                                value={formData.rack_no} 
+                                onChangeText={t => handleInputChange('rack_no', t)} 
+                                theme={theme}
+                            />
+                        </View>
+
+                        <InputLabel 
+                            label="Publisher" 
+                            placeholder="Optional" 
+                            value={formData.publisher} 
+                            onChangeText={t => handleInputChange('publisher', t)} 
+                            theme={theme}
+                        />
+                    </View>
+
+                    {/* Submit Button */}
+                    <TouchableOpacity 
+                        style={[styles.submitButton, { backgroundColor: theme.primary }]} 
+                        onPress={handleSubmit} 
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color={theme.white} />
+                        ) : (
+                            <Text style={[styles.submitButtonText, { color: theme.white }]}>
+                                {isEditMode ? 'Update Book' : 'Save Book'}
+                            </Text>
+                        )}
+                    </TouchableOpacity>
+
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 };
 
-// Helper Component
-const InputLabel = ({ label, placeholder, value, onChangeText, keyboardType, containerStyle }) => (
+// Helper Component (Injects theme automatically)
+const InputLabel = ({ label, placeholder, value, onChangeText, keyboardType, containerStyle, theme }) => (
     <View style={[styles.inputGroup, containerStyle]}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={[styles.label, { color: theme.textSub }]}>{label}</Text>
         <TextInput 
-            style={styles.input} 
+            style={[
+                styles.input, 
+                { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }
+            ]} 
             placeholder={placeholder} 
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={theme.textPlaceholder}
             value={value} 
             onChangeText={onChangeText}
             keyboardType={keyboardType}
@@ -170,21 +309,84 @@ const InputLabel = ({ label, placeholder, value, onChangeText, keyboardType, con
 );
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F1F5F9' },
-    scrollContainer: { padding: 20 },
-    header: { fontSize: 22, fontWeight: 'bold', color: '#1E293B', marginBottom: 20, textAlign: 'center' },
-    imagePicker: { width: 120, height: 160, backgroundColor: '#E2E8F0', alignSelf: 'center', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#CBD5E1', borderStyle: 'dashed' },
-    previewImage: { width: '100%', height: '100%' },
+    safeArea: { flex: 1 },
+    container: { flex: 1 },
+    
+    // --- HEADER STYLES ---
+    headerCard: {
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    backButton: { marginRight: 10, padding: 4 },
+    headerIconContainer: {
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13, marginTop: 2 },
+
+    scrollContainer: { paddingHorizontal: width * 0.04, paddingBottom: 30 },
+    
+    imagePicker: { 
+        width: 120, 
+        height: 160, 
+        alignSelf: 'center', 
+        borderRadius: 12, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        marginBottom: 20, 
+        overflow: 'hidden', 
+        borderWidth: 1, 
+        borderStyle: 'dashed' 
+    },
+    previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
     placeholder: { alignItems: 'center' },
-    plusIcon: { fontSize: 30, color: '#64748B' },
-    placeholderText: { fontSize: 12, color: '#64748B', marginTop: 4 },
-    card: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+    plusIcon: { fontSize: 30 },
+    placeholderText: { fontSize: 12, marginTop: 4 },
+    
+    card: { 
+        borderRadius: 16, 
+        padding: 20, 
+        elevation: 2, 
+        shadowOpacity: 0.05, 
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 }
+    },
     inputGroup: { marginBottom: 16 },
     row: { flexDirection: 'row' },
-    label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
-    input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: 12, fontSize: 15, color: '#1E293B' },
-    submitButton: { backgroundColor: '#2563EB', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 24, elevation: 3 },
-    submitButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+    label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+    input: { 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        padding: 12, 
+        fontSize: 15 
+    },
+    
+    submitButton: { 
+        paddingVertical: 16, 
+        borderRadius: 12, 
+        alignItems: 'center', 
+        marginTop: 20, 
+        elevation: 3 
+    },
+    submitButtonText: { fontSize: 16, fontWeight: 'bold' },
 });
 
 export default AddBookScreen;

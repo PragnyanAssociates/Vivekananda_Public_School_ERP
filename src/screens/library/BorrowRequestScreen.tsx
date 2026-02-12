@@ -1,16 +1,69 @@
-import React, { useState } from 'react';
+/**
+ * File: src/screens/library/BorrowRequestScreen.js
+ * Purpose: Form to request borrowing a library book.
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ */
+import React, { useState, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, TextInput, TouchableOpacity, 
-    ScrollView, Alert, ActivityIndicator, Platform 
+    ScrollView, Alert, ActivityIndicator, Platform,
+    SafeAreaView, useColorScheme, StatusBar, KeyboardAvoidingView, Dimensions 
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-const BorrowRequestScreen = ({ route, navigation }) => {
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#cbd5e1',
+    inputBg: '#F8FAFC',
+    inputBorder: '#E2E8F0',
+    iconBg: '#E0F2F1',
+    textPlaceholder: '#94A3B8',
+    white: '#ffffff',
+    disabledBtn: '#94A3B8'
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    inputBorder: '#555555',
+    iconBg: '#333333',
+    textPlaceholder: '#64748b',
+    white: '#ffffff',
+    disabledBtn: '#475569'
+};
+
+const BorrowRequestScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
+    const route = useRoute();
+    const navigation = useNavigation();
     const { bookId, bookTitle } = route.params;
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+
+    // Hide default header to use our custom one
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     const [form, setForm] = useState({
         full_name: user?.full_name || '',
@@ -59,11 +112,9 @@ const BorrowRequestScreen = ({ route, navigation }) => {
                 return_date: formatDateBackend(returnDate),
             };
 
-            console.log("Sending Payload:", payload); // Debug in React Native Console
-
             await apiClient.post('/library/request', payload);
             
-            Alert.alert("Success", "Request submitted! Check Admin Panel.", [
+            Alert.alert("Success", "Request submitted! Check Action Center/History.", [
                 { text: "OK", onPress: () => navigation.goBack() }
             ]);
         } catch (error) {
@@ -75,62 +126,185 @@ const BorrowRequestScreen = ({ route, navigation }) => {
     };
 
     return (
-        <ScrollView style={styles.container}>
-            <Text style={styles.header}>Request: {bookTitle}</Text>
-            <View style={styles.card}>
-                <InputField label="Full Name" value={form.full_name} onChangeText={t=>setForm({...form, full_name:t})} />
-                <InputField label="Roll No / ID *" value={form.roll_no} onChangeText={t=>setForm({...form, roll_no:t})} placeholder="12345" />
-                <InputField label="Class" value={form.class_name} onChangeText={t=>setForm({...form, class_name:t})} placeholder="10-A" />
-                <InputField label="Mobile *" keyboardType="phone-pad" value={form.mobile} onChangeText={t=>setForm({...form, mobile:t})} placeholder="9876543210" />
-                <InputField label="Email" value={form.email} onChangeText={t=>setForm({...form, email:t})} />
-
-                <Text style={styles.label}>Borrow Date</Text>
-                <TouchableOpacity style={styles.dateBtn} onPress={() => setShowBorrowPicker(true)}>
-                    <Text style={styles.dateTxt}>{formatDateDisplay(borrowDate)}</Text>
-                    <Text>📅</Text>
-                </TouchableOpacity>
-                {showBorrowPicker && (
-                    <DateTimePicker value={borrowDate} mode="date" display="default"
-                        onChange={(e, d) => { setShowBorrowPicker(Platform.OS === 'ios'); if(d) setBorrowDate(d); }}
-                    />
-                )}
-
-                <Text style={styles.label}>Return Date</Text>
-                <TouchableOpacity style={styles.dateBtn} onPress={() => setShowReturnPicker(true)}>
-                    <Text style={styles.dateTxt}>{formatDateDisplay(returnDate)}</Text>
-                    <Text>📅</Text>
-                </TouchableOpacity>
-                {showReturnPicker && (
-                    <DateTimePicker value={returnDate} mode="date" display="default" minimumDate={borrowDate}
-                        onChange={(e, d) => { setShowReturnPicker(Platform.OS === 'ios'); if(d) setReturnDate(d); }}
-                    />
-                )}
-
-                <TouchableOpacity style={styles.submitBtn} onPress={handleRequest} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.submitTxt}>Submit Request</Text>}
-                </TouchableOpacity>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+            
+            {/* --- HEADER CARD --- */}
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
+                    </TouchableOpacity>
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
+                        <MaterialIcons name="library-add-check" size={24} color={theme.primary} />
+                    </View>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]} numberOfLines={1}>Borrow Request</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]} numberOfLines={1}>{bookTitle}</Text>
+                    </View>
+                </View>
             </View>
-        </ScrollView>
+
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                style={styles.container}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                        
+                        <InputField label="Full Name" value={form.full_name} onChangeText={t=>setForm({...form, full_name:t})} theme={theme} />
+                        <InputField label="Roll No / ID *" value={form.roll_no} onChangeText={t=>setForm({...form, roll_no:t})} placeholder="12345" theme={theme} />
+                        <InputField label="Class" value={form.class_name} onChangeText={t=>setForm({...form, class_name:t})} placeholder="10-A" theme={theme} />
+                        <InputField label="Mobile *" keyboardType="phone-pad" value={form.mobile} onChangeText={t=>setForm({...form, mobile:t})} placeholder="9876543210" theme={theme} />
+                        <InputField label="Email" value={form.email} onChangeText={t=>setForm({...form, email:t})} theme={theme} />
+
+                        {/* Borrow Date Picker */}
+                        <Text style={[styles.label, { color: theme.textSub }]}>Borrow Date</Text>
+                        <TouchableOpacity 
+                            style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} 
+                            onPress={() => setShowBorrowPicker(true)}
+                        >
+                            <Text style={[styles.dateTxt, { color: theme.textMain }]}>{formatDateDisplay(borrowDate)}</Text>
+                            <MaterialIcons name="calendar-today" size={20} color={theme.textSub} />
+                        </TouchableOpacity>
+                        {showBorrowPicker && (
+                            <DateTimePicker 
+                                value={borrowDate} 
+                                mode="date" 
+                                display="default"
+                                onChange={(e, d) => { setShowBorrowPicker(Platform.OS === 'ios'); if(d) setBorrowDate(d); }}
+                            />
+                        )}
+
+                        {/* Return Date Picker */}
+                        <Text style={[styles.label, { color: theme.textSub, marginTop: 10 }]}>Return Date</Text>
+                        <TouchableOpacity 
+                            style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} 
+                            onPress={() => setShowReturnPicker(true)}
+                        >
+                            <Text style={[styles.dateTxt, { color: theme.textMain }]}>{formatDateDisplay(returnDate)}</Text>
+                            <MaterialIcons name="calendar-today" size={20} color={theme.textSub} />
+                        </TouchableOpacity>
+                        {showReturnPicker && (
+                            <DateTimePicker 
+                                value={returnDate} 
+                                mode="date" 
+                                display="default" 
+                                minimumDate={borrowDate}
+                                onChange={(e, d) => { setShowReturnPicker(Platform.OS === 'ios'); if(d) setReturnDate(d); }}
+                            />
+                        )}
+
+                        {/* Submit Button */}
+                        <TouchableOpacity 
+                            style={[
+                                styles.submitBtn, 
+                                { backgroundColor: theme.primary },
+                                loading && { backgroundColor: theme.disabledBtn }
+                            ]} 
+                            onPress={handleRequest} 
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color={theme.white}/>
+                            ) : (
+                                <Text style={[styles.submitTxt, { color: theme.white }]}>Submit Request</Text>
+                            )}
+                        </TouchableOpacity>
+
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 };
 
-const InputField = ({label, ...props}) => (
-    <View style={{marginBottom:12}}>
-        <Text style={styles.label}>{label}</Text>
-        <TextInput style={styles.input} placeholderTextColor="#999" {...props} />
+// Helper Input Field Component
+const InputField = ({ label, theme, ...props }) => (
+    <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.textSub }]}>{label}</Text>
+        <TextInput 
+            style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
+            placeholderTextColor={theme.textPlaceholder} 
+            {...props} 
+        />
     </View>
 );
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8FAFC', padding: 20 },
-    header: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, color: '#334155' },
-    card: { backgroundColor: '#FFF', padding: 20, borderRadius: 12, elevation: 3 },
-    label: { fontSize: 12, color: '#64748B', marginBottom: 4, fontWeight:'600' },
-    input: { borderWidth: 1, borderColor: '#E2E8F0', padding: 12, borderRadius: 8, color: '#1E293B', fontSize: 14 },
-    dateBtn: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, marginBottom: 12 },
-    dateTxt: { fontSize: 14, color: '#1E293B' },
-    submitBtn: { backgroundColor: '#2563EB', padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-    submitTxt: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+    safeArea: { flex: 1 },
+    container: { flex: 1 },
+    
+    // --- HEADER CARD STYLES ---
+    headerCard: {
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        width: '96%',
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 3,
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    backButton: { marginRight: 10, padding: 4 },
+    headerIconContainer: {
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: { justifyContent: 'center', flex: 1, paddingRight: 10 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    headerSubtitle: { fontSize: 13, marginTop: 2 },
+
+    scrollContent: { paddingHorizontal: width * 0.04, paddingBottom: 30 },
+    
+    card: { 
+        padding: 20, 
+        borderRadius: 12, 
+        elevation: 3,
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 },
+        marginTop: 10
+    },
+    
+    inputGroup: { marginBottom: 16 },
+    label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
+    input: { 
+        borderWidth: 1, 
+        padding: 12, 
+        borderRadius: 8, 
+        fontSize: 15 
+    },
+    
+    dateBtn: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        padding: 12, 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        marginBottom: 12 
+    },
+    dateTxt: { fontSize: 15 },
+    
+    submitBtn: { 
+        padding: 16, 
+        borderRadius: 12, 
+        alignItems: 'center', 
+        marginTop: 20,
+        elevation: 3
+    },
+    submitTxt: { fontWeight: 'bold', fontSize: 16 }
 });
 
 export default BorrowRequestScreen;

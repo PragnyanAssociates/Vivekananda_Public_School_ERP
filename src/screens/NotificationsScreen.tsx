@@ -10,18 +10,44 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Dimensions,
+  useColorScheme,
+  StatusBar
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../api/client';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext'; 
 
-// --- Style Constants and Icons ---
-const PRIMARY_COLOR = '#008080';
-const TERTIARY_COLOR = '#f8f8ff';
-const TEXT_COLOR_DARK = '#333333';
-const TEXT_COLOR_MEDIUM = '#666666';
-const TEXT_COLOR_LIGHT = '#999999';
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const Colors = {
+  light: {
+    primary: '#008080',
+    background: '#f8f8ff',
+    card: '#ffffff',
+    textMain: '#333333',
+    textSub: '#666666',
+    textLight: '#999999',
+    border: '#cccccc',
+    filterBg: '#ffffff',
+    unreadBg: '#e6fffa',
+    shadow: '#000000'
+  },
+  dark: {
+    primary: '#008080',
+    background: '#121212',
+    card: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    textLight: '#757575',
+    border: '#333333',
+    filterBg: '#2C2C2C',
+    unreadBg: 'rgba(0, 128, 128, 0.25)', // Darker translucent teal
+    shadow: '#000000'
+  }
+};
 
 const notificationIcons = {
   default: 'https://cdn-icons-png.flaticon.com/128/8297/8297354.png',
@@ -70,29 +96,22 @@ const getIconForTitle = (title) => {
     return notificationIcons.default;
 };
 
-// ★★★ CORRECTED DATE FORMATTER ★★★
+// --- DATE FORMATTER ---
 const formatNotificationTime = (dateInput) => {
   if (!dateInput) return '';
   try {
-      // 1. If backend returns a JS Date object (some drivers do)
       if (dateInput instanceof Date) {
           return format(dateInput, "MMM d, yyyy - h:mm a");
       }
 
-      // 2. If backend returns a String
       let dateString = String(dateInput);
 
-      // 3. Fix MySQL Date String "YYYY-MM-DD HH:MM:SS"
-      // If it doesn't have a 'T' (ISO format) or 'Z' (UTC), we assume it's UTC 
-      // and force the browser/phone to treat it as such.
       if (dateString.indexOf('T') === -1 && dateString.indexOf('Z') === -1) {
-         // Converts "2025-01-05 10:00:00" -> "2025-01-05T10:00:00Z"
          dateString = dateString.replace(' ', 'T') + 'Z';
       }
 
       const date = new Date(dateString);
 
-      // Check if date is valid
       if (isNaN(date.getTime())) return String(dateInput);
 
       return format(date, "MMM d, yyyy - h:mm a");
@@ -105,6 +124,12 @@ const formatNotificationTime = (dateInput) => {
 const NotificationsScreen = ({ onUnreadCountChange }) => {
   const navigation = useNavigation(); 
   const { user } = useAuth(); 
+  
+  // Theme Hooks
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const theme = isDark ? Colors.dark : Colors.light;
+
   const [filterStatus, setFilterStatus] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -213,9 +238,12 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
     return true;
   });
 
+  // Dynamic Styles
+  const styles = getStyles(theme);
+
   const renderContent = () => {
     if (loading) {
-      return <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 50 }} />;
+      return <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 50 }} />;
     }
     if (error) {
       return <Text style={styles.errorText}>{error}</Text>;
@@ -236,7 +264,6 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
         <View style={styles.notificationContent}>
           <Text style={styles.notificationTitle}>{notification.title}</Text>
           <Text style={styles.notificationMessage}>{notification.message}</Text>
-          {/* Use the new formatter */}
           <Text style={styles.notificationDate}>
             {formatNotificationTime(notification.created_at)}
           </Text>
@@ -247,6 +274,8 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+      
       <View style={styles.filterContainer}>
         {['all', 'unread', 'read'].map(status => (
           <TouchableOpacity
@@ -262,7 +291,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
       </View>
       <ScrollView
         contentContainerStyle={styles.scrollViewContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[PRIMARY_COLOR]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[theme.primary]} tintColor={theme.primary} />}
       >
         {renderContent()}
       </ScrollView>
@@ -270,23 +299,59 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: TERTIARY_COLOR },
-  filterContainer: { flexDirection: 'row', backgroundColor: 'white', borderRadius: 25, marginHorizontal: 15, marginBottom: 15, marginTop: 10, padding: 5, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, },
+const getStyles = (theme) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: theme.background },
+  
+  filterContainer: { 
+    flexDirection: 'row', 
+    backgroundColor: theme.filterBg, 
+    borderRadius: 25, 
+    marginHorizontal: width * 0.04, 
+    marginBottom: 15, 
+    marginTop: 10, 
+    padding: 5, 
+    elevation: 2, 
+    shadowColor: theme.shadow, 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 3, 
+  },
   filterButton: { flex: 1, paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
-  filterButtonActive: { backgroundColor: PRIMARY_COLOR },
-  filterButtonText: { fontSize: 14, fontWeight: 'bold', color: TEXT_COLOR_MEDIUM },
-  filterButtonTextActive: { color: 'white' },
-  scrollViewContent: { paddingHorizontal: 15, paddingBottom: 100, minHeight: '100%' },
-  notificationItem: { backgroundColor: 'white', borderRadius: 10, padding: 15, marginBottom: 12, flexDirection: 'row', alignItems: 'center', borderLeftWidth: 5, borderLeftColor: '#ccc', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, },
-  notificationItemUnread: { backgroundColor: '#e6fffa', borderLeftColor: PRIMARY_COLOR, },
-  notificationImage: { width: 32, height: 32, marginRight: 15, },
+  filterButtonActive: { backgroundColor: theme.primary },
+  filterButtonText: { fontSize: 14, fontWeight: 'bold', color: theme.textSub },
+  filterButtonTextActive: { color: '#ffffff' },
+  
+  scrollViewContent: { paddingHorizontal: width * 0.04, paddingBottom: 100, minHeight: '100%' },
+  
+  notificationItem: { 
+    backgroundColor: theme.card, 
+    borderRadius: 10, 
+    padding: 15, 
+    marginBottom: 12, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    borderLeftWidth: 5, 
+    borderLeftColor: theme.border, 
+    elevation: 2, 
+    shadowColor: theme.shadow, 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 3, 
+  },
+  notificationItemUnread: { 
+    backgroundColor: theme.unreadBg, 
+    borderLeftColor: theme.primary, 
+  },
+  
+  notificationImage: { width: 32, height: 32, marginRight: 15, resizeMode: 'contain' },
+  
   notificationContent: { flex: 1 },
-  notificationTitle: { fontSize: 16, fontWeight: 'bold', color: TEXT_COLOR_DARK, marginBottom: 4 },
-  notificationMessage: { fontSize: 14, color: TEXT_COLOR_MEDIUM, marginBottom: 6, lineHeight: 20 },
-  notificationDate: { fontSize: 12, color: TEXT_COLOR_LIGHT },
-  noNotificationsText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: TEXT_COLOR_MEDIUM, },
-  errorText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: 'red', marginHorizontal: 20, },
+  notificationTitle: { fontSize: 16, fontWeight: 'bold', color: theme.textMain, marginBottom: 4 },
+  notificationMessage: { fontSize: 14, color: theme.textSub, marginBottom: 6, lineHeight: 20 },
+  notificationDate: { fontSize: 12, color: theme.textLight },
+  
+  noNotificationsText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: theme.textSub },
+  errorText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: 'red', marginHorizontal: 20 },
 });
 
 export default NotificationsScreen;

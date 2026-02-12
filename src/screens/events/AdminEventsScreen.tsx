@@ -1,10 +1,16 @@
-import React, { useState, useCallback, useEffect } from 'react';
+/**
+ * File: src/screens/events/AdminEventsScreen.js
+ * Purpose: Admin screen to manage School Events (View/Add/Edit/Delete).
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ */
+import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, 
     ActivityIndicator, TextInput, ScrollView, Platform, SafeAreaView, 
-    UIManager, LayoutAnimation, useColorScheme, StatusBar, Dimensions 
+    UIManager, LayoutAnimation, useColorScheme, StatusBar, Dimensions,
+    KeyboardAvoidingView
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
@@ -21,25 +27,53 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // --- THEME CONFIGURATION ---
-const getTheme = (scheme: 'light' | 'dark' | null | undefined) => {
-    const isDark = scheme === 'dark';
-    return {
-        isDark,
-        primary: '#008080',
-        background: isDark ? '#121212' : '#F2F5F8',
-        cardBg: isDark ? '#1E1E1E' : '#FFFFFF',
-        textMain: isDark ? '#E0E0E0' : '#263238',
-        textSub: isDark ? '#B0BEC5' : '#546E7A',
-        border: isDark ? '#333333' : '#CFD8DC',
-        inputBg: isDark ? '#2C2C2C' : '#FFFFFF',
-        placeholder: isDark ? '#666666' : '#888888',
-        tag_bg: isDark ? '#004D40' : '#E0F2F1',
-        tag_text: isDark ? '#B2DFDB' : '#00695C',
-        white: '#ffffff',
-        shadow: '#000'
-    };
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#263238',
+    textSub: '#546E7A',
+    border: '#cbd5e1',
+    inputBg: '#F8FAFC',
+    inputBorder: '#E2E8F0',
+    iconBg: '#E0F2F1',
+    textPlaceholder: '#94A3B8',
+    white: '#ffffff',
+    danger: '#E53935',
+    dateBlockBg: '#E0F2F1',
+    dateTextMain: '#004D40',
+    dateTextSub: '#00695C',
+    tagBg: '#f0fdfa',
+    tagBorder: '#ccfbf1',
+    tagText: '#00796B',
+    expandedBg: '#FAFAFA',
+    emptyIcon: '#CFD8DC'
 };
 
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    inputBg: '#2C2C2C',
+    inputBorder: '#555555',
+    iconBg: '#333333',
+    textPlaceholder: '#64748b',
+    white: '#ffffff',
+    danger: '#EF5350',
+    dateBlockBg: '#004D40',
+    dateTextMain: '#E0F2F1',
+    dateTextSub: '#80CBC4',
+    tagBg: '#134e4a',
+    tagBorder: '#115e59',
+    tagText: '#2dd4bf',
+    expandedBg: '#252525',
+    emptyIcon: '#475569'
+};
+
+// --- HELPER FUNCTIONS ---
 const parseServerDateTime = (dateTimeString) => {
     if (!dateTimeString) return new Date();
     if (String(dateTimeString).includes('T') && String(dateTimeString).includes('Z')) {
@@ -57,13 +91,22 @@ const formatDateTimeForServer = (date) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 };
 
-// Main Component
+// --- MAIN SCREEN ---
 const AdminEventsScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const [view, setView] = useState('list'); 
     const [eventToEdit, setEventToEdit] = useState(null);
     const { user } = useAuth();
-    const scheme = useColorScheme();
-    const theme = getTheme(scheme);
+    const navigation = useNavigation();
+
+    // Hide default header
+    useLayoutEffect(() => {
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
     
     const handleBack = () => {
         setEventToEdit(null);
@@ -81,15 +124,15 @@ const AdminEventsScreen = () => {
     };
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-            <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             {view === 'list' && <EventListView user={user} onCreate={handleCreate} onEdit={handleEdit} theme={theme} />}
             {view === 'form' && <EventForm onBack={handleBack} user={user} eventToEdit={eventToEdit} theme={theme} />}
         </SafeAreaView>
     );
 };
 
-// Admin Event List
+// --- LIST VIEW COMPONENT ---
 const EventListView = ({ user, onCreate, onEdit, theme }) => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -123,32 +166,26 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     };
 
     const handleDelete = (eventId) => {
-        Alert.alert(
-            "Confirm Delete",
-            "Are you sure you want to delete this event?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await apiClient.delete(`/events/${eventId}`, { data: { userId: user.id } });
-                            fetchData();
-                        } catch (error) {
-                            Alert.alert("Error", "Could not delete event.");
-                        }
-                    },
+        Alert.alert("Confirm Delete", "Are you sure you want to delete this event?", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete", style: "destructive",
+                onPress: async () => {
+                    try {
+                        await apiClient.delete(`/events/${eventId}`, { data: { userId: user.id } });
+                        fetchData();
+                    } catch (error) { Alert.alert("Error", "Could not delete event."); }
                 },
-            ]
-        );
+            },
+        ]);
     };
 
     return (
-        <View style={{flex: 1}}>
-            <View style={[styles.headerCard, { backgroundColor: theme.cardBg }]}>
+        <View style={styles.container}>
+            {/* --- HEADER CARD (No Back Button) --- */}
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <View style={[styles.headerIconContainer, { backgroundColor: theme.isDark ? '#333' : '#E0F2F1' }]}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialIcons name="event" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
@@ -157,72 +194,85 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
                     </View>
                 </View>
                 <TouchableOpacity style={[styles.headerBtn, { backgroundColor: theme.primary }]} onPress={onCreate}>
-                    <MaterialIcons name="add" size={18} color="#fff" />
-                    <Text style={styles.headerBtnText}>Add</Text>
+                    <MaterialIcons name="add" size={18} color={theme.white} />
+                    <Text style={[styles.headerBtnText, { color: theme.white }]}>Add</Text>
                 </TouchableOpacity>
             </View>
 
-            {loading ? <ActivityIndicator size="large" color={theme.primary} style={{marginTop: 40}} /> :
-            <FlatList
-                data={events}
-                keyExtractor={item => item.id.toString()}
-                renderItem={({ item }) => (
-                    <AdminEventCard
-                        event={item}
-                        currentUser={user}
-                        theme={theme}
-                        isExpanded={expandedEventId === item.id}
-                        onPress={() => toggleExpand(item.id)}
-                        onMenu={() => handleMenuPress(item)}
-                    />
-                )}
-                ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSub }]}>No events found.</Text>}
-                contentContainerStyle={styles.listContainer}
-            />}
+            {loading ? (
+                <ActivityIndicator size="large" color={theme.primary} style={{marginTop: 40}} />
+            ) : (
+                <FlatList
+                    data={events}
+                    keyExtractor={item => item.id.toString()}
+                    renderItem={({ item }) => (
+                        <AdminEventCard
+                            event={item}
+                            currentUser={user}
+                            theme={theme}
+                            isExpanded={expandedEventId === item.id}
+                            onPress={() => toggleExpand(item.id)}
+                            onMenu={() => handleMenuPress(item)}
+                        />
+                    )}
+                    ListEmptyComponent={
+                        <View style={styles.centered}>
+                            <MaterialCommunityIcons name="calendar-remove" size={50} color={theme.emptyIcon} />
+                            <Text style={[styles.emptyText, { color: theme.textSub }]}>No events found.</Text>
+                        </View>
+                    }
+                    contentContainerStyle={styles.listContent}
+                />
+            )}
         </View>
     );
 };
 
-// Admin Event Card
-const AdminEventCard = ({ event, currentUser, isExpanded, onPress, onMenu, theme }) => {
+// --- EVENT CARD COMPONENT ---
+const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
     const date = parseServerDateTime(event.event_datetime);
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = date.getDate();
     const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     return (
-        <Animatable.View animation="fadeInUp" duration={500} style={[styles.card, { backgroundColor: theme.cardBg }]}>
-            <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-                <View style={styles.cardContent}>
-                    <View style={[styles.dateBlock, { backgroundColor: theme.tag_bg }]}>
-                        <Text style={[styles.dateMonth, { color: theme.tag_text }]}>{month}</Text>
-                        <Text style={[styles.dateDay, { color: theme.tag_text }]}>{day}</Text>
-                    </View>
-                    <View style={styles.detailsBlock}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <View style={[styles.tagContainer, { backgroundColor: theme.isDark ? '#252525' : '#f0fdfa', borderColor: theme.isDark ? '#444' : '#ccfbf1' }]}>
-                                <Text style={[styles.tagText, { color: theme.tag_text }]}>{event.target_class}</Text>
+        <Animatable.View animation="fadeInUp" duration={500} style={styles.cardWrapper}>
+            <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+                <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+                    <View style={styles.cardContent}>
+                        <View style={[styles.dateBlock, { backgroundColor: theme.dateBlockBg }]}>
+                            <Text style={[styles.dateMonth, { color: theme.dateTextSub }]}>{month}</Text>
+                            <Text style={[styles.dateDay, { color: theme.dateTextMain }]}>{day}</Text>
+                        </View>
+                        
+                        <View style={styles.detailsBlock}>
+                            <View style={styles.cardTopRow}>
+                                <View style={[styles.tagContainer, { backgroundColor: theme.tagBg, borderColor: theme.tagBorder }]}>
+                                    <Text style={[styles.tagText, { color: theme.tagText }]}>{event.target_class}</Text>
+                                </View>
+                                <TouchableOpacity onPress={onMenu} hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+                                    <MaterialIcons name="more-vert" size={24} color={theme.textSub} />
+                                </TouchableOpacity>
                             </View>
-                            <TouchableOpacity onPress={onMenu} hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-                                <MaterialIcons name="more-vert" size={24} color={theme.textSub} />
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={[styles.cardTitle, { color: theme.textMain }]} numberOfLines={2}>{event.title}</Text>
-                        <View style={styles.detailRow}>
-                            <MaterialCommunityIcons name="map-marker-outline" size={14} color={theme.textSub} />
-                            <Text style={[styles.detailText, { color: theme.textSub }]}>{event.location || 'TBD'}</Text>
+                            
+                            <Text style={[styles.cardTitle, { color: theme.textMain }]} numberOfLines={2}>{event.title}</Text>
+                            
+                            <View style={styles.detailRow}>
+                                <MaterialCommunityIcons name="map-marker-outline" size={14} color={theme.textSub} />
+                                <Text style={[styles.detailText, { color: theme.textSub }]}>{event.location || 'TBD'}</Text>
+                            </View>
                         </View>
                     </View>
-                </View>
-            </TouchableOpacity>
+                </TouchableOpacity>
 
-            {isExpanded && (
-                <View style={[styles.expandedContainer, { borderTopColor: theme.border }]}>
-                    <InfoRow icon="clock-outline" text={time} theme={theme} />
-                    {event.creator_name && <InfoRow icon="account-circle-outline" text={`Created by: ${event.creator_name}`} theme={theme} />}
-                    <InfoRow icon="text" text={event.description || "No description provided."} theme={theme} />
-                </View>
-            )}
+                {isExpanded && (
+                    <View style={[styles.expandedContainer, { borderTopColor: theme.border, backgroundColor: theme.expandedBg }]}>
+                        <InfoRow icon="clock-outline" text={time} theme={theme} />
+                        {event.creator_name && <InfoRow icon="account-circle-outline" text={`Created by: ${event.creator_name}`} theme={theme} />}
+                        <InfoRow icon="text" text={event.description || "No description provided."} theme={theme} />
+                    </View>
+                )}
+            </View>
         </Animatable.View>
     );
 };
@@ -234,7 +284,7 @@ const InfoRow = ({ icon, text, theme }) => (
     </View>
 );
 
-// Form Component
+// --- FORM COMPONENT ---
 const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const isEditMode = !!eventToEdit;
     const initialDate = isEditMode ? parseServerDateTime(eventToEdit.event_datetime) : new Date();
@@ -288,13 +338,13 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const getFormattedDate = (d) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 
     return (
-        <View style={{flex: 1}}>
-            <View style={[styles.headerCard, { backgroundColor: theme.cardBg }]}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}>
+                    <TouchableOpacity onPress={onBack} style={styles.backButton}>
                         <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
                     </TouchableOpacity>
-                    <View style={[styles.headerIconContainer, { backgroundColor: theme.isDark ? '#333' : '#E0F2F1' }]}>
+                    <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialIcons name="edit-calendar" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
@@ -310,19 +360,24 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                 
                 <Text style={[styles.label, { color: theme.textSub }]}>Date & Time *</Text>
                 <View style={styles.dateTimePickerContainer}>
-                    <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.cardBg, borderColor: theme.border }]} onPress={() => showMode('date')}>
+                    <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} onPress={() => showMode('date')}>
                         <MaterialCommunityIcons name="calendar" size={20} color={theme.primary} />
                         <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>{getFormattedDate(date)}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.cardBg, borderColor: theme.border }]} onPress={() => showMode('time')}>
+                    <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} onPress={() => showMode('time')}>
                         <MaterialCommunityIcons name="clock-outline" size={20} color={theme.primary} />
                         <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</Text>
                     </TouchableOpacity>
                 </View>
                 
                 <Text style={[styles.label, { color: theme.textSub }]}>Target Class</Text>
-                <View style={[styles.pickerContainer, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
-                    <Picker selectedValue={targetClass} onValueChange={(v) => setTargetClass(v)} dropdownIconColor={theme.textMain}>
+                <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
+                    <Picker 
+                        selectedValue={targetClass} 
+                        onValueChange={(v) => setTargetClass(v)} 
+                        dropdownIconColor={theme.textMain}
+                        style={{ color: theme.textMain }}
+                    >
                         {classes.map((c) => <Picker.Item key={c} label={c} value={c} color={theme.textMain} />)}
                     </Picker>
                 </View>
@@ -336,55 +391,131 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                 
                 {showPicker && <DateTimePicker value={date} mode={mode} is24Hour={false} display="default" onChange={onChangeDateTime} />}
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 };
 
 const FormInput = ({ theme, icon, ...props }) => (
-    <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+    <View style={[styles.inputContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
         <MaterialCommunityIcons name={icon} size={20} color={theme.textSub} style={styles.inputIcon} />
-        <TextInput style={[styles.input, { color: theme.textMain }, props.multiline && { height: 100, textAlignVertical: 'top', paddingTop: 10 }]} placeholderTextColor={theme.placeholder} {...props}/>
+        <TextInput 
+            style={[styles.input, { color: theme.textMain }, props.multiline && { height: 100, textAlignVertical: 'top', paddingTop: 10 }]} 
+            placeholderTextColor={theme.textPlaceholder} 
+            {...props}
+        />
     </View>
 );
 
 const styles = StyleSheet.create({
+    safeArea: { flex: 1 },
     container: { flex: 1 },
-    headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    headerTextContainer: { justifyContent: 'center' },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    
+    // --- HEADER CARD STYLES ---
+    headerCard: {
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        width: '96%', 
+        alignSelf: 'center',
+        marginTop: 15,
+        marginBottom: 10,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        elevation: 3,
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 },
+    },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    backButton: { marginRight: 10, padding: 4 },
+    headerIconContainer: {
+        borderRadius: 30,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 12 },
-    headerBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 },
-    headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-    listContainer: { paddingHorizontal: 15, paddingBottom: 100, paddingTop: 5 },
-    card: { borderRadius: 12, marginBottom: 15, elevation: 2, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, overflow: 'hidden' },
+    headerBtn: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 10,
+    },
+    headerBtnText: { fontSize: 12, fontWeight: '600' },
+
+    // --- LIST STYLES ---
+    listContent: { paddingHorizontal: width * 0.02, paddingBottom: 100 },
+    cardWrapper: { marginBottom: 15 },
+    
+    card: { 
+        borderRadius: 12, 
+        elevation: 2, 
+        shadowOffset: { width: 0, height: 1 }, 
+        shadowOpacity: 0.08, 
+        shadowRadius: 3, 
+        overflow: 'hidden' 
+    },
     cardContent: { flexDirection: 'row', padding: 15 },
-    dateBlock: { alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingVertical: 8, width: 60, height: 65, marginRight: 15 },
+    
+    dateBlock: { 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        borderRadius: 10, 
+        paddingVertical: 8, 
+        width: 60, 
+        height: 65, 
+        marginRight: 15 
+    },
     dateMonth: { fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
     dateDay: { fontSize: 24, fontWeight: 'bold', marginTop: -2 },
+    
     detailsBlock: { flex: 1, justifyContent: 'center' },
+    cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     cardTitle: { fontSize: 16, fontWeight: 'bold', marginTop: 4, marginBottom: 4 },
-    tagContainer: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginBottom: 4, borderWidth: 1 },
+    
+    tagContainer: { 
+        alignSelf: 'flex-start', 
+        paddingHorizontal: 8, 
+        paddingVertical: 2, 
+        borderRadius: 4, 
+        marginBottom: 4, 
+        borderWidth: 1 
+    },
     tagText: { fontSize: 10, fontWeight: '700' },
+    
     detailRow: { flexDirection: 'row', alignItems: 'center' },
     detailText: { fontSize: 13, marginLeft: 5 },
+    
     expandedContainer: { borderTopWidth: 1, paddingHorizontal: 15, paddingTop: 10, paddingBottom: 15 },
     infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
     infoRowIcon: { marginRight: 8, marginTop: 2 },
     infoRowText: { flex: 1, fontSize: 13, lineHeight: 18 },
+    
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
+
+    // --- FORM STYLES ---
     formContainer: { paddingHorizontal: 15, paddingBottom: 40 },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 4, marginTop: 10 },
     inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1, marginBottom: 15 },
     inputIcon: { marginHorizontal: 10 },
     input: { flex: 1, paddingVertical: 10, paddingRight: 10, fontSize: 15 },
+    
     dateTimePickerContainer: { flexDirection: 'row', marginBottom: 15, justifyContent: 'space-between', gap: 10 },
     dateTimePickerButton: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 8, borderWidth: 1, flex: 1, justifyContent: 'center', gap: 8 },
     dateTimePickerText: { fontSize: 14 },
+    
     pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 15, justifyContent: 'center' },
     publishButton: { paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, elevation: 2 },
-    publishButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+    publishButtonText: { fontWeight: 'bold', fontSize: 16 },
 });
 
 export default AdminEventsScreen;

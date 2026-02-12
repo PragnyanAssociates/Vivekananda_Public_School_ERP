@@ -15,7 +15,8 @@ import {
   Pressable,
   useColorScheme,
   StatusBar,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Dimensions
 } from 'react-native';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +26,8 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
 import FastImage from 'react-native-fast-image';
 import DateTimePicker from '@react-native-community/datetimepicker';
+
+const { width, height } = Dimensions.get('window');
 
 // --- Type Definitions ---
 export interface ProfileData {
@@ -65,28 +68,30 @@ interface ProfileScreenProps {
 // --- Theme Constants ---
 const Colors = {
   light: {
-    background: '#FFFFFF',
-    card: '#F8F9FA',
-    textPrimary: '#2C3E50',
-    textSecondary: '#8A94A6',
-    border: '#EAECEF',
+    background: '#F2F5F8', // Slightly off-white for better contrast
+    card: '#FFFFFF',
+    textPrimary: '#263238',
+    textSecondary: '#546E7A',
+    border: '#CFD8DC',
     accent: '#008080',
     inputBg: '#FFFFFF',
-    danger: '#D32F2F',
+    danger: '#E53935',
     iconBg: 'rgba(0, 128, 128, 0.1)',
-    placeholder: '#B0B7C3'
+    placeholder: '#90A4AE',
+    modalOverlay: 'rgba(0,0,0,0.6)'
   },
   dark: {
     background: '#121212',
     card: '#1E1E1E',
     textPrimary: '#E0E0E0',
-    textSecondary: '#A0A0A0',
+    textSecondary: '#B0B0B0',
     border: '#333333',
-    accent: '#4DB6AC',
+    accent: '#008080', // Kept consistent with other screens
     inputBg: '#2C2C2C',
     danger: '#EF5350',
     iconBg: 'rgba(77, 182, 172, 0.15)',
-    placeholder: '#555555'
+    placeholder: '#666666',
+    modalOverlay: 'rgba(0,0,0,0.8)'
   }
 };
 
@@ -103,13 +108,11 @@ const formatDateForDisplay = (dateString?: string | null) => {
 
 const formatDateForApi = (date: Date) => {
   try {
-    // Get local date components to avoid timezone issues
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   } catch (error) {
-    // Fallback in case of invalid date
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -129,40 +132,32 @@ const getProfileImageSource = (url?: string | null) => {
   return { uri: `${fullUrl}?t=${new Date().getTime()}`, priority: FastImage.priority.high };
 };
 
-// --- Date Parsing Utility (Fixes the Pre-1970 Issue) ---
+// --- Date Parsing Utility ---
 const parseDateString = (dateString?: string): Date => {
   if (!dateString) return new Date();
   
   const parts = dateString.split('-');
   if (parts.length === 3) {
     const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
+    const month = parseInt(parts[1], 10) - 1; 
     const day = parseInt(parts[2], 10);
     
-    // Handle pre-1970 dates safely using UTC to avoid timezone glitching negative timestamps
     if (year < 1970) {
       const utcDate = Date.UTC(year, month, day);
       const date = new Date(utcDate);
-      
-      // Double check validity
       if (date.getUTCFullYear() === year && 
           date.getUTCMonth() === month && 
           date.getUTCDate() === day) {
         return date;
       }
-      
-      // Fallback
       const fallbackDate = new Date();
       fallbackDate.setFullYear(year);
       fallbackDate.setMonth(month);
       fallbackDate.setDate(day);
       return fallbackDate;
     }
-    
-    // For 1970 and later, standard constructor works fine
     return new Date(year, month, day);
   }
-  
   return new Date();
 };
 
@@ -294,14 +289,14 @@ const DisplayProfileView = memo(({ userProfile, onEditPress, themeColors }: { us
         onRequestClose={() => setViewerVisible(false)}
         animationType="fade"
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setViewerVisible(false)}>
+        <Pressable style={[styles.modalBackdrop, { backgroundColor: themeColors.modalOverlay }]} onPress={() => setViewerVisible(false)}>
           <View style={[styles.modalContent, { backgroundColor: themeColors.card }]}>
             <FastImage
               source={profileImageSource}
               style={styles.enlargedProfileImage}
               resizeMode={FastImage.resizeMode.contain}
             />
-            <TouchableOpacity style={[styles.closeButton, { backgroundColor: themeColors.card }]} onPress={() => setViewerVisible(false)}>
+            <TouchableOpacity style={[styles.closeButton, { backgroundColor: themeColors.background }]} onPress={() => setViewerVisible(false)}>
               <Text style={[styles.closeButtonText, { color: themeColors.textPrimary }]}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -372,7 +367,6 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
   const [newImage, setNewImage] = useState<Asset | null>(null);
 
   const [showDatePicker, setShowDatePicker] = useState(false);
-  // Important: This state holds the 'Date' object for the picker
   const [pickerDate, setPickerDate] = useState(new Date()); 
   const [datePickerField, setDatePickerField] = useState<keyof ProfileData | null>(null);
 
@@ -428,10 +422,8 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
     setEditedData(prev => ({ ...prev, [field]: cleanedValue }));
   }, []);
 
-  // --- UPDATED DATE LOGIC ---
   const openDatePicker = (field: keyof ProfileData) => {
     const currentDateString = editedData[field];
-    // Use the robust parser that handles pre-1970 dates correctly
     const targetDate = parseDateString(currentDateString);
     
     setPickerDate(targetDate);
@@ -463,7 +455,7 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.profileHeader}>
             <FastImage source={imageSource} style={[styles.profileImage, { borderColor: themeColors.card, backgroundColor: themeColors.border }]} resizeMode={FastImage.resizeMode.cover} />
             <View style={styles.imageActionsContainer}>
@@ -478,7 +470,7 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
             </View>
           </View>
 
-          {/* Editable Fields with Placeholders */}
+          {/* Editable Fields */}
           <EditField
             label="Full Name"
             value={editedData.full_name}
@@ -521,7 +513,6 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
             placeholder="Select Date of Birth"
           />
 
-          {/* GENDER SELECTOR */}
           <GenderSelectField
             value={editedData.gender}
             onChange={(val) => setEditedData(prev => ({ ...prev, gender: val }))}
@@ -646,7 +637,6 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
           )}
         </ScrollView>
 
-        {/* Calendar Picker Modal - Uses 'pickerDate' state which is calculated via parseDateString */}
         {showDatePicker && (
           <DateTimePicker
             testID="dateTimePicker"
@@ -655,7 +645,6 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={handleDateConfirm}
             maximumDate={new Date()}
-            // Allow selecting dates as far back as 1900
             minimumDate={new Date(1900, 0, 1)}
           />
         )}
@@ -754,6 +743,7 @@ const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: Pro
         const finalUpdatedProfile = {
           ...profileData,
           ...editedData,
+          ...editedData,
           profile_image_url: refreshedDataFromServer.profile_image_url,
         } as ProfileData;
 
@@ -804,19 +794,20 @@ const ProfileScreen = ({ staticProfileData, onStaticSave, onProfileUpdate }: Pro
   );
 };
 
+// --- STYLES DEFINITION ---
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: {
-    paddingHorizontal: '4%',
+    paddingHorizontal: width * 0.05, // 5% of screen width
     paddingBottom: 40,
     paddingTop: 20
   },
   profileHeader: { alignItems: 'center', marginVertical: 20 },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: width * 0.32, // Responsive width
+    height: width * 0.32, // Keep aspect ratio
+    borderRadius: (width * 0.32) / 2,
     borderWidth: 4,
     marginBottom: 15,
     shadowColor: '#000',
@@ -825,7 +816,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5
   },
-  profileName: { fontSize: 26, fontWeight: 'bold', textAlign: 'center' },
+  profileName: { fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   profileRole: { fontSize: 16, marginTop: 5, textTransform: 'capitalize' },
   editProfileButton: {
     flexDirection: 'row',
@@ -835,7 +826,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     borderRadius: 25,
   },
-  editProfileButtonText: { fontWeight: 'bold', marginLeft: 8, fontSize: 16, },
+  editProfileButtonText: { fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
   detailsCard: {
     borderRadius: 12,
     padding: 20,
@@ -865,11 +856,13 @@ const styles = StyleSheet.create({
   detailTextContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   detailLabel: { fontSize: 14, fontWeight: '500', flex: 1 },
   detailValue: { fontSize: 15, fontWeight: '600', flex: 1.5, textAlign: 'right' },
+  
   imageActionsContainer: { flexDirection: 'row', marginTop: 10, justifyContent: 'center', alignItems: 'center', },
   changeImageButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginHorizontal: 5, },
   changeImageButtonText: { fontWeight: 'bold' },
   removeImageButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(211, 47, 47, 0.1)', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginHorizontal: 5, },
   removeImageButtonText: { fontWeight: 'bold', },
+  
   inputGroup: { marginBottom: 15 },
   inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
   textInput: {
@@ -879,6 +872,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   multilineInput: { height: 100, textAlignVertical: 'top' },
+  
   genderOption: {
     flex: 1,
     flexDirection: 'row',
@@ -893,13 +887,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 15
   },
+  
   editActionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, },
   editActionButton: { flex: 1, paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginHorizontal: 5 },
   cancelButton: { backgroundColor: '#EAECEF', },
   cancelButtonText: { color: '#8A94A6', fontWeight: 'bold', fontSize: 16 },
   saveButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'center', alignItems: 'center', },
-  modalContent: { width: '90%', height: '60%', justifyContent: 'center', alignItems: 'center', borderRadius: 20, padding: 10 },
+  
+  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', },
+  modalContent: { width: width * 0.9, height: height * 0.6, justifyContent: 'center', alignItems: 'center', borderRadius: 20, padding: 10 },
   enlargedProfileImage: { width: '100%', height: '80%', borderRadius: 10, marginBottom: 20 },
   closeButton: { paddingVertical: 10, paddingHorizontal: 30, borderRadius: 25, elevation: 5 },
   closeButtonText: { fontSize: 16, fontWeight: 'bold', },

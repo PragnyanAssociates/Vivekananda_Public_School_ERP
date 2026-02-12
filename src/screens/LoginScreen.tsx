@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, StyleSheet, TextInput, Image,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
-  ScrollView, StatusBar, SafeAreaView, Pressable, Animated
+  ScrollView, StatusBar, SafeAreaView, Pressable, Animated,
+  Dimensions, useColorScheme
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +11,36 @@ import { API_BASE_URL } from '../../apiConfig';
 
 import LinearGradient from 'react-native-linear-gradient';
 import Feather from 'react-native-vector-icons/Feather';
+
+const { width } = Dimensions.get('window');
+
+// --- THEME COLORS CONFIGURATION ---
+const COLORS = {
+  light: {
+    gradient: ['#E0F7FA', '#B2EBF2', '#dd9eb2ff'],
+    text: '#333333',
+    cardBg: 'rgba(255, 255, 255, 0.9)',
+    inputBg: '#F0F4F8',
+    inputBorder: 'transparent',
+    placeholder: '#888888',
+    primary: '#007BFF',
+    iconDefault: '#888888',
+    footer: '#005662',
+    shadow: '#000000'
+  },
+  dark: {
+    gradient: ['#0f2027', '#203a43', '#2c5364'], // Dark teal/slate gradient
+    text: '#FFFFFF',
+    cardBg: 'rgba(30, 30, 30, 0.95)',
+    inputBg: '#2C2C2C',
+    inputBorder: '#444444',
+    placeholder: '#AAAAAA',
+    primary: '#007BFF',
+    iconDefault: '#CCCCCC',
+    footer: '#80CBC4',
+    shadow: '#000000'
+  }
+};
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -28,6 +59,11 @@ export default function LoginScreen({ route }: LoginScreenProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const navigation = useNavigation<NavigationProp>();
+
+  // --- THEME HOOKS ---
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const theme = isDarkMode ? COLORS.dark : COLORS.light;
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const formAnim = useRef(new Animated.Value(0)).current;
@@ -100,42 +136,60 @@ export default function LoginScreen({ route }: LoginScreenProps) {
 
   return (
     <SafeAreaView style={{flex: 1}}>
-      <LinearGradient colors={['#E0F7FA', '#B2EBF2', '#dd9eb2ff']} style={styles.gradient}>
-        <StatusBar barStyle="dark-content" />
+      <LinearGradient colors={theme.gradient} style={styles.gradient}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContainer}>
 
             <Animated.View style={[styles.header, headerStyle]}>
               <Image source={require("../assets/logo.png")} style={styles.logo}/>
-              <Text style={styles.welcomeText}>Welcome Back!</Text>
+              <Text style={[styles.welcomeText, { color: theme.footer }]}>Welcome Back!</Text>
             </Animated.View>
 
-            <Animated.View style={[styles.formContainer, formStyle, shakeStyle]}>
-              <Text style={styles.title}>{capitalize(role)} Login</Text>
+            <Animated.View style={[styles.formContainer, formStyle, shakeStyle, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]}>
+              <Text style={[styles.title, { color: theme.text }]}>{capitalize(role)} Login</Text>
 
-              <View style={[styles.inputContainer, isUserFocused && styles.inputContainerFocused]}>
-                <Feather name={role === 'student' ? 'hash' : 'user'} size={20} color={isUserFocused ? "#007BFF" : "#888"} style={styles.inputIcon} />
+              <View style={[
+                  styles.inputContainer, 
+                  { backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+                  isUserFocused && { borderColor: theme.primary, backgroundColor: theme.inputBg }
+                ]}>
+                <Feather 
+                  name={role === 'student' ? 'hash' : 'user'} 
+                  size={20} 
+                  color={isUserFocused ? theme.primary : theme.iconDefault} 
+                  style={styles.inputIcon} 
+                />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.text }]}
                   placeholder={role === 'student' ? 'Student ID' : 'Username'}
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"
-                  placeholderTextColor="#888"
+                  placeholderTextColor={theme.placeholder}
                   onFocus={() => setIsUserFocused(true)}
                   onBlur={() => setIsUserFocused(false)}
                 />
               </View>
 
-              <View style={[styles.inputContainer, isPassFocused && styles.inputContainerFocused]}>
-                <Feather name="lock" size={20} color={isPassFocused ? "#007BFF" : "#888"} style={styles.inputIcon} />
+              <View style={[
+                  styles.inputContainer, 
+                  { backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+                  isPassFocused && { borderColor: theme.primary, backgroundColor: theme.inputBg }
+                ]}>
+                <Feather 
+                  name="lock" 
+                  size={20} 
+                  color={isPassFocused ? theme.primary : theme.iconDefault} 
+                  style={styles.inputIcon} 
+                />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.text }]}
                   placeholder="Password"
                   secureTextEntry={!isPasswordVisible}
                   value={password}
                   onChangeText={setPassword}
-                  placeholderTextColor="#888"
+                  placeholderTextColor={theme.placeholder}
                   onFocus={() => setIsPassFocused(true)}
                   onBlur={() => setIsPassFocused(false)}
                   textContentType="password"
@@ -147,7 +201,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
                   <Feather
                     name={isPasswordVisible ? "eye" : "eye-off"}
                     size={20}
-                    color={isPassFocused ? "#007BFF" : "#888"}
+                    color={isPassFocused ? theme.primary : theme.iconDefault}
                   />
                 </Pressable>
               </View>
@@ -158,7 +212,7 @@ export default function LoginScreen({ route }: LoginScreenProps) {
 
             </Animated.View>
 
-            <Text style={styles.footerText}>© 2025 Vivekananda Public School</Text>
+            <Text style={[styles.footerText, { color: theme.footer }]}>© 2025 Vivekananda Public School</Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
@@ -181,22 +235,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logo: {
-    width: 370,
+    width: width * 0.85, // Responsive width
     height: 250,
     resizeMode: "contain",
   },
   welcomeText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#005662',
     marginTop: -30,
   },
   formContainer: {
     width: '90%',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 20,
     padding: 25,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
@@ -206,23 +257,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#333",
     marginBottom: 25,
     textAlign: "center",
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F4F8',
     borderRadius: 12,
     marginBottom: 20,
     paddingHorizontal: 15,
     borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  inputContainerFocused: {
-    borderColor: '#007BFF',
-    backgroundColor: '#fff',
   },
   inputIcon: {
     marginRight: 10,
@@ -231,7 +275,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     fontSize: 16,
-    color: '#333',
   },
   eyeIconContainer: {
     padding: 5,
@@ -255,7 +298,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   footerText: {
-    color: '#005662',
     fontSize: 16,
     marginTop: 20,
   },

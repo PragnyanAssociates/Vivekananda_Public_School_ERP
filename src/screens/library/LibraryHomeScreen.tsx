@@ -1,3 +1,8 @@
+/**
+ * File: src/screens/library/LibraryHomeScreen.js
+ * Purpose: Library Hub Main Menu.
+ * Updated: Responsive Design, Dark/Light Mode, Consistent UI.
+ */
 import React, { useState } from 'react';
 import { 
     View, 
@@ -9,10 +14,13 @@ import {
     RefreshControl,
     Platform,
     UIManager,
-    SafeAreaView
+    SafeAreaView,
+    useColorScheme,
+    StatusBar,
+    Dimensions
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialIcons'; // Import Vector Icons
+import Icon from 'react-native-vector-icons/MaterialIcons'; 
 
 // IMPORT YOUR AUTH HOOK
 import { useAuth } from '../../context/AuthContext'; 
@@ -22,7 +30,37 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const { width } = Dimensions.get('window');
+
+// --- THEME CONFIGURATION ---
+const LightColors = {
+    primary: '#008080',
+    background: '#F2F5F8',
+    cardBg: '#FFFFFF',
+    textMain: '#333333',
+    textSub: '#666666',
+    border: '#cbd5e1',
+    iconBg: '#E0F2F1', // Light Teal Circle for header
+    iconContainerBg: '#F7FAFC', // Subtle circle bg for card icons
+};
+
+const DarkColors = {
+    primary: '#008080',
+    background: '#121212',
+    cardBg: '#1E1E1E',
+    textMain: '#E0E0E0',
+    textSub: '#B0B0B0',
+    border: '#333333',
+    iconBg: '#333333', // Darker circle for header
+    iconContainerBg: '#2C2C2C', // Darker circle bg for card icons
+};
+
 const LibraryHomeScreen = () => {
+    // Theme Hooks
+    const colorScheme = useColorScheme();
+    const isDark = colorScheme === 'dark';
+    const theme = isDark ? DarkColors : LightColors;
+
     const navigation = useNavigation();
     const { user } = useAuth(); 
     const [refreshing, setRefreshing] = useState(false);
@@ -56,38 +94,40 @@ const LibraryHomeScreen = () => {
         return commonModules;
     };
 
-    // New Header Component (Matches AccountsScreen)
+    // New Header Component
     const renderHeader = () => (
-        <View style={styles.headerCard}>
-            <View style={styles.headerIconContainer}>
+        <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+            <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                 {/* Library Icon */}
-                <Icon name="local-library" size={28} color="#008080" />
+                <Icon name="local-library" size={28} color={theme.primary} />
             </View>
             <View style={styles.headerTextContainer}>
-                <Text style={styles.headerTitle}>Library Hub</Text>
-                <Text style={styles.headerSubtitle}>Welcome, {userName}</Text>
+                <Text style={[styles.headerTitle, { color: theme.textMain }]}>Library Hub</Text>
+                <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Welcome, {userName}</Text>
             </View>
         </View>
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+            
             <FlatList
                 ListHeaderComponent={renderHeader}
                 data={getFeatures()}
                 keyExtractor={item => item.id}
                 numColumns={2}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
                 renderItem={({ item }) => (
                     <TouchableOpacity 
-                        style={styles.card} 
-                        onPress={() => navigation.navigate(item.screen as never)}
+                        style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]} 
+                        onPress={() => navigation.navigate(item.screen)}
                         activeOpacity={0.8}
                     >
-                        <View style={styles.imageContainer}>
+                        <View style={[styles.imageContainer, { backgroundColor: theme.iconContainerBg }]}>
                             <Image source={{ uri: item.icon }} style={styles.cardImage} resizeMode="contain" />
                         </View>
-                        <Text style={styles.cardTitle}>{item.title}</Text>
+                        <Text style={[styles.cardTitle, { color: theme.textMain }]}>{item.title}</Text>
                     </TouchableOpacity>
                 )}
                 contentContainerStyle={styles.gridContainer}
@@ -100,30 +140,26 @@ const LibraryHomeScreen = () => {
 const styles = StyleSheet.create({
     container: { 
         flex: 1, 
-        backgroundColor: '#F2F5F8' // Light Blue-Grey Background
     },
     
     // --- HEADER STYLES ---
     headerCard: {
-        backgroundColor: '#FFFFFF',
         paddingHorizontal: 15,
-        paddingVertical: 10, // Compact height
+        paddingVertical: 12, 
         width: '96%', 
         alignSelf: 'center',
         marginTop: 15,
-        marginBottom: 10,
+        marginBottom: 15,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
         // Shadow
         elevation: 3,
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
     headerIconContainer: {
-        backgroundColor: '#E0F2F1', // Light Teal Circle
         borderRadius: 30,
         width: 45,
         height: 45,
@@ -133,54 +169,48 @@ const styles = StyleSheet.create({
     },
     headerTextContainer: {
         justifyContent: 'center',
-        flex: 1, // Ensure text takes available space
+        flex: 1, 
     },
     headerTitle: {
-        fontSize: 22, // Large Title
+        fontSize: 20, 
         fontWeight: 'bold',
-        color: '#333333',
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: '#666666',
-        marginTop: 1,
+        fontSize: 13,
+        marginTop: 2,
     },
 
     // --- GRID STYLES ---
     gridContainer: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 10, // Adjusted for edge-to-edge balance
         paddingBottom: 50,
     },
     card: { 
         flex: 1, 
-        margin: 6, // Consistent spacing
+        margin: 6, // Provides even spacing between columns and rows
         height: 150, 
-        backgroundColor: '#FFF', 
         borderRadius: 16, 
         alignItems: 'center', 
         justifyContent: 'center', 
         padding: 10,
         // Shadow
         elevation: 3, 
-        shadowColor: '#000', 
         shadowOpacity: 0.1, 
         shadowRadius: 4,
         shadowOffset: { width: 0, height: 2 },
     },
     imageContainer: {
         marginBottom: 15,
-        padding: 10,
-        backgroundColor: '#F7FAFC', // Subtle circle bg for icon
+        padding: 12,
         borderRadius: 50,
     },
     cardImage: { 
-        width: 50, 
-        height: 50, 
+        width: 45, 
+        height: 45, 
     },
     cardTitle: { 
         fontSize: 15, 
         fontWeight: '600', 
-        color: '#2D3748',
         textAlign: 'center'
     }
 });
