@@ -44,11 +44,18 @@ export interface ProfileData {
   email?: string;
 
   // Student Fields
-  admission_date?: string;
+  admission_date?: string; // Treating as School Joined Date
   roll_no?: string;
   admission_no?: string;
   parent_name?: string;
   pen_no?: string;
+  
+  // Extended Student/Alumni Fields for Validation
+  school_joined_grade?: string;
+  school_outgoing_date?: string;
+  school_outgoing_grade?: string;
+  tc_issued_date?: string;
+  tc_number?: string;
 
   // Admin / Teacher / Others Fields
   aadhar_no?: string;
@@ -68,7 +75,7 @@ interface ProfileScreenProps {
 // --- Theme Constants ---
 const Colors = {
   light: {
-    background: '#F2F5F8', // Slightly off-white for better contrast
+    background: '#F2F5F8',
     card: '#FFFFFF',
     textPrimary: '#263238',
     textSecondary: '#546E7A',
@@ -86,7 +93,7 @@ const Colors = {
     textPrimary: '#E0E0E0',
     textSecondary: '#B0B0B0',
     border: '#333333',
-    accent: '#008080', // Kept consistent with other screens
+    accent: '#008080',
     inputBg: '#2C2C2C',
     danger: '#EF5350',
     iconBg: 'rgba(77, 182, 172, 0.15)',
@@ -141,21 +148,6 @@ const parseDateString = (dateString?: string): Date => {
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1; 
     const day = parseInt(parts[2], 10);
-    
-    if (year < 1970) {
-      const utcDate = Date.UTC(year, month, day);
-      const date = new Date(utcDate);
-      if (date.getUTCFullYear() === year && 
-          date.getUTCMonth() === month && 
-          date.getUTCDate() === day) {
-        return date;
-      }
-      const fallbackDate = new Date();
-      fallbackDate.setFullYear(year);
-      fallbackDate.setMonth(month);
-      fallbackDate.setDate(day);
-      return fallbackDate;
-    }
     return new Date(year, month, day);
   }
   return new Date();
@@ -166,7 +158,7 @@ const sanitizeNumeric = (text: string) => text.replace(/[^0-9]/g, '');
 const sanitizeName = (text: string) => text.replace(/[^a-zA-Z\s\-']/g, '');
 const sanitizeGeneralText = (text: string) => text.replace(/[^a-zA-Z0-9\s.,\-\/]/g, '');
 const sanitizeAddress = (text: string) => text.replace(/[^\w\s.,\-\/#]/g, '');
-
+const sanitizeAlphaNumeric = (text: string) => text.replace(/[^a-zA-Z0-9]/g, '');
 
 // --- Components ---
 
@@ -346,6 +338,9 @@ const DisplayProfileView = memo(({ userProfile, onEditPress, themeColors }: { us
             <DetailRow label="Aadhar No." value={userProfile.aadhar_no} icon="fingerprint" themeColors={themeColors} />
             <DetailRow label="PEN No." value={userProfile.pen_no} icon="description" themeColors={themeColors} />
             <DetailRow label="Admission Date" value={formatDateForDisplay(userProfile.admission_date)} icon="event" themeColors={themeColors} />
+            
+            {/* Extended Details */}
+            {userProfile.tc_number && <DetailRow label="TC No" value={userProfile.tc_number} icon="file-present" themeColors={themeColors} />}
           </Animatable.View>
         ) : (
           <Animatable.View animation="fadeInUp" duration={500} delay={400} style={[styles.detailsCard, { backgroundColor: themeColors.card }]}>
@@ -411,12 +406,13 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
     setEditedData(prev => ({ ...prev, profile_image_url: undefined }));
   }, []);
 
-  const handleTextChange = useCallback((field: keyof ProfileData, value: string, type: 'numeric' | 'alpha' | 'general' | 'address') => {
+  const handleTextChange = useCallback((field: keyof ProfileData, value: string, type: 'numeric' | 'alpha' | 'general' | 'address' | 'alphanumeric') => {
     let cleanedValue = value;
     switch (type) {
       case 'numeric': cleanedValue = sanitizeNumeric(value); break;
       case 'alpha': cleanedValue = sanitizeName(value); break;
       case 'address': cleanedValue = sanitizeAddress(value); break;
+      case 'alphanumeric': cleanedValue = sanitizeAlphaNumeric(value); break;
       case 'general': default: cleanedValue = sanitizeGeneralText(value); break;
     }
     setEditedData(prev => ({ ...prev, [field]: cleanedValue }));
@@ -424,7 +420,7 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
 
   const openDatePicker = (field: keyof ProfileData) => {
     const currentDateString = editedData[field];
-    const targetDate = parseDateString(currentDateString);
+    const targetDate = parseDateString(currentDateString as string);
     
     setPickerDate(targetDate);
     setDatePickerField(field);
@@ -447,6 +443,102 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
   };
 
   const handleSaveChanges = () => {
+    // --- VALIDATION LOGIC ---
+    
+    // 1. Phone Validation
+    if (editedData.phone) {
+        const phoneRegex = /^[1-9][0-9]{9}$/;
+        if (!phoneRegex.test(editedData.phone)) {
+            Alert.alert('Invalid Phone', 'Phone number must be exactly 10 digits, cannot start with 0, and must be numbers only.');
+            return;
+        }
+    }
+
+    // 2. PEN Number Validation (If Student)
+    if (editedData.role === 'student' && editedData.pen_no) {
+        const penRegex = /^[a-zA-Z0-9]{6,20}$/;
+        if (!penRegex.test(editedData.pen_no)) {
+             Alert.alert('Invalid PEN', 'PEN Number must be 6-20 alphanumeric characters with no special characters.');
+             return;
+        }
+    }
+
+    // 3. Aadhaar Validation
+    if (editedData.aadhar_no) {
+        const aadhaarRegex = /^\d{12}$/;
+        if (!aadhaarRegex.test(editedData.aadhar_no)) {
+            Alert.alert('Invalid Aadhaar', 'Aadhaar number must be exactly 12 digits (Numbers only).');
+            return;
+        }
+    }
+
+    // 4. Grade Validation (1-12, Outgoing >= Joined)
+    const validateGrade = (grade?: string, label?: string) => {
+        if (!grade) return true; // Optional check passed
+        const num = parseInt(grade, 10);
+        if (isNaN(num) || num < 1 || num > 12) {
+            Alert.alert('Invalid Grade', `${label} must be between 1 and 12.`);
+            return false;
+        }
+        return true;
+    };
+
+    if (!validateGrade(editedData.school_joined_grade, 'Joined Grade')) return;
+    if (!validateGrade(editedData.school_outgoing_grade, 'Outgoing Grade')) return;
+
+    if (editedData.school_joined_grade && editedData.school_outgoing_grade) {
+        if (parseInt(editedData.school_outgoing_grade) < parseInt(editedData.school_joined_grade)) {
+            Alert.alert('Invalid Grades', 'Outgoing Grade cannot be less than Joined Grade.');
+            return;
+        }
+    }
+
+    // 5. Date Validations
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const checkFutureDate = (dateStr?: string, label?: string) => {
+        if (!dateStr) return true;
+        const d = parseDateString(dateStr);
+        if (d > today) {
+            Alert.alert('Invalid Date', `${label} cannot be in the future.`);
+            return false;
+        }
+        return d;
+    };
+
+    const admissionDate = checkFutureDate(editedData.admission_date, 'Admission Date');
+    if (admissionDate === false) return;
+    
+    const outgoingDate = checkFutureDate(editedData.school_outgoing_date, 'Outgoing Date');
+    if (outgoingDate === false) return;
+
+    const tcDate = checkFutureDate(editedData.tc_issued_date, 'TC Date');
+    if (tcDate === false) return;
+
+    // Compare Dates (Sequence: Admission <= Outgoing <= TC)
+    if (admissionDate instanceof Date && outgoingDate instanceof Date) {
+        if (outgoingDate < admissionDate) {
+            Alert.alert('Invalid Dates', 'Outgoing Date cannot be before Admission Date.');
+            return;
+        }
+    }
+    if (outgoingDate instanceof Date && tcDate instanceof Date) {
+        if (tcDate < outgoingDate) {
+            Alert.alert('Invalid Dates', 'TC Issued Date cannot be before Outgoing Date.');
+            return;
+        }
+    }
+
+    // 6. TC Number Validation
+    if (editedData.tc_number) {
+        const tcRegex = /^[a-zA-Z0-9]{5,20}$/;
+        if (!tcRegex.test(editedData.tc_number)) {
+            Alert.alert('Invalid TC No', 'TC Number must be 5-20 alphanumeric characters.');
+            return;
+        }
+    }
+
     onSave(editedData, newImage);
   };
 
@@ -493,7 +585,7 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
             keyboardType="phone-pad"
             maxLength={10}
             themeColors={themeColors}
-            placeholder="e.g. 9876543210"
+            placeholder="10 digit mobile number"
           />
           <EditField
             label="Address"
@@ -521,105 +613,29 @@ const EditProfileView = memo(({ userProfile, onSave, onCancel, isSaving, themeCo
 
           {userProfile.role === 'student' ? (
             <>
-              <EditField
-                label="Class / Group"
-                value={editedData.class_group}
-                onChange={text => handleTextChange('class_group', text, 'general')}
-                themeColors={themeColors}
-                placeholder="e.g. 10-A"
-              />
-              <EditField
-                label="Roll No."
-                value={editedData.roll_no}
-                onChange={text => handleTextChange('roll_no', text, 'numeric')}
-                keyboardType="numeric"
-                themeColors={themeColors}
-                placeholder="e.g. 12"
-              />
-              <EditField
-                label="Admission No."
-                value={editedData.admission_no}
-                onChange={text => handleTextChange('admission_no', text, 'numeric')}
-                keyboardType="numeric"
-                themeColors={themeColors}
-                placeholder="e.g. 4025"
-              />
-              <EditField
-                label="Parent Name"
-                value={editedData.parent_name}
-                onChange={text => handleTextChange('parent_name', text, 'alpha')}
-                themeColors={themeColors}
-                placeholder="e.g. Robert Doe"
-              />
-              <EditField
-                label="Aadhar No."
-                value={editedData.aadhar_no}
-                onChange={text => handleTextChange('aadhar_no', text, 'numeric')}
-                keyboardType="numeric"
-                maxLength={12}
-                themeColors={themeColors}
-                placeholder="e.g. 1234 5678 9012"
-              />
-              <EditField
-                label="PEN No."
-                value={editedData.pen_no}
-                onChange={text => handleTextChange('pen_no', text, 'numeric')}
-                keyboardType="numeric"
-                themeColors={themeColors}
-                placeholder="e.g. 11223344"
-              />
-              <EditField
-                label="Admission Date"
-                value={editedData.admission_date}
-                isDate={true}
-                onDatePress={() => openDatePicker('admission_date')}
-                themeColors={themeColors}
-                placeholder="Select Admission Date"
-              />
+              <EditField label="Class / Group" value={editedData.class_group} onChange={text => handleTextChange('class_group', text, 'general')} themeColors={themeColors} placeholder="e.g. 10-A" />
+              <EditField label="Roll No." value={editedData.roll_no} onChange={text => handleTextChange('roll_no', text, 'numeric')} keyboardType="numeric" themeColors={themeColors} placeholder="e.g. 12" />
+              <EditField label="Admission No." value={editedData.admission_no} onChange={text => handleTextChange('admission_no', text, 'numeric')} keyboardType="numeric" themeColors={themeColors} placeholder="e.g. 4025" />
+              <EditField label="Parent Name" value={editedData.parent_name} onChange={text => handleTextChange('parent_name', text, 'alpha')} themeColors={themeColors} placeholder="e.g. Robert Doe" />
+              <EditField label="Aadhar No." value={editedData.aadhar_no} onChange={text => handleTextChange('aadhar_no', text, 'numeric')} keyboardType="numeric" maxLength={12} themeColors={themeColors} placeholder="12 digit Aadhaar" />
+              <EditField label="PEN No." value={editedData.pen_no} onChange={text => handleTextChange('pen_no', text, 'alphanumeric')} maxLength={20} themeColors={themeColors} placeholder="e.g. 11223344" />
+              
+              <EditField label="Admission Date" value={editedData.admission_date} isDate={true} onDatePress={() => openDatePicker('admission_date')} themeColors={themeColors} placeholder="Select Date" />
+              <EditField label="Joined Grade" value={editedData.school_joined_grade} onChange={text => handleTextChange('school_joined_grade', text, 'numeric')} keyboardType="numeric" maxLength={2} themeColors={themeColors} placeholder="1-12" />
+
+              <EditField label="Outgoing Date" value={editedData.school_outgoing_date} isDate={true} onDatePress={() => openDatePicker('school_outgoing_date')} themeColors={themeColors} placeholder="Optional" />
+              <EditField label="Outgoing Grade" value={editedData.school_outgoing_grade} onChange={text => handleTextChange('school_outgoing_grade', text, 'numeric')} keyboardType="numeric" maxLength={2} themeColors={themeColors} placeholder="1-12" />
+
+              <EditField label="TC Issued Date" value={editedData.tc_issued_date} isDate={true} onDatePress={() => openDatePicker('tc_issued_date')} themeColors={themeColors} placeholder="Optional" />
+              <EditField label="TC Number" value={editedData.tc_number} onChange={text => handleTextChange('tc_number', text, 'alphanumeric')} maxLength={20} themeColors={themeColors} placeholder="Unique TC No" />
             </>
           ) : (
             <>
-              <EditField
-                label="Aadhar No."
-                value={editedData.aadhar_no}
-                onChange={text => handleTextChange('aadhar_no', text, 'numeric')}
-                keyboardType="numeric"
-                maxLength={12}
-                themeColors={themeColors}
-                placeholder="e.g. 1234 5678 9012"
-              />
-              <EditField
-                label="Joining Date"
-                value={editedData.joining_date}
-                isDate={true}
-                onDatePress={() => openDatePicker('joining_date')}
-                themeColors={themeColors}
-                placeholder="Select Joining Date"
-              />
-              <EditField
-                label="Previous Salary"
-                value={editedData.previous_salary}
-                onChange={text => handleTextChange('previous_salary', text, 'numeric')}
-                keyboardType="numeric"
-                themeColors={themeColors}
-                placeholder="e.g. 40000"
-              />
-              <EditField
-                label="Present Salary"
-                value={editedData.present_salary}
-                onChange={text => handleTextChange('present_salary', text, 'numeric')}
-                keyboardType="numeric"
-                themeColors={themeColors}
-                placeholder="e.g. 55000"
-              />
-              <EditField
-                label="Experience"
-                value={editedData.experience}
-                onChange={text => handleTextChange('experience', text, 'general')}
-                multiline
-                themeColors={themeColors}
-                placeholder="e.g. 5 years in Mathematics"
-              />
+              <EditField label="Aadhar No." value={editedData.aadhar_no} onChange={text => handleTextChange('aadhar_no', text, 'numeric')} keyboardType="numeric" maxLength={12} themeColors={themeColors} placeholder="12 digit Aadhaar" />
+              <EditField label="Joining Date" value={editedData.joining_date} isDate={true} onDatePress={() => openDatePicker('joining_date')} themeColors={themeColors} placeholder="Select Date" />
+              <EditField label="Previous Salary" value={editedData.previous_salary} onChange={text => handleTextChange('previous_salary', text, 'numeric')} keyboardType="numeric" themeColors={themeColors} placeholder="e.g. 40000" />
+              <EditField label="Present Salary" value={editedData.present_salary} onChange={text => handleTextChange('present_salary', text, 'numeric')} keyboardType="numeric" themeColors={themeColors} placeholder="e.g. 55000" />
+              <EditField label="Experience" value={editedData.experience} onChange={text => handleTextChange('experience', text, 'general')} multiline themeColors={themeColors} placeholder="e.g. 5 years in Mathematics" />
             </>
           )}
 

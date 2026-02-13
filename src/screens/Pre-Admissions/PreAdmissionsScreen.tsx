@@ -34,7 +34,7 @@ const LightColors = {
     pendingBg: '#FFF3E0', pendingText: '#E67E22',
     approvedBg: '#E8F5E9', approvedText: '#2E7D32',
     rejectedBg: '#FFEBEE', rejectedText: '#C62828',
-    placeholder: '#B0BEC5' // Dull grey for examples
+    placeholder: '#B0BEC5'
 };
 
 const DarkColors = {
@@ -53,11 +53,12 @@ const DarkColors = {
     pendingBg: 'rgba(255, 152, 0, 0.15)', pendingText: '#FFB74D',
     approvedBg: 'rgba(76, 175, 80, 0.15)', approvedText: '#81C784',
     rejectedBg: 'rgba(244, 67, 54, 0.15)', rejectedText: '#E57373',
-    placeholder: '#616161' // Dull grey for dark mode
+    placeholder: '#616161'
 };
 
 // --- TYPES ---
 type Status = 'Pending' | 'Approved' | 'Rejected';
+
 interface PreAdmissionRecord { 
     id: number; 
     admission_no: string; 
@@ -74,14 +75,21 @@ interface PreAdmissionRecord {
     previous_grade?: string; 
     joining_grade: string; 
     address?: string; 
-    status: Status; 
+    status: Status;
+    // New Fields
+    school_joined_date?: string;
+    school_joined_grade?: string;
+    school_outgoing_date?: string;
+    school_outgoing_grade?: string;
+    tc_issued_date?: string;
+    tc_number?: string;
 }
 
 // --- HELPERS ---
 const formatDate = (dateString?: string): string => { 
-    if (!dateString) return 'N/A'; 
+    if (!dateString) return 'DD/MM/YYYY'; 
     const date = new Date(dateString); 
-    if (isNaN(date.getTime())) return 'N/A';
+    if (isNaN(date.getTime())) return 'DD/MM/YYYY';
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); 
 };
 const toYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
@@ -103,7 +111,7 @@ const StatusPill = ({ status, colors }: { status: Status, colors: any }) => {
     ); 
 };
 
-const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false, placeholder = "" }: any) => (
+const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false, placeholder = "", maxLength }: any) => (
     <View style={styles.formRow}>
         <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
         <TextInput 
@@ -118,7 +126,20 @@ const InputField = ({ label, value, onChange, kType = "default", colors, multili
             multiline={multiline}
             placeholder={placeholder}
             placeholderTextColor={colors.placeholder}
+            maxLength={maxLength}
         />
+    </View>
+);
+
+const DateInput = ({ label, dateValue, onPress, colors }: any) => (
+    <View style={styles.formRow}>
+        <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
+        <TouchableOpacity onPress={onPress} style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={{ color: dateValue ? colors.textMain : colors.placeholder }}>
+                {formatDate(dateValue)}
+            </Text>
+            <MaterialIcons name="event" size={20} color={colors.textSub} style={{ position: 'absolute', right: 10, top: 10 }} />
+        </TouchableOpacity>
     </View>
 );
 
@@ -221,7 +242,7 @@ const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, on
                     <InfoRow icon="birthday-cake" label="D.O.B" value={formatDate(item.dob)} colors={colors} />
                     <InfoRow icon="phone" label="Phone" value={item.phone_no} colors={colors} />
                     <InfoRow icon="user" label="Parent" value={item.parent_name} colors={colors} />
-                    <InfoRow icon="graduation-cap" label="Prev. Grade" value={item.previous_grade} colors={colors} />
+                    {item.tc_number ? <InfoRow icon="file-text-o" label="TC No" value={item.tc_number} colors={colors} /> : null}
                     <InfoRow icon="map-marker" label="Address" value={item.address} isMultiLine colors={colors} />
                 </View>
             )}
@@ -246,7 +267,7 @@ const PreAdmissionsScreen: React.FC = () => {
 
     const [selectedImage, setSelectedImage] = useState<Asset | null>(null);
     const [date, setDate] = useState(new Date());
-    const [pickerTarget, setPickerTarget] = useState<'dob' | null>(null);
+    const [pickerTarget, setPickerTarget] = useState<'dob' | 'school_joined_date' | 'school_outgoing_date' | 'tc_issued_date' | null>(null);
     const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
 
     const [searchText, setSearchText] = useState<string>('');
@@ -289,7 +310,13 @@ const PreAdmissionsScreen: React.FC = () => {
         if (item) { 
             setIsEditing(true); 
             setCurrentItemId(item.id);
-            const normalized = { ...item, dob: item.dob ? toYYYYMMDD(new Date(item.dob)) : undefined };
+            const normalized = { 
+                ...item, 
+                dob: item.dob ? toYYYYMMDD(new Date(item.dob)) : undefined,
+                school_joined_date: item.school_joined_date ? toYYYYMMDD(new Date(item.school_joined_date)) : undefined,
+                school_outgoing_date: item.school_outgoing_date ? toYYYYMMDD(new Date(item.school_outgoing_date)) : undefined,
+                tc_issued_date: item.tc_issued_date ? toYYYYMMDD(new Date(item.tc_issued_date)) : undefined,
+            };
             setFormData(normalized); 
             setOriginalData(normalized);
         } 
@@ -309,10 +336,110 @@ const PreAdmissionsScreen: React.FC = () => {
     };
     
     const handleSave = async () => {
+        // --- 1. Basic Required Fields ---
         if (!formData.admission_no || !formData.student_name || !formData.joining_grade) { 
-            return Alert.alert('Validation Error', 'Admission No, Name, and Grade are required.'); 
+            return Alert.alert('Validation Error', 'Admission No, Name, and Joining Grade are required.'); 
         }
+
+        // --- 2. Phone No Validation ---
+        if (formData.phone_no) {
+            const phoneRegex = /^[1-9][0-9]{9}$/;
+            if (!phoneRegex.test(formData.phone_no)) {
+                return Alert.alert('Invalid Phone', 'Phone number must be exactly 10 digits and cannot start with 0.');
+            }
+        }
+
+        // --- 3. Pen No Validation ---
+        if (formData.pen_no) {
+            const penRegex = /^[a-zA-Z0-9]{6,20}$/;
+            if (!penRegex.test(formData.pen_no)) {
+                return Alert.alert('Invalid Pen No', 'Pen No must be 6-20 alphanumeric characters, no special symbols.');
+            }
+            // Uniqueness Check
+            const duplicatePen = data.find(r => r.pen_no === formData.pen_no && r.id !== (currentItemId || -1));
+            if (duplicatePen) {
+                return Alert.alert('Duplicate Pen No', 'This Pen No already exists in the database.');
+            }
+        }
+
+        // --- 4. Aadhaar No Validation ---
+        if (formData.aadhar_no) {
+            const aadhaarRegex = /^[0-9]{12}$/;
+            if (!aadhaarRegex.test(formData.aadhar_no)) {
+                return Alert.alert('Invalid Aadhaar', 'Aadhaar number must be exactly 12 digits.');
+            }
+        }
+
+        // --- 5. Grade Validations (Joined & Outgoing) ---
+        const validateGrade = (grade?: string, label?: string) => {
+            if (!grade) return true;
+            const num = parseInt(grade, 10);
+            if (isNaN(num) || num < 1 || num > 12) {
+                Alert.alert('Invalid Grade', `${label} must be a number between 1 and 12.`);
+                return false;
+            }
+            return true;
+        };
+
+        if (!validateGrade(formData.school_joined_grade, 'Joined Grade')) return;
+        if (!validateGrade(formData.school_outgoing_grade, 'Outgoing Grade')) return;
+
+        // Compare Grades: Outgoing >= Joined
+        if (formData.school_joined_grade && formData.school_outgoing_grade) {
+            if (parseInt(formData.school_outgoing_grade) < parseInt(formData.school_joined_grade)) {
+                return Alert.alert('Invalid Grade Sequence', 'Outgoing Grade must be higher than or equal to Joined Grade.');
+            }
+        }
+
+        // --- 6. Date Validations ---
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        const checkDate = (dStr?: string, label?: string) => {
+            if (!dStr) return null;
+            const d = new Date(dStr);
+            if (d > today) {
+                Alert.alert('Invalid Date', `${label} cannot be in the future.`);
+                return false;
+            }
+            return d;
+        };
+
+        const joinedDate = checkDate(formData.school_joined_date, 'School Joined Date');
+        if (joinedDate === false) return;
+
+        const outgoingDate = checkDate(formData.school_outgoing_date, 'School Outgoing Date');
+        if (outgoingDate === false) return;
         
+        const tcDate = checkDate(formData.tc_issued_date, 'TC Issued Date');
+        if (tcDate === false) return;
+
+        // Compare Dates
+        if (joinedDate && outgoingDate) {
+            if (outgoingDate < joinedDate) {
+                return Alert.alert('Invalid Date Sequence', 'Outgoing Date cannot be before Joined Date.');
+            }
+        }
+        if (outgoingDate && tcDate) {
+            if (tcDate < outgoingDate) {
+                return Alert.alert('Invalid Date Sequence', 'TC Date cannot be before Outgoing Date.');
+            }
+        }
+
+        // --- 7. TC Number Validation ---
+        if (formData.tc_number) {
+            const tcRegex = /^[a-zA-Z0-9]{5,20}$/;
+            if (!tcRegex.test(formData.tc_number)) {
+                return Alert.alert('Invalid TC No', 'TC Number must be 5-20 alphanumeric characters.');
+            }
+             // Uniqueness Check
+             const duplicateTC = data.find(r => r.tc_number === formData.tc_number && r.id !== (currentItemId || -1));
+             if (duplicateTC) {
+                 return Alert.alert('Duplicate TC No', 'This TC Number already exists in the database.');
+             }
+        }
+
+        // --- PROCEED TO SAVE ---
         const body = new FormData();
         let hasChanges = false;
 
@@ -372,9 +499,11 @@ const PreAdmissionsScreen: React.FC = () => {
     };
 
     const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => { 
+        const target = pickerTarget;
         setPickerTarget(null); 
-        if (event.type === 'set' && selectedDate) { 
-            setFormData(prev => ({ ...prev, dob: toYYYYMMDD(selectedDate) })); 
+        if (event.type === 'set' && selectedDate && target) { 
+            const formatted = toYYYYMMDD(selectedDate);
+            setFormData(prev => ({ ...prev, [target]: formatted })); 
         } 
     };
 
@@ -463,33 +592,57 @@ const PreAdmissionsScreen: React.FC = () => {
                         <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} placeholder="e.g., 2025-001" />
                         <InputField label="Student Name*" value={formData.student_name} onChange={(t: string) => setFormData(p => ({...p, student_name: t}))} colors={COLORS} placeholder="e.g., Rahul Kumar" />
                         
-                        <View style={styles.formRow}>
-                            <Text style={[styles.label, { color: COLORS.textSub }]}>Date of Birth</Text>
-                            <TouchableOpacity onPress={() => setPickerTarget('dob')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Text style={{ color: formData.dob ? COLORS.textMain : COLORS.placeholder }}>{formData.dob ? formatDate(formData.dob) : 'dd-mm-yyyy'}</Text>
-                            </TouchableOpacity>
-                        </View>
+                        <DateInput label="Date of Birth" dateValue={formData.dob} onPress={() => setPickerTarget('dob')} colors={COLORS} />
                         
                         <View style={styles.row}>
                             <View style={styles.halfWidth}>
-                                <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9876543210" />
+                                <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
                             </View>
                             <View style={styles.halfWidth}>
-                                <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t}))} colors={COLORS} placeholder="e.g., PEN123456" />
+                                <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Alphanumeric" maxLength={20} />
                             </View>
                         </View>
-                        <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t}))} kType="numeric" colors={COLORS} placeholder="e.g., 1234 5678 9012" />
+                        <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="12 Digits" maxLength={12} />
 
                         {/* --- ACADEMIC INFO --- */}
                         <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Academic Information</Text>
                         <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} placeholder="e.g., Class 5" />
-                        <InputField label="Previous Institute" value={formData.previous_institute} onChange={(t: string) => setFormData(p => ({...p, previous_institute: t}))} colors={COLORS} placeholder="e.g., St. Mary's School" />
-                        <InputField label="Previous Grade" value={formData.previous_grade} onChange={(t: string) => setFormData(p => ({...p, previous_grade: t}))} colors={COLORS} placeholder="e.g., Class 4" />
+
+                        {/* --- PREVIOUS SCHOOL & TC INFO --- */}
+                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Previous School & TC</Text>
+                        <InputField label="Previous Institute" value={formData.previous_institute} onChange={(t: string) => setFormData(p => ({...p, previous_institute: t}))} colors={COLORS} placeholder="School Name" />
+                        
+                        <View style={styles.row}>
+                            <View style={styles.halfWidth}>
+                                <InputField label="Joined Grade" value={formData.school_joined_grade} onChange={(t: string) => setFormData(p => ({...p, school_joined_grade: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="1-12" />
+                            </View>
+                            <View style={styles.halfWidth}>
+                                <InputField label="Outgoing Grade" value={formData.school_outgoing_grade} onChange={(t: string) => setFormData(p => ({...p, school_outgoing_grade: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="1-12" />
+                            </View>
+                        </View>
+
+                        <View style={styles.row}>
+                            <View style={styles.halfWidth}>
+                                <DateInput label="Joined Date" dateValue={formData.school_joined_date} onPress={() => setPickerTarget('school_joined_date')} colors={COLORS} />
+                            </View>
+                            <View style={styles.halfWidth}>
+                                <DateInput label="Outgoing Date" dateValue={formData.school_outgoing_date} onPress={() => setPickerTarget('school_outgoing_date')} colors={COLORS} />
+                            </View>
+                        </View>
+
+                        <View style={styles.row}>
+                            <View style={styles.halfWidth}>
+                                <InputField label="TC Number" value={formData.tc_number} onChange={(t: string) => setFormData(p => ({...p, tc_number: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Unique No" maxLength={20} />
+                            </View>
+                            <View style={styles.halfWidth}>
+                                <DateInput label="TC Issued Date" dateValue={formData.tc_issued_date} onPress={() => setPickerTarget('tc_issued_date')} colors={COLORS} />
+                            </View>
+                        </View>
 
                         {/* --- PARENT INFO --- */}
                         <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Parent Information</Text>
                         <InputField label="Parent Name" value={formData.parent_name} onChange={(t: string) => setFormData(p => ({...p, parent_name: t}))} colors={COLORS} placeholder="e.g., Ramesh Kumar" />
-                        <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9876543210" />
+                        <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
                         
                         <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} placeholder="e.g., H.No 1-23, Street Name, City" />
 
@@ -502,7 +655,15 @@ const PreAdmissionsScreen: React.FC = () => {
                             ))}
                         </View>
                         
-                        {pickerTarget && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
+                        {pickerTarget && (
+                            <DateTimePicker 
+                                value={date} 
+                                mode="date" 
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={onDateChange} 
+                                maximumDate={new Date()} // Prevent Future Dates in Picker
+                            />
+                        )}
                         
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.border }]} onPress={() => setModalVisible(false)}><Text style={{color: COLORS.textMain}}>Cancel</Text></TouchableOpacity>

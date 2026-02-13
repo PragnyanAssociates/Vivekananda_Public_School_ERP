@@ -74,9 +74,9 @@ interface AlumniRecord {
 
 // --- HELPERS ---
 const formatDate = (dateString?: string): string => {
-  if (!dateString) return 'N/A';
+  if (!dateString) return 'DD/MM/YYYY';
   const date = new Date(dateString);
-  if (isNaN(date.getTime())) return 'N/A';
+  if (isNaN(date.getTime())) return 'DD/MM/YYYY';
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
@@ -132,7 +132,7 @@ const YearPickerModal: React.FC<{
   );
 };
 
-const InputField = ({ label, value, onChange, placeholder = "", kType = "default", colors, multiline = false }: any) => (
+const InputField = ({ label, value, onChange, placeholder = "", kType = "default", colors, multiline = false, maxLength }: any) => (
   <View style={styles.formRow}>
     <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
     <TextInput 
@@ -147,7 +147,20 @@ const InputField = ({ label, value, onChange, placeholder = "", kType = "default
       placeholder={placeholder} 
       placeholderTextColor={colors.placeholder} 
       multiline={multiline}
+      maxLength={maxLength}
     />
+  </View>
+);
+
+const DateInput = ({ label, dateValue, onPress, colors }: any) => (
+  <View style={styles.formRow}>
+    <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
+    <TouchableOpacity onPress={onPress} style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+      <Text style={{ color: dateValue ? colors.textMain : colors.placeholder }}>
+        {formatDate(dateValue)}
+      </Text>
+      <MaterialIcons name="event" size={20} color={colors.textSub} style={{ position: 'absolute', right: 10, top: 10 }} />
+    </TouchableOpacity>
   </View>
 );
 
@@ -219,6 +232,8 @@ const AlumniCardItem: React.FC<{ item: AlumniRecord, colors: any, onEdit: any, o
           <InfoRow icon="badge" label="Aadhar" value={item.aadhar_no} colors={colors} />
           <InfoRow icon="person" label="Parent" value={item.parent_name} colors={colors} />
           <InfoRow icon="place" label="Address" value={item.address} isMultiLine={true} colors={colors} />
+          {item.tc_number ? <InfoRow icon="description" label="TC No" value={item.tc_number} colors={colors} /> : null}
+          {item.tc_issued_date ? <InfoRow icon="event-available" label="TC Date" value={formatDate(item.tc_issued_date)} colors={colors} /> : null}
         </View>
       )}
     </TouchableOpacity>
@@ -305,8 +320,100 @@ const AlumniScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // --- 1. Basic Requirement ---
     if (!formData.admission_no || !formData.alumni_name) return Alert.alert('Required', 'Admission No and Name are required.');
 
+    // --- 2. Phone Validation ---
+    if (formData.phone_no) {
+        const phoneRegex = /^[1-9][0-9]{9}$/;
+        if (!phoneRegex.test(formData.phone_no)) {
+            return Alert.alert('Invalid Phone', 'Phone number must be exactly 10 digits and cannot start with 0.');
+        }
+    }
+
+    // --- 3. Pen No Validation ---
+    if (formData.pen_no) {
+        const penRegex = /^[a-zA-Z0-9]{6,20}$/;
+        if (!penRegex.test(formData.pen_no)) {
+            return Alert.alert('Invalid Pen No', 'Pen No must be 6-20 alphanumeric characters, no special symbols.');
+        }
+        // Unique Check
+        const duplicatePen = alumniData.find(r => r.pen_no === formData.pen_no && r.id !== (currentItemId || -1));
+        if (duplicatePen) {
+            return Alert.alert('Duplicate Pen No', 'This Pen No already exists in the database.');
+        }
+    }
+
+    // --- 4. Aadhaar Validation ---
+    if (formData.aadhar_no) {
+        const aadhaarRegex = /^[0-9]{12}$/;
+        if (!aadhaarRegex.test(formData.aadhar_no)) {
+            return Alert.alert('Invalid Aadhaar', 'Aadhaar number must be exactly 12 digits.');
+        }
+    }
+
+    // --- 5. Grade Validation ---
+    const validateGrade = (grade?: string, label?: string) => {
+        if (!grade) return true;
+        const num = parseInt(grade, 10);
+        if (isNaN(num) || num < 1 || num > 12) {
+            Alert.alert('Invalid Grade', `${label} must be a number between 1 and 12.`);
+            return false;
+        }
+        return true;
+    };
+
+    if (!validateGrade(formData.school_joined_grade, 'Joined Grade')) return;
+    if (!validateGrade(formData.school_outgoing_grade, 'Outgoing Grade')) return;
+
+    if (formData.school_joined_grade && formData.school_outgoing_grade) {
+        if (parseInt(formData.school_outgoing_grade) < parseInt(formData.school_joined_grade)) {
+            return Alert.alert('Invalid Grade Sequence', 'Outgoing Grade must be higher than or equal to Joined Grade.');
+        }
+    }
+
+    // --- 6. Date Validation ---
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const checkDate = (dStr?: string, label?: string) => {
+        if (!dStr) return null;
+        const d = new Date(dStr);
+        if (d > today) {
+            Alert.alert('Invalid Date', `${label} cannot be in the future.`);
+            return false;
+        }
+        return d;
+    };
+
+    const joinedDate = checkDate(formData.school_joined_date, 'Joined Date');
+    if (joinedDate === false) return;
+    const outgoingDate = checkDate(formData.school_outgoing_date, 'Outgoing Date');
+    if (outgoingDate === false) return;
+    const tcDate = checkDate(formData.tc_issued_date, 'TC Issued Date');
+    if (tcDate === false) return;
+
+    if (joinedDate && outgoingDate && outgoingDate < joinedDate) {
+        return Alert.alert('Invalid Date Sequence', 'Outgoing Date cannot be before Joined Date.');
+    }
+    if (outgoingDate && tcDate && tcDate < outgoingDate) {
+        return Alert.alert('Invalid Date Sequence', 'TC Date cannot be before Outgoing Date.');
+    }
+
+    // --- 7. TC Number Validation ---
+    if (formData.tc_number) {
+        const tcRegex = /^[a-zA-Z0-9]{5,20}$/;
+        if (!tcRegex.test(formData.tc_number)) {
+            return Alert.alert('Invalid TC No', 'TC Number must be 5-20 alphanumeric characters.');
+        }
+        // Unique Check
+        const duplicateTC = alumniData.find(r => r.tc_number === formData.tc_number && r.id !== (currentItemId || -1));
+        if (duplicateTC) {
+            return Alert.alert('Duplicate TC No', 'This TC Number already exists in the database.');
+        }
+    }
+
+    // --- Save Logic ---
     const data = new FormData();
     let hasChanges = false;
 
@@ -376,9 +483,10 @@ const AlumniScreen: React.FC = () => {
   };
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    const target = pickerTarget;
     setPickerTarget(null);
-    if (event.type === 'set' && selectedDate && pickerTarget) {
-      setFormData(prev => ({ ...prev, [pickerTarget]: toYYYYMMDD(selectedDate) }));
+    if (event.type === 'set' && selectedDate && target) {
+      setFormData(prev => ({ ...prev, [target]: toYYYYMMDD(selectedDate) }));
     }
   };
 
@@ -477,52 +585,41 @@ const AlumniScreen: React.FC = () => {
             <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} placeholder="e.g., 2025-001" />
             <InputField label="Alumni Name*" value={formData.alumni_name} onChange={(t: string) => setFormData(p => ({...p, alumni_name: t}))} colors={COLORS} placeholder="e.g., Rahul Kumar" />
             
-            <View style={styles.formRow}>
-              <Text style={[styles.label, { color: COLORS.textSub }]}>Date of Birth</Text>
-              <TouchableOpacity onPress={() => showDatePicker('dob')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                <Text style={{ color: formData.dob ? COLORS.textMain : COLORS.placeholder }}>{formData.dob ? formatDate(formData.dob) : 'dd-mm-yyyy'}</Text>
-              </TouchableOpacity>
-            </View>
+            <DateInput label="Date of Birth" dateValue={formData.dob} onPress={() => showDatePicker('dob')} colors={COLORS} />
             
             <View style={styles.row}>
                 <View style={styles.halfWidth}>
-                    <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t}))} colors={COLORS} placeholder="e.g., PEN123456" />
+                    <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Alphanumeric" maxLength={20} />
                 </View>
                 <View style={styles.halfWidth}>
-                    <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t}))} kType="numeric" colors={COLORS} placeholder="e.g., 1234 5678 9012" />
+                    <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="12 Digits" maxLength={12} />
                 </View>
             </View>
 
             {/* --- CONTACT & PARENT INFO --- */}
             <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Contact & Parent</Text>
-            <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9876543210" />
+            <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
             <InputField label="Parent Name" value={formData.parent_name} onChange={(t: string) => setFormData(p => ({...p, parent_name: t}))} colors={COLORS} placeholder="e.g., Ramesh Kumar" />
-            <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t}))} kType="phone-pad" colors={COLORS} placeholder="e.g., 9988776655" />
+            <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
             <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} colors={COLORS} multiline placeholder="e.g., H.No 1-23, Street Name" />
 
             {/* --- SCHOOL & CAREER --- */}
             <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>School & Career</Text>
             <View style={styles.row}>
                 <View style={styles.halfWidth}>
-                    <Text style={[styles.label, { color: COLORS.textSub }]}>Joined Date</Text>
-                    <TouchableOpacity onPress={() => showDatePicker('school_joined_date')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Text style={{ color: formData.school_joined_date ? COLORS.textMain : COLORS.placeholder }}>{formData.school_joined_date ? formatDate(formData.school_joined_date) : 'dd-mm-yyyy'}</Text>
-                    </TouchableOpacity>
+                    <DateInput label="Joined Date" dateValue={formData.school_joined_date} onPress={() => showDatePicker('school_joined_date')} colors={COLORS} />
                 </View>
                 <View style={styles.halfWidth}>
-                    <InputField label="Joined Grade" value={formData.school_joined_grade} onChange={(t: string) => setFormData(p => ({...p, school_joined_grade: t}))} colors={COLORS} placeholder="e.g., Class 1" />
+                    <InputField label="Joined Grade" value={formData.school_joined_grade} onChange={(t: string) => setFormData(p => ({...p, school_joined_grade: t.replace(/[^0-9]/g, '')}))} colors={COLORS} placeholder="1-12" kType="numeric" maxLength={2} />
                 </View>
             </View>
 
             <View style={styles.row}>
                 <View style={styles.halfWidth}>
-                    <Text style={[styles.label, { color: COLORS.textSub }]}>Outgoing Date</Text>
-                    <TouchableOpacity onPress={() => showDatePicker('school_outgoing_date')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Text style={{ color: formData.school_outgoing_date ? COLORS.textMain : COLORS.placeholder }}>{formData.school_outgoing_date ? formatDate(formData.school_outgoing_date) : 'dd-mm-yyyy'}</Text>
-                    </TouchableOpacity>
+                    <DateInput label="Outgoing Date" dateValue={formData.school_outgoing_date} onPress={() => showDatePicker('school_outgoing_date')} colors={COLORS} />
                 </View>
                 <View style={styles.halfWidth}>
-                    <InputField label="Outgoing Grade" value={formData.school_outgoing_grade} onChange={(t: string) => setFormData(p => ({...p, school_outgoing_grade: t}))} colors={COLORS} placeholder="e.g., Class 12" />
+                    <InputField label="Outgoing Grade" value={formData.school_outgoing_grade} onChange={(t: string) => setFormData(p => ({...p, school_outgoing_grade: t.replace(/[^0-9]/g, '')}))} colors={COLORS} placeholder="1-12" kType="numeric" maxLength={2} />
                 </View>
             </View>
             
@@ -532,17 +629,22 @@ const AlumniScreen: React.FC = () => {
             <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>TC Details</Text>
             <View style={styles.row}>
                 <View style={styles.halfWidth}>
-                    <Text style={[styles.label, { color: COLORS.textSub }]}>TC Issued Date</Text>
-                    <TouchableOpacity onPress={() => showDatePicker('tc_issued_date')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Text style={{ color: formData.tc_issued_date ? COLORS.textMain : COLORS.placeholder }}>{formData.tc_issued_date ? formatDate(formData.tc_issued_date) : 'dd-mm-yyyy'}</Text>
-                    </TouchableOpacity>
+                    <DateInput label="TC Issued Date" dateValue={formData.tc_issued_date} onPress={() => showDatePicker('tc_issued_date')} colors={COLORS} />
                 </View>
                 <View style={styles.halfWidth}>
-                    <InputField label="TC Number" value={formData.tc_number} onChange={(t: string) => setFormData(p => ({...p, tc_number: t}))} colors={COLORS} placeholder="e.g., TC-2025/001" />
+                    <InputField label="TC Number" value={formData.tc_number} onChange={(t: string) => setFormData(p => ({...p, tc_number: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Unique No" maxLength={20} />
                 </View>
             </View>
 
-            {pickerTarget && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
+            {pickerTarget && (
+                <DateTimePicker 
+                    value={date} 
+                    mode="date" 
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange} 
+                    maximumDate={new Date()} // Prevent future dates
+                />
+            )}
             
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.border }]} onPress={() => setModalVisible(false)}>

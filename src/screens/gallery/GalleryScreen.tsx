@@ -2,7 +2,8 @@ import React, { useState, FC, useCallback, useEffect } from 'react';
 import {
     View, Text, StyleSheet, FlatList, Dimensions,
     TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput,
-    Button, Platform, SafeAreaView, StatusBar, useColorScheme
+    Button, Platform, SafeAreaView, StatusBar, useColorScheme,
+    KeyboardAvoidingView
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -13,13 +14,18 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
 import LinearGradient from 'react-native-linear-gradient';
 import FastImage from 'react-native-fast-image';
-import DateTimePicker from '@react-native-community/datetimepicker'; // UPDATED: Imported standard date picker
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
 // --- Types ---
-type AlbumType = { title: string; event_date: string; item_count: number; cover_image_path: string | null; };
+type AlbumType = { 
+    title: string; 
+    event_date: string; 
+    item_count: number; 
+    cover_image_path: string | null; 
+};
 type RootStackParamList = { AlbumDetail: { title: string }; };
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 type DateFilterType = 'month' | 'year';
@@ -37,8 +43,11 @@ const LightColors = {
     textMain: '#263238',
     textSub: '#546E7A',
     border: '#CFD8DC',
-    inputBg: '#f0f2f5'
+    inputBg: '#FFFFFF',
+    modalOverlay: 'rgba(0,0,0,0.5)',
+    placeholder: '#90A4AE'
 };
+
 const DarkColors = {
     primary: '#008080',
     background: '#121212',
@@ -46,7 +55,9 @@ const DarkColors = {
     textMain: '#E0E0E0',
     textSub: '#B0B0B0',
     border: '#333333',
-    inputBg: '#2C2C2C'
+    inputBg: '#2C2C2C',
+    modalOverlay: 'rgba(255,255,255,0.1)',
+    placeholder: '#616161'
 };
 
 const monthItems = [
@@ -56,14 +67,24 @@ const monthItems = [
     { label: "October", value: 9 }, { label: "November", value: 10 }, { label: "December", value: 11 },
 ];
 
+// --- Helper: Date Formatter (DD/MM/YYYY) ---
+const formatDate = (dateString: string | Date): string => {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return 'N/A';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+};
+
 // --- Sub Component: Album Cover ---
 const AlbumCover: FC<{ album: AlbumType; onPress: () => void; onOptionPress: () => void; isAdmin: boolean; index: number; colors: any; }> = ({ album, onPress, onOptionPress, isAdmin, index, colors }) => {
     return (
         <Animatable.View animation="zoomIn" duration={500} delay={index * 100} useNativeDriver={true}>
             <TouchableOpacity style={[styles.albumContainer, { backgroundColor: colors.cardBg }]} onPress={onPress} activeOpacity={0.9}>
                 {!album.cover_image_path ? (
-                    <View style={styles.albumImage}>
-                        <Icon name="film-outline" size={40} color="rgba(255,255,255,0.6)" />
+                    <View style={styles.albumImagePlaceholder}>
+                        <Icon name="film-outline" size={40} color={colors.textSub} />
                     </View>
                 ) : (
                     <FastImage
@@ -75,11 +96,11 @@ const AlbumCover: FC<{ album: AlbumType; onPress: () => void; onOptionPress: () 
                 <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradientOverlay} />
                 <View style={styles.albumInfo}>
                     <Text style={styles.albumTitle} numberOfLines={2}>{album.title}</Text>
-                    <Text style={styles.albumDate}>{new Date(album.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+                    {/* Date formatted as DD/MM/YYYY */}
+                    <Text style={styles.albumDate}>{formatDate(album.event_date)}</Text>
                     <Text style={styles.albumCount}>{album.item_count} items</Text>
                 </View>
                 
-                {/* --- Three Dots Function --- */}
                 {isAdmin && (
                     <TouchableOpacity style={styles.optionButton} onPress={(e) => { e.stopPropagation(); onOptionPress(); }}>
                         <Icon name="ellipsis-vertical" size={18} color="white" />
@@ -124,7 +145,7 @@ const GalleryScreen: FC = () => {
     const [asset, setAsset] = useState<Asset | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // UPDATED: Date Picker State
+    // Date Picker State
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     // --- Fetch & Filter Logic ---
@@ -231,6 +252,7 @@ const GalleryScreen: FC = () => {
         setIsSubmitting(true);
         const fd = new FormData();
         fd.append('title', uploadTitle.trim());
+        // Send YYYY-MM-DD to API, display DD/MM/YYYY to user
         fd.append('event_date', uploadDate.toISOString().split('T')[0]);
         fd.append('role', user.role);
         fd.append('adminId', String(user.id));
@@ -248,7 +270,7 @@ const GalleryScreen: FC = () => {
         }
     };
 
-    // Dynamic styles for PickerSelect
+    // Dynamic styles for PickerSelect based on Theme
     const pickerStyle = {
         inputIOS: {
             fontSize: 16, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1,
@@ -257,7 +279,8 @@ const GalleryScreen: FC = () => {
         inputAndroid: {
             fontSize: 16, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1,
             borderColor: COLORS.border, borderRadius: 8, color: COLORS.textMain, backgroundColor: COLORS.inputBg,
-        }
+        },
+        placeholder: { color: COLORS.placeholder }
     };
 
     return (
@@ -266,7 +289,6 @@ const GalleryScreen: FC = () => {
 
             {/* --- Header --- */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
-                {/* Left Side: Icon & Title */}
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
                         <MaterialIcons name="collections" size={24} color={COLORS.primary} />
@@ -277,9 +299,7 @@ const GalleryScreen: FC = () => {
                     </View>
                 </View>
 
-                {/* Right Side: Actions (Filter & Add) */}
                 <View style={styles.headerRightActions}>
-                    {/* Filter Button */}
                     <TouchableOpacity
                         style={[
                             styles.filterTriggerButton,
@@ -291,7 +311,6 @@ const GalleryScreen: FC = () => {
                         <Text style={[styles.filterTriggerText, { color: activeDateFilterType ? COLORS.primary : COLORS.textMain }]}>Filter</Text>
                     </TouchableOpacity>
 
-                    {/* Add Button */}
                     {isAdmin && (
                         <TouchableOpacity 
                             style={[styles.headerAddButton, { backgroundColor: COLORS.primary }]} 
@@ -335,7 +354,7 @@ const GalleryScreen: FC = () => {
 
             {/* --- FILTER MODAL --- */}
             <Modal visible={isFilterModalVisible} transparent={true} animationType="slide" onRequestClose={() => setFilterModalVisible(false)}>
-                <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setFilterModalVisible(false)}>
+                <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: COLORS.modalOverlay }]} activeOpacity={1} onPress={() => setFilterModalVisible(false)}>
                     <Animatable.View animation="fadeInUpBig" duration={400} style={[styles.bottomSheet, { backgroundColor: COLORS.cardBg }]} onStartShouldSetResponder={() => true}>
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>Filter Gallery</Text>
@@ -397,28 +416,30 @@ const GalleryScreen: FC = () => {
 
             {/* --- UPLOAD MODAL --- */}
             <Modal visible={isUploadModalVisible} transparent={true} animationType="fade" onRequestClose={() => setUploadModalVisible(false)}>
-                <View style={styles.modalBackdrop}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalBackdrop, { backgroundColor: COLORS.modalOverlay }]}>
                     <Animatable.View animation="zoomInUp" duration={500} style={[styles.uploadModalView, { backgroundColor: COLORS.cardBg }]}>
                         <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>New Album</Text>
 
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Title</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain }]}
+                            style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
                             placeholder="Album Title"
-                            placeholderTextColor={COLORS.textSub}
+                            placeholderTextColor={COLORS.placeholder}
                             value={uploadTitle}
                             onChangeText={setUploadTitle}
                         />
 
-                        {/* UPDATED: Date Display with Click Action */}
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Date</Text>
                         <TouchableOpacity 
-                            style={[styles.dateDisplay, { backgroundColor: COLORS.inputBg }]}
+                            style={[styles.dateDisplay, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
                             onPress={() => setShowDatePicker(true)}
                         >
                             <Icon name="calendar-outline" size={20} color={COLORS.textSub} />
-                            <Text style={{ marginLeft: 10, color: COLORS.textMain }}>{uploadDate.toLocaleDateString()}</Text>
+                            <Text style={{ marginLeft: 10, color: COLORS.textMain, fontSize: 16 }}>
+                                {formatDate(uploadDate)}
+                            </Text>
                         </TouchableOpacity>
 
-                        {/* Date Picker Logic */}
                         {showDatePicker && (
                             <DateTimePicker
                                 value={uploadDate}
@@ -431,6 +452,7 @@ const GalleryScreen: FC = () => {
                             />
                         )}
 
+                        <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Cover Image</Text>
                         <TouchableOpacity
                             style={[styles.selectButton, { backgroundColor: COLORS.primary + '20' }]}
                             onPress={() => launchImageLibrary({ mediaType: 'mixed' }, r => r.assets && setAsset(r.assets[0]))}
@@ -441,7 +463,7 @@ const GalleryScreen: FC = () => {
                             </Text>
                         </TouchableOpacity>
 
-                        {asset?.fileName && <Text style={{ color: COLORS.textSub, fontSize: 12, marginBottom: 15 }}>{asset.fileName}</Text>}
+                        {asset?.fileName && <Text style={{ color: COLORS.textSub, fontSize: 12, marginBottom: 15, alignSelf: 'center' }}>{asset.fileName}</Text>}
 
                         <View style={styles.modalActions}>
                             <Button title="Cancel" onPress={() => setUploadModalVisible(false)} color={COLORS.textSub} />
@@ -449,7 +471,7 @@ const GalleryScreen: FC = () => {
                             <Button title={isSubmitting ? "Wait..." : "Create"} onPress={handleUpload} disabled={isSubmitting} color={COLORS.primary} />
                         </View>
                     </Animatable.View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
         </SafeAreaView>
@@ -471,13 +493,12 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 12 },
 
-    // Header Right Actions (Container for Filter + Add)
+    // Header Right Actions
     headerRightActions: { flexDirection: 'row', alignItems: 'center' },
     
     filterTriggerButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1 },
     filterTriggerText: { marginLeft: 4, fontWeight: '600', fontSize: 12 },
 
-    // Add Button in Header
     headerAddButton: {
         flexDirection: 'row', alignItems: 'center',
         paddingVertical: 7, paddingHorizontal: 12,
@@ -492,24 +513,25 @@ const styles = StyleSheet.create({
     emptySubText: { marginTop: 8, fontSize: 14, textAlign: 'center' },
     
     // Grid Item
-    albumContainer: { width: albumSize, height: albumSize + 30, marginHorizontal: MARGIN / 2, marginBottom: MARGIN, borderRadius: 12, elevation: 2, overflow: 'hidden' },
-    albumImage: { width: '100%', height: '100%', backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' },
+    albumContainer: { width: albumSize, height: albumSize + 40, marginHorizontal: MARGIN / 2, marginBottom: MARGIN, borderRadius: 12, elevation: 2, overflow: 'hidden' },
+    albumImage: { width: '100%', height: '100%' },
+    albumImagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
     gradientOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
     albumInfo: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10 },
     albumTitle: { fontSize: 14, fontWeight: 'bold', color: '#fff', textShadowColor: 'rgba(0,0,0,0.75)', textShadowRadius: 10 },
-    albumDate: { fontSize: 10, color: '#eee' },
-    albumCount: { fontSize: 10, color: '#eee', fontWeight: '600' },
+    albumDate: { fontSize: 11, color: '#eee', marginTop: 2 },
+    albumCount: { fontSize: 10, color: '#eee', fontWeight: '600', marginTop: 1 },
     
     // Option Button
     optionButton: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
 
     // Modals
-    modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-    bottomSheet: { width: '100%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
-    uploadModalView: { width: '90%', borderRadius: 20, padding: 25, alignSelf: 'center', marginBottom: height * 0.25 },
+    modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center' }, // Centered for Upload Modal
+    bottomSheet: { width: '100%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20, position: 'absolute', bottom: 0 },
+    uploadModalView: { width: '90%', borderRadius: 20, padding: 25, alignSelf: 'center' },
     
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
     modalSectionTitle: { fontSize: 14, fontWeight: '600', marginTop: 10, marginBottom: 12 },
     
     filterGroup: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
@@ -523,8 +545,9 @@ const styles = StyleSheet.create({
     applyFilterButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 
     // Inputs
-    input: { width: '100%', height: 50, borderRadius: 8, marginBottom: 15, paddingHorizontal: 15 },
-    dateDisplay: { width: '100%', height: 50, borderRadius: 8, marginBottom: 15, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center' },
+    inputLabel: { fontSize: 14, marginBottom: 5, fontWeight: '600' },
+    input: { width: '100%', height: 50, borderRadius: 8, marginBottom: 15, paddingHorizontal: 15, borderWidth: 1 },
+    dateDisplay: { width: '100%', height: 50, borderRadius: 8, marginBottom: 15, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
     selectButton: { width: '100%', height: 50, justifyContent: 'center', alignItems: 'center', borderRadius: 8, marginBottom: 10, flexDirection: 'row' },
 });
 

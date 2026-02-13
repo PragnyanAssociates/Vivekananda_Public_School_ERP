@@ -17,7 +17,13 @@ import { SERVER_URL } from '../../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 
 // --- Type Definitions ---
-type GalleryItemType = { id: number; title: string; event_date: string; file_path: string; file_type: 'photo' | 'video'; };
+type GalleryItemType = { 
+    id: number; 
+    title: string; 
+    event_date: string; 
+    file_path: string; 
+    file_type: 'photo' | 'video'; 
+};
 type RootStackParamList = { AlbumDetail: { title: string }; };
 type AlbumDetailScreenRouteProp = RouteProp<RootStackParamList, 'AlbumDetail'>;
 type FilterType = 'all' | 'photo' | 'video';
@@ -91,7 +97,7 @@ const AlbumDetailScreen: FC = () => {
         }
     }, [albumTitle]);
 
-    useFocusEffect(fetchData);
+    useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
     useEffect(() => { navigation.setOptions({ headerShown: false }); }, [navigation]);
 
@@ -100,19 +106,29 @@ const AlbumDetailScreen: FC = () => {
         else setFilteredItems(albumItems.filter(item => item.file_type === activeFilter));
     }, [albumItems, activeFilter]);
 
-    // --- Download Logic ---
+    // --- UPDATED Download Logic ---
     const handleDownloadItem = async (item: GalleryItemType) => {
         if (!item) return;
-        const url = `${SERVER_URL}${item.file_path}`;
-        const fileName = item.file_path.split('/').pop() || `gallery-item-${Date.now()}`;
+        
+        const fileUrl = `${SERVER_URL}${item.file_path}`;
+        // Extract extension or default to jpg/mp4
+        const extension = item.file_path.split('.').pop() || (item.file_type === 'video' ? 'mp4' : 'jpg');
+        const fileName = `download_${Date.now()}.${extension}`;
+        
+        // Define Mime Type
+        const mimeType = item.file_type === 'video' ? 'video/mp4' : 'image/jpeg';
 
-        if (Platform.OS === 'android') {
+        // 1. Permission Check (Only needed for Android < 10)
+        if (Platform.OS === 'android' && Platform.Version < 29) {
             try {
-                const permission = Platform.Version >= 33
-                    ? (item.file_type === 'video' ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO : PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES)
-                    : PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE;
-
-                const granted = await PermissionsAndroid.request(permission);
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+                    {
+                        title: 'Storage Permission Required',
+                        message: 'App needs access to your storage to download photos.',
+                        buttonPositive: 'OK',
+                    }
+                );
                 if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
                     Alert.alert('Permission Denied', 'Storage permission is required to download.');
                     return;
@@ -123,21 +139,37 @@ const AlbumDetailScreen: FC = () => {
             }
         }
 
+        // 2. Configure Download Path
         const { dirs } = RNFetchBlob.fs;
-        const path = Platform.OS === 'ios' ? `${dirs.DocumentDir}/${fileName}` : `${dirs.PictureDir}/${fileName}`;
+        // Use DownloadDir for Android to ensure visibility in "Files" and Gallery
+        const path = Platform.OS === 'android' ? `${dirs.DownloadDir}/${fileName}` : `${dirs.DocumentDir}/${fileName}`;
 
+        // 3. Start Download
         RNFetchBlob.config({
-            path,
             fileCache: true,
+            path: path,
             addAndroidDownloads: {
-                useDownloadManager: true,
-                notification: true,
-                path,
-                description: 'Downloading media.'
+                useDownloadManager: true, // Use built-in Android Manager
+                notification: true,       // Show notification in status bar
+                title: fileName,
+                description: 'Downloading media...',
+                mime: mimeType,           // Help Android classify the file
+                mediaScannable: true,     // Scan immediately so it shows in Gallery
+                path: path,               // Explicit path
             }
-        }).fetch('GET', url)
-            .then(() => Alert.alert('Success', 'Download complete.'))
-            .catch(() => Alert.alert('Download Failed'));
+        })
+        .fetch('GET', fileUrl)
+        .then((res) => {
+            // Success
+            Alert.alert('Success', 'Image downloaded successfully.');
+            
+            // For iOS, you might want to explicitly save to camera roll here if needed
+            // if (Platform.OS === 'ios') { CameraRoll.save(res.path()) ... }
+        })
+        .catch((errorMessage) => {
+            console.error(errorMessage);
+            Alert.alert('Download Failed', 'Could not download the file.');
+        });
     };
 
     // --- Action Handlers ---
