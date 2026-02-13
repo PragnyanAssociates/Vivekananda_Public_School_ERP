@@ -18,36 +18,36 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const { width, height } = Dimensions.get('window');
 
 const LightColors = {
-    primary: '#008080',
-    background: '#F2F5F8',
-    cardBg: '#FFFFFF',
-    textMain: '#263238',
-    textSub: '#546E7A',
-    border: '#CFD8DC',
-    error: '#E74C3C',
-    iconGrey: '#90A4AE',
-    inputBg: '#F5F7FA',
-    modalOverlay: 'rgba(0,0,0,0.5)',
-    badgeBg: '#EAEAEA',
-    badgeText: '#333333'
+  primary: '#008080',
+  background: '#F2F5F8',
+  cardBg: '#FFFFFF',
+  textMain: '#263238',
+  textSub: '#546E7A',
+  border: '#CFD8DC',
+  error: '#E74C3C',
+  iconGrey: '#90A4AE',
+  inputBg: '#F5F7FA',
+  modalOverlay: 'rgba(0,0,0,0.5)',
+  badgeBg: '#EAEAEA',
+  badgeText: '#333333'
 };
 
 const DarkColors = {
-    primary: '#008080',
-    background: '#121212',
-    cardBg: '#1E1E1E',
-    textMain: '#E0E0E0',
-    textSub: '#B0B0B0',
-    border: '#333333',
-    error: '#EF5350',
-    iconGrey: '#757575',
-    inputBg: '#2C2C2C',
-    modalOverlay: 'rgba(0,0,0,0.7)',
-    badgeBg: '#333333',
-    badgeText: '#E0E0E0'
+  primary: '#008080',
+  background: '#121212',
+  cardBg: '#1E1E1E',
+  textMain: '#E0E0E0',
+  textSub: '#B0B0B0',
+  border: '#333333',
+  error: '#EF5350',
+  iconGrey: '#757575',
+  inputBg: '#2C2C2C',
+  modalOverlay: 'rgba(0,0,0,0.7)',
+  badgeBg: '#333333',
+  badgeText: '#E0E0E0'
 };
 
-const CLASS_CATEGORIES = [ 'Admins', 'Teachers', 'Others', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10' ];
+const CLASS_CATEGORIES = ['Admins', 'Teachers', 'Others', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const DISPLAY_USER_ROLES = [
   { label: 'Management Admin', value: 'Management Admin' },
@@ -68,6 +68,7 @@ interface User {
   roll_no?: string;
   admission_no?: string;
   parent_name?: string;
+  phone_no?: string;
   pen_no?: string;
   admission_date?: string;
   aadhar_no?: string;
@@ -85,14 +86,14 @@ const AdminLM = () => {
 
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Form Modal State
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [formData, setFormData] = useState<any>({});
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [currentSubjectInput, setCurrentSubjectInput] = useState('');
-  
+
   // List State
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,36 +121,36 @@ const AdminLM = () => {
   const groupedUsers = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const filteredUsers = users.filter(user => {
-        if (!query) return true;
-        return (
-            (user.full_name && user.full_name.toLowerCase().includes(query)) ||
-            (user.username && user.username.toLowerCase().includes(query)) ||
-            (user.roll_no && user.roll_no.toString().toLowerCase().includes(query)) ||
-            (user.admission_no && user.admission_no.toLowerCase().includes(query))
-        );
+      if (!query) return true;
+      return (
+        (user.full_name && user.full_name.toLowerCase().includes(query)) ||
+        (user.username && user.username.toLowerCase().includes(query)) ||
+        (user.roll_no && user.roll_no.toString().toLowerCase().includes(query)) ||
+        (user.admission_no && user.admission_no.toLowerCase().includes(query))
+      );
     });
 
     const groups: { [key: string]: User[] } = {};
     CLASS_CATEGORIES.forEach(category => {
-        let categoryUsers: User[] = [];
+      let categoryUsers: User[] = [];
 
-        if (category === 'Admins') {
-             categoryUsers = filteredUsers.filter(user => user.role === 'admin');
-        } else if (category === 'Others') {
-             categoryUsers = filteredUsers.filter(user => user.role === 'others');
-        } else {
-            categoryUsers = filteredUsers.filter(user => user.class_group === category);
+      if (category === 'Admins') {
+        categoryUsers = filteredUsers.filter(user => user.role === 'admin');
+      } else if (category === 'Others') {
+        categoryUsers = filteredUsers.filter(user => user.role === 'others');
+      } else {
+        categoryUsers = filteredUsers.filter(user => user.class_group === category);
+      }
+
+      groups[category] = categoryUsers.sort((a, b) => {
+        const rollA = a.roll_no ? parseInt(a.roll_no, 10) : 0;
+        const rollB = b.roll_no ? parseInt(b.roll_no, 10) : 0;
+
+        if (rollA > 0 || rollB > 0) {
+          return rollA - rollB;
         }
-
-        groups[category] = categoryUsers.sort((a, b) => {
-            const rollA = a.roll_no ? parseInt(a.roll_no, 10) : 0;
-            const rollB = b.roll_no ? parseInt(b.roll_no, 10) : 0;
-
-            if (rollA > 0 || rollB > 0) {
-                return rollA - rollB;
-            }
-            return a.full_name.localeCompare(b.full_name);
-        });
+        return a.full_name.localeCompare(b.full_name);
+      });
     });
     return groups;
   }, [users, searchQuery]);
@@ -160,7 +161,7 @@ const AdminLM = () => {
     setFormData({
       username: '', password: '', full_name: '', role: 'student',
       class_group: 'LKG', subjects_taught: [],
-      roll_no: '', admission_no: '', parent_name: '', aadhar_no: '', pen_no: '', admission_date: '',
+      roll_no: '', admission_no: '', parent_name: '', phone_no: '', aadhar_no: '', pen_no: '', admission_date: '',
       joining_date: '', previous_salary: '', present_salary: '', experience: ''
     });
     setIsPasswordVisible(false);
@@ -170,23 +171,77 @@ const AdminLM = () => {
 
   const openEditModal = (user: User) => {
     setEditingUser(user);
-    setFormData({ ...user, subjects_taught: user.subjects_taught || [] }); 
+    setFormData({ ...user, subjects_taught: user.subjects_taught || [] });
     setIsPasswordVisible(false);
     setCurrentSubjectInput('');
     setIsModalVisible(true);
   };
 
-  // --- VALIDATION LOGIC ---
+  // --- HELPER: DATE VALIDATION ---
+  // Returns { valid: boolean, msg: string }
+  const checkDateValidity = (dateStr: string, fieldName: string) => {
+    if (!dateStr || dateStr.trim() === '') return { valid: true, msg: '' }; // Allow empty if not mandatory, or handle mandatory elsewhere
+    
+    // Regex for DD/MM/YYYY
+    const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const match = dateStr.match(regex);
+    
+    if (!match) {
+      return { valid: false, msg: `${fieldName} must be in DD/MM/YYYY format.` };
+    }
+
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+
+    // Basic range check
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+      return { valid: false, msg: `Invalid date in ${fieldName}.` };
+    }
+
+    // JS Date object check (handles leap years and month lengths automatically)
+    // Note: Month is 0-indexed in JS Date
+    const dateObj = new Date(year, month - 1, day);
+    
+    if (
+      dateObj.getFullYear() !== year ||
+      dateObj.getMonth() + 1 !== month ||
+      dateObj.getDate() !== day
+    ) {
+      return { valid: false, msg: `Invalid date in ${fieldName}.` };
+    }
+
+    // Future Date Check
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // normalize today to start of day
+    if (dateObj > today) {
+      return { valid: false, msg: `${fieldName} cannot be in the future.` };
+    }
+
+    return { valid: true, msg: '' };
+  };
+
+  // --- INPUT SANITIZATION LOGIC ---
   const validateInput = (key: string, value: string) => {
     let sanitized = value;
     switch (key) {
       case 'roll_no':
       case 'admission_no':
       case 'aadhar_no':
-      case 'pen_no':
       case 'previous_salary':
       case 'present_salary':
+      case 'phone_no': 
         sanitized = value.replace(/[^0-9]/g, '');
+        break;
+      case 'pen_no': 
+        sanitized = value.replace(/[^a-zA-Z0-9]/g, '');
+        break;
+      case 'joining_date':
+      case 'admission_date':
+        // Only allow numbers and slash
+        sanitized = value.replace(/[^0-9/]/g, '');
+        // Optional: Block more than 10 chars (DD/MM/YYYY is 10 chars)
+        if (sanitized.length > 10) sanitized = sanitized.slice(0, 10);
         break;
       case 'parent_name':
         sanitized = value.replace(/[^a-zA-Z\s]/g, '');
@@ -199,11 +254,11 @@ const AdminLM = () => {
         break;
       case 'experience':
       case 'subjects_taught':
-        sanitized = value.replace(/[^\w\s.,\-()]/g, ''); 
+        sanitized = value.replace(/[^\w\s.,\-()]/g, '');
         break;
       default:
-        if(key !== 'password' && key !== 'admission_date' && key !== 'joining_date') {
-           sanitized = value.replace(/[^\w\s\-@.]/g, ''); 
+        if (key !== 'password') {
+          sanitized = value.replace(/[^\w\s\-@./]/g, '');
         }
         break;
     }
@@ -213,46 +268,111 @@ const AdminLM = () => {
   const getChangedFields = (original: User, current: any) => {
     const changes: any = {};
     Object.keys(current).forEach(key => {
-        if (key === 'subjects_taught') return;
-        if (key === 'password') return;
-        if (original[key as keyof User] != current[key]) {
-            changes[key] = current[key];
-        }
+      if (key === 'subjects_taught') return;
+      if (key === 'password') return;
+      if (original[key as keyof User] != current[key]) {
+        changes[key] = current[key];
+      }
     });
     if (current.password && current.password !== original.password) {
-        changes.password = current.password;
+      changes.password = current.password;
     }
     if (original.role === 'teacher') {
-        const originalSubjects = JSON.stringify(original.subjects_taught || []);
-        const currentSubjects = JSON.stringify(current.subjects_taught || []);
-        if (originalSubjects !== currentSubjects) {
-            changes.subjects_taught = current.subjects_taught;
-        }
+      const originalSubjects = JSON.stringify(original.subjects_taught || []);
+      const currentSubjects = JSON.stringify(current.subjects_taught || []);
+      if (originalSubjects !== currentSubjects) {
+        changes.subjects_taught = current.subjects_taught;
+      }
     }
     return changes;
   };
 
+  // --- FINAL VALIDATION & SAVE ---
   const handleSave = async () => {
+    // 1. Basic Required Fields
     if (!formData.username || !formData.full_name) {
       Alert.alert('Error', 'Username and Full Name are required.');
       return;
     }
     if (formData.role === 'student' && (!formData.roll_no || !formData.class_group)) {
-         Alert.alert('Error', 'Class and Roll Number are mandatory for students.');
-         return;
+      Alert.alert('Error', 'Class and Roll Number are mandatory for students.');
+      return;
     }
     const isEditing = !!editingUser;
     if (!isEditing && !formData.password) {
-        Alert.alert('Error', 'Password cannot be empty for new users.');
-        return;
+      Alert.alert('Error', 'Password cannot be empty for new users.');
+      return;
     }
 
+    // 2. PHONE VALIDATION
+    if (formData.phone_no && formData.phone_no.trim() !== '') {
+      const phoneRegex = /^[1-9][0-9]{9}$/;
+      if (!phoneRegex.test(formData.phone_no)) {
+        Alert.alert('Invalid Phone', 'Phone number must be exactly 10 digits and cannot start with 0.');
+        return;
+      }
+    }
+
+    // 3. DATE VALIDATIONS (DD/MM/YYYY)
+    if (formData.joining_date) {
+      const dateCheck = checkDateValidity(formData.joining_date, 'Joining Date');
+      if (!dateCheck.valid) {
+        Alert.alert('Invalid Date', dateCheck.msg);
+        return;
+      }
+    }
+    if (formData.admission_date) {
+        const dateCheck = checkDateValidity(formData.admission_date, 'Admission Date');
+        if (!dateCheck.valid) {
+          Alert.alert('Invalid Date', dateCheck.msg);
+          return;
+        }
+    }
+
+    // 4. AADHAAR VALIDATION
+    if (formData.aadhar_no && formData.aadhar_no.trim() !== '') {
+      const aadhaarRegex = /^[0-9]{12}$/;
+      if (!aadhaarRegex.test(formData.aadhar_no)) {
+        Alert.alert('Invalid Aadhaar', 'Aadhaar number must be exactly 12 digits.');
+        return;
+      }
+    }
+
+    // 5. PEN NUMBER VALIDATION
+    if (formData.pen_no && formData.pen_no.trim() !== '') {
+      const penRegex = /^[a-zA-Z0-9]{6,20}$/;
+      if (!penRegex.test(formData.pen_no)) {
+        Alert.alert('Invalid PEN', 'PEN Number must be 6-20 alphanumeric characters with no special symbols.');
+        return;
+      }
+
+      // Unique Check (Client side)
+      const duplicatePen = users.find(u =>
+        u.pen_no === formData.pen_no &&
+        u.id !== (editingUser ? editingUser.id : -1)
+      );
+
+      if (duplicatePen) {
+        Alert.alert('Error', 'This PEN Number is already registered to another user.');
+        return;
+      }
+    }
+
+    // 6. TEACHER SUBJECT VALIDATION
+    if (formData.role === 'teacher') {
+      if (!formData.subjects_taught || formData.subjects_taught.length === 0) {
+        Alert.alert('Missing Info', 'A Teacher must have at least one subject assigned.');
+        return;
+      }
+    }
+
+    // --- PROCEED TO SAVE ---
     try {
       if (isEditing) {
         const changes = getChangedFields(editingUser!, formData);
         if (Object.keys(changes).length === 0) {
-            Alert.alert('Info', 'No changes detected.');
-            return;
+          Alert.alert('Info', 'No changes detected.');
+          return;
         }
         await apiClient.put(`/users/${editingUser!.id}`, changes);
       } else {
@@ -270,28 +390,30 @@ const AdminLM = () => {
   };
 
   const handleDelete = (user: User) => {
-     Alert.alert('Confirm Delete', `Are you sure you want to delete "${user.full_name}"?`, [
+    Alert.alert('Confirm Delete', `Are you sure you want to delete "${user.full_name}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
           try {
             await apiClient.delete(`/users/${user.id}`);
             fetchUsers();
           } catch (error: any) {
             Alert.alert('Error', error.response?.data?.message || 'Failed to delete the user.');
           }
-      }},
+        }
+      },
     ]);
   };
 
   const handleShowPassword = (user: User) => {
     if (user.password) {
-        if (user.password.length > 30 && user.password.startsWith('$2b$')) {
-             Alert.alert('Encrypted', `This is an old, encrypted password. Set a new one to view it.`);
-        } else {
-             Alert.alert('Password', `User: ${user.full_name}\nPass: ${user.password}`);
-        }
+      if (user.password.length > 30 && user.password.startsWith('$2b$')) {
+        Alert.alert('Encrypted', `This is an old, encrypted password. Set a new one to view it.`);
+      } else {
+        Alert.alert('Password', `User: ${user.full_name}\nPass: ${user.password}`);
+      }
     } else {
-        Alert.alert('Error', 'No password found.');
+      Alert.alert('Error', 'No password found.');
     }
   };
 
@@ -301,116 +423,123 @@ const AdminLM = () => {
   };
 
   const handleAddSubject = () => {
-      const subjectToAdd = currentSubjectInput.trim();
-      if(/[^a-zA-Z0-9\s]/.test(subjectToAdd)) {
-           Alert.alert("Invalid", "Subject names should not contain special characters.");
-           return;
-      }
-      if (subjectToAdd && !formData.subjects_taught?.includes(subjectToAdd)) {
-          const updatedSubjects = [...(formData.subjects_taught || []), subjectToAdd];
-          setFormData({ ...formData, subjects_taught: updatedSubjects });
-          setCurrentSubjectInput('');
-      }
+    const subjectToAdd = currentSubjectInput.trim();
+    if (/[^a-zA-Z0-9\s]/.test(subjectToAdd)) {
+      Alert.alert("Invalid", "Subject names should not contain special characters.");
+      return;
+    }
+    if (subjectToAdd && !formData.subjects_taught?.includes(subjectToAdd)) {
+      const updatedSubjects = [...(formData.subjects_taught || []), subjectToAdd];
+      setFormData({ ...formData, subjects_taught: updatedSubjects });
+      setCurrentSubjectInput('');
+    }
   };
 
   const handleRemoveSubject = (subjectToRemove: string) => {
-      const updatedSubjects = formData.subjects_taught.filter((sub: string) => sub !== subjectToRemove);
-      setFormData({ ...formData, subjects_taught: updatedSubjects });
+    const updatedSubjects = formData.subjects_taught.filter((sub: string) => sub !== subjectToRemove);
+    setFormData({ ...formData, subjects_taught: updatedSubjects });
   };
 
   // --- MENU HANDLER ---
   const handleMenuPress = (user: User) => {
-      setSelectedUserForMenu(user);
-      setMenuVisible(true);
+    setSelectedUserForMenu(user);
+    setMenuVisible(true);
   };
 
   const performMenuAction = (action: string) => {
-      setMenuVisible(false);
-      if (!selectedUserForMenu) return;
+    setMenuVisible(false);
+    if (!selectedUserForMenu) return;
 
-      setTimeout(() => {
-        switch(action) {
-            case 'VIEW':
-                handleShowPassword(selectedUserForMenu);
-                break;
-            case 'EDIT':
-                openEditModal(selectedUserForMenu);
-                break;
-            case 'DELETE':
-                handleDelete(selectedUserForMenu);
-                break;
-            default:
-                break;
-        }
-      }, 300);
+    setTimeout(() => {
+      switch (action) {
+        case 'VIEW':
+          handleShowPassword(selectedUserForMenu);
+          break;
+        case 'EDIT':
+          openEditModal(selectedUserForMenu);
+          break;
+        case 'DELETE':
+          handleDelete(selectedUserForMenu);
+          break;
+        default:
+          break;
+      }
+    }, 300);
   };
 
   // --- RENDER USER ITEM ---
   const renderUserItem = (item: User) => {
     let iconName = 'person';
-    if(item.role === 'admin') iconName = 'admin-panel-settings';
-    else if(item.role === 'teacher') iconName = 'school';
-    else if(item.role === 'others') iconName = 'group';
+    if (item.role === 'admin') iconName = 'admin-panel-settings';
+    else if (item.role === 'teacher') iconName = 'school';
+    else if (item.role === 'others') iconName = 'group';
 
     return (
       <View style={[styles.card, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
         {/* Header Part of Card */}
         <View style={styles.cardHeader}>
-            <View style={styles.userInfoLeft}>
-                <View style={[styles.userIconWrapper, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
-                    <Icon name={iconName} size={28} color={COLORS.primary} />
-                </View>
-                <View style={styles.textBlock}>
-                    <Text style={[styles.userName, { color: COLORS.textMain }]}>{item.full_name}</Text>
-                    <Text style={[styles.userRole, { color: COLORS.textSub }]}>
-                        {item.role === 'admin' ? item.class_group : item.role.toUpperCase()}
-                        {item.role === 'student' && item.roll_no ? ` | Roll: ${item.roll_no}` : ''}
-                    </Text>
-                </View>
+          <View style={styles.userInfoLeft}>
+            <View style={[styles.userIconWrapper, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
+              <Icon name={iconName} size={28} color={COLORS.primary} />
             </View>
+            <View style={styles.textBlock}>
+              <Text style={[styles.userName, { color: COLORS.textMain }]}>{item.full_name}</Text>
+              <Text style={[styles.userRole, { color: COLORS.textSub }]}>
+                {item.role === 'admin' ? item.class_group : item.role.toUpperCase()}
+                {item.role === 'student' && item.roll_no ? ` | Roll: ${item.roll_no}` : ''}
+              </Text>
+            </View>
+          </View>
 
-            {/* 3-DOT MENU BUTTON */}
-            <TouchableOpacity 
-                style={styles.menuButton} 
-                onPress={() => handleMenuPress(item)}
-                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-            >
-                <Icon name="more-vert" size={24} color={COLORS.iconGrey} />
-            </TouchableOpacity>
+          {/* 3-DOT MENU BUTTON */}
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => handleMenuPress(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="more-vert" size={24} color={COLORS.iconGrey} />
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.divider, { backgroundColor: COLORS.border }]} />
 
         {/* Details Part of Card */}
         <View style={styles.cardDetails}>
-            <Text style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Username: </Text> 
-                <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.username}</Text>
+          <Text style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Username: </Text>
+            <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.username}</Text>
+          </Text>
+
+          {item.phone_no ? (
+             <Text style={styles.detailRow}>
+              <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Phone: </Text>
+              <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.phone_no}</Text>
             </Text>
+          ) : null}
 
-            {item.role === 'teacher' && item.subjects_taught && item.subjects_taught.length > 0 && (
+          {item.role === 'teacher' && item.subjects_taught && item.subjects_taught.length > 0 && (
+            <Text style={styles.detailRow}>
+              <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Subjects: </Text>
+              <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.subjects_taught.join(', ')}</Text>
+            </Text>
+          )}
+
+          {item.role === 'student' && (
+            <>
+              {item.admission_no && (
                 <Text style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Subjects: </Text>
-                    <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.subjects_taught.join(', ')}</Text>
+                  <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Admission No: </Text>
+                  <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.admission_no}</Text>
                 </Text>
-            )}
-
-            {item.role === 'student' && (
-                <>
-                    {item.admission_no && (
-                         <Text style={styles.detailRow}>
-                            <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Admission No: </Text>
-                            <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.admission_no}</Text>
-                        </Text>
-                    )}
-                    {item.parent_name && (
-                        <Text style={styles.detailRow}>
-                            <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Parent: </Text>
-                            <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.parent_name}</Text>
-                        </Text>
-                    )}
-                </>
-            )}
+              )}
+              {item.parent_name && (
+                <Text style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Parent: </Text>
+                  <Text style={[styles.detailValue, { color: COLORS.textMain }]}>{item.parent_name}</Text>
+                </Text>
+              )}
+            </>
+          )}
         </View>
       </View>
     );
@@ -426,42 +555,42 @@ const AdminLM = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
-      
+
       {/* Header Card */}
       <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
         <View style={styles.headerLeftContainer}>
-             <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
-                <Icon name="manage-accounts" size={32} color={COLORS.primary} />
-            </View>
-            <View style={styles.headerTextContainer}>
-                <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>User Management</Text>
-                <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Manage and view user data</Text>
-            </View>
+          <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
+            <Icon name="manage-accounts" size={32} color={COLORS.primary} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>User Management</Text>
+            <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Manage and view user data</Text>
+          </View>
         </View>
-       
+
         <TouchableOpacity style={[styles.headerAddBtn, { backgroundColor: COLORS.primary }]} onPress={openAddModal}>
-            <Icon name="add" size={18} color="#fff" />
-            <Text style={styles.headerAddBtnText}>Add</Text>
+          <Icon name="add" size={18} color="#fff" />
+          <Text style={styles.headerAddBtnText}>Add</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
+
         {/* Search Bar */}
         <View style={[styles.searchCard, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-            <Icon name="search" size={24} color={COLORS.textSub} style={styles.searchIcon} />
-            <TextInput
-                style={[styles.searchInput, { color: COLORS.textMain }]}
-                placeholder="Search by name or roll number..."
-                placeholderTextColor={COLORS.textSub}
-                value={searchQuery}
-                onChangeText={(val) => setSearchQuery(val.replace(/[^\w\s]/g, ''))}
-            />
-             {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <Icon name="close" size={22} color={COLORS.textSub} />
-                </TouchableOpacity>
-            )}
+          <Icon name="search" size={24} color={COLORS.textSub} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: COLORS.textMain }]}
+            placeholder="Search by name or roll number..."
+            placeholderTextColor={COLORS.textSub}
+            value={searchQuery}
+            onChangeText={(val) => setSearchQuery(val.replace(/[^\w\s]/g, ''))}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Icon name="close" size={22} color={COLORS.textSub} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* List Items */}
@@ -469,10 +598,10 @@ const AdminLM = () => {
           <Animatable.View key={className} animation="fadeInUp" duration={400} delay={index * 50} style={styles.accordionContainer}>
             <TouchableOpacity style={[styles.accordionHeader, { backgroundColor: COLORS.cardBg }]} onPress={() => handleToggleAccordion(className)} activeOpacity={0.8}>
               <View style={styles.accordionLeft}>
-                  <Text style={[styles.accordionTitle, { color: COLORS.textMain }]}>{className}</Text>
-                   <View style={[styles.badgeContainer, { backgroundColor: COLORS.badgeBg }]}>
-                      <Text style={[styles.badgeText, { color: COLORS.badgeText }]}>{groupedUsers[className]?.length || 0}</Text>
-                   </View>
+                <Text style={[styles.accordionTitle, { color: COLORS.textMain }]}>{className}</Text>
+                <View style={[styles.badgeContainer, { backgroundColor: COLORS.badgeBg }]}>
+                  <Text style={[styles.badgeText, { color: COLORS.badgeText }]}>{groupedUsers[className]?.length || 0}</Text>
+                </View>
               </View>
               <Icon name={expandedClass === className ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={28} color={COLORS.textSub} />
             </TouchableOpacity>
@@ -480,10 +609,10 @@ const AdminLM = () => {
             {expandedClass === className && (
               <View style={styles.userListContainer}>
                 {groupedUsers[className]?.length > 0 ? (
-                  groupedUsers[className].map((user) => ( 
-                      <Animatable.View key={user.id} animation="fadeIn" duration={300}>
-                          {renderUserItem(user)}
-                      </Animatable.View> 
+                  groupedUsers[className].map((user) => (
+                    <Animatable.View key={user.id} animation="fadeIn" duration={300}>
+                      {renderUserItem(user)}
+                    </Animatable.View>
                   ))
                 ) : (
                   <Text style={[styles.emptySectionText, { color: COLORS.iconGrey }]}>No matching users found.</Text>
@@ -495,210 +624,238 @@ const AdminLM = () => {
       </ScrollView>
 
       {/* --- CUSTOM MENU MODAL --- */}
-      <Modal 
-        transparent 
-        visible={menuVisible} 
-        animationType="fade" 
+      <Modal
+        transparent
+        visible={menuVisible}
+        animationType="fade"
         onRequestClose={() => setMenuVisible(false)}
       >
-          <TouchableOpacity 
-            style={[styles.menuModalOverlay, { backgroundColor: COLORS.modalOverlay }]} 
-            activeOpacity={1} 
-            onPress={() => setMenuVisible(false)}
-          >
-              <Animatable.View animation="zoomIn" duration={200} style={[styles.menuModalContainer, { backgroundColor: COLORS.cardBg }]}>
-                  <Text style={[styles.menuModalTitle, { color: COLORS.textMain }]}>Manage User</Text>
-                  <Text style={[styles.menuModalSubtitle, { color: COLORS.textSub }]}>
-                    Options for "{selectedUserForMenu?.full_name}"
-                  </Text>
-                  
-                  {/* Row 1: View, Edit, Delete */}
-                  <View style={styles.menuRowThree}>
-                      <TouchableOpacity onPress={() => performMenuAction('VIEW')}>
-                          <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>VIEW</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => performMenuAction('EDIT')}>
-                          <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>EDIT</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => performMenuAction('DELETE')}>
-                          <Text style={[styles.menuBtnText, { color: COLORS.error }]}>DELETE</Text>
-                      </TouchableOpacity>
-                  </View>
+        <TouchableOpacity
+          style={[styles.menuModalOverlay, { backgroundColor: COLORS.modalOverlay }]}
+          activeOpacity={1}
+          onPress={() => setMenuVisible(false)}
+        >
+          <Animatable.View animation="zoomIn" duration={200} style={[styles.menuModalContainer, { backgroundColor: COLORS.cardBg }]}>
+            <Text style={[styles.menuModalTitle, { color: COLORS.textMain }]}>Manage User</Text>
+            <Text style={[styles.menuModalSubtitle, { color: COLORS.textSub }]}>
+              Options for "{selectedUserForMenu?.full_name}"
+            </Text>
 
-                  {/* Row 2: Cancel (Centered and Boxed) */}
-                  <View style={styles.menuRowCenter}>
-                      <TouchableOpacity 
-                        style={[styles.cancelButtonBox, { borderColor: COLORS.primary }]} 
-                        onPress={() => setMenuVisible(false)}
-                      >
-                          <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>CANCEL</Text>
-                      </TouchableOpacity>
-                  </View>
-              </Animatable.View>
-          </TouchableOpacity>
+            {/* Row 1: View, Edit, Delete */}
+            <View style={styles.menuRowThree}>
+              <TouchableOpacity onPress={() => performMenuAction('VIEW')}>
+                <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>VIEW</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => performMenuAction('EDIT')}>
+                <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>EDIT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => performMenuAction('DELETE')}>
+                <Text style={[styles.menuBtnText, { color: COLORS.error }]}>DELETE</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Row 2: Cancel (Centered and Boxed) */}
+            <View style={styles.menuRowCenter}>
+              <TouchableOpacity
+                style={[styles.cancelButtonBox, { borderColor: COLORS.primary }]}
+                onPress={() => setMenuVisible(false)}
+              >
+                <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>CANCEL</Text>
+              </TouchableOpacity>
+            </View>
+          </Animatable.View>
+        </TouchableOpacity>
       </Modal>
 
       {/* --- ADD/EDIT USER MODAL --- */}
       <Modal animationType="fade" transparent={true} visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: COLORS.modalOverlay }]}>
-            <Animatable.View animation="zoomIn" duration={400} style={[styles.modalContainer, { backgroundColor: COLORS.cardBg }]}>
-                <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
-                    <View style={styles.modalHeaderRow}>
-                         <Text style={[styles.modalTitle, { color: COLORS.primary }]}>{isEditing ? 'Edit User' : 'Add New User'}</Text>
-                         <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                             <Icon name="close" size={24} color={COLORS.textSub} />
-                         </TouchableOpacity>
-                    </View>
-                    <View style={[styles.modalDivider, { backgroundColor: COLORS.primary }]} />
+          <Animatable.View animation="zoomIn" duration={400} style={[styles.modalContainer, { backgroundColor: COLORS.cardBg }]}>
+            <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={[styles.modalTitle, { color: COLORS.primary }]}>{isEditing ? 'Edit User' : 'Add New User'}</Text>
+                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+                  <Icon name="close" size={24} color={COLORS.textSub} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.modalDivider, { backgroundColor: COLORS.primary }]} />
 
-                    <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Username</Text>
-                    <TextInput 
-                        style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
-                        placeholder="e.g. john.doe" 
-                        placeholderTextColor={COLORS.iconGrey} 
-                        value={formData.username} 
-                        onChangeText={(val) => validateInput('username', val)} 
-                        autoCapitalize="none" 
+              <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Username</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
+                placeholder="e.g. john.doe"
+                placeholderTextColor={COLORS.iconGrey}
+                value={formData.username}
+                onChangeText={(val) => validateInput('username', val)}
+                autoCapitalize="none"
+              />
+
+              <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Password</Text>
+              <View style={[styles.passwordContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                <TextInput
+                  style={[styles.passwordInput, { color: COLORS.textMain }]}
+                  placeholder="Enter password"
+                  placeholderTextColor={COLORS.iconGrey}
+                  value={formData.password}
+                  onChangeText={(val) => setFormData({ ...formData, password: val })}
+                  secureTextEntry={!isPasswordVisible}
+                />
+                <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+                  <Icon name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={20} color={COLORS.textSub} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Full Name</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
+                placeholder="Full Name"
+                placeholderTextColor={COLORS.iconGrey}
+                value={formData.full_name}
+                onChangeText={(val) => validateInput('full_name', val)}
+              />
+
+              <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Phone Number</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
+                placeholder="10 digit Mobile No"
+                placeholderTextColor={COLORS.iconGrey}
+                value={formData.phone_no}
+                onChangeText={(val) => validateInput('phone_no', val)}
+                keyboardType="numeric"
+                maxLength={10}
+              />
+
+              <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Role</Text>
+              <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                <Picker
+                  selectedValue={displayRole}
+                  onValueChange={(val) => {
+                    const newFormData = { ...formData };
+                    if (val === 'Management Admin' || val === 'General Admin') {
+                      newFormData.role = 'admin';
+                      newFormData.class_group = val;
+                    } else {
+                      newFormData.role = val;
+                      if (val === 'teacher') newFormData.class_group = 'Teachers';
+                      else if (val === 'others') newFormData.class_group = 'Others';
+                    }
+                    setFormData(newFormData);
+                  }}
+                  style={[styles.modalPicker, { color: COLORS.textMain }]}
+                  dropdownIconColor={COLORS.textSub}
+                  mode="dropdown"
+                >
+                  {DISPLAY_USER_ROLES.map((role) => (
+                    <Picker.Item key={role.value} label={role.label} value={role.value} color={COLORS.textMain} />
+                  ))}
+                </Picker>
+              </View>
+
+              {formData.role === 'teacher' && (
+                <>
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Subjects Taught</Text>
+                  <View style={styles.subjectInputContainer}>
+                    <TextInput
+                      style={[styles.subjectInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
+                      placeholder="Subject"
+                      placeholderTextColor={COLORS.iconGrey}
+                      value={currentSubjectInput}
+                      onChangeText={(val) => setCurrentSubjectInput(val.replace(/[^a-zA-Z0-9\s]/g, ''))}
+                      onSubmitEditing={handleAddSubject}
                     />
-
-                    <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Password</Text>
-                    <View style={[styles.passwordContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                      <TextInput
-                        style={[styles.passwordInput, { color: COLORS.textMain }]}
-                        placeholder="Enter password"
-                        placeholderTextColor={COLORS.iconGrey}
-                        value={formData.password}
-                        onChangeText={(val) => setFormData({ ...formData, password: val })}
-                        secureTextEntry={!isPasswordVisible}
-                      />
-                      <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
-                        <Icon name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={20} color={COLORS.textSub} />
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Full Name</Text>
-                    <TextInput 
-                        style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
-                        placeholder="Full Name" 
-                        placeholderTextColor={COLORS.iconGrey} 
-                        value={formData.full_name} 
-                        onChangeText={(val) => validateInput('full_name', val)} 
-                    />
-
-                    <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Role</Text>
-                    <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Picker 
-                            selectedValue={displayRole} 
-                            onValueChange={(val) => {
-                                const newFormData = { ...formData };
-                                if (val === 'Management Admin' || val === 'General Admin') {
-                                    newFormData.role = 'admin';
-                                    newFormData.class_group = val;
-                                } else {
-                                    newFormData.role = val;
-                                    if (val === 'teacher') newFormData.class_group = 'Teachers';
-                                    else if (val === 'others') newFormData.class_group = 'Others';
-                                }
-                                setFormData(newFormData);
-                            }} 
-                            style={[styles.modalPicker, { color: COLORS.textMain }]} 
-                            dropdownIconColor={COLORS.textSub}
-                            mode="dropdown"
-                        >
-                            {DISPLAY_USER_ROLES.map((role) => (
-                                <Picker.Item key={role.value} label={role.label} value={role.value} color={COLORS.textMain} />
-                            ))}
-                        </Picker>
-                    </View>
-
-                    {formData.role === 'teacher' && (
-                        <>
-                            <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Subjects Taught</Text>
-                            <View style={styles.subjectInputContainer}>
-                                <TextInput
-                                    style={[styles.subjectInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
-                                    placeholder="Subject"
-                                    placeholderTextColor={COLORS.iconGrey}
-                                    value={currentSubjectInput}
-                                    onChangeText={(val) => setCurrentSubjectInput(val.replace(/[^a-zA-Z0-9\s]/g, ''))}
-                                    onSubmitEditing={handleAddSubject}
-                                />
-                                <TouchableOpacity style={[styles.subjectAddButton, { backgroundColor: COLORS.primary }]} onPress={handleAddSubject}>
-                                    <Text style={styles.subjectAddButtonText}>ADD</Text>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={styles.subjectTagContainer}>
-                                {formData.subjects_taught?.map((subject: string, index: number) => (
-                                    <View key={index} style={[styles.subjectTag, { backgroundColor: COLORS.primary }]}>
-                                        <Text style={styles.subjectTagText}>{subject}</Text>
-                                        <TouchableOpacity onPress={() => handleRemoveSubject(subject)} style={styles.removeTagButton}>
-                                            <Icon name="close" size={14} color="#fff" />
-                                        </TouchableOpacity>
-                                    </View>
-                                ))}
-                            </View>
-                        </>
-                    )}
-
-                    {formData.role === 'student' ? (
-                        <>
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Class / Group</Text>
-                          <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                              <Picker 
-                                selectedValue={formData.class_group} 
-                                onValueChange={(val) => setFormData({ ...formData, class_group: val })} 
-                                style={[styles.modalPicker, { color: COLORS.textMain }]} 
-                                dropdownIconColor={COLORS.textSub}
-                              >
-                              {CLASS_CATEGORIES.filter(c => !['Admins', 'Teachers', 'Others'].includes(c)).map((level) => ( 
-                                <Picker.Item key={level} label={level} value={level} color={COLORS.textMain} /> 
-                              ))}
-                              </Picker>
-                          </View>
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Roll No.</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Roll Number" placeholderTextColor={COLORS.iconGrey} value={formData.roll_no} onChangeText={(val) => validateInput('roll_no', val)} keyboardType="numeric" />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Admission No.</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Admission No" placeholderTextColor={COLORS.iconGrey} value={formData.admission_no} onChangeText={(val) => validateInput('admission_no', val)} keyboardType="numeric" />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Parent Name</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Parent Name" placeholderTextColor={COLORS.iconGrey} value={formData.parent_name} onChangeText={(val) => validateInput('parent_name', val)} />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>PEN No.</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="PEN Number" placeholderTextColor={COLORS.iconGrey} value={formData.pen_no} onChangeText={(val) => validateInput('pen_no', val)} keyboardType="numeric" />
-                        </>
-                    ) : (
-                        <>
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Joining Date</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="YYYY-MM-DD" placeholderTextColor={COLORS.iconGrey} value={formData.joining_date} onChangeText={(val) => setFormData({ ...formData, joining_date: val })} />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Previous Salary</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Amount" placeholderTextColor={COLORS.iconGrey} value={formData.previous_salary} onChangeText={(val) => validateInput('previous_salary', val)} keyboardType="numeric" />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Present Salary</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Amount" placeholderTextColor={COLORS.iconGrey} value={formData.present_salary} onChangeText={(val) => validateInput('present_salary', val)} keyboardType="numeric" />
-                          
-                          <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Experience</Text>
-                          <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Years of experience" placeholderTextColor={COLORS.iconGrey} value={formData.experience} onChangeText={(val) => validateInput('experience', val)} />
-                        </>
-                    )}
-
-                    <View style={styles.modalButtonContainer}>
-                        <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsModalVisible(false)}>
-                            <Text style={styles.modalButtonText}>Cancel</Text>
+                    <TouchableOpacity style={[styles.subjectAddButton, { backgroundColor: COLORS.primary }]} onPress={handleAddSubject}>
+                      <Text style={styles.subjectAddButtonText}>ADD</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.subjectTagContainer}>
+                    {formData.subjects_taught?.map((subject: string, index: number) => (
+                      <View key={index} style={[styles.subjectTag, { backgroundColor: COLORS.primary }]}>
+                        <Text style={styles.subjectTagText}>{subject}</Text>
+                        <TouchableOpacity onPress={() => handleRemoveSubject(subject)} style={styles.removeTagButton}>
+                          <Icon name="close" size={14} color="#fff" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary, marginLeft: 10 }]} onPress={handleSave}>
-                            <Text style={styles.modalButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
-            </Animatable.View>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {formData.role === 'student' ? (
+                <>
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Class / Group</Text>
+                  <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                    <Picker
+                      selectedValue={formData.class_group}
+                      onValueChange={(val) => setFormData({ ...formData, class_group: val })}
+                      style={[styles.modalPicker, { color: COLORS.textMain }]}
+                      dropdownIconColor={COLORS.textSub}
+                    >
+                      {CLASS_CATEGORIES.filter(c => !['Admins', 'Teachers', 'Others'].includes(c)).map((level) => (
+                        <Picker.Item key={level} label={level} value={level} color={COLORS.textMain} />
+                      ))}
+                    </Picker>
+                  </View>
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Roll No.</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Roll Number" placeholderTextColor={COLORS.iconGrey} value={formData.roll_no} onChangeText={(val) => validateInput('roll_no', val)} keyboardType="numeric" />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Admission No.</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Admission No" placeholderTextColor={COLORS.iconGrey} value={formData.admission_no} onChangeText={(val) => validateInput('admission_no', val)} keyboardType="numeric" />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Parent Name</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Parent Name" placeholderTextColor={COLORS.iconGrey} value={formData.parent_name} onChangeText={(val) => validateInput('parent_name', val)} />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>PEN No.</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="PEN Number" placeholderTextColor={COLORS.iconGrey} value={formData.pen_no} onChangeText={(val) => validateInput('pen_no', val)} />
+                  
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Admission Date</Text>
+                  <TextInput 
+                    style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
+                    placeholder="DD/MM/YYYY" 
+                    placeholderTextColor={COLORS.iconGrey} 
+                    value={formData.admission_date} 
+                    onChangeText={(val) => validateInput('admission_date', val)}
+                    keyboardType="numeric" 
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Joining Date</Text>
+                  <TextInput 
+                    style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
+                    placeholder="DD/MM/YYYY" 
+                    placeholderTextColor={COLORS.iconGrey} 
+                    value={formData.joining_date} 
+                    onChangeText={(val) => validateInput('joining_date', val)} 
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Previous Salary</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Amount" placeholderTextColor={COLORS.iconGrey} value={formData.previous_salary} onChangeText={(val) => validateInput('previous_salary', val)} keyboardType="numeric" />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Present Salary</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Amount" placeholderTextColor={COLORS.iconGrey} value={formData.present_salary} onChangeText={(val) => validateInput('present_salary', val)} keyboardType="numeric" />
+
+                  <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Experience</Text>
+                  <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Years of experience" placeholderTextColor={COLORS.iconGrey} value={formData.experience} onChangeText={(val) => validateInput('experience', val)} />
+                </>
+              )}
+
+              <View style={styles.modalButtonContainer}>
+                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsModalVisible(false)}>
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary, marginLeft: 10 }]} onPress={handleSave}>
+                  <Text style={styles.modalButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </Animatable.View>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -769,134 +926,134 @@ const styles = StyleSheet.create({
 
   // --- Search Bar Style ---
   searchCard: {
-      borderRadius: 12,
-      width: '96%',
-      alignSelf: 'center',
-      marginBottom: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 15,
-      height: 50,
-      elevation: 2,
-      borderWidth: 1,
-      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
+    borderRadius: 12,
+    width: '96%',
+    alignSelf: 'center',
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: 50,
+    elevation: 2,
+    borderWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2,
   },
   searchIcon: {
-      marginRight: 10,
+    marginRight: 10,
   },
   searchInput: {
-      flex: 1,
-      fontSize: 16,
-      height: '100%',
+    flex: 1,
+    fontSize: 16,
+    height: '100%',
   },
 
   // --- Accordion Container ---
   accordionContainer: {
-      marginBottom: 10,
-      width: '96%',
-      alignSelf: 'center',
+    marginBottom: 10,
+    width: '96%',
+    alignSelf: 'center',
   },
   accordionHeader: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 16,
     borderRadius: 10,
     elevation: 1,
   },
-  accordionLeft: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
+  accordionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
-  accordionTitle: { 
+  accordionTitle: {
     fontSize: 18,
     fontWeight: '700',
   },
   badgeContainer: {
-      paddingHorizontal: 10, 
-      paddingVertical: 4,
-      borderRadius: 12, 
-      marginLeft: 12,
-      justifyContent: 'center',
-      alignItems: 'center'
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  badgeText: { 
+  badgeText: {
     fontSize: 14,
-    fontWeight: 'bold' 
+    fontWeight: 'bold'
   },
-  userListContainer: { 
+  userListContainer: {
     marginTop: 5,
   },
 
   // --- CARD STYLE ---
   card: {
-      borderRadius: 12,
-      padding: 15,
-      marginBottom: 8,
-      elevation: 2,
-      shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: {width: 0, height: 1},
-      borderWidth: 1,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 8,
+    elevation: 2,
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+    borderWidth: 1,
   },
   cardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start'
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start'
   },
   userInfoLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   userIconWrapper: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
   },
   textBlock: {
-      flex: 1
+    flex: 1
   },
   userName: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      marginBottom: 2
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 2
   },
   userRole: {
-      fontSize: 12,
-      fontWeight: '600',
-      letterSpacing: 0.5
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5
   },
   menuButton: {
-      padding: 5,
-      marginTop: -5,
-      marginRight: -5
+    padding: 5,
+    marginTop: -5,
+    marginRight: -5
   },
   divider: {
-      height: 1,
-      marginVertical: 10
+    height: 1,
+    marginVertical: 10
   },
   cardDetails: {
-      paddingLeft: 4
+    paddingLeft: 4
   },
   detailRow: {
-      marginBottom: 4,
-      flexDirection: 'row',
-      flexWrap: 'wrap'
+    marginBottom: 4,
+    flexDirection: 'row',
+    flexWrap: 'wrap'
   },
   detailLabel: {
-      fontSize: 14,
-      fontWeight: '500'
+    fontSize: 14,
+    fontWeight: '500'
   },
   detailValue: {
-      fontSize: 14,
-      fontWeight: '400'
+    fontSize: 14,
+    fontWeight: '400'
   },
-  emptySectionText: { 
-    textAlign: 'center', 
-    padding: 20, 
+  emptySectionText: {
+    textAlign: 'center',
+    padding: 20,
     fontStyle: 'italic',
     fontSize: 15
   },
@@ -909,7 +1066,7 @@ const styles = StyleSheet.create({
   },
   menuModalContainer: {
     width: '85%',
-    borderRadius: 4, 
+    borderRadius: 4,
     padding: 20,
     elevation: 24,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84,
@@ -921,27 +1078,27 @@ const styles = StyleSheet.create({
   },
   menuModalSubtitle: {
     fontSize: 16,
-    marginBottom: 30, 
+    marginBottom: 30,
   },
-  
+
   menuRowThree: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10, 
+    marginBottom: 10,
     paddingHorizontal: 10
   },
-  
+
   menuRowCenter: {
     flexDirection: 'row',
-    justifyContent: 'center', 
-    marginTop: 20, 
+    justifyContent: 'center',
+    marginTop: 20,
   },
 
   cancelButtonBox: {
-      borderWidth: 1,
-      borderRadius: 4,
-      paddingVertical: 8,
-      paddingHorizontal: 40,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 40,
   },
 
   menuBtnText: {
@@ -954,11 +1111,11 @@ const styles = StyleSheet.create({
   // --- Add/Edit User Modal Styles ---
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   modalContainer: {
-    width: width > 400 ? '80%' : '92%', 
-    maxHeight: '85%', 
+    width: width > 400 ? '80%' : '92%',
+    maxHeight: '85%',
     borderRadius: 15,
-    elevation: 10, 
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, 
+    elevation: 10,
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10,
     overflow: 'hidden'
   },
   modalContent: { padding: 25 },
