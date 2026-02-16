@@ -93,7 +93,7 @@ const StudentHomeworkScreen = () => {
         setIsLoading(true);
         try {
             const response = await apiClient.get(`/homework/student/${user.id}/${user.class_group}`);
-            const data = response.data;
+            const data = Array.isArray(response.data) ? response.data : [];
             data.sort((a, b) => {
                 if (a.status === 'Pending' && b.status !== 'Pending') return -1;
                 if (a.status !== 'Pending' && b.status === 'Pending') return 1;
@@ -314,7 +314,10 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
     const formatDateDisplay = (isoDateString) => {
         if (!isoDateString) return '';
         const d = new Date(isoDateString);
-        return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        const day = d.getDate().toString().padStart(2, '0');
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
     };
 
     const getStatusInfo = () => {

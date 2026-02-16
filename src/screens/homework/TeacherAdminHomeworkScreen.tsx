@@ -129,8 +129,10 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setIsLoading(true);
         try {
             const response = await apiClient.get(`/homework/teacher/${user.id}`);
-            setAssignments(response.data);
+            // Check if response.data is array to avoid crashes
+            setAssignments(Array.isArray(response.data) ? response.data : []);
         } catch (e) {
+            console.error(e);
             Alert.alert("Error", "Failed to fetch assignments.");
         } finally {
             setIsLoading(false);
@@ -207,7 +209,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
         const date = new Date(assignment.due_date);
         setDateObject(date); 
         
-        // Parse existing questions
+        // Parse existing questions safely
         let parsedQuestions = [''];
         try {
             if (assignment.questions) {
@@ -216,11 +218,15 @@ const AssignmentList = ({ onSelectAssignment }) => {
                     parsedQuestions = parsed;
                 }
             }
-        } catch (e) { console.log("Error parsing questions", e); }
+        } catch (e) { 
+            console.log("Error parsing questions JSON, resetting to empty", e); 
+            // If parsing fails (e.g. old data text), maybe treat it as one question?
+            // For now, reset to empty to prevent crash
+        }
 
         setNewAssignment({ 
             title: assignment.title, 
-            description: assignment.description, 
+            description: assignment.description || '', 
             due_date: date.toISOString().split('T')[0], 
             homework_type: assignment.homework_type || 'PDF' 
         });
@@ -271,20 +277,19 @@ const AssignmentList = ({ onSelectAssignment }) => {
             return Alert.alert("Validation Error", "Please fill required fields.");
         }
         
-        // Validate questions (Allow empty only if description is present, but let's enforce at least one quesiton based on your requirement)
-        // Or if you want to allow generic homework without questions, remove this check.
-        // Assuming you want at least one question:
+        // Filter empty questions, but allow saving if at least description is there or one question
         const validQuestions = questionsList.filter(q => q.trim() !== '');
         
         setIsSaving(true);
         const data = new FormData();
         data.append('title', newAssignment.title);
-        data.append('description', newAssignment.description || ''); // Added back description
+        data.append('description', newAssignment.description || ''); // Can be empty if questions exist
         data.append('due_date', newAssignment.due_date);
         data.append('class_group', selectedClass);
         data.append('subject', selectedSubject);
         data.append('homework_type', newAssignment.homework_type);
-        data.append('questions', JSON.stringify(validQuestions)); // Send questions
+        // Important: Serialize array to string for backend
+        data.append('questions', JSON.stringify(validQuestions)); 
 
         if (!editingAssignment) data.append('teacher_id', user.id);
 
@@ -297,8 +302,10 @@ const AssignmentList = ({ onSelectAssignment }) => {
             await apiClient.post(url, data, { headers: { 'Content-Type': 'multipart/form-data' } });
             setIsModalVisible(false);
             fetchTeacherAssignments();
-        } catch (e) { Alert.alert("Error", "Failed to save."); } 
-        finally { setIsSaving(false); }
+        } catch (e) { 
+            console.error("Save Error:", e.response?.data || e.message);
+            Alert.alert("Error", "Failed to save assignment."); 
+        } finally { setIsSaving(false); }
     };
 
     return (
@@ -398,7 +405,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Title *</Text>
                         <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Title" placeholderTextColor={COLORS.placeholder} value={newAssignment.title} onChangeText={t => setNewAssignment({ ...newAssignment, title: t })} />
                         
-                        {/* --- NEW: Description / Instructions Field --- */}
+                        {/* --- DESCRIPTION / INSTRUCTIONS SECTION --- */}
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Description / General Instructions :</Text>
                         <TextInput 
                             style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80, textAlignVertical: 'top' }]} 
@@ -409,7 +416,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                             onChangeText={t => setNewAssignment({ ...newAssignment, description: t })} 
                         />
 
-                        {/* --- QUESTIONS SECTION START --- */}
+                        {/* --- DYNAMIC QUESTIONS SECTION --- */}
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Exam Questions :</Text>
                         <View style={{ marginBottom: 15 }}>
                             {questionsList.map((question, index) => (
@@ -423,7 +430,8 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                         value={question} 
                                         onChangeText={(text) => updateQuestionText(text, index)} 
                                     />
-                                    {index > 0 && (
+                                    {/* Show remove button only if there is more than one question */}
+                                    {questionsList.length > 1 && (
                                         <TouchableOpacity onPress={() => removeQuestionField(index)} style={{ marginLeft: 8, marginTop: 10 }}>
                                             <MaterialIcons name="remove-circle-outline" size={24} color={COLORS.danger} />
                                         </TouchableOpacity>
@@ -436,7 +444,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                 <Text style={{ color: COLORS.primary, fontWeight: 'bold', marginLeft: 8 }}>Add Another Question</Text>
                             </TouchableOpacity>
                         </View>
-                        {/* --- QUESTIONS SECTION END --- */}
+                        {/* --- END QUESTIONS SECTION --- */}
 
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Due Date *</Text>
                         <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.datePickerInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
