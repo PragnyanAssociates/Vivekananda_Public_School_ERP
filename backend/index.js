@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const router = express.Router();
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
@@ -2469,22 +2470,23 @@ app.delete('/api/labs/:id', async (req, res) => {
 
 // ==========================================================
 // --- HOMEWORK & ASSIGNMENTS API ROUTES ---
-// ==========================================================
-
-// const multer = require('multer');
-// const path = require('path');
-// const fs = require('fs'); 
-const router = express.Router(); 
-// (Ensure you have db, router/app, and createBulkNotifications defined in your main file or imported here)
+// =========================================================
 
 // 1. Define where to store homework files
+// 1. Configure Storage
 const homeworkStorage = multer.diskStorage({
-    destination: (req, file, cb) => { 
-        cb(null, '/data/uploads'); // Ensure this directory exists
+    destination: (req, file, cb) => {
+        // Ensure the directory exists
+        const dir = './data/uploads'; 
+        if (!fs.existsSync(dir)){
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
     },
-    filename: (req, file, cb) => { 
+    filename: (req, file, cb) => {
+        // Generate unique filename
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+        cb(null, 'hw-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
 
@@ -2492,7 +2494,7 @@ const homeworkUpload = multer({ storage: homeworkStorage });
 
 // --- UTILITY ROUTES ---
 
-app.get('/student-classes', async (req, res) => {
+router.get('/student-classes', async (req, res) => {
     try {
         const query = `
             SELECT DISTINCT class_group FROM users 
@@ -2506,7 +2508,7 @@ app.get('/student-classes', async (req, res) => {
     }
 });
 
-app.get('/subjects-for-class/:classGroup', async (req, res) => {
+router.get('/subjects-for-class/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
     try {
         const query = "SELECT DISTINCT subject_name FROM timetables WHERE class_group = ? ORDER BY subject_name";
@@ -2520,7 +2522,7 @@ app.get('/subjects-for-class/:classGroup', async (req, res) => {
 
 // --- TEACHER / ADMIN ROUTES ---
 
-app.get('/homework/teacher/:teacherId', async (req, res) => {
+router.get('/homework/teacher/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
         // Select distinct description and questions columns
@@ -2540,7 +2542,7 @@ app.get('/homework/teacher/:teacherId', async (req, res) => {
     }
 });
 
-app.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
+router.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
     const { title, description, class_group, subject, due_date, teacher_id, homework_type, questions } = req.body;
     
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
@@ -2615,7 +2617,7 @@ app.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
     }
 });
 
-app.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
+router.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
     const { assignmentId } = req.params;
     const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type, questions } = req.body;
     
@@ -2663,7 +2665,7 @@ app.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), 
     }
 });
 
-app.delete('/homework/:assignmentId', async (req, res) => {
+router.delete('/homework/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         await db.query('DELETE FROM homework_assignments WHERE id = ?', [assignmentId]);
@@ -2674,7 +2676,7 @@ app.delete('/homework/:assignmentId', async (req, res) => {
     }
 });
 
-app.get('/homework/submissions/:assignmentId', async (req, res) => {
+router.get('/homework/submissions/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         const query = `
@@ -2694,7 +2696,7 @@ app.get('/homework/submissions/:assignmentId', async (req, res) => {
     }
 });
 
-app.put('/homework/grade/:submissionId', async (req, res) => {
+router.put('/homework/grade/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { grade, remarks } = req.body;
     try {
@@ -2709,7 +2711,7 @@ app.put('/homework/grade/:submissionId', async (req, res) => {
 
 // --- STUDENT ROUTES ---
 
-app.get('/homework/student/:studentId/:classGroup', async (req, res) => {
+router.get('/homework/student/:studentId/:classGroup', async (req, res) => {
     const { studentId, classGroup } = req.params;
     try {
         // Select both description and questions
@@ -2733,7 +2735,7 @@ app.get('/homework/student/:studentId/:classGroup', async (req, res) => {
     }
 });
 
-app.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
+router.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
     const { assignmentId } = req.params;
     const { student_id } = req.body;
     
@@ -2780,7 +2782,7 @@ app.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'), 
     }
 });
 
-app.post('/homework/submit-written', async (req, res) => {
+router.post('/homework/submit-written', async (req, res) => {
     const { assignment_id, student_id, written_answer } = req.body;
 
     if (!assignment_id || !student_id || !written_answer) {
@@ -2822,7 +2824,7 @@ app.post('/homework/submit-written', async (req, res) => {
     }
 });
 
-app.delete('/homework/submission/:submissionId', async (req, res) => {
+router.delete('/homework/submission/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { student_id } = req.body; 
 
@@ -2858,6 +2860,8 @@ app.delete('/homework/submission/:submissionId', async (req, res) => {
         connection.release();
     }
 });
+
+module.exports = router;
 
 
 

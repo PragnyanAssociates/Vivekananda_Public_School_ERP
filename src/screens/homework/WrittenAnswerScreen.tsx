@@ -11,7 +11,9 @@ import {
   Alert,
   useColorScheme,
   StatusBar,
-  Dimensions
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
@@ -89,7 +91,12 @@ const WrittenAnswerScreen = ({ route }) => {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to submit your answer.');
+      // Catch specific HTML error from server issues
+      if (err.response && typeof err.response.data === 'string' && err.response.data.includes('<!DOCTYPE html>')) {
+          Alert.alert("Connection Error", "The app cannot reach the homework server. Please check your internet or try again later.");
+      } else {
+          Alert.alert('Error', err.response?.data?.message || 'Failed to submit your answer.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -126,41 +133,47 @@ const WrittenAnswerScreen = ({ route }) => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
-          <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Instructions & Questions</Text>
-          
-          {/* --- DISPLAY DESCRIPTION --- */}
-          {assignment.description ? <Text style={[styles.description, { color: COLORS.textMain, marginBottom: 15, fontStyle: 'italic' }]}>{assignment.description}</Text> : null}
+      <KeyboardAvoidingView 
+        style={{flex: 1}} 
+        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+      >
+        <ScrollView contentContainerStyle={styles.container}>
+            <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+            <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Instructions & Questions</Text>
+            
+            {/* --- DISPLAY DESCRIPTION --- */}
+            {assignment.description ? <Text style={[styles.description, { color: COLORS.textMain, marginBottom: 15, fontStyle: 'italic' }]}>{assignment.description}</Text> : null}
 
-          {/* --- DISPLAY QUESTIONS --- */}
-          {questionsList.length > 0 && (
-                <View>
-                    <Text style={{fontWeight: 'bold', color: COLORS.textMain, marginBottom: 8}}>Questions:</Text>
-                    {questionsList.map((q, i) => (
-                        <View key={i} style={{flexDirection: 'row', marginBottom: 8}}>
-                            <Text style={{color: COLORS.primary, marginRight: 8, fontWeight: 'bold'}}>{i+1}.</Text>
-                            <Text style={{color: COLORS.textMain, flex: 1, lineHeight: 20}}>{q}</Text>
-                        </View>
-                    ))}
-                </View>
-          )}
+            {/* --- DISPLAY QUESTIONS --- */}
+            {questionsList.length > 0 && (
+                    <View>
+                        <Text style={{fontWeight: 'bold', color: COLORS.textMain, marginBottom: 8}}>Questions:</Text>
+                        {questionsList.map((q, i) => (
+                            <View key={i} style={{flexDirection: 'row', marginBottom: 8}}>
+                                <Text style={{color: COLORS.primary, marginRight: 8, fontWeight: 'bold'}}>{i+1}.</Text>
+                                <Text style={{color: COLORS.textMain, flex: 1, lineHeight: 20}}>{q}</Text>
+                            </View>
+                        ))}
+                    </View>
+            )}
 
-        </View>
+            </View>
 
-        <View style={[styles.answerBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
-          <Text style={[styles.answerHeader, { color: COLORS.textMain }]}>Your Answer</Text>
-          <TextInput
-            style={[styles.textInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
-            multiline
-            placeholder="Start typing your answer here..."
-            placeholderTextColor={COLORS.placeholder}
-            value={answer}
-            onChangeText={setAnswer}
-            editable={!isSubmitting}
-          />
-        </View>
-      </ScrollView>
+            <View style={[styles.answerBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+            <Text style={[styles.answerHeader, { color: COLORS.textMain }]}>Your Answer</Text>
+            <TextInput
+                style={[styles.textInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]}
+                multiline
+                placeholder="Start typing your answer here..."
+                placeholderTextColor={COLORS.placeholder}
+                value={answer}
+                onChangeText={setAnswer}
+                editable={!isSubmitting}
+            />
+            </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={[styles.footer, { backgroundColor: COLORS.background, borderTopColor: COLORS.border }]}>
         <TouchableOpacity

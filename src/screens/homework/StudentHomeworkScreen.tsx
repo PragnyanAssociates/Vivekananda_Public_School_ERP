@@ -149,7 +149,12 @@ const StudentHomeworkScreen = () => {
             fetchAssignments();
 
         } catch (err) {
-            Alert.alert("Error", err.response?.data?.message || "Could not submit files."); 
+            // Error handling consistent with teacher screen
+            if (err.response && typeof err.response.data === 'string' && err.response.data.includes('<!DOCTYPE html>')) {
+                Alert.alert("Connection Error", "The app cannot reach the homework server. Please check your internet or try again later.");
+            } else {
+                Alert.alert("Error", err.response?.data?.message || "Could not submit files."); 
+            }
         } finally { setIsSubmitting(false); }
     };
     
