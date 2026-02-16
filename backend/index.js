@@ -2472,10 +2472,6 @@ app.delete('/api/labs/:id', async (req, res) => {
 // --- HOMEWORK & ASSIGNMENTS API ROUTES ---
 // ==========================================================
 
-// Ensure you have these imports at the very top of your file (if not already there):
-// const multer = require('multer');
-// const path = require('path');
-// const router = express.Router(); // Or use 'app' if you are in the main server file
 
 // 1. Define where to store homework files
 const homeworkStorage = multer.diskStorage({
