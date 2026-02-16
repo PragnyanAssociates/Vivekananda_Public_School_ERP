@@ -18,7 +18,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- THEME CONFIGURATION (Master Style Guide) ---
+// --- THEME CONFIGURATION ---
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',

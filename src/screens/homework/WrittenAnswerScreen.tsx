@@ -20,7 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
-// --- THEME CONFIGURATION (Master Style Guide) ---
+// --- THEME CONFIGURATION ---
 const LightColors = {
   primary: '#008080',
   background: '#F5F7FA',
@@ -86,6 +86,12 @@ const WrittenAnswerScreen = ({ route }) => {
     }
   };
 
+  const formatDate = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
@@ -102,7 +108,7 @@ const WrittenAnswerScreen = ({ route }) => {
             <View style={styles.headerTextContainer}>
                 <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{assignment.title}</Text>
                 <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>
-                    {assignment.subject} | Due: {new Date(assignment.due_date).toLocaleDateString('en-GB')}
+                    {assignment.subject} | Due: {formatDate(assignment.due_date)}
                 </Text>
             </View>
         </View>

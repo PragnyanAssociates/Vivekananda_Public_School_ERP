@@ -13,13 +13,13 @@ import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- THEME CONFIGURATION (Master Style Guide) ---
+// --- THEME CONFIGURATION ---
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -35,7 +35,9 @@ const LightColors = {
     headerIconBg: '#E0F2F1',
     modalOverlay: 'rgba(0,0,0,0.6)',
     placeholder: '#B0BEC5',
-    divider: '#f0f2f5'
+    divider: '#f0f2f5',
+    tabActive: '#008080',
+    tabInactive: '#ECEFF1'
 };
 
 const DarkColors = {
@@ -53,10 +55,12 @@ const DarkColors = {
     headerIconBg: '#333333',
     modalOverlay: 'rgba(255,255,255,0.1)',
     placeholder: '#616161',
-    divider: '#2C2C2C'
+    divider: '#2C2C2C',
+    tabActive: '#004D40',
+    tabInactive: '#424242'
 };
 
-// --- HELPER ---
+// --- HELPER: Date Format DD/MM/YYYY ---
 const formatDateDisplay = (isoDateString) => {
     if (!isoDateString) return '';
     const d = new Date(isoDateString);
@@ -375,6 +379,9 @@ const SubmissionList = ({ assignment, onBack }) => {
     const [gradeData, setGradeData] = useState({ grade: '', remarks: '' });
     const [isGrading, setIsGrading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    
+    // --- NEW: Tab State ---
+    const [activeTab, setActiveTab] = useState('All'); // 'All', 'Submitted', 'Pending'
 
     const fetchStudentRoster = useCallback(async () => {
         setIsLoading(true);
@@ -388,10 +395,25 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     useEffect(() => { fetchStudentRoster(); }, [fetchStudentRoster]);
 
+    // --- UPDATED: Filtering Logic (Search + Tabs) ---
     useEffect(() => {
-        const query = searchQuery.toLowerCase();
-        setFilteredRoster(studentRoster.filter(i => i.student_name.toLowerCase().includes(query) || (i.roll_no && i.roll_no.includes(query))));
-    }, [searchQuery, studentRoster]);
+        let result = studentRoster;
+
+        // 1. Filter by Tab
+        if (activeTab === 'Submitted') {
+            result = result.filter(item => item.submission_id);
+        } else if (activeTab === 'Pending') {
+            result = result.filter(item => !item.submission_id);
+        }
+
+        // 2. Filter by Search
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(i => i.student_name.toLowerCase().includes(query) || (i.roll_no && i.roll_no.includes(query)));
+        }
+
+        setFilteredRoster(result);
+    }, [searchQuery, activeTab, studentRoster]);
 
     const handleGrade = async () => {
         if (!selectedStudent?.submission_id) return;
@@ -416,10 +438,25 @@ const SubmissionList = ({ assignment, onBack }) => {
                     </View>
                 </View>
             </View>
+
+            {/* --- NEW: Tab Filters --- */}
+            <View style={styles.tabContainer}>
+                {['All', 'Submitted', 'Pending'].map((tab) => (
+                    <TouchableOpacity 
+                        key={tab} 
+                        style={[styles.tabButton, { backgroundColor: activeTab === tab ? COLORS.primary : COLORS.inputBg, borderColor: COLORS.border }]}
+                        onPress={() => setActiveTab(tab)}
+                    >
+                        <Text style={[styles.tabText, { color: activeTab === tab ? '#fff' : COLORS.textMain }]}>{tab}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
             <View style={[styles.searchContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                 <MaterialIcons name="search" size={22} color={COLORS.textSub} />
                 <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search student..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={setSearchQuery} />
             </View>
+
             <FlatList
                 data={filteredRoster}
                 keyExtractor={(item) => item.student_id.toString()}
@@ -431,12 +468,14 @@ const SubmissionList = ({ assignment, onBack }) => {
                         </View>
                         <View style={styles.submittedContainer}>
                             <MaterialIcons name={item.submission_id ? "check-circle" : "cancel"} size={18} color={item.submission_id ? COLORS.success : COLORS.iconGrey}/>
-                            <Text style={[styles.submittedText, { color: item.submission_id ? COLORS.success : COLORS.textSub }]}>{item.submission_id ? `Submitted: ${new Date(item.submitted_at).toLocaleDateString()}` : "Not Submitted"}</Text>
+                            <Text style={[styles.submittedText, { color: item.submission_id ? COLORS.success : COLORS.textSub }]}>{item.submission_id ? `Submitted: ${formatDateDisplay(item.submitted_at)}` : "Not Submitted"}</Text>
                         </View>
                     </TouchableOpacity>
                 )}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+                ListEmptyComponent={<View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found in this category.</Text></View>}
             />
+
             <Modal visible={!!selectedStudent} onRequestClose={() => setSelectedStudent(null)} animationType="slide">
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeaderBar, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
@@ -448,18 +487,30 @@ const SubmissionList = ({ assignment, onBack }) => {
                         {selectedStudent?.submission_id ? (
                             <>
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Content</Text>
-                                {selectedStudent.written_answer ? (
-                                    <View style={[styles.writtenAnswerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}><Text style={{ color: COLORS.textMain }}>{selectedStudent.written_answer}</Text></View>
+                                {/* --- UPDATED: Conditional Rendering for Homework Type --- */}
+                                {assignment.homework_type === 'Written' ? (
+                                    // 1. Written Homework: Show text directly line-wise
+                                    <View style={[styles.writtenAnswerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                                        <Text style={{ color: COLORS.textSub, marginBottom: 5, fontSize: 12, fontStyle: 'italic' }}>Student Answer:</Text>
+                                        <Text style={{ color: COLORS.textMain, lineHeight: 22, fontSize: 15 }}>{selectedStudent.written_answer || "No text answer provided."}</Text>
+                                    </View>
                                 ) : (
+                                    // 2. PDF/Image Homework: Show View File button
                                     <TouchableOpacity style={[styles.downloadButton, { backgroundColor: COLORS.blue }]} onPress={() => Linking.openURL(`${SERVER_URL}${selectedStudent.submission_path}`)}>
                                         <MaterialIcons name="cloud-download" size={20} color="#fff" style={{marginRight: 5}}/>
                                         <Text style={{ color: '#fff', fontWeight: 'bold' }}>View File</Text>
                                     </TouchableOpacity>
                                 )}
+
+                                <View style={[styles.divider, { backgroundColor: COLORS.divider, marginVertical: 20 }]} />
+
+                                {/* Grading Section - Always Visible if submitted */}
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Grade</Text>
-                                <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} value={gradeData.grade} onChangeText={t => setGradeData({...gradeData, grade: t})} />
+                                <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} value={gradeData.grade} onChangeText={t => setGradeData({...gradeData, grade: t})} placeholder="e.g., A, 9/10" placeholderTextColor={COLORS.placeholder} />
+                                
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Remarks</Text>
-                                <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80 }]} multiline value={gradeData.remarks} onChangeText={t => setGradeData({...gradeData, remarks: t})} />
+                                <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80 }]} multiline value={gradeData.remarks} onChangeText={t => setGradeData({...gradeData, remarks: t})} placeholder="Feedback for student..." placeholderTextColor={COLORS.placeholder} />
+                                
                                 <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.success, marginTop: 15 }]} onPress={handleGrade}>{isGrading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalButtonText}>Submit Grade</Text>}</TouchableOpacity>
                             </>
                         ) : <View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No submission yet.</Text></View>}
@@ -483,6 +534,11 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 13 },
     headerBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+    // Tabs
+    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, marginBottom: 10, justifyContent: 'space-between' },
+    tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', marginHorizontal: 4, borderRadius: 20, borderWidth: 1 },
+    tabText: { fontWeight: 'bold', fontSize: 13 },
 
     // Card
     card: { borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
