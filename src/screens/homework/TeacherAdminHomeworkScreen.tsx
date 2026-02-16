@@ -118,7 +118,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
     
-    // --- NEW: Questions State ---
+    // --- Questions State ---
     const [questionsList, setQuestionsList] = useState(['']); // Start with one empty question
 
     const [attachments, setAttachments] = useState([]);
@@ -271,21 +271,20 @@ const AssignmentList = ({ onSelectAssignment }) => {
             return Alert.alert("Validation Error", "Please fill required fields.");
         }
         
-        // Validate questions
+        // Validate questions (Allow empty only if description is present, but let's enforce at least one quesiton based on your requirement)
+        // Or if you want to allow generic homework without questions, remove this check.
+        // Assuming you want at least one question:
         const validQuestions = questionsList.filter(q => q.trim() !== '');
-        if (validQuestions.length === 0) {
-            return Alert.alert("Validation Error", "Please add at least one question.");
-        }
-
+        
         setIsSaving(true);
         const data = new FormData();
         data.append('title', newAssignment.title);
-        data.append('description', newAssignment.description || ''); // Keep general description if needed, or remove
+        data.append('description', newAssignment.description || ''); // Added back description
         data.append('due_date', newAssignment.due_date);
         data.append('class_group', selectedClass);
         data.append('subject', selectedSubject);
         data.append('homework_type', newAssignment.homework_type);
-        data.append('questions', JSON.stringify(validQuestions)); // Send questions array as string
+        data.append('questions', JSON.stringify(validQuestions)); // Send questions
 
         if (!editingAssignment) data.append('teacher_id', user.id);
 
@@ -399,8 +398,19 @@ const AssignmentList = ({ onSelectAssignment }) => {
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Title *</Text>
                         <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Title" placeholderTextColor={COLORS.placeholder} value={newAssignment.title} onChangeText={t => setNewAssignment({ ...newAssignment, title: t })} />
                         
+                        {/* --- NEW: Description / Instructions Field --- */}
+                        <Text style={[styles.label, { color: COLORS.textSub }]}>Description / General Instructions :</Text>
+                        <TextInput 
+                            style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80, textAlignVertical: 'top' }]} 
+                            placeholder="Enter general description..." 
+                            placeholderTextColor={COLORS.placeholder} 
+                            multiline 
+                            value={newAssignment.description} 
+                            onChangeText={t => setNewAssignment({ ...newAssignment, description: t })} 
+                        />
+
                         {/* --- QUESTIONS SECTION START --- */}
-                        <Text style={[styles.label, { color: COLORS.textSub }]}>Questions / Instructions :</Text>
+                        <Text style={[styles.label, { color: COLORS.textSub }]}>Exam Questions :</Text>
                         <View style={{ marginBottom: 15 }}>
                             {questionsList.map((question, index) => (
                                 <View key={index} style={[styles.questionRow, { borderColor: COLORS.border }]}>
@@ -458,7 +468,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     );
 };
 
-// --- SUBMISSION LIST COMPONENT (Unchanged mostly but kept for full file integrity) ---
+// --- SUBMISSION LIST COMPONENT ---
 const SubmissionList = ({ assignment, onBack }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';

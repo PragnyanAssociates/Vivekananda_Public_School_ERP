@@ -356,9 +356,10 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 </View>
             </View>
             
-            <Text style={[styles.description, { color: colors.textSub }]} numberOfLines={3}>{item.description}</Text>
+            {/* --- SHOW DESCRIPTION --- */}
+            {item.description ? <Text style={[styles.description, { color: colors.textSub, fontStyle: 'italic', marginBottom: 10 }]} numberOfLines={3}>{item.description}</Text> : null}
             
-            {/* --- DISPLAY QUESTIONS --- */}
+            {/* --- SHOW QUESTIONS --- */}
             {questionsList.length > 0 && (
                 <View style={{ marginBottom: 15 }}>
                     <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.textMain, marginBottom: 5 }}>Questions:</Text>

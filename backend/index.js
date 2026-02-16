@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const router = express.Router();
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
@@ -2471,15 +2472,15 @@ app.delete('/api/labs/:id', async (req, res) => {
 // --- HOMEWORK & ASSIGNMENTS API ROUTES ---
 // ==========================================================
 
-// Ensure you have these imports at the very top:
+// Ensure you have these imports at the very top of your file (if not already there):
 // const multer = require('multer');
 // const path = require('path');
-// const router = express.Router();
+// const router = express.Router(); // Or use 'app' if you are in the main server file
 
 // 1. Define where to store homework files
 const homeworkStorage = multer.diskStorage({
     destination: (req, file, cb) => { 
-        cb(null, '/data/uploads'); // Ensure this directory exists
+        cb(null, '/data/uploads'); // Ensure this directory exists on your server
     },
     filename: (req, file, cb) => { 
         // Simple unique filename generator
@@ -2527,10 +2528,25 @@ app.get('/subjects-for-class/:classGroup', async (req, res) => {
 app.get('/homework/teacher/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
+        // We explicitly select 'questions' and 'description' to ensure they are sent to the frontend
         const query = `
-            SELECT a.*, (SELECT COUNT(*) FROM homework_submissions s WHERE s.assignment_id = a.id) as submission_count
+            SELECT 
+                a.id, 
+                a.title, 
+                a.description, 
+                a.class_group, 
+                a.subject, 
+                a.due_date, 
+                a.teacher_id, 
+                a.attachment_path, 
+                a.homework_type, 
+                a.created_at, 
+                a.questions,
+                (SELECT COUNT(*) FROM homework_submissions s WHERE s.assignment_id = a.id) as submission_count
             FROM homework_assignments a
-            WHERE a.teacher_id = ? ORDER BY a.created_at DESC`;
+            WHERE a.teacher_id = ? 
+            ORDER BY a.created_at DESC`;
+        
         const [assignments] = await db.query(query, [teacherId]);
         res.json(assignments);
     } catch (error) { 
@@ -2541,7 +2557,7 @@ app.get('/homework/teacher/:teacherId', async (req, res) => {
 
 // Create a new homework assignment
 app.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
-    // 'questions' comes in as a JSON string from frontend
+    // We retrieve 'description' (Instructions) and 'questions' (JSON string) from the body
     const { title, description, class_group, subject, due_date, teacher_id, homework_type, questions } = req.body;
     
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
@@ -2566,17 +2582,23 @@ app.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const query = `INSERT INTO homework_assignments (title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type, questions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        // INSERT Query updated to include BOTH 'description' and 'questions'
+        const query = `
+            INSERT INTO homework_assignments 
+            (title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type, questions) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        
         const [assignmentResult] = await connection.query(query, [
             title, 
-            description, 
+            description || '', // Default to empty string if missing
             class_group, 
             subject, 
             due_date, 
             teacher_id, 
             attachment_path, 
             homework_type,
-            questions // Insert the questions JSON string
+            questions // This stores the JSON array of questions
         ]);
         const newAssignmentId = assignmentResult.insertId;
 
@@ -2634,16 +2656,22 @@ app.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), 
             attachment_path = JSON.stringify(filePaths);
         }
 
-        const query = `UPDATE homework_assignments SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ?, questions = ? WHERE id = ?`;
+        // UPDATE Query updated to include BOTH 'description' and 'questions'
+        const query = `
+            UPDATE homework_assignments 
+            SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ?, questions = ? 
+            WHERE id = ?
+        `;
+        
         await db.query(query, [
             title, 
-            description, 
+            description || '', 
             class_group, 
             subject, 
             due_date, 
             attachment_path, 
             homework_type, 
-            questions, // Update questions
+            questions, 
             assignmentId
         ]);
         res.status(200).json({ message: 'Homework updated successfully.' });
@@ -2721,6 +2749,7 @@ app.put('/homework/grade/:submissionId', async (req, res) => {
 app.get('/homework/student/:studentId/:classGroup', async (req, res) => {
     const { studentId, classGroup } = req.params;
     try {
+        // UPDATED: Query now selects 'description' AND 'questions'
         const query = `
             SELECT 
                 a.id, a.title, a.description, a.subject, a.due_date, a.attachment_path, a.homework_type, a.questions,
@@ -2734,6 +2763,7 @@ app.get('/homework/student/:studentId/:classGroup', async (req, res) => {
             LEFT JOIN homework_submissions s ON a.id = s.assignment_id AND s.student_id = ?
             WHERE a.class_group = ? 
             ORDER BY a.due_date DESC, a.id DESC`;
+            
         const [assignments] = await db.query(query, [studentId, classGroup]);
         const processedAssignments = assignments.map(a => ({
             ...a,

@@ -125,13 +125,15 @@ const WrittenAnswerScreen = ({ route }) => {
 
       <ScrollView contentContainerStyle={styles.container}>
         <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
-          <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Questions / Instructions</Text>
+          <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Instructions & Questions</Text>
           
-          <Text style={[styles.description, { color: COLORS.textMain, marginBottom: 15 }]}>{assignment.description || 'See questions below:'}</Text>
+          {/* --- DISPLAY DESCRIPTION --- */}
+          {assignment.description ? <Text style={[styles.description, { color: COLORS.textMain, marginBottom: 15, fontStyle: 'italic' }]}>{assignment.description}</Text> : null}
 
           {/* --- DISPLAY QUESTIONS --- */}
-          {questionsList.length > 0 ? (
+          {questionsList.length > 0 && (
                 <View>
+                    <Text style={{fontWeight: 'bold', color: COLORS.textMain, marginBottom: 8}}>Questions:</Text>
                     {questionsList.map((q, i) => (
                         <View key={i} style={{flexDirection: 'row', marginBottom: 8}}>
                             <Text style={{color: COLORS.primary, marginRight: 8, fontWeight: 'bold'}}>{i+1}.</Text>
@@ -139,8 +141,6 @@ const WrittenAnswerScreen = ({ route }) => {
                         </View>
                     ))}
                 </View>
-          ) : (
-             <Text style={{color: COLORS.textSub, fontStyle:'italic'}}>No specific questions listed.</Text>
           )}
 
         </View>
