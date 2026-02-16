@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-    View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
-    Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation, 
-    UIManager, Platform, SafeAreaView, useColorScheme, StatusBar, Dimensions 
+import {
+    View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity,
+    Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation,
+    UIManager, Platform, SafeAreaView, useColorScheme, StatusBar, Dimensions, Image
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { Picker } from '@react-native-picker/picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
-import DateTimePicker from '@react-native-community/datetimepicker'; 
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Animatable from 'react-native-animatable';
+import Pdf from 'react-native-pdf';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -37,7 +38,8 @@ const LightColors = {
     placeholder: '#B0BEC5',
     divider: '#f0f2f5',
     tabActive: '#008080',
-    tabInactive: '#ECEFF1'
+    tabInactive: '#ECEFF1',
+    viewerBg: '#000000'
 };
 
 const DarkColors = {
@@ -57,14 +59,18 @@ const DarkColors = {
     placeholder: '#616161',
     divider: '#2C2C2C',
     tabActive: '#004D40',
-    tabInactive: '#424242'
+    tabInactive: '#424242',
+    viewerBg: '#000000'
 };
 
 // --- HELPER: Date Format DD/MM/YYYY ---
 const formatDateDisplay = (isoDateString) => {
     if (!isoDateString) return '';
     const d = new Date(isoDateString);
-    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
 };
 
 // --- MAIN SCREEN ---
@@ -111,6 +117,10 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
+    
+    // --- NEW: Questions State ---
+    const [questionsList, setQuestionsList] = useState(['']); // Start with one empty question
+
     const [attachments, setAttachments] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -164,9 +174,26 @@ const AssignmentList = ({ onSelectAssignment }) => {
         } else { setShowDatePicker(false); }
     };
 
+    // --- Question Handlers ---
+    const addQuestionField = () => {
+        setQuestionsList([...questionsList, '']);
+    };
+
+    const removeQuestionField = (index) => {
+        const updatedList = questionsList.filter((_, i) => i !== index);
+        setQuestionsList(updatedList);
+    };
+
+    const updateQuestionText = (text, index) => {
+        const updatedList = [...questionsList];
+        updatedList[index] = text;
+        setQuestionsList(updatedList);
+    };
+
     const openCreateModal = () => {
         setEditingAssignment(null);
         setNewAssignment(initialAssignmentState);
+        setQuestionsList(['']); // Reset to one empty question
         setSelectedClass('');
         setSelectedSubject('');
         setSubjects([]);
@@ -179,12 +206,25 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setEditingAssignment(assignment);
         const date = new Date(assignment.due_date);
         setDateObject(date); 
+        
+        // Parse existing questions
+        let parsedQuestions = [''];
+        try {
+            if (assignment.questions) {
+                const parsed = JSON.parse(assignment.questions);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    parsedQuestions = parsed;
+                }
+            }
+        } catch (e) { console.log("Error parsing questions", e); }
+
         setNewAssignment({ 
             title: assignment.title, 
             description: assignment.description, 
             due_date: date.toISOString().split('T')[0], 
             homework_type: assignment.homework_type || 'PDF' 
         });
+        setQuestionsList(parsedQuestions);
         setAttachments([]); 
         await handleClassChange(assignment.class_group);
         setSelectedSubject(assignment.subject);
@@ -230,14 +270,23 @@ const AssignmentList = ({ onSelectAssignment }) => {
         if (!user || !selectedClass || !selectedSubject || !newAssignment.title || !newAssignment.due_date) {
             return Alert.alert("Validation Error", "Please fill required fields.");
         }
+        
+        // Validate questions
+        const validQuestions = questionsList.filter(q => q.trim() !== '');
+        if (validQuestions.length === 0) {
+            return Alert.alert("Validation Error", "Please add at least one question.");
+        }
+
         setIsSaving(true);
         const data = new FormData();
         data.append('title', newAssignment.title);
-        data.append('description', newAssignment.description || '');
+        data.append('description', newAssignment.description || ''); // Keep general description if needed, or remove
         data.append('due_date', newAssignment.due_date);
         data.append('class_group', selectedClass);
         data.append('subject', selectedSubject);
         data.append('homework_type', newAssignment.homework_type);
+        data.append('questions', JSON.stringify(validQuestions)); // Send questions array as string
+
         if (!editingAssignment) data.append('teacher_id', user.id);
 
         attachments.forEach((file) => {
@@ -330,23 +379,65 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                 <Picker.Item label="Written / Text Answer" value="Written" color={COLORS.textMain} />
                             </Picker>
                         </View>
+                        
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Class *</Text>
-                        <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}><Picker selectedValue={selectedClass} onValueChange={handleClassChange} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}><Picker.Item label="-- Select --" value="" color={COLORS.textMain} />{studentClasses.map(c => <Picker.Item key={c} label={c} value={c} color={COLORS.textMain} />)}</Picker></View>
+                        <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                            <Picker selectedValue={selectedClass} onValueChange={handleClassChange} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
+                                <Picker.Item label="-- Select --" value="" color={COLORS.textMain} />
+                                {studentClasses.map(c => <Picker.Item key={c} label={c} value={c} color={COLORS.textMain} />)}
+                            </Picker>
+                        </View>
+                        
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Subject *</Text>
-                        <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}><Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}><Picker.Item label="-- Select --" value="" color={COLORS.textMain} />{subjects.map(s => <Picker.Item key={s} label={s} value={s} color={COLORS.textMain} />)}</Picker></View>
+                        <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                            <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
+                                <Picker.Item label="-- Select --" value="" color={COLORS.textMain} />
+                                {subjects.map(s => <Picker.Item key={s} label={s} value={s} color={COLORS.textMain} />)}
+                            </Picker>
+                        </View>
+                        
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Title *</Text>
                         <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Title" placeholderTextColor={COLORS.placeholder} value={newAssignment.title} onChangeText={t => setNewAssignment({ ...newAssignment, title: t })} />
-                        <Text style={[styles.label, { color: COLORS.textSub }]}>Description</Text>
-                        <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80, textAlignVertical: 'top' }]} placeholder="Instructions" placeholderTextColor={COLORS.placeholder} multiline value={newAssignment.description} onChangeText={t => setNewAssignment({ ...newAssignment, description: t })} />
+                        
+                        {/* --- QUESTIONS SECTION START --- */}
+                        <Text style={[styles.label, { color: COLORS.textSub }]}>Questions / Instructions :</Text>
+                        <View style={{ marginBottom: 15 }}>
+                            {questionsList.map((question, index) => (
+                                <View key={index} style={[styles.questionRow, { borderColor: COLORS.border }]}>
+                                    <Text style={{color: COLORS.primary, fontWeight: 'bold', marginRight: 8, marginTop: 12}}>Q{index + 1}.</Text>
+                                    <TextInput 
+                                        style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, textAlignVertical: 'top', height: 60 }]} 
+                                        placeholder={`Enter question ${index + 1}`}
+                                        placeholderTextColor={COLORS.placeholder} 
+                                        multiline 
+                                        value={question} 
+                                        onChangeText={(text) => updateQuestionText(text, index)} 
+                                    />
+                                    {index > 0 && (
+                                        <TouchableOpacity onPress={() => removeQuestionField(index)} style={{ marginLeft: 8, marginTop: 10 }}>
+                                            <MaterialIcons name="remove-circle-outline" size={24} color={COLORS.danger} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+                            
+                            <TouchableOpacity style={[styles.addQuestionBtn, { borderColor: COLORS.primary }]} onPress={addQuestionField}>
+                                <MaterialIcons name="add-circle-outline" size={24} color={COLORS.primary} />
+                                <Text style={{ color: COLORS.primary, fontWeight: 'bold', marginLeft: 8 }}>Add Another Question</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {/* --- QUESTIONS SECTION END --- */}
+
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Due Date *</Text>
                         <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.datePickerInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                             <Text style={{ color: newAssignment.due_date ? COLORS.textMain : COLORS.placeholder }}>{newAssignment.due_date ? formatDateDisplay(newAssignment.due_date) : "Select Date"}</Text>
                             <MaterialIcons name="event" size={20} color={COLORS.textSub} />
                         </TouchableOpacity>
                         {showDatePicker && <DateTimePicker value={dateObject} mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()} />}
+                        
                         <View style={styles.attachmentSection}>
                             <TouchableOpacity style={[styles.uploadButton, { backgroundColor: COLORS.blue }]} onPress={selectAttachment}>
-                                <MaterialIcons name="attach-file" size={20} color="#fff" /><Text style={styles.uploadButtonText}>Add Files</Text>
+                                <MaterialIcons name="attach-file" size={20} color="#fff" /><Text style={styles.uploadButtonText}>Add Attachments</Text>
                             </TouchableOpacity>
                             {attachments.map((file, idx) => (
                                 <View key={idx} style={[styles.fileItem, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
@@ -355,6 +446,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                 </View>
                             ))}
                         </View>
+                        
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.border }]} onPress={() => setIsModalVisible(false)}><Text style={{ color: COLORS.textMain, fontWeight: 'bold' }}>Cancel</Text></TouchableOpacity>
                             <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.success }]} onPress={handleSave} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalButtonText}>{editingAssignment ? 'Save' : 'Create'}</Text>}</TouchableOpacity>
@@ -366,7 +458,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     );
 };
 
-// --- SUBMISSION LIST COMPONENT ---
+// --- SUBMISSION LIST COMPONENT (Unchanged mostly but kept for full file integrity) ---
 const SubmissionList = ({ assignment, onBack }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -379,9 +471,10 @@ const SubmissionList = ({ assignment, onBack }) => {
     const [gradeData, setGradeData] = useState({ grade: '', remarks: '' });
     const [isGrading, setIsGrading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    
-    // --- NEW: Tab State ---
-    const [activeTab, setActiveTab] = useState('All'); // 'All', 'Submitted', 'Pending'
+    const [activeTab, setActiveTab] = useState('All'); 
+    const [isViewerVisible, setIsViewerVisible] = useState(false);
+    const [currentFile, setCurrentFile] = useState({ uri: '', type: '', name: '' });
+    const [submissionFiles, setSubmissionFiles] = useState([]);
 
     const fetchStudentRoster = useCallback(async () => {
         setIsLoading(true);
@@ -395,23 +488,17 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     useEffect(() => { fetchStudentRoster(); }, [fetchStudentRoster]);
 
-    // --- UPDATED: Filtering Logic (Search + Tabs) ---
     useEffect(() => {
         let result = studentRoster;
-
-        // 1. Filter by Tab
         if (activeTab === 'Submitted') {
             result = result.filter(item => item.submission_id);
         } else if (activeTab === 'Pending') {
             result = result.filter(item => !item.submission_id);
         }
-
-        // 2. Filter by Search
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             result = result.filter(i => i.student_name.toLowerCase().includes(query) || (i.roll_no && i.roll_no.includes(query)));
         }
-
         setFilteredRoster(result);
     }, [searchQuery, activeTab, studentRoster]);
 
@@ -427,6 +514,18 @@ const SubmissionList = ({ assignment, onBack }) => {
         finally { setIsGrading(false); }
     };
 
+    const openDocumentViewer = (file) => {
+        if (file.type === 'unknown') {
+            Alert.alert('Cannot View', 'This file type is not supported for in-app viewing.', [
+                { text: 'Open Externally', onPress: () => Linking.openURL(file.uri) },
+                { text: 'Cancel', style: 'cancel' }
+            ]);
+        } else {
+            setCurrentFile(file);
+            setIsViewerVisible(true);
+        }
+    };
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
@@ -439,7 +538,6 @@ const SubmissionList = ({ assignment, onBack }) => {
                 </View>
             </View>
 
-            {/* --- NEW: Tab Filters --- */}
             <View style={styles.tabContainer}>
                 {['All', 'Submitted', 'Pending'].map((tab) => (
                     <TouchableOpacity 
@@ -461,7 +559,25 @@ const SubmissionList = ({ assignment, onBack }) => {
                 data={filteredRoster}
                 keyExtractor={(item) => item.student_id.toString()}
                 renderItem={({ item }) => (
-                    <TouchableOpacity style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} onPress={() => { setSelectedStudent(item); setGradeData({ grade: item.grade || '', remarks: item.remarks || '' }); }}>
+                    <TouchableOpacity style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} onPress={() => { 
+                        setSelectedStudent(item); 
+                        setGradeData({ grade: item.grade || '', remarks: item.remarks || '' });
+                        let files = [];
+                        if (item.submission_path) {
+                            try {
+                                files = JSON.parse(item.submission_path);
+                                if (!Array.isArray(files)) files = [files];
+                            } catch (e) { files = [item.submission_path]; }
+                        }
+                        setSubmissionFiles(files.map(path => {
+                            const url = `${SERVER_URL}${path}`;
+                            const extension = path.split('.').pop().toLowerCase();
+                            let type = 'unknown';
+                            if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) type = 'image';
+                            else if (extension === 'pdf') type = 'pdf';
+                            return { uri: url, type, name: path.split('/').pop() };
+                        }));
+                    }}>
                         <View style={styles.cardHeaderRow}>
                             <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{item.roll_no ? `(${item.roll_no}) ` : ''}{item.student_name}</Text>
                             {item.grade && <View style={[styles.gradeBadge, { backgroundColor: COLORS.blue }]}><Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{item.grade}</Text></View>}
@@ -473,7 +589,7 @@ const SubmissionList = ({ assignment, onBack }) => {
                     </TouchableOpacity>
                 )}
                 contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
-                ListEmptyComponent={<View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found in this category.</Text></View>}
+                ListEmptyComponent={<View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found.</Text></View>}
             />
 
             <Modal visible={!!selectedStudent} onRequestClose={() => setSelectedStudent(null)} animationType="slide">
@@ -487,35 +603,53 @@ const SubmissionList = ({ assignment, onBack }) => {
                         {selectedStudent?.submission_id ? (
                             <>
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Content</Text>
-                                {/* --- UPDATED: Conditional Rendering for Homework Type --- */}
                                 {assignment.homework_type === 'Written' ? (
-                                    // 1. Written Homework: Show text directly line-wise
                                     <View style={[styles.writtenAnswerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                                         <Text style={{ color: COLORS.textSub, marginBottom: 5, fontSize: 12, fontStyle: 'italic' }}>Student Answer:</Text>
                                         <Text style={{ color: COLORS.textMain, lineHeight: 22, fontSize: 15 }}>{selectedStudent.written_answer || "No text answer provided."}</Text>
                                     </View>
                                 ) : (
-                                    // 2. PDF/Image Homework: Show View File button
-                                    <TouchableOpacity style={[styles.downloadButton, { backgroundColor: COLORS.blue }]} onPress={() => Linking.openURL(`${SERVER_URL}${selectedStudent.submission_path}`)}>
-                                        <MaterialIcons name="cloud-download" size={20} color="#fff" style={{marginRight: 5}}/>
-                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>View File</Text>
-                                    </TouchableOpacity>
+                                    <View style={styles.fileListContainer}>
+                                        {submissionFiles.map((file, index) => (
+                                            <TouchableOpacity key={index} style={[styles.fileItem, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} onPress={() => openDocumentViewer(file)}>
+                                                <MaterialIcons name={file.type === 'image' ? 'image' : file.type === 'pdf' ? 'picture-as-pdf' : 'insert-drive-file'} size={24} color={COLORS.primary} />
+                                                <Text style={[styles.fileName, { color: COLORS.textMain }]} numberOfLines={1}>{file.name}</Text>
+                                                <MaterialIcons name="visibility" size={20} color={COLORS.iconGrey} />
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
                                 )}
-
                                 <View style={[styles.divider, { backgroundColor: COLORS.divider, marginVertical: 20 }]} />
-
-                                {/* Grading Section - Always Visible if submitted */}
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Grade</Text>
                                 <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} value={gradeData.grade} onChangeText={t => setGradeData({...gradeData, grade: t})} placeholder="e.g., A, 9/10" placeholderTextColor={COLORS.placeholder} />
-                                
                                 <Text style={[styles.label, { color: COLORS.textSub }]}>Remarks</Text>
                                 <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain, height: 80 }]} multiline value={gradeData.remarks} onChangeText={t => setGradeData({...gradeData, remarks: t})} placeholder="Feedback for student..." placeholderTextColor={COLORS.placeholder} />
-                                
                                 <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.success, marginTop: 15 }]} onPress={handleGrade}>{isGrading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalButtonText}>Submit Grade</Text>}</TouchableOpacity>
                             </>
                         ) : <View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No submission yet.</Text></View>}
                     </ScrollView>
                 </SafeAreaView>
+            </Modal>
+
+            <Modal visible={isViewerVisible} onRequestClose={() => setIsViewerVisible(false)} animationType="fade" transparent={true}>
+                <View style={[styles.viewerModalContainer, { backgroundColor: COLORS.viewerBg }]}>
+                    <SafeAreaView style={styles.viewerSafeArea}>
+                        <View style={[styles.viewerHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
+                            <Text style={[styles.viewerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{currentFile.name}</Text>
+                            <TouchableOpacity onPress={() => setIsViewerVisible(false)} style={styles.closeViewerBtn}>
+                                <MaterialIcons name="close" size={24} color={COLORS.textMain} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.viewerContent}>
+                            {currentFile.type === 'pdf' && (
+                                <Pdf source={{ uri: currentFile.uri, cache: true }} style={styles.pdfView} onError={(error) => Alert.alert('Error', 'Could not load PDF.')} />
+                            )}
+                            {currentFile.type === 'image' && (
+                                <Image source={{ uri: currentFile.uri }} style={styles.imageView} resizeMode="contain" />
+                            )}
+                        </View>
+                    </SafeAreaView>
+                </View>
             </Modal>
         </SafeAreaView>
     );
@@ -568,11 +702,15 @@ const styles = StyleSheet.create({
     uploadButton: { flexDirection: 'row', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
     uploadButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 },
     fileItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderRadius: 8, marginBottom: 8, borderWidth: 1 },
-    fileName: { flex: 1, fontSize: 14, marginRight: 10 },
+    fileName: { flex: 1, fontSize: 14, marginRight: 10, marginLeft: 10 },
     modalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
     modalBtn: { paddingVertical: 14, borderRadius: 8, alignItems: 'center', flex: 1, justifyContent: 'center' },
     datePickerInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, padding: 12, borderRadius: 8, marginBottom: 10 },
     
+    // Question Rows
+    questionRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+    addQuestionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', marginBottom: 20 },
+
     // Search
     searchContainer: { flexDirection: 'row', borderRadius: 8, marginHorizontal: 15, marginBottom: 15, alignItems: 'center', paddingHorizontal: 10, borderWidth: 1, height: 45 },
     searchInput: { flex: 1, height: 45, marginLeft: 8, fontSize: 15 },
@@ -582,13 +720,23 @@ const styles = StyleSheet.create({
     submittedText: { marginLeft: 8, fontSize: 13 },
     modalStudentName: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
     writtenAnswerContainer: { padding: 12, borderRadius: 8, borderWidth: 1, marginBottom: 15, minHeight: 100 },
-    downloadButton: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-    
+    fileListContainer: { marginBottom: 15 },
+
     // Form Elements
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 15 },
     modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 50 },
+
+    // Viewer Modal
+    viewerModalContainer: { flex: 1 },
+    viewerSafeArea: { flex: 1 },
+    viewerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
+    viewerTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
+    closeViewerBtn: { padding: 5 },
+    viewerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    pdfView: { flex: 1, width: width, height: height },
+    imageView: { flex: 1, width: width, height: height },
 });
 
 export default TeacherAdminHomeworkScreen;

@@ -58,6 +58,15 @@ const WrittenAnswerScreen = ({ route }) => {
   const [answer, setAnswer] = useState(assignment.written_answer || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // --- PARSE QUESTIONS ---
+  let questionsList = [];
+  try {
+      if (assignment.questions) {
+          const parsed = JSON.parse(assignment.questions);
+          if (Array.isArray(parsed)) questionsList = parsed;
+      }
+  } catch (e) {}
+
   const handleSubmit = async () => {
     if (!user) {
       Alert.alert('Error', 'You must be logged in to submit.');
@@ -117,7 +126,23 @@ const WrittenAnswerScreen = ({ route }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
           <Text style={[styles.questionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.border }]}>Questions / Instructions</Text>
-          <Text style={[styles.description, { color: COLORS.textMain }]}>{assignment.description || 'No specific instructions provided.'}</Text>
+          
+          <Text style={[styles.description, { color: COLORS.textMain, marginBottom: 15 }]}>{assignment.description || 'See questions below:'}</Text>
+
+          {/* --- DISPLAY QUESTIONS --- */}
+          {questionsList.length > 0 ? (
+                <View>
+                    {questionsList.map((q, i) => (
+                        <View key={i} style={{flexDirection: 'row', marginBottom: 8}}>
+                            <Text style={{color: COLORS.primary, marginRight: 8, fontWeight: 'bold'}}>{i+1}.</Text>
+                            <Text style={{color: COLORS.textMain, flex: 1, lineHeight: 20}}>{q}</Text>
+                        </View>
+                    ))}
+                </View>
+          ) : (
+             <Text style={{color: COLORS.textSub, fontStyle:'italic'}}>No specific questions listed.</Text>
+          )}
+
         </View>
 
         <View style={[styles.answerBox, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>

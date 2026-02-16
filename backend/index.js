@@ -2474,26 +2474,27 @@ app.delete('/api/labs/:id', async (req, res) => {
 // Ensure you have these imports at the very top:
 // const multer = require('multer');
 // const path = require('path');
-const router = express.Router();
+// const router = express.Router();
 
 // 1. Define where to store homework files
 const homeworkStorage = multer.diskStorage({
     destination: (req, file, cb) => { 
-        // This MUST match your server's upload directory
-        cb(null, '/data/uploads'); 
+        cb(null, '/data/uploads'); // Ensure this directory exists
     },
     filename: (req, file, cb) => { 
-        cb(null, generateUniqueFilename(file.originalname, 'homework')); 
+        // Simple unique filename generator
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
 
 // 2. Initialize the uploader variable
 const homeworkUpload = multer({ storage: homeworkStorage });
 
-// --- UTILITY ROUTES (FOR HOMEWORK FORMS) ---
+// --- UTILITY ROUTES ---
 
 // Get a list of all unique student class groups
-app.get('/api/student-classes', async (req, res) => {
+app.get('/student-classes', async (req, res) => {
     try {
         const query = `
             SELECT DISTINCT class_group FROM users 
@@ -2507,8 +2508,8 @@ app.get('/api/student-classes', async (req, res) => {
     }
 });
 
-// Get all subjects for a selected class from the timetable
-app.get('/api/subjects-for-class/:classGroup', async (req, res) => {
+// Get all subjects for a selected class
+app.get('/subjects-for-class/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
     try {
         const query = "SELECT DISTINCT subject_name FROM timetables WHERE class_group = ? ORDER BY subject_name";
@@ -2523,7 +2524,7 @@ app.get('/api/subjects-for-class/:classGroup', async (req, res) => {
 // --- TEACHER / ADMIN ROUTES ---
 
 // Get assignment history for a specific teacher
-app.get('/api/homework/teacher/:teacherId', async (req, res) => {
+app.get('/homework/teacher/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
         const query = `
@@ -2539,8 +2540,9 @@ app.get('/api/homework/teacher/:teacherId', async (req, res) => {
 });
 
 // Create a new homework assignment
-app.post('/api/homework', homeworkUpload.array('attachments'), async (req, res) => {
-    const { title, description, class_group, subject, due_date, teacher_id, homework_type } = req.body;
+app.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
+    // 'questions' comes in as a JSON string from frontend
+    const { title, description, class_group, subject, due_date, teacher_id, homework_type, questions } = req.body;
     
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
         return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
@@ -2564,11 +2566,21 @@ app.post('/api/homework', homeworkUpload.array('attachments'), async (req, res) 
     try {
         await connection.beginTransaction();
 
-        const query = `INSERT INTO homework_assignments (title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-        const [assignmentResult] = await connection.query(query, [title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type]);
+        const query = `INSERT INTO homework_assignments (title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type, questions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const [assignmentResult] = await connection.query(query, [
+            title, 
+            description, 
+            class_group, 
+            subject, 
+            due_date, 
+            teacher_id, 
+            attachment_path, 
+            homework_type,
+            questions // Insert the questions JSON string
+        ]);
         const newAssignmentId = assignmentResult.insertId;
 
-        // Notification logic here (ensure createBulkNotifications is available)
+        // Notification logic
         const [[teacher]] = await connection.query('SELECT full_name FROM users WHERE id = ?', [teacher_id]);
         const [students] = await connection.query('SELECT id FROM users WHERE role = "student" AND class_group = ?', [class_group]);
         
@@ -2599,9 +2611,9 @@ app.post('/api/homework', homeworkUpload.array('attachments'), async (req, res) 
 });
 
 // Update an existing homework assignment
-app.post('/api/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
+app.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
     const { assignmentId } = req.params;
-    const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type } = req.body;
+    const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type, questions } = req.body;
     
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
         return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
@@ -2622,8 +2634,18 @@ app.post('/api/homework/update/:assignmentId', homeworkUpload.array('attachments
             attachment_path = JSON.stringify(filePaths);
         }
 
-        const query = `UPDATE homework_assignments SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ? WHERE id = ?`;
-        await db.query(query, [title, description, class_group, subject, due_date, attachment_path, homework_type, assignmentId]);
+        const query = `UPDATE homework_assignments SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ?, questions = ? WHERE id = ?`;
+        await db.query(query, [
+            title, 
+            description, 
+            class_group, 
+            subject, 
+            due_date, 
+            attachment_path, 
+            homework_type, 
+            questions, // Update questions
+            assignmentId
+        ]);
         res.status(200).json({ message: 'Homework updated successfully.' });
     } catch (error) { 
         console.error('Error updating homework:', error);
@@ -2632,7 +2654,7 @@ app.post('/api/homework/update/:assignmentId', homeworkUpload.array('attachments
 });
 
 // Delete a homework assignment
-app.delete('/api/homework/:assignmentId', async (req, res) => {
+app.delete('/homework/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         await db.query('DELETE FROM homework_assignments WHERE id = ?', [assignmentId]);
@@ -2644,7 +2666,7 @@ app.delete('/api/homework/:assignmentId', async (req, res) => {
 });
 
 // Get all submissions for an assignment
-app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
+app.get('/homework/submissions/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         const query = `
@@ -2680,7 +2702,7 @@ app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
 });
 
 // Grade a submission
-app.put('/api/homework/grade/:submissionId', async (req, res) => {
+app.put('/homework/grade/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { grade, remarks } = req.body;
     try {
@@ -2696,12 +2718,12 @@ app.put('/api/homework/grade/:submissionId', async (req, res) => {
 // --- STUDENT ROUTES ---
 
 // Get all assignments for a student
-app.get('/api/homework/student/:studentId/:classGroup', async (req, res) => {
+app.get('/homework/student/:studentId/:classGroup', async (req, res) => {
     const { studentId, classGroup } = req.params;
     try {
         const query = `
             SELECT 
-                a.id, a.title, a.description, a.subject, a.due_date, a.attachment_path, a.homework_type,
+                a.id, a.title, a.description, a.subject, a.due_date, a.attachment_path, a.homework_type, a.questions,
                 s.id as submission_id,
                 s.written_answer,
                 s.submitted_at, 
@@ -2725,7 +2747,7 @@ app.get('/api/homework/student/:studentId/:classGroup', async (req, res) => {
 });
 
 // Student submits a homework file (PDF Type)
-app.post('/api/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
+app.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
     const { assignmentId } = req.params;
     const { student_id } = req.body;
     
@@ -2745,7 +2767,6 @@ app.post('/api/homework/submit/:assignmentId', homeworkUpload.array('submissions
         if (existing.length > 0) {
             await connection.rollback(); 
             // Cleanup files
-            const fs = require('fs');
             req.files.forEach(f => fs.unlink(f.path, ()=>{}));
             return res.status(409).json({ message: 'You have already submitted this homework.' });
         }
@@ -2780,7 +2801,7 @@ app.post('/api/homework/submit/:assignmentId', homeworkUpload.array('submissions
 });
 
 // Student submits a written answer
-app.post('/api/homework/submit-written', async (req, res) => {
+app.post('/homework/submit-written', async (req, res) => {
     const { assignment_id, student_id, written_answer } = req.body;
 
     if (!assignment_id || !student_id || !written_answer) {
@@ -2827,7 +2848,7 @@ app.post('/api/homework/submit-written', async (req, res) => {
 });
 
 // Delete a submission
-app.delete('/api/homework/submission/:submissionId', async (req, res) => {
+app.delete('/homework/submission/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { student_id } = req.body; 
 
@@ -2852,10 +2873,6 @@ app.delete('/api/homework/submission/:submissionId', async (req, res) => {
         }
 
         await connection.query('DELETE FROM homework_submissions WHERE id = ?', [submissionId]);
-
-        if (submission.submission_path) {
-            // Optional: Add logic to unlink files if needed
-        }
         
         await connection.commit();
         res.status(200).json({ message: 'Submission deleted successfully.' });
@@ -2868,6 +2885,7 @@ app.delete('/api/homework/submission/:submissionId', async (req, res) => {
         connection.release();
     }
 });
+
 
 
 
