@@ -2,7 +2,6 @@
 
 require('dotenv').config();
 const express = require('express');
-const router = express.Router();
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
@@ -2475,12 +2474,7 @@ app.delete('/api/labs/:id', async (req, res) => {
 // Ensure you have these imports at the very top:
 // const multer = require('multer');
 // const path = require('path');
-
-// Helper to generate unique filenames (if not already defined in your file)
-const generateUniqueFilename = (originalName, prefix) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    return `${prefix}-${uniqueSuffix}${path.extname(originalName)}`;
-};
+const router = express.Router();
 
 // 1. Define where to store homework files
 const homeworkStorage = multer.diskStorage({
