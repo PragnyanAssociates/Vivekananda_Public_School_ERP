@@ -2472,6 +2472,30 @@ app.delete('/api/labs/:id', async (req, res) => {
 // --- HOMEWORK & ASSIGNMENTS API ROUTES ---
 // ==========================================================
 
+// Ensure you have these imports at the very top:
+// const multer = require('multer');
+// const path = require('path');
+
+// Helper to generate unique filenames (if not already defined in your file)
+const generateUniqueFilename = (originalName, prefix) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    return `${prefix}-${uniqueSuffix}${path.extname(originalName)}`;
+};
+
+// 1. Define where to store homework files
+const homeworkStorage = multer.diskStorage({
+    destination: (req, file, cb) => { 
+        // This MUST match your server's upload directory
+        cb(null, '/data/uploads'); 
+    },
+    filename: (req, file, cb) => { 
+        cb(null, generateUniqueFilename(file.originalname, 'homework')); 
+    }
+});
+
+// 2. Initialize the uploader variable
+const homeworkUpload = multer({ storage: homeworkStorage });
+
 // --- UTILITY ROUTES (FOR HOMEWORK FORMS) ---
 
 // Get a list of all unique student class groups
