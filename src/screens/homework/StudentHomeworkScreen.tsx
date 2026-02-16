@@ -294,7 +294,7 @@ const StudentHomeworkScreen = () => {
                             <TouchableOpacity onPress={() => setIsAnswerModalVisible(false)}><MaterialIcons name="close" size={24} color={COLORS.textMain} /></TouchableOpacity>
                         </View>
                         <ScrollView>
-                             <Text style={{color: COLORS.textSub, fontWeight:'bold', marginBottom:5}}>Question / Instructions:</Text>
+                             <Text style={{color: COLORS.textSub, fontWeight:'bold', marginBottom:5}}>Description / Instructions:</Text>
                              <Text style={{color: COLORS.textMain, marginBottom: 15}}>{selectedAnswerDetails?.description || 'N/A'}</Text>
                              
                              <View style={{height:1, backgroundColor: COLORS.divider, marginVertical: 10}}/>

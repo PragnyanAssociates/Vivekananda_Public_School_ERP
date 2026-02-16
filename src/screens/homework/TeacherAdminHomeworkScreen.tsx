@@ -129,7 +129,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setIsLoading(true);
         try {
             const response = await apiClient.get(`/homework/teacher/${user.id}`);
-            // Check if response.data is array to avoid crashes
+            // Safety check: ensure response is an array
             setAssignments(Array.isArray(response.data) ? response.data : []);
         } catch (e) {
             console.error(e);
@@ -219,9 +219,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                 }
             }
         } catch (e) { 
-            console.log("Error parsing questions JSON, resetting to empty", e); 
-            // If parsing fails (e.g. old data text), maybe treat it as one question?
-            // For now, reset to empty to prevent crash
+            console.log("Error parsing questions JSON", e); 
         }
 
         setNewAssignment({ 
@@ -277,13 +275,13 @@ const AssignmentList = ({ onSelectAssignment }) => {
             return Alert.alert("Validation Error", "Please fill required fields.");
         }
         
-        // Filter empty questions, but allow saving if at least description is there or one question
+        // Filter empty questions, allowing save if at least one question OR description exists
         const validQuestions = questionsList.filter(q => q.trim() !== '');
         
         setIsSaving(true);
         const data = new FormData();
         data.append('title', newAssignment.title);
-        data.append('description', newAssignment.description || ''); // Can be empty if questions exist
+        data.append('description', newAssignment.description || ''); 
         data.append('due_date', newAssignment.due_date);
         data.append('class_group', selectedClass);
         data.append('subject', selectedSubject);
