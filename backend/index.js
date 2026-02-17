@@ -2697,10 +2697,11 @@ app.get('/api/homework/student/:studentId/:classGroup', async (req, res) => {
     }
 
     try {
+        // --- FIXED QUERY: Added s.submission_path ---
         const query = `
             SELECT 
                 a.id, a.title, a.description, a.subject, a.due_date, a.attachment_path, a.homework_type, a.questions,
-                s.id as submission_id, s.written_answer, s.submitted_at, s.status, s.grade, s.remarks
+                s.id as submission_id, s.submission_path, s.written_answer, s.submitted_at, s.status, s.grade, s.remarks
             FROM homework_assignments a
             LEFT JOIN homework_submissions s ON a.id = s.assignment_id AND s.student_id = ?
             WHERE a.class_group = ? 

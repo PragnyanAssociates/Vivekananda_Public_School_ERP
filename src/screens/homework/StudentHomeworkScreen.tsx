@@ -89,7 +89,6 @@ const StudentHomeworkScreen = () => {
     const fetchAssignments = useCallback(async () => {
         if (!user || !user.id) return;
 
-        // FIX: If no class group, don't fetch to avoid errors
         if (!user.class_group) {
             setIsLoading(false);
             setAssignments([]);
@@ -98,7 +97,6 @@ const StudentHomeworkScreen = () => {
 
         setIsLoading(true);
         try {
-            // FIX: Encode URI to handle slashes in class names (e.g. "10/A")
             const safeClassGroup = encodeURIComponent(user.class_group);
             const response = await apiClient.get(`/homework/student/${user.id}/${safeClassGroup}`);
             
@@ -186,15 +184,17 @@ const StudentHomeworkScreen = () => {
         }, ]);
     };
 
-    const openDocumentViewer = (fileUrl, fileName) => {
-        const url = `${SERVER_URL}${fileUrl}`;
-        const extension = fileUrl.split('.').pop().toLowerCase();
+    const openDocumentViewer = (filePath, fileName) => {
+        // Construct full URL
+        const url = `${SERVER_URL}${filePath}`;
+        
+        const extension = filePath.split('.').pop().toLowerCase();
         let type = 'unknown';
         if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) type = 'image';
         else if (extension === 'pdf') type = 'pdf';
 
         if (type === 'unknown') {
-            Alert.alert('Cannot View', 'This file type is not supported. Open externally?', [{ text: 'Yes', onPress: () => Linking.openURL(url) }, { text: 'No' }]);
+            Alert.alert('Cannot View', 'This file type is not supported in-app. Open externally?', [{ text: 'Yes', onPress: () => Linking.openURL(url) }, { text: 'No' }]);
         } else {
             setCurrentFile({ uri: url, type, name: fileName || 'Document' });
             setIsViewerVisible(true);
@@ -351,6 +351,7 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
     };
     const status = getStatusInfo();
     
+    // Helper for Teacher Attachments
     const getAttachments = () => {
         if (!item.attachment_path) return [];
         try {
@@ -359,6 +360,7 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
         } catch (e) { return [item.attachment_path]; }
     };
 
+    // Helper for Questions
     let questionsList = [];
     try {
         if (item.questions) {
@@ -368,6 +370,29 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
     } catch (e) {}
 
     const attachments = getAttachments();
+
+    // Helper to parse STUDENT submitted files (ROBUST PARSING)
+    const getSubmittedFiles = () => {
+        if (!item.submission_path) return [];
+        try {
+            const pathStr = item.submission_path.trim();
+            if (pathStr.startsWith('[')) {
+                // It looks like a JSON array
+                const parsed = JSON.parse(pathStr);
+                return Array.isArray(parsed) ? parsed : [parsed];
+            } else {
+                // It is a single path string
+                // Remove potential quotes if encoded weirdly
+                const cleanPath = pathStr.replace(/^"|"$/g, '');
+                return [cleanPath];
+            }
+        } catch (e) { 
+            // Fallback: treat as raw string if JSON parse fails
+            return [item.submission_path]; 
+        }
+    };
+
+    const submittedFiles = getSubmittedFiles();
 
     return (
         <Animatable.View style={[styles.card, { backgroundColor: colors.cardBg, borderLeftColor: status.color, shadowColor: colors.border }]} animation="fadeInUp" duration={600} delay={index * 100}>
@@ -400,6 +425,7 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 {item.submitted_at && <DetailRow icon="event-available" label="Submitted" value={formatDateDisplay(item.submitted_at)} colors={colors} />}
             </View>
             
+            {/* Teacher Grade Section */}
             {status.text === 'Graded' && item.grade && (
                 <Animatable.View animation="fadeIn" duration={400} style={[styles.gradedSection, { backgroundColor: colors.gradeBg, borderColor: colors.success }]}>
                     <View style={{flexDirection:'row', alignItems:'center', marginBottom:5}}>
@@ -410,6 +436,7 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 </Animatable.View>
             )}
 
+            {/* Teacher Attachments */}
             {attachments.length > 0 && (
                 <View style={{marginTop: 10}}>
                     {attachments.map((path, idx) => (
@@ -423,13 +450,15 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 </View>
             )}
 
+            {/* --- SUBMISSION SECTION --- */}
             {item.submission_id ? (
                 <>
                     {item.written_answer ? (
+                         // 1. WRITTEN ANSWER VIEW
                          <View style={[styles.submittedAnswerContainer, { borderTopColor: colors.divider }]}>
                             <Text style={[styles.submittedAnswerLabel, { color: colors.textSub }]}>Your Answer:</Text>
                             <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
-                                <Text style={[styles.submittedAnswerText, { color: colors.textMain, backgroundColor: isDark ? colors.inputBg : '#f1f8e9', flex:1 }]} numberOfLines={2}>
+                                <Text style={[styles.submittedAnswerText, { color: colors.textMain, backgroundColor: isDark ? colors.inputBg : '#f1f8e9', flex:1 }]} numberOfLines={1}>
                                     {item.written_answer}
                                 </Text>
                                 <TouchableOpacity onPress={() => onViewWritten(item)} style={{marginLeft:10, padding:5}}>
@@ -438,10 +467,34 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                             </View>
                         </View>
                     ) : (
+                         // 2. PDF/FILE UPLOAD VIEW
                          <View style={[styles.submittedAnswerContainer, { borderTopColor: colors.divider }]}>
-                            <Text style={{color: colors.success, fontStyle:'italic'}}>File submitted successfully.</Text>
+                            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                                {/* Left Side: Text */}
+                                <Text style={{color: colors.success, fontStyle:'italic', flex: 1}}>
+                                    File submitted successfully.
+                                </Text>
+                                
+                                {/* Right Side: Eye Icon (Loops if multiple files) */}
+                                <View style={{flexDirection: 'row'}}>
+                                    {submittedFiles.length > 0 ? (
+                                        submittedFiles.map((file, idx) => (
+                                            <TouchableOpacity 
+                                                key={idx} 
+                                                onPress={() => onViewFile(file, `My Submission ${idx+1}`)}
+                                                style={{marginLeft: 10, padding: 5}}
+                                            >
+                                                <MaterialIcons name="visibility" size={24} color={colors.primary} />
+                                            </TouchableOpacity>
+                                        ))
+                                    ) : (
+                                        <Text style={{fontSize:10, color:colors.danger}}>File Error</Text>
+                                    )}
+                                </View>
+                            </View>
                          </View>
                     )}
+
                     <View style={[styles.buttonRow, { borderTopColor: colors.divider }]}>
                         {status.text !== 'Graded' && (
                             <TouchableOpacity style={[styles.deleteButton, { backgroundColor: colors.danger }]} onPress={() => onDelete(item.submission_id, item.id)}>
@@ -452,6 +505,7 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                     </View>
                 </>
             ) : (
+                // --- PENDING STATE ---
                 item.homework_type === 'Written' ? (
                     <View style={[styles.buttonRow, { borderTopColor: colors.divider }]}>
                         <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.success }]} onPress={() => navigation.navigate('WrittenAnswerScreen', { assignment: item })}>

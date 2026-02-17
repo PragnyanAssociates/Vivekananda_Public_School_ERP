@@ -528,6 +528,20 @@ const SubmissionList = ({ assignment, onBack }) => {
         }
     };
 
+    // Helper to parse questions from the assignment object
+    const getQuestionsList = () => {
+        let qList = [];
+        try {
+            if (assignment.questions) {
+                const parsed = JSON.parse(assignment.questions);
+                if (Array.isArray(parsed)) qList = parsed;
+            }
+        } catch (e) {}
+        return qList;
+    };
+
+    const questionsList = getQuestionsList();
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
@@ -554,7 +568,7 @@ const SubmissionList = ({ assignment, onBack }) => {
 
             <View style={[styles.searchContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                 <MaterialIcons name="search" size={22} color={COLORS.textSub} />
-                <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search student..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={setSearchQuery} />
+                <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search student..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={t => setSearchQuery(t)} />
             </View>
 
             <FlatList
@@ -603,6 +617,20 @@ const SubmissionList = ({ assignment, onBack }) => {
                         </View>
                         <ScrollView style={{ padding: 20 }}>
                             <Text style={[styles.modalStudentName, { color: COLORS.textMain }]}>{selectedStudent?.student_name}</Text>
+                            
+                            {/* --- DISPLAY QUESTIONS --- */}
+                            {questionsList.length > 0 && (
+                                <View style={{ marginBottom: 20, padding: 12, backgroundColor: isDark ? COLORS.inputBg : '#f9f9f9', borderRadius: 8, borderColor: COLORS.border, borderWidth: 1 }}>
+                                    <Text style={{ fontWeight: 'bold', color: COLORS.textSub, marginBottom: 8, textDecorationLine:'underline' }}>Questions:</Text>
+                                    {questionsList.map((q, i) => (
+                                        <View key={i} style={{ flexDirection: 'row', marginBottom: 6 }}>
+                                            <Text style={{ fontWeight: 'bold', color: COLORS.primary, marginRight: 6 }}>Q{i + 1}.</Text>
+                                            <Text style={{ color: COLORS.textMain, flex: 1, lineHeight: 20 }}>{q}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
                             {selectedStudent?.submission_id ? (
                                 <>
                                     <Text style={[styles.label, { color: COLORS.textSub }]}>Content</Text>
