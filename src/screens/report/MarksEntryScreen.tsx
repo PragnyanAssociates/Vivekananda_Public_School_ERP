@@ -1,7 +1,11 @@
 /**
  * File: src/screens/report/MarksEntryScreen.js
- * Purpose: Data Entry for Marks & Attendance with Smart Saving (No Academic Year).
- * Updated: Responsive Design, Dark/Light Mode, Android Input Fixes.
+ * Purpose: Data Entry for Marks & Attendance with Smart Saving.
+ * Updated: 
+ * 1. Default state is now "View Mode" (Edit Button Visible) to ensure smooth scrolling.
+ * 2. Saving marks (even with no changes) switches back to View Mode.
+ * 3. Fixed Scrolling Issue on Inputs (pointerEvents wrapper).
+ * 4. Responsive Table & Date Formatting (DD/MM/YYYY).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -14,6 +18,7 @@ import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+// Get Screen Dimensions for Responsive Design
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -98,6 +103,15 @@ const MONTHS = [
     'December', 'January', 'February', 'March', 'April', 'May'
 ];
 
+// --- HELPER FUNCTION: Date Format (DD/MM/YYYY) ---
+const getFormattedDate = () => {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0!
+    const yyyy = today.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+};
+
 const MarksEntryScreen = ({ route, navigation }) => {
     const { classGroup } = route.params;
     const subjects = CLASS_SUBJECTS[classGroup] || [];
@@ -127,7 +141,9 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const [viewMode, setViewMode] = useState('marks');
     const [sortOrder, setSortOrder] = useState('rollno');
 
-    const [isEditing, setIsEditing] = useState(true);
+    // Default to FALSE (Read-Only) to allow smooth scrolling initially
+    const [isEditing, setIsEditing] = useState(false);
+    
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -136,8 +152,9 @@ const MarksEntryScreen = ({ route, navigation }) => {
         fetchClassData();
     }, [classGroup]);
 
+    // When changing Exam or Mode, Reset to Read-Only (Scroll Mode)
     useEffect(() => {
-        setIsEditing(true);
+        setIsEditing(false);
     }, [selectedExam, viewMode]);
 
     const fetchClassData = async () => {
@@ -172,7 +189,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
             });
 
             setMarksData(marksMap);
-            // Deep copy for change detection
             setOriginalMarksData(JSON.parse(JSON.stringify(marksMap)));
 
 
@@ -195,7 +211,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
             });
 
             setAttendanceData(attendanceMap);
-            // Deep copy for change detection
             setOriginalAttendanceData(JSON.parse(JSON.stringify(attendanceMap)));
 
         } catch (error) {
@@ -299,7 +314,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     const currentValue = marksData[student.id]?.[subject]?.[examDisplayType] || '';
                     const originalValue = originalMarksData[student.id]?.[subject]?.[examDisplayType] || '';
 
-                    // Compare values strictly
                     if (currentValue !== originalValue) {
                         subjectHasChange = true;
                         const marksValue = (currentValue.trim() === '') ? null : currentValue;
@@ -315,7 +329,6 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     }
                 });
 
-                // If any exam in this subject changed, recalculate and update 'Total'
                 if (subjectHasChange) {
                     const overallValue = calculateOverallForSubject(student.id, subject);
                     marksPayload.push({
@@ -332,6 +345,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
         if (marksPayload.length === 0) {
             Alert.alert("No Changes", "You haven't made any changes to save.");
             setSaving(false);
+            setIsEditing(false); // Return to view mode even if no changes
             return;
         }
 
@@ -339,7 +353,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             await apiClient.post('/reports/marks/bulk', { marksPayload });
             setOriginalMarksData(JSON.parse(JSON.stringify(marksData)));
             Alert.alert('Success', 'Marks saved successfully!');
-            setIsEditing(false);
+            setIsEditing(false); // Return to View Mode on success
         } catch (error) {
             console.error('Error saving marks:', error);
             const errMsg = error.response?.data?.message || 'Failed to save marks. Check internet connection.';
@@ -401,6 +415,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const sortedStudents = getSortedStudents();
     const isOverallView = selectedExam === 'Overall';
     const canEditScreen = !isOverallView && isEditing;
+    const formattedDate = getFormattedDate(); // Date format DD/MM/YYYY
 
     return (
         <KeyboardAvoidingView 
@@ -417,7 +432,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     </View>
                     <View style={styles.headerTextContainer}>
                         <Text style={[styles.headerTitle, { color: theme.textMain }]}>{classGroup}</Text>
-                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Data Entry</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Date: {formattedDate}</Text>
                     </View>
                 </View>
 
@@ -441,76 +456,139 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
             </View>
 
+            {/* Filters for Marks (Visible only in Marks Mode) */}
             {viewMode === 'marks' && (
-                <>
-                    {/* Filters for Marks */}
-                    <View style={styles.filterContainer}>
-                        <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-                            <Picker
-                                selectedValue={selectedExam}
-                                onValueChange={setSelectedExam}
-                                style={[styles.picker, { color: theme.textMain }]}
-                                dropdownIconColor={theme.textMain}
-                            >
-                                {ALL_EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} color={theme.textMain} />)}
-                            </Picker>
-                        </View>
-                        <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-                            <Picker
-                                selectedValue={sortOrder}
-                                onValueChange={setSortOrder}
-                                style={[styles.picker, { color: theme.textMain }]}
-                                dropdownIconColor={theme.textMain}
-                            >
-                                <Picker.Item label="Roll No" value="rollno" color={theme.textMain} />
-                                <Picker.Item label="High to Low" value="descending" color={theme.textMain} />
-                                <Picker.Item label="Low to High" value="ascending" color={theme.textMain} />
-                            </Picker>
-                        </View>
+                <View style={styles.filterContainer}>
+                    <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                        <Picker
+                            selectedValue={selectedExam}
+                            onValueChange={setSelectedExam}
+                            style={[styles.picker, { color: theme.textMain }]}
+                            dropdownIconColor={theme.textMain}
+                        >
+                            {ALL_EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} color={theme.textMain} />)}
+                        </Picker>
                     </View>
+                    <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+                        <Picker
+                            selectedValue={sortOrder}
+                            onValueChange={setSortOrder}
+                            style={[styles.picker, { color: theme.textMain }]}
+                            dropdownIconColor={theme.textMain}
+                        >
+                            <Picker.Item label="Roll No" value="rollno" color={theme.textMain} />
+                            <Picker.Item label="High to Low" value="descending" color={theme.textMain} />
+                            <Picker.Item label="Low to High" value="ascending" color={theme.textMain} />
+                        </Picker>
+                    </View>
+                </View>
+            )}
 
-                    <ScrollView style={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-                        <ScrollView horizontal showsHorizontalScrollIndicator={true} persistentScrollbar={true} keyboardShouldPersistTaps="handled">
-                            <View style={styles.tableWrapper}>
-                                {/* Header Row */}
-                                <View style={[styles.tableRow, { borderBottomColor: theme.tableBorder, backgroundColor: theme.tableHeaderBg }]}>
-                                    <View style={[styles.cellHeader, styles.cellRollNo, { borderRightColor: theme.background }]}><Text style={styles.headerText}>Roll</Text></View>
-                                    <View style={[styles.cellHeader, styles.cellName, { borderRightColor: theme.background }]}><Text style={styles.headerText}>Name</Text></View>
-                                    {subjects.map(subject => (
-                                        <View key={subject} style={[styles.cellHeader, styles.cellSubject, { borderRightColor: theme.background }]}><Text style={styles.headerText}>{subject}</Text></View>
-                                    ))}
-                                    <View style={[styles.cellHeader, styles.cellTotal, { borderRightColor: theme.background }]}><Text style={styles.headerText}>Sub Tot</Text></View>
-                                    <View style={[styles.cellHeader, styles.cellTotal]}><Text style={styles.headerText}>Grand Total</Text></View>
+            {/* --- MAIN CONTENT AREA: BI-DIRECTIONAL SCROLL WRAPPER --- */}
+            <View style={{ flex: 1, width: '100%' }}>
+                
+                {/* 1. VERTICAL SCROLL (Master) */}
+                <ScrollView 
+                    style={styles.verticalScroll} 
+                    contentContainerStyle={styles.verticalScrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled={true}
+                    refreshControl={viewMode === 'attendance' ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} /> : null}
+                >
+                    {/* 2. HORIZONTAL SCROLL (Slave) - Wraps the Table */}
+                    <ScrollView 
+                        horizontal={true} 
+                        style={styles.horizontalScroll}
+                        contentContainerStyle={styles.horizontalScrollContent}
+                        showsHorizontalScrollIndicator={true}
+                        persistentScrollbar={true}
+                        nestedScrollEnabled={true}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {/* Table Wrapper ensures minimum width matches screen width */}
+                        <View style={styles.tableWrapper}>
+
+                            {/* --- TABLE HEADER --- */}
+                            <View style={[styles.tableRow, styles.headerRow, { backgroundColor: theme.tableHeaderBg }]}>
+                                <View style={[styles.cellHeader, styles.cellRollNo, { borderRightColor: theme.background }]}>
+                                    <Text style={styles.headerText}>Roll</Text>
+                                </View>
+                                <View style={[styles.cellHeader, styles.cellName, { borderRightColor: theme.background }]}>
+                                    <Text style={styles.headerText}>Name</Text>
                                 </View>
 
-                                {/* Data Rows */}
-                                {sortedStudents.map(student => {
-                                    const studentGrandTotal = calculateStudentGrandTotal(student.id);
-                                    return (
-                                        <View key={student.id} style={[styles.tableRow, { borderBottomColor: theme.tableBorder }]}>
-                                            <View style={[styles.cell, styles.cellRollNo, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}><Text style={[styles.cellText, { color: theme.textMain }]}>{student.roll_no}</Text></View>
-                                            <View style={[styles.cell, styles.cellName, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}><Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={2}>{student.full_name}</Text></View>
+                                {viewMode === 'marks' ? (
+                                    <>
+                                        {subjects.map(subject => (
+                                            <View key={subject} style={[styles.cellHeader, styles.cellSubject, { borderRightColor: theme.background }]}>
+                                                <Text style={styles.headerText}>{subject}</Text>
+                                            </View>
+                                        ))}
+                                        <View style={[styles.cellHeader, styles.cellTotal, { borderRightColor: theme.background }]}>
+                                            <Text style={styles.headerText}>Sub Tot</Text>
+                                        </View>
+                                        <View style={[styles.cellHeader, styles.cellTotal]}>
+                                            <Text style={styles.headerText}>Grand Total</Text>
+                                        </View>
+                                    </>
+                                ) : (
+                                    <>
+                                        {MONTHS.map(month => (
+                                            <View key={month} style={[styles.cellHeader, styles.cellAttendance, { borderRightColor: theme.background }]}>
+                                                <Text style={styles.headerText}>{month.substring(0, 3)}</Text>
+                                                <Text style={styles.subHeaderText}>(Wrk / Pre)</Text>
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+                            </View>
 
-                                            {subjects.map(subject => {
-                                                const canUserEditSubject = () => {
-                                                    if (userRole === 'admin') return true;
-                                                    const assignment = teacherAssignments.find(a => a.subject === subject);
-                                                    if (assignment) return assignment.teacher_id === userId;
-                                                    return false;
-                                                };
+                            {/* --- TABLE BODY (DATA ROWS) --- */}
+                            {sortedStudents.map(student => {
+                                const studentGrandTotal = viewMode === 'marks' ? calculateStudentGrandTotal(student.id) : 0;
+                                
+                                return (
+                                    <View key={student.id} style={[styles.tableRow, { borderBottomColor: theme.tableBorder }]}>
+                                        
+                                        {/* Fixed Columns: Roll No & Name */}
+                                        <View style={[styles.cell, styles.cellRollNo, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                                            <Text style={[styles.cellText, { color: theme.textMain }]}>{student.roll_no}</Text>
+                                        </View>
+                                        <View style={[styles.cell, styles.cellName, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                                            <Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={2}>{student.full_name}</Text>
+                                        </View>
 
-                                                const isEditable = canEditScreen && canUserEditSubject();
-                                                const displayValue = isOverallView
-                                                    ? (calculateOverallForSubject(student.id, subject) || '').toString()
-                                                    : (marksData[student.id]?.[subject]?.[selectedExam] || '');
+                                        {/* Dynamic Columns: Marks */}
+                                        {viewMode === 'marks' && subjects.map(subject => {
+                                            const canUserEditSubject = () => {
+                                                if (userRole === 'admin') return true;
+                                                const assignment = teacherAssignments.find(a => a.subject === subject);
+                                                if (assignment) return assignment.teacher_id === userId;
+                                                return false;
+                                            };
 
-                                                return (
-                                                    <View key={subject} style={[styles.cell, styles.cellSubject, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                                            // Only true if Global Edit Mode is ON AND user has permission
+                                            const isEditable = canEditScreen && canUserEditSubject();
+                                            
+                                            const displayValue = isOverallView
+                                                ? (calculateOverallForSubject(student.id, subject) || '').toString()
+                                                : (marksData[student.id]?.[subject]?.[selectedExam] || '');
+
+                                            return (
+                                                <View key={subject} style={[styles.cell, styles.cellSubject, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                                                    {/* 
+                                                        POINTER EVENTS FIX:
+                                                        When NOT editing (View Mode), disable touches on this wrapper.
+                                                        This passes touches through to the ScrollView, ensuring smooth scrolling.
+                                                    */}
+                                                    <View style={styles.inputWrapper} pointerEvents={isEditable ? 'auto' : 'none'}>
                                                         <TextInput
                                                             style={[
                                                                 styles.input,
                                                                 { backgroundColor: theme.inputBg, color: theme.textMain },
                                                                 !isEditable && { backgroundColor: theme.inputBgDisabled, color: theme.textPlaceholder },
+                                                                // If in View Mode (Edit button visible), show text as bold/darker for readability
+                                                                !isEditing && !isOverallView && { color: theme.textMain, fontWeight: '500' },
                                                                 isOverallView && { backgroundColor: theme.inputBgDisabled, color: theme.textMain, fontWeight: 'bold' }
                                                             ]}
                                                             keyboardType="numeric"
@@ -523,114 +601,91 @@ const MarksEntryScreen = ({ route, navigation }) => {
                                                             selectTextOnFocus
                                                         />
                                                     </View>
-                                                );
-                                            })}
-
-                                            <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBg, borderRightColor: theme.tableBorder }]}>
-                                                <Text style={[styles.cellText, styles.overallText]}>
-                                                    {subjects.reduce((sum, subject) => {
-                                                        const marks = isOverallView ? parseFloat(calculateOverallForSubject(student.id, subject)) || 0 : parseFloat(marksData[student.id]?.[subject]?.[selectedExam]) || 0;
-                                                        return sum + marks;
-                                                    }, 0) || '-'}
-                                                </Text>
-                                            </View>
-                                            <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBgDark }]}>
-                                                <Text style={[styles.cellText, styles.totalText]}>{studentGrandTotal || '-'}</Text>
-                                            </View>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        </ScrollView>
-                    </ScrollView>
-                </>
-            )}
-
-            {viewMode === 'attendance' && (
-                <ScrollView style={{ backgroundColor: theme.background }} keyboardShouldPersistTaps="handled">
-                    <ScrollView 
-                        horizontal 
-                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} tintColor={theme.primary} />}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        <View style={styles.tableWrapper}>
-                            {/* Header Row */}
-                            <View style={[styles.tableRow, { borderBottomColor: theme.tableBorder, backgroundColor: theme.tableHeaderBg }]}>
-                                <View style={[styles.cellHeader, styles.cellRollNo, { borderRightColor: theme.background }]}><Text style={styles.headerText}>Roll</Text></View>
-                                <View style={[styles.cellHeader, styles.cellName, { borderRightColor: theme.background }]}><Text style={styles.headerText}>Name</Text></View>
-                                {MONTHS.map(month => (
-                                    <View key={month} style={[styles.cellHeader, styles.cellAttendance, { borderRightColor: theme.background }]}>
-                                        <Text style={styles.headerText}>{month.substring(0, 3)}</Text>
-                                        <Text style={styles.subHeaderText}>(Wrk / Pre)</Text>
-                                    </View>
-                                ))}
-                            </View>
-                            
-                            {/* Student Rows */}
-                            {students.map(student => (
-                                <View key={student.id} style={[styles.tableRow, { borderBottomColor: theme.tableBorder }]}>
-                                    <View style={[styles.cell, styles.cellRollNo, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}><Text style={[styles.cellText, { color: theme.textMain }]}>{student.roll_no}</Text></View>
-                                    <View style={[styles.cell, styles.cellName, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}><Text style={[styles.cellText, { color: theme.textMain }]}>{student.full_name}</Text></View>
-                                    {MONTHS.map(month => {
-                                        const att = attendanceData[student.id]?.[month] || {};
-                                        return (
-                                            <View key={month} style={[styles.cell, styles.cellAttendance, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
-                                                <View style={styles.attendanceInputContainer}>
-                                                    <TextInput
-                                                        style={[
-                                                            styles.attendanceInputBox, 
-                                                            { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
-                                                        ]}
-                                                        keyboardType="numeric"
-                                                        maxLength={2}
-                                                        placeholder="W"
-                                                        placeholderTextColor={theme.textPlaceholder}
-                                                        value={att.working_days}
-                                                        onChangeText={(val) => updateAttendance(student.id, month, 'working_days', val)}
-                                                        selectTextOnFocus
-                                                    />
-                                                    <Text style={[styles.attendanceSeparator, { color: theme.textSub }]}>/</Text>
-                                                    <TextInput
-                                                        style={[
-                                                            styles.attendanceInputBox, 
-                                                            { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
-                                                        ]}
-                                                        keyboardType="numeric"
-                                                        maxLength={2}
-                                                        placeholder="P"
-                                                        placeholderTextColor={theme.textPlaceholder}
-                                                        value={att.present_days}
-                                                        onChangeText={(val) => updateAttendance(student.id, month, 'present_days', val)}
-                                                        selectTextOnFocus
-                                                    />
                                                 </View>
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            ))}
+                                            );
+                                        })}
+
+                                        {/* Dynamic Columns: Marks Totals */}
+                                        {viewMode === 'marks' && (
+                                            <>
+                                                <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBg, borderRightColor: theme.tableBorder }]}>
+                                                    <Text style={[styles.cellText, styles.overallText]}>
+                                                        {subjects.reduce((sum, subject) => {
+                                                            const marks = isOverallView ? parseFloat(calculateOverallForSubject(student.id, subject)) || 0 : parseFloat(marksData[student.id]?.[subject]?.[selectedExam]) || 0;
+                                                            return sum + marks;
+                                                        }, 0) || '-'}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBgDark }]}>
+                                                    <Text style={[styles.cellText, styles.totalText]}>{studentGrandTotal || '-'}</Text>
+                                                </View>
+                                            </>
+                                        )}
+
+                                        {/* Dynamic Columns: Attendance */}
+                                        {viewMode === 'attendance' && MONTHS.map(month => {
+                                            const att = attendanceData[student.id]?.[month] || {};
+                                            return (
+                                                <View key={month} style={[styles.cell, styles.cellAttendance, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                                                    <View style={styles.attendanceInputContainer}>
+                                                        <TextInput
+                                                            style={[
+                                                                styles.attendanceInputBox, 
+                                                                { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
+                                                            ]}
+                                                            keyboardType="numeric"
+                                                            maxLength={2}
+                                                            placeholder="W"
+                                                            placeholderTextColor={theme.textPlaceholder}
+                                                            value={att.working_days}
+                                                            onChangeText={(val) => updateAttendance(student.id, month, 'working_days', val)}
+                                                            selectTextOnFocus
+                                                        />
+                                                        <Text style={[styles.attendanceSeparator, { color: theme.textSub }]}>/</Text>
+                                                        <TextInput
+                                                            style={[
+                                                                styles.attendanceInputBox, 
+                                                                { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
+                                                            ]}
+                                                            keyboardType="numeric"
+                                                            maxLength={2}
+                                                            placeholder="P"
+                                                            placeholderTextColor={theme.textPlaceholder}
+                                                            value={att.present_days}
+                                                            onChangeText={(val) => updateAttendance(student.id, month, 'present_days', val)}
+                                                            selectTextOnFocus
+                                                        />
+                                                    </View>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                );
+                            })}
                         </View>
                     </ScrollView>
                 </ScrollView>
-            )}
+            </View>
 
-            {/* Action Buttons */}
-            {viewMode === 'attendance' ? (
-                <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
-                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Changes</Text>}
-                </TouchableOpacity>
-            ) : viewMode === 'marks' && !isOverallView ? (
-                isEditing ? (
+            {/* --- ACTION BUTTONS --- */}
+            <View style={styles.actionButtonContainer}>
+                {viewMode === 'attendance' ? (
                     <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
-                        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Marks</Text>}
+                        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Attendance</Text>}
                     </TouchableOpacity>
-                ) : (
-                    <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
-                        <Icon name="pencil" size={20} color="#fff" style={{ marginRight: 5 }} />
-                        <Text style={styles.editButtonText}>Edit Marks</Text>
-                    </TouchableOpacity>
-                )
-            ) : null}
+                ) : viewMode === 'marks' && !isOverallView ? (
+                    isEditing ? (
+                        <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
+                            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Marks</Text>}
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
+                            <Icon name="pencil" size={20} color="#fff" style={{ marginRight: 5 }} />
+                            <Text style={styles.editButtonText}>Edit Marks</Text>
+                        </TouchableOpacity>
+                    )
+                ) : null}
+            </View>
         </KeyboardAvoidingView>
     );
 };
@@ -638,8 +693,23 @@ const MarksEntryScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    scrollContainer: { flex: 1 },
-
+    
+    // --- SCROLL CONTAINERS ---
+    verticalScroll: { 
+        flex: 1, 
+        width: '100%',
+    },
+    verticalScrollContent: {
+        flexGrow: 1,
+        paddingBottom: 80, // Space for the save button
+    },
+    horizontalScroll: {
+        width: '100%',
+    },
+    horizontalScrollContent: {
+        flexGrow: 1,
+    },
+    
     // --- HEADER ---
     headerCard: {
         paddingHorizontal: 15,
@@ -674,15 +744,40 @@ const styles = StyleSheet.create({
     filterBox: { flex: 1, borderRadius: 10, overflow: 'hidden', borderWidth: 1, height: 45, justifyContent: 'center' },
     picker: { width: '100%' },
 
-    // --- TABLE ---
-    tableWrapper: { marginHorizontal: 15, paddingBottom: 20 },
-    tableRow: { flexDirection: 'row', borderBottomWidth: 1, alignItems: 'center', minHeight: 60 },
-    cellHeader: { padding: 5, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, height: 60 },
-    cell: { padding: 0, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, height: 60 },
+    // --- TABLE STRUCTURE ---
+    tableWrapper: { 
+        minWidth: width, // Ensures table spans at least full screen width
+        paddingHorizontal: 10,
+    },
+    tableRow: { 
+        flexDirection: 'row', 
+        borderBottomWidth: 1, 
+        alignItems: 'center', 
+        minHeight: 60 
+    },
+    headerRow: {
+        borderTopLeftRadius: 8,
+        borderTopRightRadius: 8,
+        overflow: 'hidden',
+    },
+    cellHeader: { 
+        padding: 5, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        borderRightWidth: 1, 
+        height: 60 
+    },
+    cell: { 
+        padding: 0, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        borderRightWidth: 1, 
+        height: 60 
+    },
 
-    // Column Widths
+    // RESPONSIVE COLUMN WIDTHS
     cellRollNo: { width: 50 },
-    cellName: { width: 140 },
+    cellName: { width: 140 }, // Fixed width for name to keep it readable
     cellSubject: { width: 75 },
     cellTotal: { width: 75 },
     cellAttendance: { width: 130 },
@@ -693,7 +788,13 @@ const styles = StyleSheet.create({
     overallText: { fontWeight: 'bold', color: '#1b5e20' },
     totalText: { fontWeight: 'bold', color: '#1b5e20', fontSize: 13 },
 
-    // Inputs
+    // INPUTS & WRAPPERS
+    inputWrapper: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     input: {
         borderWidth: 0,
         textAlign: 'center',
@@ -706,7 +807,7 @@ const styles = StyleSheet.create({
         includeFontPadding: false
     },
 
-    // Attendance Specific Styles
+    // ATTENDANCE INPUTS
     attendanceInputContainer: { 
         flexDirection: 'row', 
         alignItems: 'center', 
@@ -729,12 +830,17 @@ const styles = StyleSheet.create({
     },
     attendanceSeparator: { fontSize: 18, marginHorizontal: 4 },
 
-    // Buttons
-    saveButton: { padding: 14, margin: 15, borderRadius: 25, alignItems: 'center', elevation: 3 },
+    // ACTION BUTTON CONTAINER
+    actionButtonContainer: {
+        width: '100%',
+        alignItems: 'center',
+        paddingBottom: 20,
+    },
+    saveButton: { width: '90%', padding: 14, borderRadius: 25, alignItems: 'center', elevation: 3 },
     saveButtonDisabled: { opacity: 0.6 },
     saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
-    editButton: { backgroundColor: '#e67e22', padding: 14, margin: 15, borderRadius: 25, alignItems: 'center', elevation: 3, flexDirection: 'row', justifyContent: 'center' },
+    editButton: { backgroundColor: '#e67e22', width: '90%', padding: 14, borderRadius: 25, alignItems: 'center', elevation: 3, flexDirection: 'row', justifyContent: 'center' },
     editButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 

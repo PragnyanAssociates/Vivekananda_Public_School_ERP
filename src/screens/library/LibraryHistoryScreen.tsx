@@ -1,7 +1,7 @@
 /**
  * File: src/screens/library/LibraryHistoryScreen.js
  * Purpose: Display a history of library transactions.
- * Updated: Handles Roles and Null Classes.
+ * Updated: Added Phone Number, Handles Roles and Null Classes.
  */
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
@@ -104,7 +104,8 @@ const LibraryHistoryScreen = () => {
             result = result.filter(item => 
                 (item.book_title && item.book_title.toLowerCase().includes(lower)) || 
                 (item.full_name && item.full_name.toLowerCase().includes(lower)) ||
-                (item.roll_no && item.roll_no.toLowerCase().includes(lower))
+                (item.roll_no && item.roll_no.toLowerCase().includes(lower)) ||
+                (item.mobile && item.mobile.includes(lower))
             );
         }
         if (startDate) {
@@ -140,12 +141,17 @@ const LibraryHistoryScreen = () => {
         const isStudent = item.user_role === 'student';
         return (
             <View style={[styles.row, { borderBottomColor: theme.tableRowBorder }]}>
-                {/* Details Column: Name + Role + ID/Class */}
+                {/* Details Column: Name + Role + ID/Class + Phone */}
                 <View style={[styles.cell, styles.col1]}>
                     <Text style={[styles.cellTextBold, { color: theme.textMain }]} numberOfLines={1}>{item.full_name}</Text>
                     <Text style={[styles.cellRoleText, { color: theme.primary }]}>{item.user_role ? item.user_role.toUpperCase() : 'USER'}</Text>
                     <Text style={[styles.cellSubText, { color: theme.textSub }]}>
                         {isStudent ? `ID: ${item.roll_no}` : `ID: ${item.roll_no}`}
+                    </Text>
+                    
+                    {/* --- ADDED PHONE NUMBER HERE --- */}
+                    <Text style={[styles.cellSubText, { color: theme.textSub }]}>
+                         Ph: {item.mobile}
                     </Text>
                 </View>
                 

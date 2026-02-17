@@ -1,7 +1,7 @@
 /**
  * File: src/screens/library/AdminActionScreen.js
  * Purpose: Admin interface to manage library book requests.
- * Updated: Handles Roles and Responsive Design.
+ * Updated: Added Phone Number display, Responsive Design, Role Handling.
  */
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
@@ -98,7 +98,6 @@ const AdminActionScreen = () => {
 
     const formatDate = (dateString) => {
         if (!dateString) return '-';
-        // Format to DD/MM/YYYY
         const d = new Date(dateString);
         return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
     };
@@ -127,7 +126,8 @@ const AdminActionScreen = () => {
             data = data.filter(item => 
                 (item.book_title && item.book_title.toLowerCase().includes(lower)) || 
                 (item.full_name && item.full_name.toLowerCase().includes(lower)) ||
-                (item.roll_no && item.roll_no.toLowerCase().includes(lower))
+                (item.roll_no && item.roll_no.toLowerCase().includes(lower)) ||
+                (item.mobile && item.mobile.includes(lower))
             );
         }
         return data;
@@ -174,17 +174,25 @@ const AdminActionScreen = () => {
                 <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                     <View style={styles.cardHeader}>
                         <View style={{flex: 1, paddingRight: 10}}>
+                            {/* Book Title */}
                             <Text style={[styles.bookTitle, { color: theme.textMain }]} numberOfLines={2}>
                                 {item.book_title || "Unknown Book"}
                             </Text>
                             
+                            {/* Name & Role */}
                             <Text style={[styles.studentDetails, { color: theme.textSub }]}>
                                 {item.full_name} 
                                 <Text style={{fontWeight: 'normal', fontStyle: 'italic', fontSize: 12}}> ({item.user_role || 'user'})</Text>
                             </Text>
                             
+                            {/* ID & Class */}
                             <Text style={[styles.classDetails, { color: theme.textSub }]}>
                                 {isStudent ? `ID: ${item.roll_no} | Class: ${item.class_name}` : `User ID: ${item.roll_no}`}
+                            </Text>
+
+                            {/* --- ADDED PHONE NUMBER HERE --- */}
+                            <Text style={[styles.classDetails, { color: theme.textSub, marginTop: 4 }]}>
+                                <MaterialIcons name="phone" size={12} /> {item.mobile}
                             </Text>
                         </View>
 
