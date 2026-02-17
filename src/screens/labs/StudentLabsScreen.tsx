@@ -1,7 +1,7 @@
 /**
  * File: src/screens/labs/StudentLabsScreen.tsx
  * Purpose: Display list of Digital Labs assigned to the student's class.
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Updated: Responsive, Dark Mode, Consistent Header.
  */
 
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
@@ -120,8 +120,8 @@ const StudentLabsScreen = () => {
                         <MaterialCommunityIcons name="monitor-dashboard" size={24} color={theme.primary} />
                     </View>
                     <View style={styles.headerTextContainer}>
-                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>Digital Labs</Text>
-                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Interactive Resources</Text>
+                        <Text style={[styles.headerTitle, { color: theme.textMain }]}>My Labs</Text>
+                        <Text style={[styles.headerSubtitle, { color: theme.textSub }]}>Course Resources</Text>
                     </View>
                 </View>
             </View>
@@ -130,7 +130,6 @@ const StudentLabsScreen = () => {
                 data={labs}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
-                    // Wrapper ensures exact alignment with Header Card width
                     <View style={styles.cardWrapper}>
                         <LabCard lab={item} />
                     </View>
@@ -159,14 +158,14 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     
-    // --- HEADER CARD STYLES ---
+    // --- HEADER STYLES ---
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: '96%', 
         alignSelf: 'center',
-        marginTop: 10,    // Reduced top margin
-        marginBottom: 8,  // Reduced bottom margin
+        marginTop: 10,
+        marginBottom: 8,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
@@ -193,10 +192,9 @@ const styles = StyleSheet.create({
     cardWrapper: {
         width: '100%', 
         alignSelf: 'center',
-        marginBottom: 5,   // Space between cards
+        marginBottom: 5,
     },
 
-    // --- STATES ---
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 80 },
     emptyText: { fontSize: 16, textAlign: 'center', marginTop: 10 },
     errorText: { fontSize: 16, textAlign: 'center', marginTop: 10 },

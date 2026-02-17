@@ -68,19 +68,19 @@ const MAIN_TABS = ['home', 'calendar', 'profile'];
 // Theme Colors Configuration
 const COLORS = {
     light: {
-        background: '#f8f8ff',
+        background: '#FFFFFF', // --- MODIFIED: Changed to Pure White ---
         cardBg: '#ffffff',
         textPrimary: '#333333',
         textSecondary: '#555555',
         border: '#b2ebf2',
-        secondary: '#e0f2f7',
+        secondary: '#e0f2f7', // Teal/Light Blue for Header
         headerIconBg: '#E0F2F1',
         subCardBg: '#FFFFFF',
         subCardImageBg: '#F7FAFC',
         shadow: '#000000',
     },
     dark: {
-        background: '#121212',
+        background: '#121212', // Pure Black
         cardBg: '#1e1e1e',
         textPrimary: '#ffffff',
         textSecondary: '#bbbbbb',
@@ -319,6 +319,7 @@ const TeacherDashboard = ({ navigation }) => {
               {MAIN_CATEGORIES.map((category) => (
                   <TouchableOpacity 
                     key={category.id} 
+                    // --- MODIFIED: Use responsive percentage width (48%) ---
                     style={[styles.categoryCard, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]} 
                     onPress={() => handleCategoryPress(category)}
                     activeOpacity={0.8}
@@ -430,9 +431,20 @@ const TeacherDashboard = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient colors={[theme.background, theme.background]} style={{ flex: 1 }}>
+    // --- MODIFIED: Removed LinearGradient. Used View with Dual-SafeAreaView strategy ---
+    // The top 'SafeAreaView' gets theme.secondary (Teal) to fill the status bar area.
+    // The body 'View' gets theme.background (White/Black) to prevent color bleeding.
+    <View style={{ flex: 1, backgroundColor: theme.secondary }}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.secondary} />
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      
+      {/* 1. Top SafeAreaView for Status Bar Area (Teal) */}
+      <SafeAreaView style={{ flex: 0, backgroundColor: theme.secondary }} />
+      
+      {/* 2. Main Body SafeAreaView (White/Black) */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+        
+        {/* Inner Content Container */}
+        <View style={{ flex: 1, backgroundColor: theme.background }}>
         
         {/* TOP BAR: Only show on Main Dashboard */}
         {activeTab === 'home' && currentView === 'dashboard' && (
@@ -479,8 +491,9 @@ const TeacherDashboard = ({ navigation }) => {
           </TouchableWithoutFeedback>
         </Modal>
 
+        </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -542,8 +555,10 @@ const styles = StyleSheet.create({
 
   // --- DASHBOARD CATEGORY GRID ---
   dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  
+  // --- MODIFIED: Responsive Card Style (Percentage based) ---
   categoryCard: {
-    width: (windowWidth - 45) / 2, // Responsive width
+    width: '48%', // Ensures 2 columns always fit
     borderRadius: 16,
     padding: 15,
     marginBottom: 15,

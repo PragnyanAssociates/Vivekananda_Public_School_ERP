@@ -15,6 +15,25 @@ const { sendPasswordResetCode } = require('./mailer');
 const fs = require('fs'); 
 const { Client } = require("@googlemaps/google-maps-services-js");
 const googleMapsClient = new Client({});
+const cors = require('cors');
+// This code is the "bridge" between Railway and your App
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',') // This creates the list of 3 URLs
+  : ["http://localhost:3000"];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    
+    // Now it checks if your URL is ONE of the items in the list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 
 // ★★★ NEW IMPORTS FOR REAL-TIME CHAT ★★★
 const http = require('http');

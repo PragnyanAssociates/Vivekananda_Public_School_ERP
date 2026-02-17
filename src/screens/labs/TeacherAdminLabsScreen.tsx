@@ -1,8 +1,13 @@
 /**
  * File: src/screens/labs/TeacherAdminLabsScreen.tsx
  * Purpose: Teacher/Admin screen to manage (Add/Edit/Delete) Digital Labs.
- * Updated: Back Button Removed, Responsive Design, Dark/Light Mode.
+ * Updated: 
+ * - Responsive Design (Auto-adjusts to screen width).
+ * - Dark/Light Mode Support.
+ * - DD/MM/YYYY Date Formatting.
+ * - Full support for Video, Meet, and File links.
  */
+
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import { 
     View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
@@ -13,13 +18,14 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
-import { LabCard, Lab } from './LabCard';
+import { LabCard } from './LabCard'; // Ensure this import path is correct
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+// Get screen dimensions for responsive styling
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -90,14 +96,24 @@ const TeacherAdminLabsScreen = () => {
         topic: '', video_url: '', meet_link: '',
     };
     const [formData, setFormData] = useState(initialFormState);
-    const [scheduleDate, setScheduleDate] = useState(null);
+    const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
 
     const [selectedImage, setSelectedImage] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const [studentClasses, setStudentClasses] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     const [showPicker, setShowPicker] = useState(false);
-    const [pickerMode, setPickerMode] = useState('date');
+    const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+
+    // Helper: Format Date to DD/MM/YYYY
+    const formatDisplayDate = (date: Date) => {
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+    };
 
     const fetchLabs = useCallback(async () => {
         if (!user) return;
@@ -105,8 +121,11 @@ const TeacherAdminLabsScreen = () => {
         try {
             const response = await apiClient.get(`/labs/teacher/${user.id}`);
             setLabs(response.data);
-        } catch (e) { Alert.alert("Error", e.response?.data?.message || 'Failed to fetch labs'); } 
-        finally { setIsLoading(false); }
+        } catch (e: any) { 
+            Alert.alert("Error", e.response?.data?.message || 'Failed to fetch labs'); 
+        } finally { 
+            setIsLoading(false); 
+        }
     }, [user]);
 
     const fetchStudentClasses = async () => {
@@ -124,22 +143,24 @@ const TeacherAdminLabsScreen = () => {
     }, [fetchLabs]);
 
     // --- DATETIME LOGIC ---
-    const showMode = (currentMode) => {
+    const showMode = (currentMode: 'date' | 'time') => {
         setShowPicker(true);
         setPickerMode(currentMode);
     };
     
-    const handleDateChange = (event, selectedDate) => {
+    const handleDateChange = (event: any, selectedDate?: Date) => {
         setShowPicker(Platform.OS === 'ios'); 
 
         if (event.type === 'set' && selectedDate) {
             const currentDate = selectedDate;
             if (Platform.OS === 'android' && pickerMode === 'date') {
                 setScheduleDate(currentDate); 
-                showMode('time'); 
+                showMode('time'); // Automatically show time picker after date on Android
             } else {
                 setScheduleDate(currentDate);
             }
+        } else if (event.type === 'dismissed') {
+            setShowPicker(false);
         }
     };
 
@@ -164,7 +185,7 @@ const TeacherAdminLabsScreen = () => {
         }
     };
 
-    const handleOpenModal = (lab = null) => {
+    const handleOpenModal = (lab: any = null) => {
         setEditingLab(lab);
         if (lab) {
             setScheduleDate(lab.class_datetime ? new Date(lab.class_datetime) : null);
@@ -184,7 +205,9 @@ const TeacherAdminLabsScreen = () => {
             setFormData(initialFormState);
             setSelectedClass('');
         }
-        setSelectedImage(null); setSelectedFile(null); setIsModalOpen(true);
+        setSelectedImage(null); 
+        setSelectedFile(null); 
+        setIsModalOpen(true);
     };
 
     const handleSave = async () => {
@@ -194,12 +217,14 @@ const TeacherAdminLabsScreen = () => {
         
         const data = new FormData();
         Object.keys(formData).forEach(key => {
+            // @ts-ignore
             const value = formData[key];
             if (value) { data.append(key, value); }
         });
 
         if (scheduleDate) {
-            const pad = (num) => num.toString().padStart(2, '0');
+            // Format for MySQL: YYYY-MM-DD HH:MM:SS
+            const pad = (num: number) => num.toString().padStart(2, '0');
             const formattedDateTime = `${scheduleDate.getFullYear()}-${pad(scheduleDate.getMonth() + 1)}-${pad(scheduleDate.getDate())} ${pad(scheduleDate.getHours())}:${pad(scheduleDate.getMinutes())}:00`;
             data.append('class_datetime', formattedDateTime);
         }
@@ -208,26 +233,38 @@ const TeacherAdminLabsScreen = () => {
         data.append('class_group', selectedClass);
 
         if (selectedImage?.assets?.[0]) {
-            data.append('coverImage', { uri: selectedImage.assets[0].uri, type: selectedImage.assets[0].type, name: selectedImage.assets[0].fileName });
+            data.append('coverImage', { 
+                uri: selectedImage.assets[0].uri, 
+                type: selectedImage.assets[0].type, 
+                name: selectedImage.assets[0].fileName 
+            });
         }
         if (selectedFile) {
-            data.append('labFile', { uri: selectedFile.uri, type: selectedFile.type, name: selectedFile.name });
+            data.append('labFile', { 
+                uri: selectedFile.uri, 
+                type: selectedFile.type, 
+                name: selectedFile.name 
+            });
         }
         
         try {
             const config = { headers: { 'Content-Type': 'multipart/form-data' } };
             if (editingLab) {
+                // @ts-ignore
                 await apiClient.put(`/labs/${editingLab.id}`, data, config);
             } else {
                 await apiClient.post('/labs', data, config);
             }
+            // @ts-ignore
             Alert.alert("Success", `Lab ${editingLab ? 'updated' : 'created'} successfully!`);
             setIsModalOpen(false);
             fetchLabs();
-        } catch (error) { Alert.alert("Save Error", error.response?.data?.message || 'An unknown error occurred.'); }
+        } catch (error: any) { 
+            Alert.alert("Save Error", error.response?.data?.message || 'An unknown error occurred.'); 
+        }
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id: number) => {
         Alert.alert("Confirm Deletion", "Are you sure you want to delete this lab?", [
             { text: "Cancel", style: "cancel" },
             { text: "Delete", style: "destructive", onPress: async () => {
@@ -235,7 +272,9 @@ const TeacherAdminLabsScreen = () => {
                     await apiClient.delete(`/labs/${id}`);
                     Alert.alert("Success", "Lab deleted.");
                     fetchLabs();
-                } catch (e) { Alert.alert("Error", e.response?.data?.message || "Failed to delete lab."); }
+                } catch (e: any) { 
+                    Alert.alert("Error", e.response?.data?.message || "Failed to delete lab."); 
+                }
             }}
         ]);
     };
@@ -253,7 +292,7 @@ const TeacherAdminLabsScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             
-            {/* --- HEADER CARD (Back Button Removed) --- */}
+            {/* --- HEADER --- */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
@@ -272,9 +311,9 @@ const TeacherAdminLabsScreen = () => {
 
             <FlatList
                 data={labs}
+                // @ts-ignore
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
-                    // Wrapper ensures width alignment
                     <View style={styles.cardWrapper}>
                         <LabCard lab={item} onEdit={handleOpenModal} onDelete={handleDelete} />
                     </View>
@@ -300,6 +339,7 @@ const TeacherAdminLabsScreen = () => {
                         </View>
 
                         <ScrollView contentContainerStyle={{ padding: 20 }}>
+                            {/* Class Selection */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Assign to Class</Text>
                             <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
                                 <Picker 
@@ -309,10 +349,12 @@ const TeacherAdminLabsScreen = () => {
                                     dropdownIconColor={theme.textMain}
                                 >
                                     <Picker.Item label="All Classes" value="" color={theme.textSub}/>
+                                    {/* @ts-ignore */}
                                     {studentClasses.map(c => <Picker.Item key={c} label={c} value={c} color={theme.textMain} />)}
                                 </Picker>
                             </View>
 
+                            {/* Basic Info */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Title*</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
@@ -331,7 +373,7 @@ const TeacherAdminLabsScreen = () => {
                                 onChangeText={t => setFormData({...formData, subject: t})} 
                             />
                             
-                            <Text style={[styles.label, { color: theme.textSub }]}>Type</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Type (Video, PDF, etc)</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="e.g., Video, PDF" 
@@ -340,7 +382,7 @@ const TeacherAdminLabsScreen = () => {
                                 onChangeText={t => setFormData({...formData, lab_type: t})} 
                             />
                             
-                            <Text style={[styles.label, { color: theme.textSub }]}>Topic</Text>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Topic / Chapter</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
                                 placeholder="e.g., Titration" 
@@ -359,6 +401,7 @@ const TeacherAdminLabsScreen = () => {
                                 multiline 
                             />
                             
+                            {/* Date Picker */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Scheduled Time</Text>
                             <View style={styles.datePickerContainer}>
                                 <TouchableOpacity 
@@ -367,7 +410,7 @@ const TeacherAdminLabsScreen = () => {
                                 >
                                     <MaterialIcons name="event" size={20} color={theme.primary} style={{marginRight: 10}}/>
                                     <Text style={[styles.datePickerText, { color: theme.textMain }]}>
-                                        {scheduleDate ? scheduleDate.toLocaleString() : 'Select Date & Time'}
+                                        {scheduleDate ? formatDisplayDate(scheduleDate) : 'Select Date & Time'}
                                     </Text>
                                 </TouchableOpacity>
                                 {scheduleDate && (
@@ -388,46 +431,57 @@ const TeacherAdminLabsScreen = () => {
                                 />
                             )}
 
+                            {/* Cover Image */}
                             <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={handleChoosePhoto}>
                                 <MaterialIcons name="image" size={20} color={theme.white} />
-                                <Text style={[styles.uploadButtonText, { color: theme.white }]}>{editingLab?.cover_image_url || selectedImage ? 'Change Cover' : 'Select Cover'}</Text>
+                                {/* @ts-ignore */}
+                                <Text style={[styles.uploadButtonText, { color: theme.white }]}>{editingLab?.cover_image_url || selectedImage ? 'Change Cover' : 'Select Cover Image'}</Text>
                             </TouchableOpacity>
                             {selectedImage?.assets?.[0]?.uri && <Text style={[styles.fileNameText, { color: theme.textSub }]}>{selectedImage.assets[0].fileName}</Text>}
                             
                             <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                            <Text style={[styles.sectionHeader, { color: theme.primary }]}>Links & Files</Text>
+                            <Text style={[styles.sectionHeader, { color: theme.primary }]}>Links & Resources</Text>
                             
+                            {/* Multiple Link Inputs */}
+                            <Text style={[styles.label, { color: theme.textSub, fontSize: 12 }]}>External URL / Website</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
-                                placeholder="Access URL (https://...)" 
+                                placeholder="https://..." 
                                 placeholderTextColor={theme.textPlaceholder}
                                 value={formData.access_url} 
                                 onChangeText={t => setFormData({...formData, access_url: t})} 
                                 keyboardType="url" 
                             />
+
+                            <Text style={[styles.label, { color: theme.textSub, fontSize: 12 }]}>YouTube / Video Link</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
-                                placeholder="Video URL (Youtube...)" 
+                                placeholder="https://youtube.com/..." 
                                 placeholderTextColor={theme.textPlaceholder}
                                 value={formData.video_url} 
                                 onChangeText={t => setFormData({...formData, video_url: t})} 
                                 keyboardType="url" 
                             />
+
+                            <Text style={[styles.label, { color: theme.textSub, fontSize: 12 }]}>Google Meet / Zoom Link</Text>
                             <TextInput 
                                 style={[styles.input, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textMain }]} 
-                                placeholder="Meet Link (Google Meet...)" 
+                                placeholder="https://meet.google.com/..." 
                                 placeholderTextColor={theme.textPlaceholder}
                                 value={formData.meet_link} 
                                 onChangeText={t => setFormData({...formData, meet_link: t})} 
                                 keyboardType="url" 
                             />
                             
-                            <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.blue }]} onPress={handleChooseFile}>
+                            {/* File Upload */}
+                            <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.blue, marginTop: 15 }]} onPress={handleChooseFile}>
                                 <MaterialIcons name="attach-file" size={20} color={theme.white} />
-                                <Text style={[styles.uploadButtonText, { color: theme.white }]}>{editingLab?.file_path || selectedFile ? 'Change File' : 'Upload File'}</Text>
+                                {/* @ts-ignore */}
+                                <Text style={[styles.uploadButtonText, { color: theme.white }]}>{editingLab?.file_path || selectedFile ? 'Change Attached File' : 'Upload Document/PDF'}</Text>
                             </TouchableOpacity>
                             {selectedFile?.name && <Text style={[styles.fileNameText, { color: theme.textSub }]}>{selectedFile.name}</Text>}
 
+                            {/* Action Buttons */}
                             <View style={styles.modalActions}>
                                 <TouchableOpacity style={[styles.modalButton, styles.cancelButton, { backgroundColor: theme.cancelBtnBg }]} onPress={() => setIsModalOpen(false)}>
                                     <Text style={[styles.cancelButtonText, { color: theme.cancelBtnText }]}>Cancel</Text>
@@ -448,7 +502,7 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     
-    // --- HEADER CARD STYLES ---
+    // --- HEADER STYLES ---
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
@@ -478,20 +532,20 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
     headerBtn: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 15,
         borderRadius: 20,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: 5,
         marginLeft: 10,
     },
-    headerBtnText: { fontSize: 12, fontWeight: '600' },
+    headerBtnText: { fontSize: 13, fontWeight: '600' },
 
     cardWrapper: {
         width: '100%', 
         alignSelf: 'center',
-        marginBottom: 5,   // Space between cards
+        marginBottom: 5,   
     },
 
     emptyText: { textAlign: 'center', marginTop: 10, fontSize: 16 },
@@ -499,18 +553,18 @@ const styles = StyleSheet.create({
     // --- MODAL STYLES ---
     modalBackground: { flex: 1 }, 
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
-    modalTitle: { fontSize: 22, fontWeight: 'bold' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold' },
     
-    label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
+    label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 12 },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-    textarea: { height: 100, textAlignVertical: 'top' },
+    textarea: { height: 80, textAlignVertical: 'top' },
     pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 5 },
     
     uploadButton: { flexDirection: 'row', padding: 14, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
     uploadButtonText: { marginLeft: 10, fontWeight: 'bold', fontSize: 15 },
     fileNameText: { textAlign: 'center', marginTop: 5, fontSize: 12, fontStyle: 'italic' },
     
-    sectionHeader: { fontSize: 16, fontWeight: 'bold', marginTop: 20, marginBottom: 10, textAlign: 'center' },
+    sectionHeader: { fontSize: 16, fontWeight: 'bold', marginTop: 20, marginBottom: 5, textAlign: 'center', letterSpacing: 1 },
     divider: { height: 1, marginVertical: 15 },
 
     datePickerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
@@ -518,8 +572,8 @@ const styles = StyleSheet.create({
     datePickerText: { fontSize: 15 },
     clearDateButton: { padding: 10, marginLeft: 5 },
 
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 20 },
-    modalButton: { paddingVertical: 12, borderRadius: 8, flex: 0.48, alignItems: 'center', elevation: 2 },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 40 },
+    modalButton: { paddingVertical: 14, borderRadius: 8, flex: 0.48, alignItems: 'center', elevation: 2 },
     cancelButtonText: { fontWeight: 'bold', fontSize: 16 },
     saveButtonText: { fontWeight: 'bold', fontSize: 16 },
 });

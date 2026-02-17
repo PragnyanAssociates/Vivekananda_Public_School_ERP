@@ -49,18 +49,18 @@ const MAIN_TABS = ['home', 'calendar', 'profile'];
 // --- THEME COLORS ---
 const COLORS = {
     light: {
-        background: '#f8f8ff',
+        background: '#FFFFFF', // --- MODIFIED: Changed to Pure White ---
         cardBg: '#ffffff',
         textPrimary: '#333333',
         textSecondary: '#555555',
         border: '#b2ebf2',
-        secondary: '#e0f2f7',
+        secondary: '#e0f2f7', // Teal/Light Blue for Header
         inputBg: '#ffffff',
         placeholder: '#555555',
         shadow: '#000000',
     },
     dark: {
-        background: '#121212',
+        background: '#121212', // Pure Black
         cardBg: '#1e1e1e',
         textPrimary: '#ffffff',
         textSecondary: '#bbbbbb',
@@ -128,7 +128,7 @@ const OthersDashboard = ({ navigation }) => {
 
   const handleLogout = () => { Alert.alert("Logout", "Are you sure?", [{ text: "Cancel", style: "cancel" }, { text: "Logout", onPress: logout, style: "destructive" }]); };
 
-  const switchTab = (tab: string) => {
+  const switchTab = (tab) => {
     if (tab === activeTab) return;
     setActiveTab(tab);
     setIsBottomNavVisible(MAIN_TABS.includes(tab));
@@ -200,57 +200,70 @@ const OthersDashboard = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient colors={[theme.background, theme.background]} style={{flex: 1}}>
+    // --- MODIFIED: Removed LinearGradient. Used View with Dual-SafeAreaView strategy ---
+    // The top 'SafeAreaView' gets theme.secondary (Teal) to fill the status bar area.
+    // The body 'View' gets theme.background (White/Black) to prevent color bleeding.
+    <View style={{ flex: 1, backgroundColor: theme.secondary }}>
     <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.secondary} />
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      {activeTab === 'home' && (
-        <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
-          <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
-              {/* --- CHANGE 4: USE FastImage INSTEAD OF Image --- */}
-              <FastImage source={profileImageSource} style={[styles.profileImage, { borderColor: PRIMARY_COLOR, backgroundColor: theme.cardBg }]} />
-              <View style={styles.profileTextContainer}>
-                <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Administrator'}</Text>
-                <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Admin'}</Text>
-              </View>
-          </TouchableOpacity>
-          <View style={styles.topBarActions}>
-            <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
-              <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
-              {unreadNotificationsCount > 0 && ( <View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View> )}
+    
+    {/* 1. Top SafeAreaView for Status Bar Area (Teal) */}
+    <SafeAreaView style={{ flex: 0, backgroundColor: theme.secondary }} />
+    
+    {/* 2. Main Body SafeAreaView (White/Black) */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      
+      {/* Inner Content Container */}
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+      
+        {activeTab === 'home' && (
+            <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
+            <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
+                {/* --- CHANGE 4: USE FastImage INSTEAD OF Image --- */}
+                <FastImage source={profileImageSource} style={[styles.profileImage, { borderColor: PRIMARY_COLOR, backgroundColor: theme.cardBg }]} />
+                <View style={styles.profileTextContainer}>
+                    <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Administrator'}</Text>
+                    <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Admin'}</Text>
+                </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
-              <MaterialIcons name="logout" size={26} color={PRIMARY_COLOR} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+            <View style={styles.topBarActions}>
+                <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
+                <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
+                {unreadNotificationsCount > 0 && ( <View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View> )}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
+                <MaterialIcons name="logout" size={26} color={PRIMARY_COLOR} />
+                </TouchableOpacity>
+            </View>
+            </View>
+        )}
 
-      <View style={{ flex: 1 }}>
-        {renderContent()}
+        <View style={{ flex: 1 }}>
+            {renderContent()}
+        </View>
+
+        {isBottomNavVisible && (
+            <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
+            <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} theme={theme} onPress={() => switchTab('home')} />
+            <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} theme={theme} onPress={() => switchTab('calendar')} />
+            <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} theme={theme} onPress={() => switchTab('profile')} />
+            </View>
+        )}
+
+        <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
+            <TouchableWithoutFeedback onPress={() => setProfileModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    {/* --- CHANGE 5: USE FastImage IN THE MODAL AS WELL --- */}
+                    <FastImage source={profileImageSource} style={styles.enlargedProfileImage} />
+                    <TouchableOpacity style={styles.closeModalButton} onPress={() => setProfileModalVisible(false)}>
+                        <MaterialIcons name="close" size={30} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </TouchableWithoutFeedback>
+        </Modal>
+
       </View>
-
-      {isBottomNavVisible && (
-        <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
-          <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} theme={theme} onPress={() => switchTab('home')} />
-          <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} theme={theme} onPress={() => switchTab('calendar')} />
-          <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} theme={theme} onPress={() => switchTab('profile')} />
-        </View>
-      )}
-
-      <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
-          <TouchableWithoutFeedback onPress={() => setProfileModalVisible(false)}>
-              <View style={styles.modalOverlay}>
-                  {/* --- CHANGE 5: USE FastImage IN THE MODAL AS WELL --- */}
-                  <FastImage source={profileImageSource} style={styles.enlargedProfileImage} />
-                  <TouchableOpacity style={styles.closeModalButton} onPress={() => setProfileModalVisible(false)}>
-                      <MaterialIcons name="close" size={30} color="#fff" />
-                  </TouchableOpacity>
-              </View>
-          </TouchableWithoutFeedback>
-      </Modal>
-
     </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -301,7 +314,10 @@ const styles = StyleSheet.create({
     noResultsText: { fontSize: 16, textAlign: 'center', },
     contentScrollViewContainer: { paddingHorizontal: CONTENT_HORIZONTAL_PADDING, paddingBottom: 20, flexGrow: 1, },
     dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', },
-    dashboardCardWrapper: { width: (windowWidth - (CONTENT_HORIZONTAL_PADDING * 2) - (CARD_GAP * 2)) / 3, marginBottom: CARD_GAP, },
+    
+    // --- MODIFIED: Responsive Grid (31% for ~3 columns) ---
+    dashboardCardWrapper: { width: '31%', marginBottom: CARD_GAP, },
+    
     dashboardCard: { borderRadius: 12, paddingVertical: 15, alignItems: 'center', justifyContent: 'flex-start', height: 110, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 4, },
     cardIconContainer: { width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 8, },
     cardImage: { width: 38, height: 38, resizeMode: 'contain', },
@@ -316,7 +332,7 @@ const styles = StyleSheet.create({
     enlargedProfileImage: { width: windowWidth * 0.8, height: windowWidth * 0.8, borderRadius: (windowWidth * 0.8) / 2, borderWidth: 4, borderColor: '#fff' },
     closeModalButton: { position: 'absolute', top: 50, right: 20, padding: 10, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
     placeholderCard: {
-      width: (windowWidth - (CONTENT_HORIZONTAL_PADDING * 2) - (CARD_GAP * 2)) / 3,
+      width: '31%', // Matches dashboardCardWrapper width
     },
 });
 

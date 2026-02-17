@@ -72,7 +72,7 @@ const LightColors = {
 
     chipBg: '#FFFFFF',
     chipBorder: '#ccc',
-    selectedChip: '#b278f5',
+    selectedChip: '#3d72f8',
     selectedChipText: '#FFF',
     
     inputBg: '#FFFFFF'

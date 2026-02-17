@@ -63,19 +63,19 @@ const MAIN_TABS = ['home', 'calendar', 'profile'];
 // --- THEME COLORS CONFIGURATION ---
 const COLORS = {
     light: {
-        background: '#f8f8ff',
+        background: '#FFFFFF', // --- MODIFIED: Changed to Pure White ---
         cardBg: '#ffffff',
         textPrimary: '#333333',
         textSecondary: '#555555',
         border: '#b2ebf2',
-        secondary: '#e0f2f7',
+        secondary: '#e0f2f7', // Teal/Light Blue for Header
         headerIconBg: '#E0F2F1',
         subCardBg: '#FFFFFF',
         subCardImageBg: '#F7FAFC',
         shadow: '#000000',
     },
     dark: {
-        background: '#121212',
+        background: '#121212', // Pure Black
         cardBg: '#1e1e1e',
         textPrimary: '#ffffff',
         textSecondary: '#bbbbbb',
@@ -307,6 +307,7 @@ const StudentDashboard = ({ navigation }) => {
               {MAIN_CATEGORIES.map((category) => (
                   <TouchableOpacity 
                     key={category.id} 
+                    // --- MODIFIED: Use responsive width percentage instead of fixed pixel subtraction ---
                     style={[styles.categoryCard, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]} 
                     onPress={() => handleCategoryPress(category)}
                     activeOpacity={0.8}
@@ -419,55 +420,67 @@ const StudentDashboard = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient colors={[theme.background, theme.background]} style={{ flex: 1 }}>
+    // --- MODIFIED: Removed LinearGradient, used View with Dual-SafeAreaView strategy ---
+    // The top 'SafeAreaView' gets theme.secondary (Teal) to fill the status bar area.
+    // The body 'View' gets theme.background (White/Black) to prevent color bleeding.
+    <View style={{ flex: 1, backgroundColor: theme.secondary }}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.secondary} />
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      
+      {/* 1. Top SafeAreaView for Status Bar Area (Teal) */}
+      <SafeAreaView style={{ flex: 0, backgroundColor: theme.secondary }} />
+      
+      {/* 2. Main Body SafeAreaView (White/Black) */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
         
-        {/* TOP BAR: Only show on Main Dashboard */}
-        {activeTab === 'home' && currentView === 'dashboard' && (
-          <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
-            <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
-              <FastImage source={profileImageSource} style={[styles.profileImage, { borderColor: PRIMARY_COLOR, backgroundColor: theme.cardBg }]} />
-              <View style={styles.profileTextContainer}>
-                <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Student'}</Text>
-                <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Student'}</Text>
-              </View>
-            </TouchableOpacity>
-            <View style={styles.topBarActions}>
-              <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
-                <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
-                {unreadNotificationsCount > 0 && (<View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View>)}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
-                <MaterialIcons name="logout" size={24} color={PRIMARY_COLOR} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {/* Inner Content Container */}
+        <View style={{ flex: 1, backgroundColor: theme.background }}>
         
-        <View style={styles.mainContent}>{renderContent()}</View>
-
-        {isBottomNavVisible && (
-          <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
-            <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} onPress={() => switchTab('home')} theme={theme} />
-            <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} onPress={() => switchTab('calendar')} theme={theme} />
-            <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} onPress={() => switchTab('profile')} theme={theme} />
-          </View>
-        )}
-
-        <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
-          <TouchableWithoutFeedback onPress={() => setProfileModalVisible(false)}>
-            <View style={styles.modalOverlay}>
-              <FastImage source={profileImageSource} style={styles.enlargedProfileImage} />
-              <TouchableOpacity style={styles.closeModalButton} onPress={() => setProfileModalVisible(false)}>
-                <MaterialIcons name="close" size={30} color="#fff" />
-              </TouchableOpacity>
+            {/* TOP BAR: Only show on Main Dashboard - Background is Teal */}
+            {activeTab === 'home' && currentView === 'dashboard' && (
+            <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
+                <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
+                <FastImage source={profileImageSource} style={[styles.profileImage, { borderColor: PRIMARY_COLOR, backgroundColor: theme.cardBg }]} />
+                <View style={styles.profileTextContainer}>
+                    <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Student'}</Text>
+                    <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Student'}</Text>
+                </View>
+                </TouchableOpacity>
+                <View style={styles.topBarActions}>
+                <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
+                    <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
+                    {unreadNotificationsCount > 0 && (<View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View>)}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
+                    <MaterialIcons name="logout" size={24} color={PRIMARY_COLOR} />
+                </TouchableOpacity>
+                </View>
             </View>
-          </TouchableWithoutFeedback>
-        </Modal>
+            )}
+            
+            <View style={styles.mainContent}>{renderContent()}</View>
 
+            {isBottomNavVisible && (
+            <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
+                <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} onPress={() => switchTab('home')} theme={theme} />
+                <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} onPress={() => switchTab('calendar')} theme={theme} />
+                <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} onPress={() => switchTab('profile')} theme={theme} />
+            </View>
+            )}
+
+            <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
+            <TouchableWithoutFeedback onPress={() => setProfileModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                <FastImage source={profileImageSource} style={styles.enlargedProfileImage} />
+                <TouchableOpacity style={styles.closeModalButton} onPress={() => setProfileModalVisible(false)}>
+                    <MaterialIcons name="close" size={30} color="#fff" />
+                </TouchableOpacity>
+                </View>
+            </TouchableWithoutFeedback>
+            </Modal>
+
+        </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -528,8 +541,11 @@ const styles = StyleSheet.create({
 
   // --- DASHBOARD CATEGORY GRID ---
   dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  
+  // --- MODIFIED: Responsive Card Styles ---
+  // Replaced fixed pixel calculation with percentage to fix overlapping
   categoryCard: {
-    width: (windowWidth - 45) / 2,
+    width: '48%', // Uses percentage width to fit 2 columns on any screen
     borderRadius: 16,
     padding: 15,
     marginBottom: 15,
