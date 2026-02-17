@@ -389,7 +389,17 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishButtonText}>{isEditMode ? "Save Changes" : "Publish Event"}</Text>}
                 </TouchableOpacity>
                 
-                {showPicker && <DateTimePicker value={date} mode={mode} is24Hour={false} display="default" onChange={onChangeDateTime} />}
+                {/* CHANGED: Added minimumDate={new Date()} to prevent selecting past dates */}
+                {showPicker && (
+                    <DateTimePicker 
+                        value={date} 
+                        mode={mode} 
+                        is24Hour={false} 
+                        display="default" 
+                        onChange={onChangeDateTime}
+                        minimumDate={new Date()} 
+                    />
+                )}
             </ScrollView>
         </KeyboardAvoidingView>
     );

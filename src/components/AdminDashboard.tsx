@@ -76,22 +76,24 @@ const DANGER_COLOR = '#ef4444';
 
 const MAIN_TABS = ['home', 'calendar', 'profile'];
 
-// Theme Colors
+// --- THEME CONFIGURATION ---
+// UPDATED: 'background' for light mode is now pure '#FFFFFF' per request.
+// 'secondary' is the Teal/Light Blue color used for the Header/Status Bar.
 const COLORS = {
     light: {
-        background: '#f8f8ff',
+        background: '#FFFFFF', // Changed from GhostWhite to Pure White
         cardBg: '#ffffff',
         textPrimary: '#333333',
         textSecondary: '#555555',
         border: '#b2ebf2',
-        secondary: '#e0f2f7', // Updated to match Student Dashboard (Light Blue)
+        secondary: '#e0f2f7', // Light Blue/Teal for Header & Nav
         headerIconBg: '#E0F2F1',
         subCardBg: '#FFFFFF',
         subCardImageBg: '#F7FAFC',
         shadow: '#000000',
     },
     dark: {
-        background: '#121212',
+        background: '#000000', // Changed to Pure Black for high contrast
         cardBg: '#1e1e1e',
         textPrimary: '#ffffff',
         textSecondary: '#bbbbbb',
@@ -276,7 +278,7 @@ const AdminDashboard = ({ navigation }) => {
     setIsBottomNavVisible(MAIN_TABS.includes(tab));
   };
 
-  // 2. Module Back Button Logic (The Fix)
+  // 2. Module Back Button Logic
   // This goes back to the Sub-Menu (Head Module) instead of resetting to Dashboard
   const handleModuleBack = () => {
       // Switch back to Home tab, but PRESERVE the category_detail view
@@ -329,6 +331,7 @@ const AdminDashboard = ({ navigation }) => {
               {MAIN_CATEGORIES.map((category) => (
                   <TouchableOpacity 
                     key={category.id} 
+                    // RESPONSIVE FIX: Card style updated to handle width percentages
                     style={[styles.categoryCard, { backgroundColor: theme.cardBg, shadowColor: theme.shadow }]} 
                     onPress={() => handleCategoryPress(category)}
                     activeOpacity={0.8}
@@ -459,45 +462,57 @@ const AdminDashboard = ({ navigation }) => {
   };
 
   return (
-    <LinearGradient colors={[theme.background, theme.background]} style={{flex: 1}}>
+    // ROOT LAYOUT FIX: Changed from LinearGradient to standard View.
+    // The top 'SafeAreaView' gets theme.secondary (Teal) to fill the status bar area.
+    // The body 'View' gets theme.background (White/Black) to prevent color bleeding.
+    <View style={{ flex: 1, backgroundColor: theme.secondary }}>
     <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.secondary} />
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    
+    {/* This SafeAreaView handles the Top Notch Area, keeping it Teal/Light Blue */}
+    <SafeAreaView style={{ flex: 0, backgroundColor: theme.secondary }} />
+    
+    {/* This SafeAreaView handles the main App content */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       
-      {/* TOP BAR: Only show on Main Dashboard */}
-      {activeTab === 'home' && currentView === 'dashboard' && (
-        <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
-          <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
-              <FastImage source={profileImageSource} style={[styles.profileImage, { backgroundColor: theme.cardBg }]} />
-              <View style={styles.profileTextContainer}>
-                <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Administrator'}</Text>
-                <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Admin'}</Text>
-              </View>
-          </TouchableOpacity>
-          <View style={styles.topBarActions}>
-            <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
-              <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
-              {unreadNotificationsCount > 0 && ( <View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View> )}
+      {/* BODY CONTAINER: Ensures the main content background is White/Black */}
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        
+        {/* TOP BAR: Only show on Main Dashboard - Background is Teal */}
+        {activeTab === 'home' && currentView === 'dashboard' && (
+            <View style={[styles.topBar, { backgroundColor: theme.secondary, borderBottomColor: theme.border, shadowColor: theme.shadow }]}>
+            <TouchableOpacity style={styles.profileContainer} onPress={() => setProfileModalVisible(true)} activeOpacity={0.8}>
+                <FastImage source={profileImageSource} style={[styles.profileImage, { backgroundColor: theme.cardBg }]} />
+                <View style={styles.profileTextContainer}>
+                    <Text style={styles.profileNameText} numberOfLines={1}>{user?.full_name || 'Administrator'}</Text>
+                    <Text style={[styles.profileRoleText, { color: theme.textSecondary }]}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Admin'}</Text>
+                </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
-              <MaterialIcons name="logout" size={26} color={PRIMARY_COLOR} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+            <View style={styles.topBarActions}>
+                <TouchableOpacity onPress={() => switchTab('allNotifications')} style={styles.iconButton}>
+                <MaterialIcons name="notifications-none" size={26} color={PRIMARY_COLOR} />
+                {unreadNotificationsCount > 0 && ( <View style={styles.notificationCountBubble}><Text style={styles.notificationCountText}>{unreadNotificationsCount}</Text></View> )}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
+                <MaterialIcons name="logout" size={26} color={PRIMARY_COLOR} />
+                </TouchableOpacity>
+            </View>
+            </View>
+        )}
 
-      {/* MAIN CONTENT AREA */}
-      <View style={{ flex: 1 }}>
-        {renderContent()}
+        {/* MAIN CONTENT AREA */}
+        <View style={{ flex: 1 }}>
+            {renderContent()}
+        </View>
+
+        {/* BOTTOM NAV - Background is Teal */}
+        {isBottomNavVisible && (
+            <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
+            <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} theme={theme} onPress={() => switchTab('home')} />
+            <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} theme={theme} onPress={() => switchTab('calendar')} />
+            <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} theme={theme} onPress={() => switchTab('profile')} />
+            </View>
+        )}
       </View>
-
-      {/* BOTTOM NAV */}
-      {isBottomNavVisible && (
-        <View style={[styles.bottomNav, { backgroundColor: theme.secondary, borderTopColor: theme.border, shadowColor: theme.shadow }]}>
-          <BottomNavItem icon="home" label="Home" isActive={activeTab === 'home'} theme={theme} onPress={() => switchTab('home')} />
-          <BottomNavItem icon="calendar" label="Calendar" isActive={activeTab === 'calendar'} theme={theme} onPress={() => switchTab('calendar')} />
-          <BottomNavItem icon="user" label="Profile" isActive={activeTab === 'profile'} theme={theme} onPress={() => switchTab('profile')} />
-        </View>
-      )}
 
       {/* PROFILE MODAL */}
       <Modal animationType="fade" transparent={true} visible={isProfileModalVisible} onRequestClose={() => setProfileModalVisible(false)}>
@@ -512,7 +527,7 @@ const AdminDashboard = ({ navigation }) => {
       </Modal>
 
     </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -570,9 +585,11 @@ const styles = StyleSheet.create({
 
     dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     
-    // RESPONSIVE CATEGORY CARD
+    // RESPONSIVE CATEGORY CARD FIX
+    // Replaced pixel calculations with percentages and Flexbox logic
+    // This prevents overlapping and auto-adjusts to any screen size
     categoryCard: {
-        width: (windowWidth - 45) / 2, // 2 columns dynamically calculated based on screen width
+        width: '48%', // Uses percentage instead of fixed pixel subtraction
         borderRadius: 16,
         padding: 15,
         marginBottom: 15,
@@ -581,7 +598,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 3.84,
         elevation: 4,
-        minHeight: 140,
+        minHeight: 140, // Ensures minimum size but allows growth
         justifyContent: 'center'
     },
     categoryIconCircle: {
