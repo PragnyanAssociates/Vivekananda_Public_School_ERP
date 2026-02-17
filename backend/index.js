@@ -5,7 +5,6 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
-const cors = require('cors');
 const multer = require('multer');
 const jwt = require('jsonwebtoken'); 
 const path = require('path');
