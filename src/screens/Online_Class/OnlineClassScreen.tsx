@@ -167,8 +167,13 @@ const OnlineClassScreen: React.FC = () => {
     const { liveClasses, recordedClasses } = useMemo(() => {
         const live = filteredClasses.filter(c => c.class_type === 'live');
         const recorded = filteredClasses.filter(c => c.class_type === 'recorded');
-        live.sort((a, b) => new Date(a.class_datetime).getTime() - new Date(b.class_datetime).getTime());
+        
+        // --- UPDATED: Sorting Logic Changed (Latest First) ---
+        // Both Live and Recorded classes now sort Descending (Latest/Newest -> Oldest)
+        // b - a ensures the larger (newer) timestamp comes first
+        live.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
         recorded.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
+        
         return { liveClasses: live, recordedClasses: recorded };
     }, [filteredClasses]);
 
