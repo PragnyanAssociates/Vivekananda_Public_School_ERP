@@ -51,7 +51,7 @@ const DarkColors = {
 };
 
 // --- Constants ---
-const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const CLASS_GROUPS = ['Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5', 'Class 4', 'Class 3', 'Class 2', 'Class 1',  'UKG', 'LKG'];
 const DAYS: Day[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PERIOD_DEFINITIONS: PeriodDefinition[] = [
   { period: 1, time: '09:00-09:45' }, { period: 2, time: '09:45-10:30' },

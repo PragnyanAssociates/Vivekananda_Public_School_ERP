@@ -71,7 +71,7 @@ const COL_WIDTHS = {
 const TABLE_MIN_WIDTH = COL_WIDTHS.ROLL + COL_WIDTHS.NAME + COL_WIDTHS.STATUS + COL_WIDTHS.REMARKS; 
 
 // --- ANIMATED BAR COMPONENT ---
-const AnimatedBar = ({ percentage, rating, label, color, colors }) => {
+const AnimatedBar = ({ percentage, rating, label, roll, color, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -91,12 +91,20 @@ const AnimatedBar = ({ percentage, rating, label, color, colors }) => {
     return (
         <View style={styles.barWrapper}>
             <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{Math.round(percentage)}%</Text>
+            
             <View style={[styles.barTrack, { backgroundColor: colors.track }]}>
                 <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
             </View>
+            
+            {/* Roll Number Display */}
+            <Text style={[styles.barRollText, { color: colors.primary }]}>
+                {roll ? `(${roll})` : '-'}
+            </Text>
+
             <Text style={[styles.barLabelBottom, { color: colors.textMain }]} numberOfLines={1}>
                 {label.split(' ')[0]} 
             </Text>
+            
             <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
                  <Text style={{fontSize:10, fontWeight:'bold', color: colors.textSub}}>{rating}</Text>
                  <MaterialIcons name="star" size={10} color={colors.warning} />
@@ -130,6 +138,7 @@ const StudentFeedback = () => {
 
     // --- Compare Modal State ---
     const [showCompareModal, setShowCompareModal] = useState(false);
+    const [compareClass, setCompareClass] = useState(''); 
     const [compareSubject, setCompareSubject] = useState('All Subjects'); 
     const [sortOrder, setSortOrder] = useState('desc'); 
     const [analyticsData, setAnalyticsData] = useState([]);
@@ -155,10 +164,35 @@ const StudentFeedback = () => {
                 const response = await apiClient.get(`/teacher-classes/${user.id}`);
                 classesData = response.data;
             }
-            setAllClasses(classesData);
-            if (classesData.length > 0) {
-                // Auto-select first class if available
-                setSelectedClass(classesData[0]);
+
+            // --- IMPROVED SORTING LOGIC ---
+            // Ensures LKG & UKG are at the top, then numeric classes
+            const sortedClasses = classesData.sort((a, b) => {
+                const valA = a.toUpperCase().replace(/\./g, ''); // Normalize (L.K.G -> LKG)
+                const valB = b.toUpperCase().replace(/\./g, '');
+
+                // Priority for LKG and UKG
+                if (valA.includes('LKG')) return -1;
+                if (valB.includes('LKG')) return 1;
+                if (valA.includes('UKG')) return -1;
+                if (valB.includes('UKG')) return 1;
+
+                // Numeric Sort for Class 1, Class 2, etc.
+                const numA = parseInt(valA.replace(/\D/g, ''), 10);
+                const numB = parseInt(valB.replace(/\D/g, ''), 10);
+
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA - numB;
+                }
+                
+                // Fallback to alphabetical
+                return valA.localeCompare(valB);
+            });
+
+            setAllClasses(sortedClasses);
+            if (sortedClasses.length > 0) {
+                // Default to first class (likely LKG or Class 1)
+                setSelectedClass(sortedClasses[0]);
             }
         } catch (error) { console.error('Error fetching classes', error); }
     };
@@ -260,16 +294,16 @@ const StudentFeedback = () => {
 
     // --- 4. Analytics Data (Modal) ---
     useEffect(() => {
-        if (showCompareModal && selectedClass) {
+        if (showCompareModal && compareClass) {
             fetchAnalytics();
         }
-    }, [showCompareModal, compareSubject, sortOrder, selectedClass]);
+    }, [showCompareModal, compareSubject, sortOrder, compareClass]);
 
     const fetchAnalytics = async () => {
         setLoadingAnalytics(true);
         try {
             const params = { 
-                class_group: selectedClass,
+                class_group: compareClass, 
                 mode: 'analytics',
                 subject: compareSubject 
             };
@@ -380,12 +414,13 @@ const StudentFeedback = () => {
                     </View>
                 </View>
 
-                {/* Right Side: Compare Button (Badge Removed) */}
+                {/* Right Side: Compare Button */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity 
                         style={styles.comButton}
                         onPress={() => {
                             if(selectedClass) {
+                                setCompareClass(selectedClass); // Initialize modal with current class
                                 setCompareSubject(selectedSubject || 'All Subjects');
                                 setShowCompareModal(true);
                             } else {
@@ -571,7 +606,23 @@ const StudentFeedback = () => {
 
                     {/* MODAL FILTERS */}
                     <View style={[styles.modalFilterContainer, { backgroundColor: COLORS.inputBg, borderBottomColor: COLORS.border }]}>
-                        {/* Subject Filter inside Modal */}
+                        
+                        {/* 1. Class Filter (NEW) */}
+                        <View style={{marginBottom: 10}}>
+                            <Text style={[styles.modalLabel, { color: COLORS.textSub }]}>Comparing Class:</Text>
+                            <View style={[styles.modalPickerWrap, { borderColor: COLORS.border, backgroundColor: COLORS.cardBg }]}>
+                                <Picker
+                                    selectedValue={compareClass}
+                                    onValueChange={setCompareClass}
+                                    style={{width:'100%', color: COLORS.textMain}}
+                                    dropdownIconColor={COLORS.textMain}
+                                >
+                                    {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
+                                </Picker>
+                            </View>
+                        </View>
+
+                        {/* 2. Subject Filter */}
                         <View style={{marginBottom: 10}}>
                             <Text style={[styles.modalLabel, { color: COLORS.textSub }]}>Comparing Subject:</Text>
                             <View style={[styles.modalPickerWrap, { borderColor: COLORS.border, backgroundColor: COLORS.cardBg }]}>
@@ -590,7 +641,7 @@ const StudentFeedback = () => {
                             </View>
                         </View>
 
-                        {/* Sort Filter */}
+                        {/* 3. Sort Filter */}
                         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
                             <Text style={[styles.modalLabel, { color: COLORS.textSub }]}>Sort Order:</Text>
                             <View style={{flexDirection:'row', backgroundColor: COLORS.cardBg, borderRadius:8, borderWidth: 1, borderColor: COLORS.border}}>
@@ -637,6 +688,7 @@ const StudentFeedback = () => {
                                             percentage={item.percentage}
                                             rating={item.avg_rating}
                                             label={item.name}
+                                            roll={item.roll_no}
                                             color={color}
                                             colors={COLORS}
                                         />
@@ -759,7 +811,10 @@ const styles = StyleSheet.create({
     barLabelTop: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
     barTrack: { width: 30, height: 220, borderRadius: 0, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 0 },
-    barLabelBottom: { fontSize: 11, fontWeight: '600', marginTop: 6, textAlign:'center', width: '100%' },
+    
+    barRollText: { fontSize: 10, fontWeight: 'bold', marginTop: 4, textAlign: 'center' },
+
+    barLabelBottom: { fontSize: 11, fontWeight: '600', marginTop: 1, textAlign:'center', width: '100%' },
 });
 
 export default StudentFeedback;
