@@ -1,7 +1,7 @@
 /**
  * File: src/screens/library/BorrowRequestScreen.js
  * Purpose: Form to request borrowing a library book.
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Updated: Added Role Selection, Conditional Fields, Responsive & Dark Mode.
  */
 import React, { useState, useLayoutEffect } from 'react';
 import { 
@@ -10,6 +10,7 @@ import {
     SafeAreaView, useColorScheme, StatusBar, KeyboardAvoidingView, Dimensions 
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker'; // Ensure this is installed
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -67,7 +68,8 @@ const BorrowRequestScreen = () => {
 
     const [form, setForm] = useState({
         full_name: user?.full_name || '',
-        roll_no: '',
+        user_role: 'student', // Default Role
+        roll_no: '', // Acts as Roll No for students, User ID for others
         class_name: '',
         mobile: '',
         email: user?.email || '',
@@ -99,9 +101,11 @@ const BorrowRequestScreen = () => {
     };
 
     const handleRequest = async () => {
-        if(!form.roll_no || !form.mobile) {
-            return Alert.alert("Required", "Please fill Roll No and Mobile Number.");
-        }
+        // Validation
+        if(!form.full_name) return Alert.alert("Required", "Full Name is required.");
+        if(!form.roll_no) return Alert.alert("Required", form.user_role === 'student' ? "Roll No is required." : "User ID is required.");
+        if(!form.mobile) return Alert.alert("Required", "Mobile Number is required.");
+        if(form.user_role === 'student' && !form.class_name) return Alert.alert("Required", "Class is required for students.");
 
         setLoading(true);
         try {
@@ -152,9 +156,47 @@ const BorrowRequestScreen = () => {
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                         
-                        <InputField label="Full Name" value={form.full_name} onChangeText={t=>setForm({...form, full_name:t})} theme={theme} />
-                        <InputField label="Roll No / ID *" value={form.roll_no} onChangeText={t=>setForm({...form, roll_no:t})} placeholder="12345" theme={theme} />
-                        <InputField label="Class" value={form.class_name} onChangeText={t=>setForm({...form, class_name:t})} placeholder="10-A" theme={theme} />
+                        {/* 1. Full Name */}
+                        <InputField label="Full Name *" value={form.full_name} onChangeText={t=>setForm({...form, full_name:t})} theme={theme} />
+
+                        {/* 2. Role Selector (Picker) */}
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: theme.textSub }]}>Role *</Text>
+                            <View style={[styles.pickerContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+                                <Picker
+                                    selectedValue={form.user_role}
+                                    onValueChange={(itemValue) => setForm({...form, user_role: itemValue, class_name: ''})} // Reset class on change
+                                    dropdownIconColor={theme.textMain}
+                                    style={{ color: theme.textMain }}
+                                >
+                                    <Picker.Item label="Student" value="student" style={{color: theme.textMain}} />
+                                    <Picker.Item label="Teacher" value="teacher" style={{color: theme.textMain}} />
+                                    <Picker.Item label="Admin" value="admin" style={{color: theme.textMain}} />
+                                    <Picker.Item label="Other" value="other" style={{color: theme.textMain}} />
+                                </Picker>
+                            </View>
+                        </View>
+
+                        {/* 3. Dynamic Field: Roll No (Student) OR User ID (Others) */}
+                        <InputField 
+                            label={form.user_role === 'student' ? "Roll No *" : "User ID *"} 
+                            value={form.roll_no} 
+                            onChangeText={t=>setForm({...form, roll_no:t})} 
+                            placeholder={form.user_role === 'student' ? "e.g. 101" : "e.g. T-550"} 
+                            theme={theme} 
+                        />
+
+                        {/* 4. Class (Only visible if Role is Student) */}
+                        {form.user_role === 'student' && (
+                            <InputField 
+                                label="Class *" 
+                                value={form.class_name} 
+                                onChangeText={t=>setForm({...form, class_name:t})} 
+                                placeholder="e.g. 10-A" 
+                                theme={theme} 
+                            />
+                        )}
+
                         <InputField label="Mobile *" keyboardType="phone-pad" value={form.mobile} onChangeText={t=>setForm({...form, mobile:t})} placeholder="9876543210" theme={theme} />
                         <InputField label="Email" value={form.email} onChangeText={t=>setForm({...form, email:t})} theme={theme} />
 
@@ -284,6 +326,11 @@ const styles = StyleSheet.create({
         padding: 12, 
         borderRadius: 8, 
         fontSize: 15 
+    },
+    pickerContainer: {
+        borderWidth: 1,
+        borderRadius: 8,
+        overflow: 'hidden', // Ensures picker rounded corners on Android
     },
     
     dateBtn: { 

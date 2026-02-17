@@ -1,7 +1,7 @@
 /**
  * File: src/screens/library/LibraryHistoryScreen.js
- * Purpose: Display a history of library transactions (Issue/Return) with search and date filters.
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Purpose: Display a history of library transactions.
+ * Updated: Handles Roles and Null Classes.
  */
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
@@ -14,9 +14,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client'; 
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -63,7 +60,6 @@ const LibraryHistoryScreen = () => {
 
     const navigation = useNavigation(); 
     
-    // Hide default header to use our custom one
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
@@ -74,20 +70,17 @@ const LibraryHistoryScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState('');
 
-    // Date Filters
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
 
-    // --- 1. Auto-Fetch when screen is focused ---
     useFocusEffect(
         useCallback(() => {
             fetchHistory();
         }, [])
     );
 
-    // --- 2. Filter Logic (Triggered on any change) ---
     React.useEffect(() => {
         applyFilters();
     }, [search, startDate, endDate, data]);
@@ -106,8 +99,6 @@ const LibraryHistoryScreen = () => {
 
     const applyFilters = () => {
         let result = [...data];
-
-        // 1. Text Search
         if (search) {
             const lower = search.toLowerCase();
             result = result.filter(item => 
@@ -116,8 +107,6 @@ const LibraryHistoryScreen = () => {
                 (item.roll_no && item.roll_no.toLowerCase().includes(lower))
             );
         }
-
-        // 2. Date Filter
         if (startDate) {
             result = result.filter(item => new Date(item.actual_return_date) >= startDate);
         }
@@ -126,12 +115,9 @@ const LibraryHistoryScreen = () => {
             endOfDay.setHours(23, 59, 59);
             result = result.filter(item => new Date(item.actual_return_date) <= endOfDay);
         }
-
-        // 3. "Latest 10" Logic for Initial View
         if (!search && !startDate && !endDate) {
             result = result.slice(0, 10);
         }
-
         setFilteredData(result);
     };
 
@@ -141,57 +127,55 @@ const LibraryHistoryScreen = () => {
         return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
     };
 
-    // --- Render Header ---
     const renderHeader = () => (
         <View style={[styles.headerRow, { backgroundColor: theme.tableHeader }]}>
-            <Text style={[styles.cell, styles.col1, styles.headText]}>Student</Text>
+            <Text style={[styles.cell, styles.col1, styles.headText]}>Details</Text>
             <Text style={[styles.cell, styles.col2, styles.headText]}>Book</Text>
             <Text style={[styles.cell, styles.col3, styles.headText]}>Issued</Text>
             <Text style={[styles.cell, styles.col4, styles.headText]}>Returned</Text>
         </View>
     );
 
-    // --- Render Row ---
-    const renderItem = ({ item }) => (
-        <View style={[styles.row, { borderBottomColor: theme.tableRowBorder }]}>
-            {/* Student Column */}
-            <View style={[styles.cell, styles.col1]}>
-                <Text style={[styles.cellTextBold, { color: theme.textMain }]} numberOfLines={1}>{item.full_name}</Text>
-                <Text style={[styles.cellSubText, { color: theme.textSub }]}>{item.roll_no}</Text>
+    const renderItem = ({ item }) => {
+        const isStudent = item.user_role === 'student';
+        return (
+            <View style={[styles.row, { borderBottomColor: theme.tableRowBorder }]}>
+                {/* Details Column: Name + Role + ID/Class */}
+                <View style={[styles.cell, styles.col1]}>
+                    <Text style={[styles.cellTextBold, { color: theme.textMain }]} numberOfLines={1}>{item.full_name}</Text>
+                    <Text style={[styles.cellRoleText, { color: theme.primary }]}>{item.user_role ? item.user_role.toUpperCase() : 'USER'}</Text>
+                    <Text style={[styles.cellSubText, { color: theme.textSub }]}>
+                        {isStudent ? `ID: ${item.roll_no}` : `ID: ${item.roll_no}`}
+                    </Text>
+                </View>
+                
+                {/* Book Column */}
+                <View style={[styles.cell, styles.col2]}>
+                    <Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={2}>{item.book_title}</Text>
+                    <Text style={[styles.cellSubText, { color: theme.textSub }]}>{item.book_no}</Text>
+                </View>
+                
+                {/* Dates */}
+                <View style={[styles.cell, styles.col3]}>
+                    <Text style={[styles.cellText, { color: theme.textMain }]}>{formatDate(item.borrow_date)}</Text>
+                </View>
+                <View style={[styles.cell, styles.col4]}>
+                    <Text style={[styles.cellText, { color: theme.success, fontWeight: '700' }]}>{formatDate(item.actual_return_date)}</Text>
+                </View>
             </View>
-            
-            {/* Book Column */}
-            <View style={[styles.cell, styles.col2]}>
-                <Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={1}>{item.book_title}</Text>
-                <Text style={[styles.cellSubText, { color: theme.textSub }]}>{item.book_no}</Text>
-            </View>
-            
-            {/* Issued Date */}
-            <View style={[styles.cell, styles.col3]}>
-                <Text style={[styles.cellText, { color: theme.textMain }]}>{formatDate(item.borrow_date)}</Text>
-            </View>
-            
-            {/* Returned Date */}
-            <View style={[styles.cell, styles.col4]}>
-                <Text style={[styles.cellText, { color: theme.success, fontWeight: '700' }]}>
-                    {formatDate(item.actual_return_date)}
-                </Text>
-            </View>
-        </View>
-    );
+        );
+    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             
-            {/* --- HEADER CARD --- */}
+            {/* Header Card */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    {/* Back Button */}
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                         <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
                     </TouchableOpacity>
-
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialCommunityIcons name="history" size={24} color={theme.primary} />
                     </View>
@@ -202,73 +186,41 @@ const LibraryHistoryScreen = () => {
                 </View>
             </View>
             
-            {/* --- Filters Section --- */}
+            {/* Filters */}
             <View style={styles.filterContainer}>
                 <View style={[styles.searchBox, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
                     <MaterialIcons name="search" size={20} color={theme.textPlaceholder} style={styles.searchIcon} />
                     <TextInput 
                         style={[styles.searchInput, { color: theme.textMain }]}
-                        placeholder="Search Student or Book..."
+                        placeholder="Search Name or Book..."
                         placeholderTextColor={theme.textPlaceholder}
                         value={search}
-                        onChangeText={setSearch}
+                        onChangeText={setSearchText} // Using wrapper for filter
                     />
                 </View>
-                
                 <View style={styles.dateRow}>
-                    <TouchableOpacity 
-                        onPress={() => setShowStartPicker(true)} 
-                        style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
-                    >
-                        <Text style={[styles.dateBtnTxt, { color: theme.textMain }]}>
-                            {startDate ? formatDate(startDate.toISOString()) : 'Start Date'}
-                        </Text>
+                    <TouchableOpacity onPress={() => setShowStartPicker(true)} style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+                        <Text style={[styles.dateBtnTxt, { color: theme.textMain }]}>{startDate ? formatDate(startDate.toISOString()) : 'Start Date'}</Text>
                         <MaterialIcons name="calendar-today" size={16} color={theme.primary} />
                     </TouchableOpacity>
-                    
                     <MaterialIcons name="arrow-right-alt" size={24} color={theme.textSub} style={{ marginHorizontal: 5 }} />
-                    
-                    <TouchableOpacity 
-                        onPress={() => setShowEndPicker(true)} 
-                        style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
-                    >
-                        <Text style={[styles.dateBtnTxt, { color: theme.textMain }]}>
-                            {endDate ? formatDate(endDate.toISOString()) : 'End Date'}
-                        </Text>
+                    <TouchableOpacity onPress={() => setShowEndPicker(true)} style={[styles.dateBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+                        <Text style={[styles.dateBtnTxt, { color: theme.textMain }]}>{endDate ? formatDate(endDate.toISOString()) : 'End Date'}</Text>
                         <MaterialIcons name="calendar-today" size={16} color={theme.primary} />
                     </TouchableOpacity>
-                    
                     {(startDate || endDate) && (
-                        <TouchableOpacity 
-                            onPress={() => {setStartDate(null); setEndDate(null)}} 
-                            style={[styles.clearBtn, { backgroundColor: theme.danger }]}
-                        >
+                        <TouchableOpacity onPress={() => {setStartDate(null); setEndDate(null)}} style={[styles.clearBtn, { backgroundColor: theme.danger }]}>
                             <MaterialIcons name="close" size={18} color={theme.white} />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
-            {/* --- Date Pickers --- */}
-            {showStartPicker && (
-                <DateTimePicker 
-                    value={startDate || new Date()} 
-                    mode="date" 
-                    display="default"
-                    onChange={(e, d) => { setShowStartPicker(Platform.OS === 'ios'); if(d) setStartDate(d); }} 
-                />
-            )}
-            {showEndPicker && (
-                <DateTimePicker 
-                    value={endDate || new Date()} 
-                    mode="date" 
-                    display="default"
-                    minimumDate={startDate || undefined}
-                    onChange={(e, d) => { setShowEndPicker(Platform.OS === 'ios'); if(d) setEndDate(d); }} 
-                />
-            )}
+            {/* Pickers */}
+            {showStartPicker && <DateTimePicker value={startDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowStartPicker(Platform.OS === 'ios'); if(d) setStartDate(d); }} />}
+            {showEndPicker && <DateTimePicker value={endDate || new Date()} mode="date" display="default" minimumDate={startDate || undefined} onChange={(e, d) => { setShowEndPicker(Platform.OS === 'ios'); if(d) setEndDate(d); }} />}
 
-            {/* --- Table --- */}
+            {/* List */}
             <View style={[styles.tableContainer, { backgroundColor: theme.cardBg }]}>
                 {renderHeader()}
                 {loading ? <ActivityIndicator style={{marginTop: 50}} color={theme.primary} size="large" /> : (
@@ -277,104 +229,48 @@ const LibraryHistoryScreen = () => {
                         renderItem={renderItem}
                         keyExtractor={item => item.id.toString()}
                         contentContainerStyle={{ paddingBottom: 20 }}
-                        refreshControl={
-                            <RefreshControl 
-                                refreshing={refreshing} 
-                                onRefresh={()=>{setRefreshing(true); fetchHistory()}} 
-                                colors={[theme.primary]} 
-                                tintColor={theme.primary}
-                            />
-                        }
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Text style={[styles.emptyText, { color: theme.textSub }]}>No history found.</Text>
-                            </View>
-                        }
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true); fetchHistory()}} colors={[theme.primary]} tintColor={theme.primary}/>}
+                        ListEmptyComponent={<View style={styles.emptyContainer}><Text style={[styles.emptyText, { color: theme.textSub }]}>No history found.</Text></View>}
                     />
                 )}
             </View>
         </SafeAreaView>
     );
+
+    // Filter Wrapper
+    function setSearchText(text) { setSearch(text); }
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    
-    // --- HEADER CARD STYLES ---
     headerCard: {
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     backButton: { marginRight: 10, padding: 4 },
-    headerIconContainer: {
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
-
-    // Filters
     filterContainer: { paddingHorizontal: 15, marginBottom: 15 },
-    searchBox: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        borderRadius: 10, 
-        paddingHorizontal: 10, 
-        marginBottom: 10, 
-        borderWidth: 1, 
-        height: 45 
-    },
+    searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, marginBottom: 10, borderWidth: 1, height: 45 },
     searchIcon: { marginRight: 8 },
     searchInput: { flex: 1, fontSize: 15, padding: 0 },
-    
     dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    dateBtn: { 
-        flex: 1, // Flex 1 makes it perfectly responsive
-        flexDirection: 'row', 
-        alignItems:'center', 
-        justifyContent:'space-between', 
-        padding: 10, 
-        borderRadius: 8, 
-        borderWidth: 1 
-    },
+    dateBtn: { flex: 1, flexDirection: 'row', alignItems:'center', justifyContent:'space-between', padding: 10, borderRadius: 8, borderWidth: 1 },
     dateBtnTxt: { fontSize: 12, fontWeight: '600' },
     clearBtn: { padding: 8, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-
-    // Table
     tableContainer: { flex: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 5, overflow: 'hidden' },
     headerRow: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 10 },
     row: { flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 14, paddingHorizontal: 10, alignItems:'center' },
-    
-    // Grid System
-    col1: { flex: 3 },   // Student Name (Wider)
-    col2: { flex: 3 },   // Book Title (Wider)
-    col3: { flex: 2 },   // Issue Date
-    col4: { flex: 2 },   // Return Date
-    
+    col1: { flex: 3 }, col2: { flex: 3 }, col3: { flex: 2 }, col4: { flex: 2 },
     cell: { paddingRight: 5 },
     headText: { color: '#FFF', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
     cellText: { fontSize: 12, fontWeight: '500' },
     cellTextBold: { fontSize: 13, fontWeight: '700' },
-    cellSubText: { fontSize: 10, marginTop: 2 },
-    
+    cellRoleText: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+    cellSubText: { fontSize: 10, marginTop: 1 },
     emptyContainer: { padding: 40, alignItems: 'center' },
     emptyText: { textAlign: 'center', fontSize: 16 }
 });

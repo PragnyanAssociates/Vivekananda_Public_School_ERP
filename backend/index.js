@@ -9766,34 +9766,38 @@ app.delete('/api/library/books/:id', verifyToken, isAdmin, async (req, res) => {
 // Logic: Creates a 'pending' request. Does NOT deduct a copy yet.
 app.post('/api/library/request', verifyToken, async (req, res) => {
     try {
-        const { book_id, full_name, roll_no, class_name, mobile, email, borrow_date, return_date } = req.body;
+        const { book_id, full_name, user_role, roll_no, class_name, mobile, email, borrow_date, return_date } = req.body;
         
         // 1. Validation
-        if (!book_id || !roll_no || !mobile || !borrow_date || !return_date) {
+        if (!book_id || !full_name || !user_role || !roll_no || !mobile || !borrow_date || !return_date) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        // 2. Get User ID from Token (CRITICAL for Foreign Key Constraint)
+        // 2. Get User ID from Token
         const userId = req.user ? req.user.id : null;
         if (!userId) {
-            return res.status(401).json({ message: 'Unauthorized: No User ID found in token.' });
+            return res.status(401).json({ message: 'Unauthorized: No User ID found.' });
         }
 
-        // 3. Check Book Availability (Don't allow request if 0 copies)
+        // 3. Check Book Availability
         const [book] = await db.query('SELECT available_copies FROM library_books WHERE id = ?', [book_id]);
         if (!book.length || book[0].available_copies < 1) {
             return res.status(400).json({ message: 'Book is currently unavailable.' });
         }
 
-        // 4. Insert Transaction
+        // 4. Handle Logic based on Role
+        // If role is NOT student, ensure class_name is NULL (even if sent)
+        const finalClassName = (user_role === 'student') ? class_name : null;
+
+        // 5. Insert Transaction with Role
         const query = `
             INSERT INTO library_transactions 
-            (book_id, user_id, full_name, roll_no, class_name, mobile, email, borrow_date, expected_return_date, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            (book_id, user_id, full_name, user_role, roll_no, class_name, mobile, email, borrow_date, expected_return_date, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         `;
         
         await db.query(query, [
-            book_id, userId, full_name, roll_no, class_name, mobile, email, borrow_date, return_date
+            book_id, userId, full_name, user_role, roll_no, finalClassName, mobile, email, borrow_date, return_date
         ]);
 
         res.status(201).json({ message: 'Request submitted successfully!' });

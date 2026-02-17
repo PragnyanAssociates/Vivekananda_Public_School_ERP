@@ -1,7 +1,7 @@
 /**
  * File: src/screens/library/AdminActionScreen.js
- * Purpose: Admin interface to manage library book requests (Approve, Reject, Mark Returned).
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Purpose: Admin interface to manage library book requests.
+ * Updated: Handles Roles and Responsive Design.
  */
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
@@ -68,12 +68,10 @@ const AdminActionScreen = () => {
 
     const navigation = useNavigation();
     
-    // Hide default header to use our custom one
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
 
-    // --- State ---
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -100,7 +98,9 @@ const AdminActionScreen = () => {
 
     const formatDate = (dateString) => {
         if (!dateString) return '-';
-        return dateString.split('T')[0];
+        // Format to DD/MM/YYYY
+        const d = new Date(dateString);
+        return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
     };
 
     const isOverdue = (dateString) => {
@@ -146,19 +146,16 @@ const AdminActionScreen = () => {
                         try {
                             let endpoint = '';
                             let body = {};
-
                             if (type === 'returned') {
                                 endpoint = `/library/return/${id}`;
                             } else {
                                 endpoint = `/library/admin/request-action/${id}`;
                                 body = { action: type };
                             }
-                            
                             await apiClient.put(endpoint, body);
                             Alert.alert("Success", "Updated successfully");
                             fetchData(); 
                         } catch (error) {
-                            console.error(error);
                             Alert.alert("Error", error.response?.data?.message || "Action failed");
                             setLoading(false);
                         }
@@ -170,6 +167,7 @@ const AdminActionScreen = () => {
 
     const renderItem = ({ item, index }) => {
         const overdue = isOverdue(item.expected_return_date);
+        const isStudent = item.user_role === 'student';
 
         return (
             <Animatable.View animation="fadeInUp" duration={500} delay={index * 50}>
@@ -179,11 +177,14 @@ const AdminActionScreen = () => {
                             <Text style={[styles.bookTitle, { color: theme.textMain }]} numberOfLines={2}>
                                 {item.book_title || "Unknown Book"}
                             </Text>
+                            
                             <Text style={[styles.studentDetails, { color: theme.textSub }]}>
-                                {item.full_name} ({item.roll_no})
+                                {item.full_name} 
+                                <Text style={{fontWeight: 'normal', fontStyle: 'italic', fontSize: 12}}> ({item.user_role || 'user'})</Text>
                             </Text>
+                            
                             <Text style={[styles.classDetails, { color: theme.textSub }]}>
-                                Class: {item.class_name || 'N/A'}
+                                {isStudent ? `ID: ${item.roll_no} | Class: ${item.class_name}` : `User ID: ${item.roll_no}`}
                             </Text>
                         </View>
 
@@ -275,17 +276,10 @@ const AdminActionScreen = () => {
                     {['PENDING', 'ISSUED', 'OVERDUE'].map(tab => (
                         <TouchableOpacity 
                             key={tab}
-                            style={[
-                                styles.tab, 
-                                activeTab === tab && { backgroundColor: theme.tabActiveBg }
-                            ]}
+                            style={[styles.tab, activeTab === tab && { backgroundColor: theme.tabActiveBg }]}
                             onPress={() => setActiveTab(tab)}
                         >
-                            <Text style={[
-                                styles.tabText, 
-                                { color: theme.textSub },
-                                activeTab === tab && { color: theme.primary, fontWeight: 'bold' }
-                            ]}>
+                            <Text style={[styles.tabText, { color: theme.textSub }, activeTab === tab && { color: theme.primary, fontWeight: 'bold' }]}>
                                 {tab.charAt(0) + tab.slice(1).toLowerCase()}
                             </Text>
                         </TouchableOpacity>
@@ -301,20 +295,11 @@ const AdminActionScreen = () => {
                     renderItem={renderItem}
                     keyExtractor={item => item.id.toString()}
                     contentContainerStyle={styles.listContent}
-                    refreshControl={
-                        <RefreshControl 
-                            refreshing={refreshing} 
-                            onRefresh={() => { setRefreshing(true); fetchData(); }} 
-                            colors={[theme.primary]} 
-                            tintColor={theme.primary}
-                        />
-                    }
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} colors={[theme.primary]} tintColor={theme.primary}/>}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <MaterialCommunityIcons name="playlist-check" size={50} color={theme.border} />
-                            <Text style={[styles.emptyText, { color: theme.textSub }]}>
-                                No {activeTab.toLowerCase()} requests found.
-                            </Text>
+                            <Text style={[styles.emptyText, { color: theme.textSub }]}>No {activeTab.toLowerCase()} requests found.</Text>
                         </View>
                     }
                 />
@@ -326,104 +311,38 @@ const AdminActionScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     loader: { marginTop: 40 },
-    
-    // --- HEADER CARD STYLES ---
     headerCard: {
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     backButton: { marginRight: 10, padding: 4 },
-    headerIconContainer: {
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
-    headerBtn: {
-        padding: 8,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    // --- FILTERS ---
+    headerBtn: { padding: 8, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     filterContainer: { paddingHorizontal: 15, marginBottom: 10 },
-    searchBox: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        borderRadius: 10, 
-        paddingHorizontal: 10, 
-        borderWidth: 1, 
-        height: 45, 
-        marginBottom: 15 
-    },
+    searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, borderWidth: 1, height: 45, marginBottom: 15 },
     searchIcon: { marginRight: 8 },
     searchInput: { flex: 1, height: 45, fontSize: 15 },
-
-    // Tabs
-    tabContainer: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        borderRadius: 8, 
-        padding: 4, 
-        borderWidth: 1 
-    },
+    tabContainer: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 8, padding: 4, borderWidth: 1 },
     tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6 },
     tabText: { fontSize: 13, fontWeight: '600' },
-
-    // --- CARD STYLES ---
     listContent: { paddingHorizontal: 15, paddingBottom: 20 },
-    card: { 
-        borderRadius: 12, 
-        padding: 15, 
-        marginBottom: 12, 
-        elevation: 2, 
-        shadowOpacity: 0.05, 
-        shadowRadius: 3, 
-        shadowOffset: { width: 0, height: 1 } 
-    },
+    card: { borderRadius: 12, padding: 15, marginBottom: 12, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
     bookTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
     studentDetails: { fontSize: 13, fontWeight: '600' },
     classDetails: { fontSize: 12, marginTop: 2 },
-    
     badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, height: 24, justifyContent: 'center' },
     badgeText: { fontSize: 10, fontWeight: 'bold' },
-
-    dateRow: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        padding: 10, 
-        borderRadius: 8, 
-        marginVertical: 10, 
-        borderWidth: 1 
-    },
+    dateRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, borderRadius: 8, marginVertical: 10, borderWidth: 1 },
     dateItem: { flexDirection: 'row', alignItems: 'center' },
     dateText: { fontSize: 12, fontWeight: '500', marginLeft: 4 },
-
-    // Buttons
     actionRow: { flexDirection: 'row', gap: 10 },
     btn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
     btnText: { fontWeight: 'bold', fontSize: 13 },
-
     emptyContainer: { alignItems: 'center', marginTop: 60 },
     emptyText: { fontSize: 16, marginTop: 10 }
 });
