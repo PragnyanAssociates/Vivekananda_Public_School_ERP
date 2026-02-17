@@ -91,7 +91,6 @@ const WrittenAnswerScreen = ({ route }) => {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
-      // Catch specific HTML error from server issues
       if (err.response && typeof err.response.data === 'string' && err.response.data.includes('<!DOCTYPE html>')) {
           Alert.alert("Connection Error", "The app cannot reach the homework server. Please check your internet or try again later.");
       } else {
@@ -198,8 +197,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  
-  // Header Style
   headerCard: {
     paddingHorizontal: 15,
     paddingVertical: 12,
@@ -221,12 +218,10 @@ const styles = StyleSheet.create({
   headerTextContainer: { justifyContent: 'center', flex: 1 },
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
   headerSubtitle: { fontSize: 12, marginTop: 1 },
-
   container: {
     padding: 15,
-    paddingBottom: 100, // Space for the floating button
+    paddingBottom: 100, 
   },
-  
   questionBox: {
     marginBottom: 20,
     padding: 15,
@@ -247,7 +242,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  
   answerBox: {
     borderRadius: 12,
     elevation: 2,
@@ -270,7 +264,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
   },
-  
   footer: {
     position: 'absolute',
     bottom: 0,

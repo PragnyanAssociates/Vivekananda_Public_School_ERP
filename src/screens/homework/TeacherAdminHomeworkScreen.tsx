@@ -21,7 +21,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- THEME CONFIGURATION ---
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -64,7 +63,6 @@ const DarkColors = {
     viewerBg: '#000000'
 };
 
-// --- HELPER: Date Format DD/MM/YYYY ---
 const formatDateDisplay = (isoDateString) => {
     if (!isoDateString) return '';
     const d = new Date(isoDateString);
@@ -74,7 +72,6 @@ const formatDateDisplay = (isoDateString) => {
     return `${day}/${month}/${year}`;
 };
 
-// --- MAIN SCREEN ---
 const TeacherAdminHomeworkScreen = () => {
     const [view, setView] = useState('assignments');
     const [selectedAssignment, setSelectedAssignment] = useState(null);
@@ -97,7 +94,6 @@ const TeacherAdminHomeworkScreen = () => {
     return null;
 };
 
-// --- ASSIGNMENT LIST COMPONENT ---
 const AssignmentList = ({ onSelectAssignment }) => {
     const { user } = useAuth();
     const colorScheme = useColorScheme();
@@ -118,10 +114,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
-    
-    // --- Questions State ---
-    const [questionsList, setQuestionsList] = useState(['']); // Start with one empty question
-
+    const [questionsList, setQuestionsList] = useState(['']); 
     const [attachments, setAttachments] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -159,7 +152,9 @@ const AssignmentList = ({ onSelectAssignment }) => {
         setSelectedSubject('');
         if (classGroup) {
             try {
-                const response = await apiClient.get(`/subjects-for-class/${classGroup}`);
+                // Encode to safely handle '10/A'
+                const encodedClass = encodeURIComponent(classGroup);
+                const response = await apiClient.get(`/subjects-for-class/${encodedClass}`);
                 setSubjects(response.data);
                 return response.data;
             } catch (e) { return []; }
@@ -176,7 +171,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
         } else { setShowDatePicker(false); }
     };
 
-    // --- Question Handlers ---
     const addQuestionField = () => {
         setQuestionsList([...questionsList, '']);
     };
@@ -195,7 +189,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     const openCreateModal = () => {
         setEditingAssignment(null);
         setNewAssignment(initialAssignmentState);
-        setQuestionsList(['']); // Reset to one empty question
+        setQuestionsList(['']); 
         setSelectedClass('');
         setSelectedSubject('');
         setSubjects([]);
@@ -217,9 +211,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                     parsedQuestions = parsed;
                 }
             }
-        } catch (e) { 
-            console.log("Error parsing questions JSON", e); 
-        }
+        } catch (e) { console.log("Error parsing questions JSON", e); }
 
         setNewAssignment({ 
             title: assignment.title, 
@@ -299,9 +291,8 @@ const AssignmentList = ({ onSelectAssignment }) => {
             fetchTeacherAssignments();
         } catch (e) { 
             console.error("Save Error:", e.response?.data || e.message);
-            // Catch the specific HTML error string if it still happens
             if (e.response && typeof e.response.data === 'string' && e.response.data.includes('<!DOCTYPE html>')) {
-                Alert.alert("Connection Error", "The app cannot reach the homework server. Please check your internet or try again later.");
+                Alert.alert("Connection Error", "The app cannot reach the homework server.");
             } else {
                 Alert.alert("Error", "Failed to save assignment.");
             }
@@ -311,8 +302,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
-            
-            {/* Header Card */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
@@ -347,9 +336,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                     <MaterialIcons name="more-vert" size={26} color={COLORS.iconGrey} />
                                 </TouchableOpacity>
                             </View>
-                            
                             <View style={[styles.divider, { backgroundColor: COLORS.divider }]} />
-                            
                             <Text style={[styles.cardDetail, { color: COLORS.textSub }]}>Due: {formatDateDisplay(item.due_date)}</Text>
                             <View style={styles.footerRow}>
                                 <View style={[styles.submissionBadge, { backgroundColor: item.submission_count > 0 ? (isDark ? '#332b00' : '#fff3cd') : (isDark ? COLORS.inputBg : '#f8f9fa') }]}>
@@ -363,7 +350,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
                         </View>
                     </Animatable.View>
                 )}
-                contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+                contentContainerStyle={{ paddingHorizontal: width * 0.04, paddingBottom: 20 }}
                 ListEmptyComponent={<View style={styles.center}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No assignments found.</Text></View>}
                 onRefresh={fetchTeacherAssignments}
                 refreshing={isLoading}
@@ -474,7 +461,6 @@ const AssignmentList = ({ onSelectAssignment }) => {
     );
 };
 
-// --- SUBMISSION LIST COMPONENT ---
 const SubmissionList = ({ assignment, onBack }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -604,7 +590,7 @@ const SubmissionList = ({ assignment, onBack }) => {
                         </View>
                     </TouchableOpacity>
                 )}
-                contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+                contentContainerStyle={{ paddingHorizontal: width * 0.04, paddingBottom: 20 }}
                 ListEmptyComponent={<View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found.</Text></View>}
             />
 
@@ -676,8 +662,6 @@ const SubmissionList = ({ assignment, onBack }) => {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     center: { alignItems: 'center', justifyContent: 'center' },
-    
-    // Header
     headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -686,13 +670,9 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 13 },
     headerBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-    // Tabs
     tabContainer: { flexDirection: 'row', paddingHorizontal: 15, marginBottom: 10, justifyContent: 'space-between' },
     tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', marginHorizontal: 4, borderRadius: 20, borderWidth: 1 },
     tabText: { fontWeight: 'bold', fontSize: 13 },
-
-    // Card
     card: { borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
     cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     menuIcon: { padding: 4 },
@@ -702,16 +682,12 @@ const styles = StyleSheet.create({
     typeBadgeText: { fontSize: 10, fontWeight: 'bold' },
     divider: { height: 1, marginVertical: 10 },
     cardDetail: { fontSize: 12, marginTop: 2 },
-    
-    // Footer Actions
     footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
     viewSubmissionsBtn: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', gap: 5 },
     viewSubmissionsBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
     submissionBadge: { borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
     submissionBadgeText: { fontSize: 11, fontWeight: 'bold' },
     gradeBadge: { borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2 },
-
-    // Modal
     modalHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
     modalView: { flex: 1, padding: 20 },
     modalFormTitle: { fontSize: 20, fontWeight: 'bold' },
@@ -724,29 +700,19 @@ const styles = StyleSheet.create({
     modalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
     modalBtn: { paddingVertical: 14, borderRadius: 8, alignItems: 'center', flex: 1, justifyContent: 'center' },
     datePickerInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, padding: 12, borderRadius: 8, marginBottom: 10 },
-    
-    // Question Rows
     questionRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
     addQuestionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', marginBottom: 20 },
-
-    // Search
     searchContainer: { flexDirection: 'row', borderRadius: 8, marginHorizontal: 15, marginBottom: 15, alignItems: 'center', paddingHorizontal: 10, borderWidth: 1, height: 45 },
     searchInput: { flex: 1, height: 45, marginLeft: 8, fontSize: 15 },
-    
-    // Submission View
     submittedContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
     submittedText: { marginLeft: 8, fontSize: 13 },
     modalStudentName: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
     writtenAnswerContainer: { padding: 12, borderRadius: 8, borderWidth: 1, marginBottom: 15, minHeight: 100 },
     fileListContainer: { marginBottom: 15 },
-
-    // Form Elements
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 15 },
     modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 50 },
-
-    // Viewer Modal
     viewerModalContainer: { flex: 1 },
     viewerSafeArea: { flex: 1 },
     viewerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },

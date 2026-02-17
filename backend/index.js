@@ -2469,15 +2469,14 @@ app.delete('/api/labs/:id', async (req, res) => {
 
 
 // ==========================================================
-// --- HOMEWORK & ASSIGNMENTS API ROUTES ---
-// =========================================================
+// --- HOMEWORK & ASSIGNMENTS API ROUTES (CORRECTED) ---
+// ==========================================================
 
-// 1. Define where to store homework files
-// 1. Configure Storage
+// 1. Configure Storage for Homework
 const homeworkStorage = multer.diskStorage({
     destination: (req, file, cb) => {
         // Ensure the directory exists
-        const dir = './data/uploads'; 
+        const dir = '/data/uploads'; // Matches your ROOT_STORAGE_PATH
         if (!fs.existsSync(dir)){
             fs.mkdirSync(dir, { recursive: true });
         }
@@ -2494,7 +2493,7 @@ const homeworkUpload = multer({ storage: homeworkStorage });
 
 // --- UTILITY ROUTES ---
 
-router.get('/student-classes', async (req, res) => {
+app.get('/api/student-classes', async (req, res) => {
     try {
         const query = `
             SELECT DISTINCT class_group FROM users 
@@ -2508,7 +2507,7 @@ router.get('/student-classes', async (req, res) => {
     }
 });
 
-router.get('/subjects-for-class/:classGroup', async (req, res) => {
+app.get('/api/subjects-for-class/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
     try {
         const query = "SELECT DISTINCT subject_name FROM timetables WHERE class_group = ? ORDER BY subject_name";
@@ -2522,10 +2521,9 @@ router.get('/subjects-for-class/:classGroup', async (req, res) => {
 
 // --- TEACHER / ADMIN ROUTES ---
 
-router.get('/homework/teacher/:teacherId', async (req, res) => {
+app.get('/api/homework/teacher/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
-        // Select distinct description and questions columns
         const query = `
             SELECT 
                 a.id, a.title, a.description, a.class_group, a.subject, a.due_date, 
@@ -2542,7 +2540,7 @@ router.get('/homework/teacher/:teacherId', async (req, res) => {
     }
 });
 
-router.post('/homework', homeworkUpload.array('attachments'), async (req, res) => {
+app.post('/api/homework', homeworkUpload.array('attachments'), async (req, res) => {
     const { title, description, class_group, subject, due_date, teacher_id, homework_type, questions } = req.body;
     
     if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
@@ -2567,7 +2565,6 @@ router.post('/homework', homeworkUpload.array('attachments'), async (req, res) =
     try {
         await connection.beginTransaction();
 
-        // Updated Query to include both description and questions
         const query = `
             INSERT INTO homework_assignments 
             (title, description, class_group, subject, due_date, teacher_id, attachment_path, homework_type, questions) 
@@ -2583,17 +2580,18 @@ router.post('/homework', homeworkUpload.array('attachments'), async (req, res) =
             teacher_id, 
             attachment_path, 
             homework_type,
-            questions // This is the JSON string of questions
+            questions 
         ]);
         const newAssignmentId = assignmentResult.insertId;
 
         // Notifications
-        const [[teacher]] = await connection.query('SELECT full_name FROM users WHERE id = ?', [teacher_id]);
-        const [students] = await connection.query('SELECT id FROM users WHERE role = "student" AND class_group = ?', [class_group]);
-        
-        if (students.length > 0) {
-            const studentIds = students.map(s => s.id);
-            if (typeof createBulkNotifications === 'function') {
+        // Safety check to ensure notification function exists in scope
+        if (typeof createBulkNotifications === 'function') {
+            const [[teacher]] = await connection.query('SELECT full_name FROM users WHERE id = ?', [teacher_id]);
+            const [students] = await connection.query('SELECT id FROM users WHERE role = "student" AND class_group = ?', [class_group]);
+            
+            if (students.length > 0) {
+                const studentIds = students.map(s => s.id);
                 await createBulkNotifications(
                     connection,
                     studentIds,
@@ -2617,22 +2615,10 @@ router.post('/homework', homeworkUpload.array('attachments'), async (req, res) =
     }
 });
 
-router.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
+app.post('/api/homework/update/:assignmentId', homeworkUpload.array('attachments'), async (req, res) => {
     const { assignmentId } = req.params;
     const { title, description, class_group, subject, due_date, existing_attachment_path, homework_type, questions } = req.body;
     
-    if (!homework_type || !['PDF', 'Written'].includes(homework_type)) {
-        return res.status(400).json({ message: 'A valid homework type (PDF or Written) is required.' });
-    }
-
-    const selectedDate = new Date(due_date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); 
-    
-    if (selectedDate < today) {
-        return res.status(400).json({ message: 'Due date cannot be in the past.' });
-    }
-
     try {
         let attachment_path = existing_attachment_path || null;
         if (req.files && req.files.length > 0) {
@@ -2640,7 +2626,6 @@ router.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'
             attachment_path = JSON.stringify(filePaths);
         }
 
-        // Updated Query to update both description and questions
         const query = `
             UPDATE homework_assignments 
             SET title = ?, description = ?, class_group = ?, subject = ?, due_date = ?, attachment_path = ?, homework_type = ?, questions = ? 
@@ -2648,15 +2633,7 @@ router.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'
         `;
         
         await db.query(query, [
-            title, 
-            description || '', 
-            class_group, 
-            subject, 
-            due_date, 
-            attachment_path, 
-            homework_type, 
-            questions, 
-            assignmentId
+            title, description || '', class_group, subject, due_date, attachment_path, homework_type, questions, assignmentId
         ]);
         res.status(200).json({ message: 'Homework updated successfully.' });
     } catch (error) { 
@@ -2665,18 +2642,18 @@ router.post('/homework/update/:assignmentId', homeworkUpload.array('attachments'
     }
 });
 
-router.delete('/homework/:assignmentId', async (req, res) => {
+app.delete('/api/homework/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         await db.query('DELETE FROM homework_assignments WHERE id = ?', [assignmentId]);
-        res.status(200).json({ message: 'Homework and all its submissions deleted.' });
+        res.status(200).json({ message: 'Homework deleted.' });
     } catch (error) { 
         console.error('Error deleting homework:', error);
         res.status(500).json({ message: 'Error deleting homework.' }); 
     }
 });
 
-router.get('/homework/submissions/:assignmentId', async (req, res) => {
+app.get('/api/homework/submissions/:assignmentId', async (req, res) => {
     const { assignmentId } = req.params;
     try {
         const query = `
@@ -2696,7 +2673,7 @@ router.get('/homework/submissions/:assignmentId', async (req, res) => {
     }
 });
 
-router.put('/homework/grade/:submissionId', async (req, res) => {
+app.put('/api/homework/grade/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { grade, remarks } = req.body;
     try {
@@ -2711,10 +2688,15 @@ router.put('/homework/grade/:submissionId', async (req, res) => {
 
 // --- STUDENT ROUTES ---
 
-router.get('/homework/student/:studentId/:classGroup', async (req, res) => {
+app.get('/api/homework/student/:studentId/:classGroup', async (req, res) => {
     const { studentId, classGroup } = req.params;
+    
+    // Safety check to prevent SQL errors or 404s
+    if (!classGroup || classGroup === 'null' || classGroup === 'undefined') {
+        return res.json([]);
+    }
+
     try {
-        // Select both description and questions
         const query = `
             SELECT 
                 a.id, a.title, a.description, a.subject, a.due_date, a.attachment_path, a.homework_type, a.questions,
@@ -2723,7 +2705,9 @@ router.get('/homework/student/:studentId/:classGroup', async (req, res) => {
             LEFT JOIN homework_submissions s ON a.id = s.assignment_id AND s.student_id = ?
             WHERE a.class_group = ? 
             ORDER BY a.due_date DESC, a.id DESC`;
+        
         const [assignments] = await db.query(query, [studentId, classGroup]);
+        
         const processedAssignments = assignments.map(a => ({
             ...a,
             status: a.submission_id ? (a.status || 'Submitted') : 'Pending'
@@ -2735,7 +2719,7 @@ router.get('/homework/student/:studentId/:classGroup', async (req, res) => {
     }
 });
 
-router.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
+app.post('/api/homework/submit/:assignmentId', homeworkUpload.array('submissions'), async (req, res) => {
     const { assignmentId } = req.params;
     const { student_id } = req.body;
     
@@ -2760,15 +2744,17 @@ router.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'
         const query = `INSERT INTO homework_submissions (assignment_id, student_id, submission_path, status) VALUES (?, ?, ?, 'Submitted')`;
         await connection.query(query, [assignmentId, student_id, submission_path]);
         
-        const [[assignment]] = await connection.query('SELECT teacher_id, title FROM homework_assignments WHERE id = ?', [assignmentId]);
-        const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
+        if (typeof createBulkNotifications === 'function') {
+            const [[assignment]] = await connection.query('SELECT teacher_id, title FROM homework_assignments WHERE id = ?', [assignmentId]);
+            const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
 
-        if (assignment && student && typeof createBulkNotifications === 'function') {
-             await createBulkNotifications(
-                connection, [assignment.teacher_id], student.full_name, 
-                `Submission for: ${assignment.title}`, `${student.full_name} (${student.class_group}) has submitted their homework.`, 
-                `/submissions/${assignmentId}`
-            );
+            if (assignment && student) {
+                 await createBulkNotifications(
+                    connection, [assignment.teacher_id], student.full_name, 
+                    `Submission for: ${assignment.title}`, `${student.full_name} (${student.class_group}) has submitted their homework.`, 
+                    `/submissions/${assignmentId}`
+                );
+            }
         }
         
         await connection.commit();
@@ -2782,7 +2768,7 @@ router.post('/homework/submit/:assignmentId', homeworkUpload.array('submissions'
     }
 });
 
-router.post('/homework/submit-written', async (req, res) => {
+app.post('/api/homework/submit-written', async (req, res) => {
     const { assignment_id, student_id, written_answer } = req.body;
 
     if (!assignment_id || !student_id || !written_answer) {
@@ -2802,15 +2788,17 @@ router.post('/homework/submit-written', async (req, res) => {
         const query = `INSERT INTO homework_submissions (assignment_id, student_id, written_answer, status) VALUES (?, ?, ?, 'Submitted')`;
         await connection.query(query, [assignment_id, student_id, written_answer]);
         
-        const [[assignment]] = await connection.query('SELECT teacher_id, title FROM homework_assignments WHERE id = ?', [assignment_id]);
-        const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
+        if (typeof createBulkNotifications === 'function') {
+            const [[assignment]] = await connection.query('SELECT teacher_id, title FROM homework_assignments WHERE id = ?', [assignment_id]);
+            const [[student]] = await connection.query('SELECT full_name, class_group FROM users WHERE id = ?', [student_id]);
 
-        if (assignment && student && typeof createBulkNotifications === 'function') {
-             await createBulkNotifications(
-                connection, [assignment.teacher_id], student.full_name, 
-                `Submission for: ${assignment.title}`, `${student.full_name} (${student.class_group}) has submitted their written homework.`, 
-                `/submissions/${assignment_id}`
-            );
+            if (assignment && student) {
+                 await createBulkNotifications(
+                    connection, [assignment.teacher_id], student.full_name, 
+                    `Submission for: ${assignment.title}`, `${student.full_name} (${student.class_group}) has submitted their written homework.`, 
+                    `/submissions/${assignment_id}`
+                );
+            }
         }
 
         await connection.commit();
@@ -2824,14 +2812,10 @@ router.post('/homework/submit-written', async (req, res) => {
     }
 });
 
-router.delete('/homework/submission/:submissionId', async (req, res) => {
+app.delete('/api/homework/submission/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const { student_id } = req.body; 
 
-    if (!student_id) {
-        return res.status(400).json({ message: 'Student ID is required for verification.' });
-    }
-    
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -2860,8 +2844,6 @@ router.delete('/homework/submission/:submissionId', async (req, res) => {
         connection.release();
     }
 });
-
-module.exports = router;
 
 
 

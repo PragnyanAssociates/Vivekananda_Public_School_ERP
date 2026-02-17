@@ -19,7 +19,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- THEME CONFIGURATION ---
+// --- THEME COLORS ---
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -77,11 +77,9 @@ const StudentHomeworkScreen = () => {
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // --- Document Viewer State ---
+    // --- Viewers ---
     const [isViewerVisible, setIsViewerVisible] = useState(false);
     const [currentFile, setCurrentFile] = useState({ uri: '', type: '', name: '' });
-
-    // --- Written Answer Viewer State ---
     const [isAnswerModalVisible, setIsAnswerModalVisible] = useState(false);
     const [selectedAnswerDetails, setSelectedAnswerDetails] = useState(null);
     
@@ -89,10 +87,21 @@ const StudentHomeworkScreen = () => {
     const isFocused = useIsFocused();
 
     const fetchAssignments = useCallback(async () => {
-        if (!user) return;
+        if (!user || !user.id) return;
+
+        // FIX: If no class group, don't fetch to avoid errors
+        if (!user.class_group) {
+            setIsLoading(false);
+            setAssignments([]);
+            return;
+        }
+
         setIsLoading(true);
         try {
-            const response = await apiClient.get(`/homework/student/${user.id}/${user.class_group}`);
+            // FIX: Encode URI to handle slashes in class names (e.g. "10/A")
+            const safeClassGroup = encodeURIComponent(user.class_group);
+            const response = await apiClient.get(`/homework/student/${user.id}/${safeClassGroup}`);
+            
             const data = Array.isArray(response.data) ? response.data : [];
             data.sort((a, b) => {
                 if (a.status === 'Pending' && b.status !== 'Pending') return -1;
@@ -100,8 +109,16 @@ const StudentHomeworkScreen = () => {
                 return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
             });
             setAssignments(data);
-        } catch (e) { Alert.alert("Error", e.response?.data?.message || "Failed to fetch assignments."); } 
-        finally { setIsLoading(false); }
+        } catch (e) { 
+            console.error("Fetch Error:", e);
+            if (e.response && e.response.status === 404) {
+                 setAssignments([]); 
+            } else {
+                 Alert.alert("Error", e.response?.data?.message || "Failed to fetch assignments."); 
+            }
+        } finally { 
+            setIsLoading(false); 
+        }
     }, [user]);
 
     useEffect(() => {
@@ -147,11 +164,9 @@ const StudentHomeworkScreen = () => {
             Alert.alert("Success", "Homework submitted successfully!");
             setIsModalVisible(false);
             fetchAssignments();
-
         } catch (err) {
-            // Error handling consistent with teacher screen
             if (err.response && typeof err.response.data === 'string' && err.response.data.includes('<!DOCTYPE html>')) {
-                Alert.alert("Connection Error", "The app cannot reach the homework server. Please check your internet or try again later.");
+                Alert.alert("Connection Error", "The app cannot reach the server.");
             } else {
                 Alert.alert("Error", err.response?.data?.message || "Could not submit files."); 
             }
@@ -206,7 +221,7 @@ const StudentHomeworkScreen = () => {
                     </View>
                     <View style={styles.headerTextContainer}>
                         <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Homework</Text>
-                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>My Assignments</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{user.class_group ? `Class: ${user.class_group}` : 'No Class Assigned'}</Text>
                     </View>
                 </View>
             </View>
@@ -227,10 +242,10 @@ const StudentHomeworkScreen = () => {
                         onViewWritten={viewWrittenAnswer}
                     />
                 )}
-                ListEmptyComponent={<View style={styles.centered}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No homework assigned yet.</Text></View>}
+                ListEmptyComponent={<View style={styles.centered}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No homework found.</Text></View>}
                 onRefresh={fetchAssignments}
                 refreshing={isLoading}
-                contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+                contentContainerStyle={{ paddingHorizontal: width * 0.04, paddingBottom: 20 }}
             />
 
             {/* File Submission Modal */}
@@ -316,6 +331,7 @@ const StudentHomeworkScreen = () => {
 
 const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, colors, isDark, onViewFile, onViewWritten }) => {
     
+    // DD/MM/YYYY Format
     const formatDateDisplay = (isoDateString) => {
         if (!isoDateString) return '';
         const d = new Date(isoDateString);
@@ -343,7 +359,6 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
         } catch (e) { return [item.attachment_path]; }
     };
 
-    // --- PARSE QUESTIONS ---
     let questionsList = [];
     try {
         if (item.questions) {
@@ -364,10 +379,8 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 </View>
             </View>
             
-            {/* --- SHOW DESCRIPTION --- */}
             {item.description ? <Text style={[styles.description, { color: colors.textSub, fontStyle: 'italic', marginBottom: 10 }]} numberOfLines={3}>{item.description}</Text> : null}
             
-            {/* --- SHOW QUESTIONS --- */}
             {questionsList.length > 0 && (
                 <View style={{ marginBottom: 15 }}>
                     <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.textMain, marginBottom: 5 }}>Questions:</Text>
@@ -387,7 +400,6 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                 {item.submitted_at && <DetailRow icon="event-available" label="Submitted" value={formatDateDisplay(item.submitted_at)} colors={colors} />}
             </View>
             
-            {/* Highlighted Grade Section */}
             {status.text === 'Graded' && item.grade && (
                 <Animatable.View animation="fadeIn" duration={400} style={[styles.gradedSection, { backgroundColor: colors.gradeBg, borderColor: colors.success }]}>
                     <View style={{flexDirection:'row', alignItems:'center', marginBottom:5}}>
@@ -440,7 +452,6 @@ const AssignmentCard = ({ item, onOpenSubmitModal, onDelete, index, navigation, 
                     </View>
                 </>
             ) : (
-                // Not Submitted actions
                 item.homework_type === 'Written' ? (
                     <View style={[styles.buttonRow, { borderTopColor: colors.divider }]}>
                         <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.success }]} onPress={() => navigation.navigate('WrittenAnswerScreen', { assignment: item })}>
@@ -473,9 +484,9 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
     card: { borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, borderLeftWidth: 5 },
@@ -488,7 +499,6 @@ const styles = StyleSheet.create({
     detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
     detailLabel: { marginLeft: 8, fontSize: 14, fontWeight: '500' },
     detailValue: { fontSize: 14, flexShrink: 1, marginLeft: 5 },
-    // Highlighted Section
     gradedSection: { marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1, borderStyle:'dashed' },
     remarksText: { fontStyle: 'italic', fontSize: 14, marginTop: 4 },
     buttonRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 15, paddingTop: 10, borderTopWidth: 1 },
@@ -501,7 +511,6 @@ const styles = StyleSheet.create({
     submittedAnswerLabel: { fontSize: 14, fontWeight: 'bold', marginBottom: 5 },
     submittedAnswerText: { fontSize: 14, padding: 12, borderRadius: 6, lineHeight: 20 },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
-    // Modal
     modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     modalContent: { width: '90%', borderRadius: 15, padding: 20, maxHeight: '80%', elevation: 5 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 5 },
@@ -516,7 +525,6 @@ const styles = StyleSheet.create({
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
     modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
     modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-    // Viewer
     viewerModalContainer: { flex: 1 },
     viewerSafeArea: { flex: 1 },
     viewerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
