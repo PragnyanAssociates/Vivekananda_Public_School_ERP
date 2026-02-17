@@ -14,9 +14,11 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Video from 'react-native-video';
 import * as Animatable from 'react-native-animatable';
 
+// Get device dimensions for responsive adjustments
 const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION (Master Style Guide) ---
+// Ensures consistent colors across Light and Dark modes
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -64,13 +66,22 @@ interface FormData {
     meet_link: string; description: string; topic: string;
 }
 
+// --- HELPER: DATE FORMATTING (DD/MM/YYYY) ---
 const formatDateTime = (isoString: string): string => {
     if (!isoString) return 'Select Date & Time';
     const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-        month: 'long', day: 'numeric', year: 'numeric',
-        hour: 'numeric', minute: '2-digit', hour12: true,
-    });
+    
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
 };
 
 const OnlineClassScreen: React.FC = () => {
@@ -119,10 +130,13 @@ const OnlineClassScreen: React.FC = () => {
 
     useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
     
+    // --- UPDATED: Fetch Subjects/Teachers even when editing ---
+    // Removed 'isEditing' check so lists update if user changes Class Group
     useEffect(() => {
         const fetchClassSpecificData = async () => {
-            if (!modalVisible || isEditing || !formData.class_group) return;
-            setSubjects([]); setTeachers([]);
+            if (!modalVisible || !formData.class_group) return;
+            
+            // We don't wipe state immediately to prevent flicker if values exist
             try {
                 const [subjectsRes, teachersRes] = await Promise.all([
                     apiClient.get(`/subjects-for-class/${formData.class_group}`),
@@ -131,13 +145,14 @@ const OnlineClassScreen: React.FC = () => {
                 setSubjects(subjectsRes.data);
                 setTeachers(teachersRes.data);
             } catch (error: any) {
-                Alert.alert("Error", "Could not load class details.");
+                console.log("Error loading dropdown details", error);
             }
         };
         fetchClassSpecificData();
-    }, [formData.class_group, modalVisible, isEditing]);
+    }, [formData.class_group, modalVisible]);
 
     const handleClassChange = (classValue: string) => {
+        // When class changes, we clear subject/teacher to force re-selection or re-validation
         setFormData({ ...formData, class_group: classValue, subject: '', teacher_id: '' });
     };
 
@@ -175,12 +190,27 @@ const OnlineClassScreen: React.FC = () => {
     
     const handleOpenModal = (classItem: OnlineClass | null = null) => {
         if (classItem) {
-            setIsEditing(true); setCurrentClass(classItem); setModalClassType(classItem.class_type);
-            setFormData({ title: classItem.title, class_group: classItem.class_group, subject: classItem.subject, teacher_id: classItem.teacher_id, meet_link: classItem.meet_link || '', description: classItem.description || '', topic: classItem.topic || '', });
+            setIsEditing(true); 
+            setCurrentClass(classItem); 
+            setModalClassType(classItem.class_type);
+            setFormData({ 
+                title: classItem.title, 
+                class_group: classItem.class_group, 
+                subject: classItem.subject, 
+                teacher_id: classItem.teacher_id, 
+                meet_link: classItem.meet_link || '', 
+                description: classItem.description || '', 
+                topic: classItem.topic || '', 
+            });
             setDate(new Date(classItem.class_datetime)); 
             setSelectedVideo(null);
         } else {
-            setIsEditing(false); setCurrentClass(null); setFormData(initialFormState); setSelectedVideo(null); setModalClassType('live'); setDate(new Date());
+            setIsEditing(false); 
+            setCurrentClass(null); 
+            setFormData(initialFormState); 
+            setSelectedVideo(null); 
+            setModalClassType('live'); 
+            setDate(new Date());
         }
         setModalVisible(true);
     };
@@ -193,9 +223,12 @@ const OnlineClassScreen: React.FC = () => {
     const handleSave = async () => {
         if (!user) return Alert.alert("Error", "User not found.");
         if (!formData.title) return Alert.alert("Validation Error", "Title is required.");
-        if (!isEditing && (!formData.class_group || !formData.subject || !formData.teacher_id)) {
-            return Alert.alert("Validation Error", "Please fill all required fields.");
+        
+        // --- UPDATED: Validation applies to both Edit and Create now ---
+        if (!formData.class_group || !formData.subject || !formData.teacher_id) {
+            return Alert.alert("Validation Error", "Please fill all required fields (Class, Subject, Teacher).");
         }
+        
         if (modalClassType === 'live' && !formData.meet_link) {
             return Alert.alert("Validation Error", "Meeting Link required.");
         }
@@ -209,13 +242,13 @@ const OnlineClassScreen: React.FC = () => {
         data.append('description', formData.description);
         data.append('topic', formData.topic);
         data.append('class_type', modalClassType);
-
-        if (!isEditing) {
-            data.append('class_group', formData.class_group);
-            data.append('subject', formData.subject);
-            data.append('teacher_id', String(formData.teacher_id));
-            data.append('class_datetime', date.toISOString());
-        }
+        
+        // --- UPDATED: Append these fields for BOTH Create and Edit ---
+        // This ensures if a user edits the Class/Subject/Date, it is sent to backend
+        data.append('class_group', formData.class_group);
+        data.append('subject', formData.subject);
+        data.append('teacher_id', String(formData.teacher_id));
+        data.append('class_datetime', date.toISOString());
 
         if (modalClassType === 'live') {
             data.append('meet_link', formData.meet_link);
@@ -225,6 +258,7 @@ const OnlineClassScreen: React.FC = () => {
 
         try { 
             if (isEditing && currentClass) {
+                // Ensure backend accepts these new fields in PUT request
                 await apiClient.put(`/online-classes/${currentClass.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }); 
                 Alert.alert("Success", "Class updated successfully."); 
             } else {
@@ -334,9 +368,16 @@ const OnlineClassScreen: React.FC = () => {
                                 onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                             />
                             
+                            {/* --- UPDATED: Picker Enabled even in Edit Mode --- */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Class</Text>
                             <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker enabled={!isEditing} selectedValue={formData.class_group} onValueChange={(itemValue) => handleClassChange(itemValue)} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                <Picker 
+                                    enabled={true} 
+                                    selectedValue={formData.class_group} 
+                                    onValueChange={(itemValue) => handleClassChange(itemValue)} 
+                                    dropdownIconColor={COLORS.textMain} 
+                                    style={{color: COLORS.textMain}}
+                                >
                                     <Picker.Item label="-- Select Class --" value="" color={COLORS.textMain} />
                                     {classGroups.map((c, i) => <Picker.Item key={i} label={c} value={c} color={COLORS.textMain} />)}
                                 </Picker>
@@ -344,7 +385,13 @@ const OnlineClassScreen: React.FC = () => {
 
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Subject</Text>
                             <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker enabled={!isEditing} selectedValue={formData.subject} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, subject: itemValue }))} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                <Picker 
+                                    enabled={true} 
+                                    selectedValue={formData.subject} 
+                                    onValueChange={(itemValue) => setFormData(prev => ({ ...prev, subject: itemValue }))} 
+                                    dropdownIconColor={COLORS.textMain} 
+                                    style={{color: COLORS.textMain}}
+                                >
                                     <Picker.Item label="-- Select Subject --" value="" color={COLORS.textMain} />
                                     {subjects.map((s, i) => <Picker.Item key={i} label={s} value={s} color={COLORS.textMain} />)}
                                 </Picker>
@@ -352,17 +399,28 @@ const OnlineClassScreen: React.FC = () => {
 
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Teacher</Text>
                             <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker enabled={!isEditing} selectedValue={String(formData.teacher_id)} onValueChange={(itemValue) => setFormData(prev => ({ ...prev, teacher_id: Number(itemValue) }))} dropdownIconColor={COLORS.textMain} style={{color: COLORS.textMain}}>
+                                <Picker 
+                                    enabled={true} 
+                                    selectedValue={String(formData.teacher_id)} 
+                                    onValueChange={(itemValue) => setFormData(prev => ({ ...prev, teacher_id: Number(itemValue) }))} 
+                                    dropdownIconColor={COLORS.textMain} 
+                                    style={{color: COLORS.textMain}}
+                                >
                                     <Picker.Item label="-- Select Person --" value="" color={COLORS.textMain} />
                                     {teachers.map((t) => <Picker.Item key={t.id} label={t.full_name} value={String(t.id)} color={COLORS.textMain} />)}
                                 </Picker>
                             </View>
                             
+                            {/* --- UPDATED: Date Picker Enabled in Edit Mode --- */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Date & Time</Text>
-                            <TouchableOpacity disabled={isEditing} onPress={() => setPickerMode('date')} style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, justifyContent: 'center', height: 50 }]}>
+                            <TouchableOpacity 
+                                disabled={false} 
+                                onPress={() => setPickerMode('date')} 
+                                style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, justifyContent: 'center', height: 50 }]}
+                            >
                                 <Text style={{ color: COLORS.textMain }}>{formatDateTime(date.toISOString())}</Text>
                             </TouchableOpacity>
-                            {pickerMode && <DateTimePicker value={date} mode={pickerMode} is24Hour={true} display="default" onChange={onPickerChange}/>}
+                            {pickerMode && <DateTimePicker value={date} mode={pickerMode} is24Hour={false} display="default" onChange={onPickerChange}/>}
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Topic</Text>
                             <TextInput 
@@ -454,7 +512,7 @@ const ClassCard = ({ classItem, onEdit, onDelete, onJoinOrWatch, userRole, color
     return (
         <Animatable.View animation="fadeInUp" duration={500}>
             <View style={[styles.card, { backgroundColor: colors.cardBg, shadowColor: colors.border }]}>
-                <View style={[styles.cardHeader, { borderBottomColor: colors.divider }]}>
+                <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
                     <View style={{flex: 1, paddingRight: 8}}>
                         <Text style={[styles.cardTitle, { color: colors.textMain }]}>{classItem.title}</Text>
                         <Text style={[styles.cardSubtitle, { color: colors.textSub }]}>{formatDateTime(classItem.class_datetime)}</Text>
@@ -501,13 +559,29 @@ const InfoRow = ({ icon, text, color, textColor }) => (
     </View>
 );
 
+// --- STYLES ---
 const styles = StyleSheet.create({ 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }, 
     container: { flex: 1 }, 
     listContentContainer: { paddingBottom: 20, paddingHorizontal: 15 }, 
     
     // Header
-    headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
+    headerCard: { 
+        paddingHorizontal: 15, 
+        paddingVertical: 12, 
+        width: '96%', 
+        alignSelf: 'center', 
+        marginTop: 15, 
+        marginBottom: 10, 
+        borderRadius: 12, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        elevation: 3, 
+        shadowOpacity: 0.1, 
+        shadowRadius: 4, 
+        shadowOffset: { width: 0, height: 2 } 
+    },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
@@ -538,7 +612,7 @@ const styles = StyleSheet.create({
     
     // Modal
     modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
-    modalContent: { borderRadius: 12, padding: 20, width: '90%', maxHeight: '85%', elevation: 5 }, 
+    modalContent: { borderRadius: 12, padding: 20, width: width > 600 ? '60%' : '90%', maxHeight: '85%', elevation: 5 }, 
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }, 
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 }, 
     input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 16 }, 

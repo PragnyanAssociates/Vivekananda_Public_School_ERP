@@ -883,9 +883,9 @@ const styles = StyleSheet.create({
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center' },
     backButton: {
-        marginRight: 4,
+        marginRight: 2,
         padding: 5,
-        marginLeft: -3,
+        marginLeft: -10,
     },
     headerIconContainer: {
         borderRadius: 30,
@@ -893,10 +893,10 @@ const styles = StyleSheet.create({
         height: 45,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        marginRight: 10,
     },
     headerTextContainer: { justifyContent: 'center' },
-    headerTitle: { fontSize: 19, fontWeight: 'bold' },
+    headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
     headerActionBtn: {
         padding: 6,
