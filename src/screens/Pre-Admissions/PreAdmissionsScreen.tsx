@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, 
     Modal, ScrollView, TextInput, Platform, Image, LayoutAnimation, UIManager, 
-    Dimensions, SafeAreaView, useColorScheme, StatusBar 
+    Dimensions, SafeAreaView, useColorScheme, StatusBar, KeyboardAvoidingView 
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -11,6 +11,7 @@ import { SERVER_URL } from '../../../apiConfig';
 import apiClient from '../../api/client';
 import { launchImageLibrary, ImagePickerResponse, Asset } from 'react-native-image-picker';
 
+// Enable Layout Animation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -18,6 +19,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
+// Defines colors for Light and Dark modes to ensure visibility on all devices
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -76,7 +78,7 @@ interface PreAdmissionRecord {
     joining_grade: string; 
     address?: string; 
     status: Status;
-    // New Fields
+    // New Fields for Academic History
     school_joined_date?: string;
     school_joined_grade?: string;
     school_outgoing_date?: string;
@@ -86,12 +88,16 @@ interface PreAdmissionRecord {
 }
 
 // --- HELPERS ---
+
+// Formats YYYY-MM-DD to DD/MM/YYYY
 const formatDate = (dateString?: string): string => { 
     if (!dateString) return 'DD/MM/YYYY'; 
     const date = new Date(dateString); 
     if (isNaN(date.getTime())) return 'DD/MM/YYYY';
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); 
 };
+
+// Formats Date object to YYYY-MM-DD for backend storage
 const toYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
 const getCurrentYear = () => new Date().getFullYear();
 
@@ -111,6 +117,7 @@ const StatusPill = ({ status, colors }: { status: Status, colors: any }) => {
     ); 
 };
 
+// Generic Input Field Component
 const InputField = ({ label, value, onChange, kType = "default", colors, multiline = false, placeholder = "", maxLength }: any) => (
     <View style={styles.formRow}>
         <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
@@ -131,6 +138,7 @@ const InputField = ({ label, value, onChange, kType = "default", colors, multili
     </View>
 );
 
+// Date Picker Input Component
 const DateInput = ({ label, dateValue, onPress, colors }: any) => (
     <View style={styles.formRow}>
         <Text style={[styles.label, { color: colors.textSub }]}>{label}</Text>
@@ -153,6 +161,7 @@ const InfoRow = ({ icon, label, value, isMultiLine = false, colors }: any) => (
 
 // --- MODALS ---
 
+// Full screen image viewer
 const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () => void }> = ({ visible, uri, onClose }) => {
     if (!uri || !visible) return null;
     return (
@@ -167,6 +176,7 @@ const ImageEnlargerModal: React.FC<{ visible: boolean, uri: string, onClose: () 
     );
 };
 
+// Year selection modal
 const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedValue: string, onSelect: (year: string) => void, onClose: () => void, colors: any }> = ({ visible, years, selectedValue, onSelect, onClose, colors }) => {
     const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
     return (
@@ -192,7 +202,7 @@ const YearPickerModal: React.FC<{ visible: boolean, years: string[], selectedVal
 }
 
 // --- CARD ITEM ---
-
+// Displays individual student record
 const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, onEdit: any, onDelete: any, isExpanded: boolean, onPress: any, onDpPress: any }> = ({ item, colors, onEdit, onDelete, isExpanded, onPress, onDpPress }) => {
     const imageUri = item.photo_url ? `${SERVER_URL}${item.photo_url}` : undefined;
 
@@ -252,6 +262,7 @@ const PreAdmissionCardItem: React.FC<{ item: PreAdmissionRecord, colors: any, on
 
 // --- MAIN SCREEN ---
 const PreAdmissionsScreen: React.FC = () => {
+    // Detect system theme (Dark/Light)
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
@@ -279,6 +290,7 @@ const PreAdmissionsScreen: React.FC = () => {
     const [enlargeModalVisible, setEnlargeModalVisible] = useState<boolean>(false);
     const [enlargeImageUri, setEnlargeImageUri] = useState<string>('');
     
+    // Fetch data from API
     const fetchData = useCallback(async (isSearch: boolean = false) => {
         if (isSearch) setIsSearching(true); else setLoading(true);
         try {
@@ -287,6 +299,7 @@ const PreAdmissionsScreen: React.FC = () => {
             const records: PreAdmissionRecord[] = response.data;
             setData(records);
 
+            // Extract available years for filter
             const years = records.map((item) => item.submission_date ? new Date(item.submission_date).getFullYear().toString() : null).filter((y): y is string => y !== null);
             const currentYear = getCurrentYear();
             const uniqueYears = Array.from(new Set([...years, (currentYear - 1).toString(), currentYear.toString(), (currentYear + 1).toString()]));
@@ -342,6 +355,7 @@ const PreAdmissionsScreen: React.FC = () => {
         }
 
         // --- 2. Phone No Validation ---
+        // Must be exactly 10 digits, cannot start with 0
         if (formData.phone_no) {
             const phoneRegex = /^[1-9][0-9]{9}$/;
             if (!phoneRegex.test(formData.phone_no)) {
@@ -350,12 +364,13 @@ const PreAdmissionsScreen: React.FC = () => {
         }
 
         // --- 3. Pen No Validation ---
+        // Alphanumeric, 6-20 chars, unique
         if (formData.pen_no) {
             const penRegex = /^[a-zA-Z0-9]{6,20}$/;
             if (!penRegex.test(formData.pen_no)) {
                 return Alert.alert('Invalid Pen No', 'Pen No must be 6-20 alphanumeric characters, no special symbols.');
             }
-            // Uniqueness Check
+            // Uniqueness Check (Client-side simulation, backend should also enforce)
             const duplicatePen = data.find(r => r.pen_no === formData.pen_no && r.id !== (currentItemId || -1));
             if (duplicatePen) {
                 return Alert.alert('Duplicate Pen No', 'This Pen No already exists in the database.');
@@ -363,6 +378,7 @@ const PreAdmissionsScreen: React.FC = () => {
         }
 
         // --- 4. Aadhaar No Validation ---
+        // Exactly 12 digits
         if (formData.aadhar_no) {
             const aadhaarRegex = /^[0-9]{12}$/;
             if (!aadhaarRegex.test(formData.aadhar_no)) {
@@ -371,11 +387,13 @@ const PreAdmissionsScreen: React.FC = () => {
         }
 
         // --- 5. Grade Validations (Joined & Outgoing) ---
+        // CHANGED: Validation now allows Alphanumeric (LKG, UKG) or Numbers.
         const validateGrade = (grade?: string, label?: string) => {
             if (!grade) return true;
-            const num = parseInt(grade, 10);
-            if (isNaN(num) || num < 1 || num > 12) {
-                Alert.alert('Invalid Grade', `${label} must be a number between 1 and 12.`);
+            // Alphanumeric regex: Letters, numbers, spaces, hyphens
+            const regex = /^[a-zA-Z0-9\s-]+$/;
+            if (!regex.test(grade)) {
+                Alert.alert('Invalid Grade', `${label} must be alphanumeric (e.g., LKG, UKG, 1, 10).`);
                 return false;
             }
             return true;
@@ -384,10 +402,17 @@ const PreAdmissionsScreen: React.FC = () => {
         if (!validateGrade(formData.school_joined_grade, 'Joined Grade')) return;
         if (!validateGrade(formData.school_outgoing_grade, 'Outgoing Grade')) return;
 
-        // Compare Grades: Outgoing >= Joined
+        // CHANGED: Comparison Only happens if BOTH are strictly numbers.
+        // If one is "LKG" and other is "1", we skip comparison to prevent errors.
         if (formData.school_joined_grade && formData.school_outgoing_grade) {
-            if (parseInt(formData.school_outgoing_grade) < parseInt(formData.school_joined_grade)) {
-                return Alert.alert('Invalid Grade Sequence', 'Outgoing Grade must be higher than or equal to Joined Grade.');
+            const joinedNum = parseInt(formData.school_joined_grade, 10);
+            const outgoingNum = parseInt(formData.school_outgoing_grade, 10);
+            
+            // Only compare if both parse to valid numbers
+            if (!isNaN(joinedNum) && !isNaN(outgoingNum)) {
+                if (outgoingNum < joinedNum) {
+                    return Alert.alert('Invalid Grade Sequence', 'Outgoing Grade must be higher than or equal to Joined Grade.');
+                }
             }
         }
 
@@ -414,7 +439,7 @@ const PreAdmissionsScreen: React.FC = () => {
         const tcDate = checkDate(formData.tc_issued_date, 'TC Issued Date');
         if (tcDate === false) return;
 
-        // Compare Dates
+        // Compare Dates: Joined <= Outgoing <= TC
         if (joinedDate && outgoingDate) {
             if (outgoingDate < joinedDate) {
                 return Alert.alert('Invalid Date Sequence', 'Outgoing Date cannot be before Joined Date.');
@@ -427,6 +452,7 @@ const PreAdmissionsScreen: React.FC = () => {
         }
 
         // --- 7. TC Number Validation ---
+        // Alphanumeric, 5-20 chars, unique
         if (formData.tc_number) {
             const tcRegex = /^[a-zA-Z0-9]{5,20}$/;
             if (!tcRegex.test(formData.tc_number)) {
@@ -498,6 +524,7 @@ const PreAdmissionsScreen: React.FC = () => {
         ]);
     };
 
+    // Handle Date Picker selection
     const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => { 
         const target = pickerTarget;
         setPickerTarget(null); 
@@ -571,106 +598,176 @@ const PreAdmissionsScreen: React.FC = () => {
             
             {/* MODAL */}
             <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
-                <SafeAreaView style={{flex: 1, backgroundColor: COLORS.background}}>
-                    <ScrollView style={styles.modalContainer} contentContainerStyle={{paddingBottom: 50}}>
-                        <View style={styles.modalHeaderRow}>
-                            <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>{isEditing ? 'Edit Application' : 'New Application'}</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialIcons name="close" size={24} color={COLORS.textMain} /></TouchableOpacity>
-                        </View>
-                        
-                        <View style={styles.imagePickerContainer}>
-                            {selectedImage?.uri || formData.photo_url ? (
-                                <Image source={selectedImage?.uri ? { uri: selectedImage.uri } : { uri: `${SERVER_URL}${formData.photo_url}` }} style={[styles.profileImage, { borderColor: COLORS.primary }]} />
-                            ) : (
-                                <View style={[styles.profileImage, styles.avatarFallback, { borderColor: COLORS.primary }]}><FontAwesome name="user-circle" size={60} color="#9E9E9E" /></View>
-                            )}
-                            <TouchableOpacity style={[styles.imagePickerButton, { backgroundColor: COLORS.primary }]} onPress={handleChoosePhoto}><MaterialIcons name="camera-alt" size={16} color="#fff" /><Text style={styles.imagePickerButtonText}>Photo</Text></TouchableOpacity>
-                        </View>
-                        
-                        {/* --- STUDENT INFO --- */}
-                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Student Details</Text>
-                        <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} placeholder="e.g., 2025-001" />
-                        <InputField label="Student Name*" value={formData.student_name} onChange={(t: string) => setFormData(p => ({...p, student_name: t}))} colors={COLORS} placeholder="e.g., Rahul Kumar" />
-                        
-                        <DateInput label="Date of Birth" dateValue={formData.dob} onPress={() => setPickerTarget('dob')} colors={COLORS} />
-                        
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <InputField label="Student Phone" value={formData.phone_no} onChange={(t: string) => setFormData(p => ({...p, phone_no: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: COLORS.background }}>
+                    <SafeAreaView style={{flex: 1, backgroundColor: COLORS.background}}>
+                        <ScrollView style={styles.modalContainer} contentContainerStyle={{paddingBottom: 50}} showsVerticalScrollIndicator={false}>
+                            <View style={styles.modalHeaderRow}>
+                                <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>{isEditing ? 'Edit Application' : 'New Application'}</Text>
+                                <TouchableOpacity onPress={() => setModalVisible(false)}><MaterialIcons name="close" size={24} color={COLORS.textMain} /></TouchableOpacity>
                             </View>
-                            <View style={styles.halfWidth}>
-                                <InputField label="Pen No" value={formData.pen_no} onChange={(t: string) => setFormData(p => ({...p, pen_no: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Alphanumeric" maxLength={20} />
+                            
+                            <View style={styles.imagePickerContainer}>
+                                {selectedImage?.uri || formData.photo_url ? (
+                                    <Image source={selectedImage?.uri ? { uri: selectedImage.uri } : { uri: `${SERVER_URL}${formData.photo_url}` }} style={[styles.profileImage, { borderColor: COLORS.primary }]} />
+                                ) : (
+                                    <View style={[styles.profileImage, styles.avatarFallback, { borderColor: COLORS.primary }]}><FontAwesome name="user-circle" size={60} color="#9E9E9E" /></View>
+                                )}
+                                <TouchableOpacity style={[styles.imagePickerButton, { backgroundColor: COLORS.primary }]} onPress={handleChoosePhoto}><MaterialIcons name="camera-alt" size={16} color="#fff" /><Text style={styles.imagePickerButtonText}>Photo</Text></TouchableOpacity>
                             </View>
-                        </View>
-                        <InputField label="Aadhar No" value={formData.aadhar_no} onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="12 Digits" maxLength={12} />
-
-                        {/* --- ACADEMIC INFO --- */}
-                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Academic Information</Text>
-                        <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} placeholder="e.g., Class 5" />
-
-                        {/* --- PREVIOUS SCHOOL & TC INFO --- */}
-                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Previous School & TC</Text>
-                        <InputField label="Previous Institute" value={formData.previous_institute} onChange={(t: string) => setFormData(p => ({...p, previous_institute: t}))} colors={COLORS} placeholder="School Name" />
-                        
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <InputField label="Joined Grade" value={formData.school_joined_grade} onChange={(t: string) => setFormData(p => ({...p, school_joined_grade: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="1-12" />
-                            </View>
-                            <View style={styles.halfWidth}>
-                                <InputField label="Outgoing Grade" value={formData.school_outgoing_grade} onChange={(t: string) => setFormData(p => ({...p, school_outgoing_grade: t.replace(/[^0-9]/g, '')}))} kType="numeric" colors={COLORS} placeholder="1-12" />
-                            </View>
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <DateInput label="Joined Date" dateValue={formData.school_joined_date} onPress={() => setPickerTarget('school_joined_date')} colors={COLORS} />
-                            </View>
-                            <View style={styles.halfWidth}>
-                                <DateInput label="Outgoing Date" dateValue={formData.school_outgoing_date} onPress={() => setPickerTarget('school_outgoing_date')} colors={COLORS} />
-                            </View>
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <InputField label="TC Number" value={formData.tc_number} onChange={(t: string) => setFormData(p => ({...p, tc_number: t.replace(/[^a-zA-Z0-9]/g, '')}))} colors={COLORS} placeholder="Unique No" maxLength={20} />
-                            </View>
-                            <View style={styles.halfWidth}>
-                                <DateInput label="TC Issued Date" dateValue={formData.tc_issued_date} onPress={() => setPickerTarget('tc_issued_date')} colors={COLORS} />
-                            </View>
-                        </View>
-
-                        {/* --- PARENT INFO --- */}
-                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Parent Information</Text>
-                        <InputField label="Parent Name" value={formData.parent_name} onChange={(t: string) => setFormData(p => ({...p, parent_name: t}))} colors={COLORS} placeholder="e.g., Ramesh Kumar" />
-                        <InputField label="Parent Phone" value={formData.parent_phone} onChange={(t: string) => setFormData(p => ({...p, parent_phone: t.replace(/[^0-9]/g, '')}))} kType="phone-pad" colors={COLORS} placeholder="10 Digits" maxLength={10} />
-                        
-                        <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} placeholder="e.g., H.No 1-23, Street Name, City" />
-
-                        <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Status</Text>
-                        <View style={styles.statusSelector}>
-                            {(['Pending', 'Approved', 'Rejected'] as Status[]).map(status => (
-                                <TouchableOpacity key={status} onPress={() => setFormData(p => ({...p, status}))} style={[styles.statusButton, { borderColor: COLORS.border }, formData.status === status && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
-                                    <Text style={[styles.statusButtonText, { color: COLORS.textMain }, formData.status === status && { color: '#FFFFFF' }]}>{status}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        
-                        {pickerTarget && (
-                            <DateTimePicker 
-                                value={date} 
-                                mode="date" 
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={onDateChange} 
-                                maximumDate={new Date()} // Prevent Future Dates in Picker
+                            
+                            {/* --- STUDENT INFO --- */}
+                            <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Student Details</Text>
+                            <InputField label="Admission No*" value={formData.admission_no} onChange={(t: string) => setFormData(p => ({...p, admission_no: t}))} colors={COLORS} placeholder="e.g., 2025-001" />
+                            
+                            {/* STRICT NAME VALIDATION: Alphabets Only */}
+                            <InputField 
+                                label="Student Name*" 
+                                value={formData.student_name} 
+                                onChange={(t: string) => setFormData(p => ({...p, student_name: t.replace(/[^a-zA-Z\s]/g, '')}))} 
+                                colors={COLORS} 
+                                placeholder="e.g., Rahul Kumar" 
                             />
-                        )}
-                        
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.border }]} onPress={() => setModalVisible(false)}><Text style={{color: COLORS.textMain}}>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary }]} onPress={handleSave}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity>
-                        </View>
-                    </ScrollView>
-                </SafeAreaView>
+                            
+                            <DateInput label="Date of Birth" dateValue={formData.dob} onPress={() => setPickerTarget('dob')} colors={COLORS} />
+                            
+                            <View style={styles.row}>
+                                <View style={styles.halfWidth}>
+                                    <InputField 
+                                        label="Student Phone" 
+                                        value={formData.phone_no} 
+                                        onChange={(t: string) => setFormData(p => ({...p, phone_no: t.replace(/[^0-9]/g, '')}))} 
+                                        kType="phone-pad" 
+                                        colors={COLORS} 
+                                        placeholder="10 Digits" 
+                                        maxLength={10} 
+                                    />
+                                </View>
+                                <View style={styles.halfWidth}>
+                                    <InputField 
+                                        label="Pen No" 
+                                        value={formData.pen_no} 
+                                        onChange={(t: string) => setFormData(p => ({...p, pen_no: t.replace(/[^a-zA-Z0-9]/g, '')}))} 
+                                        colors={COLORS} 
+                                        placeholder="Alphanumeric" 
+                                        maxLength={20} 
+                                    />
+                                </View>
+                            </View>
+                            <InputField 
+                                label="Aadhar No" 
+                                value={formData.aadhar_no} 
+                                onChange={(t: string) => setFormData(p => ({...p, aadhar_no: t.replace(/[^0-9]/g, '')}))} 
+                                kType="numeric" 
+                                colors={COLORS} 
+                                placeholder="12 Digits" 
+                                maxLength={12} 
+                            />
+
+                            {/* --- ACADEMIC INFO --- */}
+                            <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Academic Information</Text>
+                            <InputField label="Joining Grade*" value={formData.joining_grade} onChange={(t: string) => setFormData(p => ({...p, joining_grade: t}))} colors={COLORS} placeholder="e.g., Class 5" />
+
+                            {/* --- PREVIOUS SCHOOL & TC INFO --- */}
+                            <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Previous School & TC</Text>
+                            <InputField label="Previous Institute" value={formData.previous_institute} onChange={(t: string) => setFormData(p => ({...p, previous_institute: t}))} colors={COLORS} placeholder="School Name" />
+                            
+                            {/* MODIFIED GRADES: Alphanumeric allowed (e.g., LKG, UKG, 1-12) */}
+                            <View style={styles.row}>
+                                <View style={styles.halfWidth}>
+                                    <InputField 
+                                        label="Joined Grade" 
+                                        value={formData.school_joined_grade} 
+                                        onChange={(t: string) => setFormData(p => ({...p, school_joined_grade: t.replace(/[^a-zA-Z0-9\s-]/g, '')}))} 
+                                        colors={COLORS} 
+                                        placeholder="e.g. LKG, 1" 
+                                    />
+                                </View>
+                                <View style={styles.halfWidth}>
+                                    <InputField 
+                                        label="Outgoing Grade" 
+                                        value={formData.school_outgoing_grade} 
+                                        onChange={(t: string) => setFormData(p => ({...p, school_outgoing_grade: t.replace(/[^a-zA-Z0-9\s-]/g, '')}))} 
+                                        colors={COLORS} 
+                                        placeholder="e.g. UKG, 2" 
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.row}>
+                                <View style={styles.halfWidth}>
+                                    <DateInput label="Joined Date" dateValue={formData.school_joined_date} onPress={() => setPickerTarget('school_joined_date')} colors={COLORS} />
+                                </View>
+                                <View style={styles.halfWidth}>
+                                    <DateInput label="Outgoing Date" dateValue={formData.school_outgoing_date} onPress={() => setPickerTarget('school_outgoing_date')} colors={COLORS} />
+                                </View>
+                            </View>
+
+                            <View style={styles.row}>
+                                <View style={styles.halfWidth}>
+                                    <InputField 
+                                        label="TC Number" 
+                                        value={formData.tc_number} 
+                                        onChange={(t: string) => setFormData(p => ({...p, tc_number: t.replace(/[^a-zA-Z0-9]/g, '')}))} 
+                                        colors={COLORS} 
+                                        placeholder="Unique No" 
+                                        maxLength={20} 
+                                    />
+                                </View>
+                                <View style={styles.halfWidth}>
+                                    <DateInput label="TC Issued Date" dateValue={formData.tc_issued_date} onPress={() => setPickerTarget('tc_issued_date')} colors={COLORS} />
+                                </View>
+                            </View>
+
+                            {/* --- PARENT INFO --- */}
+                            <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Parent Information</Text>
+                            
+                            {/* STRICT PARENT NAME VALIDATION: Alphabets Only */}
+                            <InputField 
+                                label="Parent Name" 
+                                value={formData.parent_name} 
+                                onChange={(t: string) => setFormData(p => ({...p, parent_name: t.replace(/[^a-zA-Z\s]/g, '')}))} 
+                                colors={COLORS} 
+                                placeholder="e.g., Ramesh Kumar" 
+                            />
+                            
+                            <InputField 
+                                label="Parent Phone" 
+                                value={formData.parent_phone} 
+                                onChange={(t: string) => setFormData(p => ({...p, parent_phone: t.replace(/[^0-9]/g, '')}))} 
+                                kType="phone-pad" 
+                                colors={COLORS} 
+                                placeholder="10 Digits" 
+                                maxLength={10} 
+                            />
+                            
+                            <InputField label="Address" value={formData.address} onChange={(t: string) => setFormData(p => ({...p, address: t}))} multiline colors={COLORS} placeholder="e.g., H.No 1-23, Street Name, City" />
+
+                            <Text style={[styles.sectionHeader, { color: COLORS.primary, borderColor: COLORS.border }]}>Status</Text>
+                            <View style={styles.statusSelector}>
+                                {(['Pending', 'Approved', 'Rejected'] as Status[]).map(status => (
+                                    <TouchableOpacity key={status} onPress={() => setFormData(p => ({...p, status}))} style={[styles.statusButton, { borderColor: COLORS.border }, formData.status === status && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
+                                        <Text style={[styles.statusButtonText, { color: COLORS.textMain }, formData.status === status && { color: '#FFFFFF' }]}>{status}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            
+                            {pickerTarget && (
+                                <DateTimePicker 
+                                    value={date} 
+                                    mode="date" 
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={onDateChange} 
+                                    maximumDate={new Date()} // Prevent Future Dates in Picker visually
+                                />
+                            )}
+                            
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.border }]} onPress={() => setModalVisible(false)}><Text style={{color: COLORS.textMain}}>Cancel</Text></TouchableOpacity>
+                                <TouchableOpacity style={[styles.modalButton, { backgroundColor: COLORS.primary }]} onPress={handleSave}><Text style={styles.modalButtonText}>Save</Text></TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </SafeAreaView>
+                </KeyboardAvoidingView>
             </Modal>
 
             <YearPickerModal visible={yearPickerVisible} years={availableYears} selectedValue={filterYear} onSelect={(y) => setFilterYear(y)} onClose={() => setYearPickerVisible(false)} colors={COLORS} />

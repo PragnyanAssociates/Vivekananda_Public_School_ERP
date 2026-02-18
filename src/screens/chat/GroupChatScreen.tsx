@@ -37,6 +37,9 @@ import { pick, types } from '@react-native-documents/picker';
 import FileViewer from 'react-native-file-viewer';
 import ImageViewing from 'react-native-image-viewing';
 
+// --- PDF VIEWER IMPORT ---
+import Pdf from 'react-native-pdf'; 
+
 // --- THEME CONFIGURATION ---
 const lightTheme = {
     mode: 'light',
@@ -47,7 +50,8 @@ const lightTheme = {
     myMessageBg: '#dcf8c6',
     otherMessageBg: '#ffffff',
     white: '#ffffff',
-    destructive: '#dc3545',
+    destructive: '#dc3545', // Red for Admin
+    teacherTag: '#1565C0',   // Blue for Teacher
     background: '#F2F5F8', 
     cardBg: '#FFFFFF',
     unreadBannerBg: '#e1f5fe',
@@ -67,7 +71,8 @@ const darkTheme = {
     myMessageBg: '#005c4b', 
     otherMessageBg: '#202c33',
     white: '#ececec',
-    destructive: '#ff6b6b',
+    destructive: '#ff6b6b', // Light Red for Admin
+    teacherTag: '#64B5F6',   // Light Blue for Teacher
     background: '#0b141a', 
     cardBg: '#202c33',
     unreadBannerBg: '#1f2c34',
@@ -133,6 +138,11 @@ const GroupChatScreen = () => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [selectedVideoUri, setSelectedVideoUri] = useState<string | null>(null);
     const [initialScrollDone, setInitialScrollDone] = useState(false);
+
+    // --- PDF Viewer State ---
+    const [pdfViewerVisible, setPdfViewerVisible] = useState(false);
+    const [currentPdfUri, setCurrentPdfUri] = useState<string | null>(null);
+    const [currentPdfName, setCurrentPdfName] = useState('');
 
     const socketRef = useRef<Socket | null>(null);
     const flatListRef = useRef<FlatList | null>(null);
@@ -246,7 +256,9 @@ const GroupChatScreen = () => {
                 reply_to_message_id: replyingTo ? replyingTo.id : null,
                 reply_sender_name: replyingTo ? replyingTo.full_name : null,
                 reply_text: replyingTo ? (replyingTo.message_type === 'text' ? replyingTo.message_text : 'Media') : null,
-                reply_type: replyingTo ? replyingTo.message_type : null
+                reply_type: replyingTo ? replyingTo.message_type : null,
+                // Add role to temp message for immediate UI update
+                role: user.role 
             };
             setMessages(prev => [...prev, tempMessage]);
         }
@@ -265,6 +277,7 @@ const GroupChatScreen = () => {
             id: clientMessageId, clientMessageId, user_id: user.id, full_name: user.fullName, profile_image_url: user.profileImageUrl,
             group_id: group.id, message_type: type, file_url: null, localUri: file.uri, file_name: file.fileName,
             message_text: null, timestamp: getLocalISOString(), status: 'uploading', progress: 0,
+            role: user.role
         };
         setMessages(prev => [...prev, tempMessage]);
         
@@ -287,11 +300,13 @@ const GroupChatScreen = () => {
         }
     };
 
+    // --- FILE OPENING LOGIC (With Internal PDF Check) ---
     const downloadAndOpenFile = async (fileUrl: string, fileName: string, action: 'open' | 'download') => { 
         if (!fileUrl) return Alert.alert("Error", "No file available."); 
         
         const fullUrl = SERVER_URL + fileUrl; 
         const localPath = `${RNFS.DownloadDirectoryPath}/${fileName}`; 
+        const isPdf = fileName.toLowerCase().endsWith('.pdf');
         
         try { 
             if (Platform.OS === 'android') { 
@@ -301,9 +316,17 @@ const GroupChatScreen = () => {
             closeOptionsModal(); 
             const fileExists = await RNFS.exists(localPath); 
             
-            // Logic for 'open' action: If exists, just open. If not, download then open.
+            // Logic for 'open' action
             if (action === 'open') {
                 if (fileExists) {
+                    // Internal PDF View
+                    if (isPdf) {
+                        setCurrentPdfUri(`file://${localPath}`);
+                        setCurrentPdfName(fileName);
+                        setPdfViewerVisible(true);
+                        return;
+                    }
+                    
                     try {
                         await FileViewer.open(localPath);
                     } catch (e) {
@@ -311,10 +334,8 @@ const GroupChatScreen = () => {
                     }
                     return;
                 }
-                // If not exists, fall through to download logic
                 Alert.alert("Opening...", "Downloading file to view...");
             } else {
-                // Action is 'download'
                 if (fileExists) {
                     Alert.alert("Already Downloaded", `File is saved in your Downloads folder.`); 
                     return; 
@@ -332,6 +353,13 @@ const GroupChatScreen = () => {
             await RNFS.downloadFile(options).promise; 
             
             if (action === 'open') {
+                if (isPdf) {
+                    setCurrentPdfUri(`file://${localPath}`);
+                    setCurrentPdfName(fileName);
+                    setPdfViewerVisible(true);
+                    return;
+                }
+
                 try {
                     await FileViewer.open(localPath);
                 } catch(e) {
@@ -355,7 +383,7 @@ const GroupChatScreen = () => {
     const handleSend = () => { if (!newMessage.trim()) return; if (editingMessage) { socketRef.current?.emit('editMessage', { messageId: editingMessage.id, newText: newMessage.trim(), userId: user?.id, groupId: group.id }); setEditingMessage(null); } else { sendMessage('text', newMessage.trim(), null); } setNewMessage(''); Keyboard.dismiss(); };
     const onLongPressMessage = (message: any) => { if (!user || message.status === 'uploading') return; setSelectedMessage(message); setOptionsModalVisible(true); };
     
-    // Updated Handler for Media Press
+    // Media Handler
     const handleMediaPress = (item: any) => { 
         if (item.status === 'uploading' || item.status === 'failed' || !item.file_url) return; 
         
@@ -365,7 +393,6 @@ const GroupChatScreen = () => {
         } else if (item.message_type === 'video') { 
             setSelectedVideoUri(SERVER_URL + item.file_url); 
         } else if (item.message_type === 'file') {
-            // TAP ACTION: OPEN FILE
             downloadAndOpenFile(item.file_url, item.file_name, 'open');
         }
     };
@@ -404,7 +431,7 @@ const GroupChatScreen = () => {
                         <TouchableOpacity 
                             disabled={isUploading} 
                             onPress={() => handleMediaPress(item)} 
-                            onLongPress={() => onLongPressMessage(item)} // Enable Long Press for files
+                            onLongPress={() => onLongPressMessage(item)} 
                             activeOpacity={0.7}
                         >
                             <View style={styles.fileContainer}>
@@ -413,7 +440,7 @@ const GroupChatScreen = () => {
                                 </View>
                                 <View style={styles.fileInfo}>
                                     <Text style={[styles.fileName, {color: theme.text}]} numberOfLines={1}>{item.file_name}</Text>
-                                    <Text style={[styles.fileSubText, {color: theme.muted}]}>PDF • Tap to view</Text>
+                                    <Text style={[styles.fileSubText, {color: theme.muted}]}>Tap to view</Text>
                                 </View>
                                 {renderOverlay()}
                             </View>
@@ -424,6 +451,38 @@ const GroupChatScreen = () => {
             }
         };
 
+        // --- ROLE RENDERING LOGIC ---
+        const renderSenderRole = () => {
+            // Case 1: Student
+            if (item.role === 'student') {
+                if (item.class_group) {
+                    return (
+                        <Text style={[styles.senderDetails, {color: theme.muted}]}> 
+                            ({item.class_group}{item.roll_no ? `, Roll: ${item.roll_no}` : ''})
+                        </Text>
+                    );
+                }
+                return null;
+            }
+            
+            // Case 2: Admin
+            if (item.role === 'admin') {
+                return (
+                    <Text style={[styles.senderDetails, {color: theme.destructive, fontWeight: 'bold'}]}> (Admin)</Text>
+                );
+            }
+
+            // Case 3: Teacher
+            if (item.role === 'teacher') {
+                return (
+                    <Text style={[styles.senderDetails, {color: theme.teacherTag, fontWeight: 'bold'}]}> (Teacher)</Text>
+                );
+            }
+
+            // Case 4: Others (Optional: leave blank or show specific text)
+            return null; 
+        };
+
         return (
             <TouchableOpacity onLongPress={() => onLongPressMessage(item)} activeOpacity={0.9} style={isSelected ? styles.highlightedMessage : null}>
                 <View style={[styles.messageRow, isMyMessage ? styles.myMessageRow : styles.otherMessageRow]}>
@@ -431,15 +490,15 @@ const GroupChatScreen = () => {
                     <View style={[
                         styles.messageContainer, 
                         { backgroundColor: isMyMessage ? theme.myMessageBg : theme.otherMessageBg },
-                        // FIX: Remove padding for files/media so they fill the bubble
                         (item.message_type !== 'text') && { padding: 4, paddingBottom: 4 } 
                     ]}>
                         {!isMyMessage && (
                             <View style={[styles.senderInfo, {paddingHorizontal: item.message_type !== 'text' ? 5 : 0}]}>
                                 <Text style={[styles.senderName, {color: theme.primary}]}>{item.full_name}</Text>
-                                {item.role === 'student' && item.class_group && <Text style={[styles.senderDetails, {color: theme.muted}]}> ({item.class_group}{item.roll_no ? `, Roll: ${item.roll_no}` : ''})</Text>}
+                                {renderSenderRole()}
                             </View>
                         )}
+
                         {item.reply_to_message_id && (
                             <View style={[styles.replyContainer, {backgroundColor: isMyMessage ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)', marginHorizontal: item.message_type !== 'text' ? 5 : 0}]}>
                                 <Text style={[styles.replySenderName, {color: theme.primary}]}>{item.reply_sender_name}</Text>
@@ -478,7 +537,6 @@ const GroupChatScreen = () => {
                             <Text style={[styles.modalOptionText, {color: theme.primary}]}>Reply</Text>
                         </TouchableOpacity>
                         
-                        {/* FIX: DOWNLOAD BUTTON SHOWS FOR FILES NOW */}
                         {isMedia && (
                             <TouchableOpacity style={[styles.modalOption, {borderTopColor: theme.border}]} onPress={() => downloadAndOpenFile(selectedMessage.file_url, selectedMessage.file_name, 'download')}>
                                 <Text style={[styles.modalOptionText, {color: theme.primary}]}>Download</Text>
@@ -504,12 +562,40 @@ const GroupChatScreen = () => {
         ); 
     };
     
+    // --- PDF Modal Component ---
+    const renderPdfViewer = () => (
+        <Modal visible={pdfViewerVisible} onRequestClose={() => setPdfViewerVisible(false)} animationType="slide">
+            <SafeAreaView style={[styles.pdfContainer, {backgroundColor: theme.background}]}>
+                <View style={[styles.pdfHeader, {backgroundColor: theme.cardBg, borderBottomColor: theme.border}]}>
+                    <TouchableOpacity onPress={() => setPdfViewerVisible(false)}>
+                        <Icon name="arrow-left" size={24} color={theme.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.pdfTitle, {color: theme.text}]} numberOfLines={1}>
+                        {currentPdfName}
+                    </Text>
+                </View>
+                {currentPdfUri && (
+                    <Pdf
+                        source={{ uri: currentPdfUri, cache: true }}
+                        style={styles.pdf}
+                        onError={(error) => {
+                            console.log(error);
+                            Alert.alert("Error", "Could not render PDF.");
+                        }}
+                    />
+                )}
+            </SafeAreaView>
+        </Modal>
+    );
+
     const renderVideoPlayer = () => (<Modal visible={!!selectedVideoUri} transparent onRequestClose={() => setSelectedVideoUri(null)}><View style={styles.videoModalContainer}><TouchableOpacity style={styles.videoCloseButton} onPress={() => setSelectedVideoUri(null)}><Icon name="close" size={32} color={theme.white} /></TouchableOpacity>{selectedVideoUri && <Video source={{ uri: selectedVideoUri }} style={styles.fullScreenVideo} controls resizeMode="contain" />}</View></Modal>);
 
     return (
         <SafeAreaView style={{flex: 1, backgroundColor: theme.background}}>
             <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-            {renderOptionsModal()}{renderVideoPlayer()}
+            {renderOptionsModal()}
+            {renderVideoPlayer()}
+            {renderPdfViewer()} 
             <ImageViewing images={imageMessages} imageIndex={currentImageIndex} visible={isImageViewerVisible} onRequestClose={() => setImageViewerVisible(false)} />
             
             <View style={[styles.headerCard, {backgroundColor: theme.cardBg, shadowColor: theme.mode === 'dark' ? '#000' : '#888'}]}>
@@ -604,7 +690,7 @@ const styles = StyleSheet.create({
     otherMessageRow: { justifyContent: 'flex-start' },
     senderDp: { width: 36, height: 36, borderRadius: 18, marginRight: 8, marginBottom: 5, backgroundColor: '#eee' },
     
-    // Updated Message Container: Padding is dynamically adjusted in render for files
+    // Message Container
     messageContainer: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.1, shadowRadius: 1 },
     
     mediaContainer: { backgroundColor: 'transparent' },
@@ -631,7 +717,7 @@ const styles = StyleSheet.create({
     replyText: { fontSize: 13 },
     mediaOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
     
-    // Updated File Container Styles for slimmer look
+    // File Container Styles
     fileContainer: { flexDirection: 'row', alignItems: 'center', padding: 6, width: 230, borderRadius: 10 },
     fileIconWrapper: { padding: 8, borderRadius: 8, marginRight: 10, justifyContent: 'center', alignItems: 'center' },
     fileInfo: { flex: 1, justifyContent: 'center' },
@@ -649,6 +735,12 @@ const styles = StyleSheet.create({
     fullScreenVideo: { width: Dimensions.get('window').width, height: Dimensions.get('window').height },
     videoCloseButton: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20, zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 5 },
     highlightedMessage: { backgroundColor: 'rgba(0, 80, 255, 0.15)', borderRadius: 15 },
+
+    // PDF Viewer Styles
+    pdfContainer: { flex: 1 },
+    pdfHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
+    pdfTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 15, flex: 1 },
+    pdf: { flex: 1, width: Dimensions.get('window').width, height: Dimensions.get('window').height }
 });
 
 export default GroupChatScreen;

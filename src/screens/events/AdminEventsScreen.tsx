@@ -2,6 +2,7 @@
  * File: src/screens/events/AdminEventsScreen.js
  * Purpose: Admin screen to manage School Events (View/Add/Edit/Delete).
  * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * FIX: Timezone correction to prevent +5:30h shift.
  */
 import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { 
@@ -73,21 +74,43 @@ const DarkColors = {
     emptyIcon: '#475569'
 };
 
-// --- HELPER FUNCTIONS ---
+// --- HELPER FUNCTIONS (FIXED TIME FORMATTING) ---
+
 const parseServerDateTime = (dateTimeString) => {
     if (!dateTimeString) return new Date();
-    if (String(dateTimeString).includes('T') && String(dateTimeString).includes('Z')) {
-        return new Date(dateTimeString);
+    
+    // 1. Convert to string to be safe
+    let dateStr = String(dateTimeString);
+
+    // 2. Remove 'Z' (UTC marker) if present to prevent timezone shift (+5:30)
+    if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1);
     }
-    const parts = String(dateTimeString).match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-    if (parts) {
-        return new Date(parts[1], parseInt(parts[2], 10) - 1, parts[3], parts[4], parts[5], parts[6]);
+
+    // 3. Ensure it uses 'T' separator for ISO compatibility
+    // "2026-02-18 13:44:00" -> "2026-02-18T13:44:00"
+    if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T');
     }
-    return new Date();
+
+    // 4. Create Date object (This will now be treated as Local Time)
+    const date = new Date(dateStr);
+
+    // Fallback: If invalid, try regex parsing
+    if (isNaN(date.getTime())) {
+        const parts = String(dateTimeString).match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+        if (parts) {
+            return new Date(parts[1], parseInt(parts[2], 10) - 1, parts[3], parts[4], parts[5], parts[6]);
+        }
+        return new Date();
+    }
+
+    return date;
 };
 
 const formatDateTimeForServer = (date) => {
     const pad = (num) => String(num).padStart(2, '0');
+    // Sends local time numbers (e.g. 13:44)
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 };
 
@@ -141,7 +164,11 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     const fetchData = useCallback(() => {
         setLoading(true);
         apiClient.get('/events/all-for-admin')
-            .then(response => setEvents(response.data))
+            .then(response => {
+                // Sort by date desc (newest first)
+                const sortedEvents = response.data.sort((a, b) => new Date(b.event_datetime) - new Date(a.event_datetime));
+                setEvents(sortedEvents);
+            })
             .catch(err => Alert.alert("Error", "Could not load events."))
             .finally(() => setLoading(false));
     }, []);
@@ -233,7 +260,8 @@ const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
     const date = parseServerDateTime(event.event_datetime);
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = date.getDate();
-    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    // Format Time: 1:44 PM
+    const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
     return (
         <Animatable.View animation="fadeInUp" duration={500} style={styles.cardWrapper}>
@@ -287,6 +315,7 @@ const InfoRow = ({ icon, text, theme }) => (
 // --- FORM COMPONENT ---
 const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const isEditMode = !!eventToEdit;
+    // Ensure initial date is parsed correctly without timezone shifts
     const initialDate = isEditMode ? parseServerDateTime(eventToEdit.event_datetime) : new Date();
 
     const [title, setTitle] = useState(isEditMode ? eventToEdit.title : '');
@@ -389,7 +418,7 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishButtonText}>{isEditMode ? "Save Changes" : "Publish Event"}</Text>}
                 </TouchableOpacity>
                 
-                {/* CHANGED: Added minimumDate={new Date()} to prevent selecting past dates */}
+                {/* Note: Removed minimumDate to allow editing past events if necessary */}
                 {showPicker && (
                     <DateTimePicker 
                         value={date} 
@@ -397,7 +426,6 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                         is24Hour={false} 
                         display="default" 
                         onChange={onChangeDateTime}
-                        minimumDate={new Date()} 
                     />
                 )}
             </ScrollView>

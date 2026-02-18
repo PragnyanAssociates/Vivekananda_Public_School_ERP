@@ -6,12 +6,15 @@
  * 2. Saving marks (even with no changes) switches back to View Mode.
  * 3. Fixed Scrolling Issue on Inputs (pointerEvents wrapper).
  * 4. Responsive Table & Date Formatting (DD/MM/YYYY).
+ * 5. PERFORMANCE FIX: Replaced vertical ScrollView with FlatList.
+ * 6. PERFORMANCE FIX: Added MemoizedRow to prevent re-rendering entire table on keypress.
+ * 7. PERFORMANCE FIX: Added InteractionManager and Loading State for instant Tab Switching.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, TextInput,
     TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Dimensions,
-    useColorScheme, StatusBar, KeyboardAvoidingView, Platform
+    useColorScheme, StatusBar, KeyboardAvoidingView, Platform, FlatList, InteractionManager
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiClient from '../../api/client';
@@ -112,6 +115,158 @@ const getFormattedDate = () => {
     return `${dd}/${mm}/${yyyy}`;
 };
 
+// --- OPTIMIZED ROW COMPONENT (MEMOIZED) ---
+// This component renders a single row. React.memo ensures it only re-renders 
+// if the data for this specific student changes, making typing very fast.
+const StudentRow = React.memo(({ 
+    student, 
+    viewMode, 
+    subjects, 
+    marksData, 
+    attendanceData, 
+    selectedExam, 
+    isOverallView, 
+    canEditScreen, 
+    theme, 
+    updateMarks, 
+    updateAttendance,
+    userRole,
+    userId,
+    teacherAssignments,
+    calculateOverallForSubject,
+    calculateStudentGrandTotal
+}) => {
+    
+    // Calculate totals inside the row to avoid passing them as props
+    const studentGrandTotal = viewMode === 'marks' ? calculateStudentGrandTotal(student.id) : 0;
+
+    return (
+        <View style={[styles.tableRow, { borderBottomColor: theme.tableBorder }]}>
+            
+            {/* Fixed Columns: Roll No & Name */}
+            <View style={[styles.cell, styles.cellRollNo, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                <Text style={[styles.cellText, { color: theme.textMain }]}>{student.roll_no}</Text>
+            </View>
+            <View style={[styles.cell, styles.cellName, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                <Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={2}>{student.full_name}</Text>
+            </View>
+
+            {/* Dynamic Columns: Marks */}
+            {viewMode === 'marks' && subjects.map(subject => {
+                const canUserEditSubject = () => {
+                    if (userRole === 'admin') return true;
+                    const assignment = teacherAssignments.find(a => a.subject === subject);
+                    if (assignment) return assignment.teacher_id === userId;
+                    return false;
+                };
+
+                const isEditable = canEditScreen && canUserEditSubject();
+                
+                // Get value from props
+                const displayValue = isOverallView
+                    ? (calculateOverallForSubject(student.id, subject) || '').toString()
+                    : (marksData?.[subject]?.[selectedExam] || '');
+
+                return (
+                    <View key={subject} style={[styles.cell, styles.cellSubject, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                        <View style={styles.inputWrapper} pointerEvents={isEditable ? 'auto' : 'none'}>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBg, color: theme.textMain },
+                                    !isEditable && { backgroundColor: theme.inputBgDisabled, color: theme.textPlaceholder },
+                                    !canEditScreen && !isOverallView && { color: theme.textMain, fontWeight: '500' },
+                                    isOverallView && { backgroundColor: theme.inputBgDisabled, color: theme.textMain, fontWeight: 'bold' }
+                                ]}
+                                keyboardType="numeric"
+                                maxLength={isOverallView ? 5 : 3}
+                                value={displayValue}
+                                onChangeText={(val) => updateMarks(student.id, subject, selectedExam, val)}
+                                editable={isEditable}
+                                placeholder={isEditable ? "-" : ""}
+                                placeholderTextColor={theme.textPlaceholder}
+                                selectTextOnFocus
+                            />
+                        </View>
+                    </View>
+                );
+            })}
+
+            {/* Dynamic Columns: Marks Totals */}
+            {viewMode === 'marks' && (
+                <>
+                    <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBg, borderRightColor: theme.tableBorder }]}>
+                        <Text style={[styles.cellText, styles.overallText]}>
+                            {subjects.reduce((sum, subject) => {
+                                const marks = isOverallView 
+                                    ? parseFloat(calculateOverallForSubject(student.id, subject)) || 0 
+                                    : parseFloat(marksData?.[subject]?.[selectedExam]) || 0;
+                                return sum + marks;
+                            }, 0) || '-'}
+                        </Text>
+                    </View>
+                    <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBgDark }]}>
+                        <Text style={[styles.cellText, styles.totalText]}>{studentGrandTotal || '-'}</Text>
+                    </View>
+                </>
+            )}
+
+            {/* Dynamic Columns: Attendance */}
+            {viewMode === 'attendance' && MONTHS.map(month => {
+                const att = attendanceData?.[month] || {};
+                return (
+                    <View key={month} style={[styles.cell, styles.cellAttendance, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
+                        <View style={styles.attendanceInputContainer}>
+                            <TextInput
+                                style={[
+                                    styles.attendanceInputBox, 
+                                    { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
+                                ]}
+                                keyboardType="numeric"
+                                maxLength={2}
+                                placeholder="W"
+                                placeholderTextColor={theme.textPlaceholder}
+                                value={att.working_days}
+                                onChangeText={(val) => updateAttendance(student.id, month, 'working_days', val)}
+                                selectTextOnFocus
+                            />
+                            <Text style={[styles.attendanceSeparator, { color: theme.textSub }]}>/</Text>
+                            <TextInput
+                                style={[
+                                    styles.attendanceInputBox, 
+                                    { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
+                                ]}
+                                keyboardType="numeric"
+                                maxLength={2}
+                                placeholder="P"
+                                placeholderTextColor={theme.textPlaceholder}
+                                value={att.present_days}
+                                onChangeText={(val) => updateAttendance(student.id, month, 'present_days', val)}
+                                selectTextOnFocus
+                            />
+                        </View>
+                    </View>
+                );
+            })}
+        </View>
+    );
+}, (prevProps, nextProps) => {
+    // Custom comparison for performance
+    // Only re-render if the relevant data for THIS student has changed
+    const studentId = nextProps.student.id;
+    
+    const marksChanged = prevProps.marksData !== nextProps.marksData;
+    const attendanceChanged = prevProps.attendanceData !== nextProps.attendanceData;
+    const metaChanged = 
+        prevProps.viewMode !== nextProps.viewMode ||
+        prevProps.selectedExam !== nextProps.selectedExam ||
+        prevProps.canEditScreen !== nextProps.canEditScreen ||
+        prevProps.theme !== nextProps.theme;
+
+    return !marksChanged && !attendanceChanged && !metaChanged;
+});
+
+
 const MarksEntryScreen = ({ route, navigation }) => {
     const { classGroup } = route.params;
     const subjects = CLASS_SUBJECTS[classGroup] || [];
@@ -141,21 +296,38 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const [viewMode, setViewMode] = useState('marks');
     const [sortOrder, setSortOrder] = useState('rollno');
 
-    // Default to FALSE (Read-Only) to allow smooth scrolling initially
     const [isEditing, setIsEditing] = useState(false);
     
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
+    // New State for handling heavy tab switching
+    const [isSwitchingTab, setIsSwitchingTab] = useState(false);
+
     useEffect(() => {
         fetchClassData();
     }, [classGroup]);
 
-    // When changing Exam or Mode, Reset to Read-Only (Scroll Mode)
     useEffect(() => {
         setIsEditing(false);
     }, [selectedExam, viewMode]);
+
+    // Handle Tab Switching with InteractionManager
+    const handleTabChange = (mode) => {
+        if (mode === viewMode) return;
+        
+        // 1. Show loader immediately
+        setIsSwitchingTab(true);
+
+        // 2. Change the tab identifier
+        setViewMode(mode);
+
+        // 3. Wait for the tab click animation to finish before rendering the heavy list
+        InteractionManager.runAfterInteractions(() => {
+            setIsSwitchingTab(false);
+        });
+    };
 
     const fetchClassData = async () => {
         setLoading(true);
@@ -166,7 +338,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             setStudents(students);
             setTeacherAssignments(assignments || []);
 
-            // --- 1. Process Marks Data ---
+            // Process Marks Data
             const marksMap = {};
             students.forEach(student => {
                 marksMap[student.id] = {};
@@ -192,7 +364,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             setOriginalMarksData(JSON.parse(JSON.stringify(marksMap)));
 
 
-            // --- 2. Process Attendance Data ---
+            // Process Attendance Data
             const attendanceMap = {};
             students.forEach(student => {
                 attendanceMap[student.id] = {};
@@ -227,8 +399,8 @@ const MarksEntryScreen = ({ route, navigation }) => {
         fetchClassData();
     }, [classGroup]);
 
-    // Update Local State for Marks
-    const updateMarks = (studentId, subject, examType, value) => {
+    // Optimized Update: Updates state, but React.memo in Row prevents full re-render
+    const updateMarks = useCallback((studentId, subject, examType, value) => {
         const cleanValue = value.replace(/[^0-9.]/g, '');
         setMarksData(prev => ({
             ...prev,
@@ -240,11 +412,10 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 }
             }
         }));
-    };
+    }, []);
 
-    // Update Local State for Attendance
-    const updateAttendance = (studentId, month, field, value) => {
-        const cleanValue = value.replace(/[^0-9]/g, ''); // Numbers only
+    const updateAttendance = useCallback((studentId, month, field, value) => {
+        const cleanValue = value.replace(/[^0-9]/g, '');
         setAttendanceData(prev => ({
             ...prev,
             [studentId]: {
@@ -255,9 +426,10 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 }
             }
         }));
-    };
+    }, []);
 
-    const calculateOverallForSubject = (studentId, subject) => {
+    // Moved calculations to useCallback to be stable
+    const calculateOverallForSubject = useCallback((studentId, subject) => {
         const studentMarks = marksData[studentId]?.[subject] || {};
         let total = 0;
         EDITABLE_EXAM_TYPES.forEach(examType => {
@@ -265,16 +437,16 @@ const MarksEntryScreen = ({ route, navigation }) => {
             total += marks;
         });
         return total > 0 ? total : '';
-    };
+    }, [marksData]);
 
-    const calculateStudentGrandTotal = (studentId) => {
+    const calculateStudentGrandTotal = useCallback((studentId) => {
         let total = 0;
         subjects.forEach(subject => {
             const overall = calculateOverallForSubject(studentId, subject);
             total += parseFloat(overall) || 0;
         });
         return total;
-    };
+    }, [marksData, subjects, calculateOverallForSubject]);
 
     const getSortedStudents = () => {
         if (sortOrder === 'rollno') {
@@ -300,7 +472,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
         }
     };
 
-    // --- SMART SAVE MARKS ---
+    // Save Marks Logic (Kept same as provided)
     const saveMarks = async () => {
         setSaving(true);
         const marksPayload = [];
@@ -345,7 +517,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
         if (marksPayload.length === 0) {
             Alert.alert("No Changes", "You haven't made any changes to save.");
             setSaving(false);
-            setIsEditing(false); // Return to view mode even if no changes
+            setIsEditing(false);
             return;
         }
 
@@ -353,7 +525,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             await apiClient.post('/reports/marks/bulk', { marksPayload });
             setOriginalMarksData(JSON.parse(JSON.stringify(marksData)));
             Alert.alert('Success', 'Marks saved successfully!');
-            setIsEditing(false); // Return to View Mode on success
+            setIsEditing(false);
         } catch (error) {
             console.error('Error saving marks:', error);
             const errMsg = error.response?.data?.message || 'Failed to save marks. Check internet connection.';
@@ -363,7 +535,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
         }
     };
 
-    // --- SMART SAVE ATTENDANCE ---
+    // Save Attendance Logic
     const saveAttendance = async () => {
         setSaving(true);
         const attendancePayload = [];
@@ -408,6 +580,31 @@ const MarksEntryScreen = ({ route, navigation }) => {
         }
     };
 
+    const renderItem = useCallback(({ item }) => (
+        <StudentRow 
+            student={item}
+            viewMode={viewMode}
+            subjects={subjects}
+            marksData={marksData[item.id]} // Pass specific student data
+            attendanceData={attendanceData[item.id]} // Pass specific student data
+            selectedExam={selectedExam}
+            isOverallView={isOverallView}
+            canEditScreen={canEditScreen}
+            theme={theme}
+            updateMarks={updateMarks}
+            updateAttendance={updateAttendance}
+            userRole={userRole}
+            userId={userId}
+            teacherAssignments={teacherAssignments}
+            calculateOverallForSubject={calculateOverallForSubject}
+            calculateStudentGrandTotal={calculateStudentGrandTotal}
+        />
+    ), [
+        viewMode, subjects, marksData, attendanceData, selectedExam, 
+        isOverallView, canEditScreen, theme, updateMarks, updateAttendance, 
+        userRole, userId, teacherAssignments
+    ]);
+
     if (loading) {
         return <View style={[styles.loaderContainer, { backgroundColor: theme.background }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
     }
@@ -415,7 +612,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
     const sortedStudents = getSortedStudents();
     const isOverallView = selectedExam === 'Overall';
     const canEditScreen = !isOverallView && isEditing;
-    const formattedDate = getFormattedDate(); // Date format DD/MM/YYYY
+    const formattedDate = getFormattedDate();
 
     return (
         <KeyboardAvoidingView 
@@ -448,15 +645,21 @@ const MarksEntryScreen = ({ route, navigation }) => {
 
             {/* Mode Toggle Tabs */}
             <View style={[styles.tabContainer, { backgroundColor: theme.background }]}>
-                <TouchableOpacity style={[styles.tabButton, viewMode === 'marks' && { borderBottomColor: theme.primary }]} onPress={() => setViewMode('marks')}>
+                <TouchableOpacity 
+                    style={[styles.tabButton, viewMode === 'marks' && { borderBottomColor: theme.primary }]} 
+                    onPress={() => handleTabChange('marks')}
+                >
                     <Text style={[styles.tabText, { color: viewMode === 'marks' ? theme.primary : theme.textSub }]}>Marks Entry</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tabButton, viewMode === 'attendance' && { borderBottomColor: theme.primary }]} onPress={() => setViewMode('attendance')}>
+                <TouchableOpacity 
+                    style={[styles.tabButton, viewMode === 'attendance' && { borderBottomColor: theme.primary }]} 
+                    onPress={() => handleTabChange('attendance')}
+                >
                     <Text style={[styles.tabText, { color: viewMode === 'attendance' ? theme.primary : theme.textSub }]}>Attendance</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Filters for Marks (Visible only in Marks Mode) */}
+            {/* Filters */}
             {viewMode === 'marks' && (
                 <View style={styles.filterContainer}>
                     <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
@@ -484,186 +687,75 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 </View>
             )}
 
-            {/* --- MAIN CONTENT AREA: BI-DIRECTIONAL SCROLL WRAPPER --- */}
+            {/* --- MAIN CONTENT: OPTIMIZED SCROLLING WITH FLATLIST --- */}
             <View style={{ flex: 1, width: '100%' }}>
                 
-                {/* 1. VERTICAL SCROLL (Master) */}
+                {/* Horizontal Scroll (Wraps the whole table including header and list) */}
                 <ScrollView 
-                    style={styles.verticalScroll} 
-                    contentContainerStyle={styles.verticalScrollContent}
-                    keyboardShouldPersistTaps="handled"
-                    nestedScrollEnabled={true}
-                    refreshControl={viewMode === 'attendance' ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} /> : null}
+                    horizontal={true} 
+                    style={styles.horizontalScroll}
+                    contentContainerStyle={styles.horizontalScrollContent}
+                    showsHorizontalScrollIndicator={true}
                 >
-                    {/* 2. HORIZONTAL SCROLL (Slave) - Wraps the Table */}
-                    <ScrollView 
-                        horizontal={true} 
-                        style={styles.horizontalScroll}
-                        contentContainerStyle={styles.horizontalScrollContent}
-                        showsHorizontalScrollIndicator={true}
-                        persistentScrollbar={true}
-                        nestedScrollEnabled={true}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Table Wrapper ensures minimum width matches screen width */}
-                        <View style={styles.tableWrapper}>
-
-                            {/* --- TABLE HEADER --- */}
-                            <View style={[styles.tableRow, styles.headerRow, { backgroundColor: theme.tableHeaderBg }]}>
-                                <View style={[styles.cellHeader, styles.cellRollNo, { borderRightColor: theme.background }]}>
-                                    <Text style={styles.headerText}>Roll</Text>
-                                </View>
-                                <View style={[styles.cellHeader, styles.cellName, { borderRightColor: theme.background }]}>
-                                    <Text style={styles.headerText}>Name</Text>
-                                </View>
-
-                                {viewMode === 'marks' ? (
-                                    <>
-                                        {subjects.map(subject => (
-                                            <View key={subject} style={[styles.cellHeader, styles.cellSubject, { borderRightColor: theme.background }]}>
-                                                <Text style={styles.headerText}>{subject}</Text>
-                                            </View>
-                                        ))}
-                                        <View style={[styles.cellHeader, styles.cellTotal, { borderRightColor: theme.background }]}>
-                                            <Text style={styles.headerText}>Sub Tot</Text>
-                                        </View>
-                                        <View style={[styles.cellHeader, styles.cellTotal]}>
-                                            <Text style={styles.headerText}>Grand Total</Text>
-                                        </View>
-                                    </>
-                                ) : (
-                                    <>
-                                        {MONTHS.map(month => (
-                                            <View key={month} style={[styles.cellHeader, styles.cellAttendance, { borderRightColor: theme.background }]}>
-                                                <Text style={styles.headerText}>{month.substring(0, 3)}</Text>
-                                                <Text style={styles.subHeaderText}>(Wrk / Pre)</Text>
-                                            </View>
-                                        ))}
-                                    </>
-                                )}
+                    <View style={styles.tableWrapper}>
+                        {/* 1. TABLE HEADER */}
+                        <View style={[styles.tableRow, styles.headerRow, { backgroundColor: theme.tableHeaderBg }]}>
+                            <View style={[styles.cellHeader, styles.cellRollNo, { borderRightColor: theme.background }]}>
+                                <Text style={styles.headerText}>Roll</Text>
+                            </View>
+                            <View style={[styles.cellHeader, styles.cellName, { borderRightColor: theme.background }]}>
+                                <Text style={styles.headerText}>Name</Text>
                             </View>
 
-                            {/* --- TABLE BODY (DATA ROWS) --- */}
-                            {sortedStudents.map(student => {
-                                const studentGrandTotal = viewMode === 'marks' ? calculateStudentGrandTotal(student.id) : 0;
-                                
-                                return (
-                                    <View key={student.id} style={[styles.tableRow, { borderBottomColor: theme.tableBorder }]}>
-                                        
-                                        {/* Fixed Columns: Roll No & Name */}
-                                        <View style={[styles.cell, styles.cellRollNo, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
-                                            <Text style={[styles.cellText, { color: theme.textMain }]}>{student.roll_no}</Text>
+                            {viewMode === 'marks' ? (
+                                <>
+                                    {subjects.map(subject => (
+                                        <View key={subject} style={[styles.cellHeader, styles.cellSubject, { borderRightColor: theme.background }]}>
+                                            <Text style={styles.headerText}>{subject}</Text>
                                         </View>
-                                        <View style={[styles.cell, styles.cellName, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
-                                            <Text style={[styles.cellText, { color: theme.textMain }]} numberOfLines={2}>{student.full_name}</Text>
-                                        </View>
-
-                                        {/* Dynamic Columns: Marks */}
-                                        {viewMode === 'marks' && subjects.map(subject => {
-                                            const canUserEditSubject = () => {
-                                                if (userRole === 'admin') return true;
-                                                const assignment = teacherAssignments.find(a => a.subject === subject);
-                                                if (assignment) return assignment.teacher_id === userId;
-                                                return false;
-                                            };
-
-                                            // Only true if Global Edit Mode is ON AND user has permission
-                                            const isEditable = canEditScreen && canUserEditSubject();
-                                            
-                                            const displayValue = isOverallView
-                                                ? (calculateOverallForSubject(student.id, subject) || '').toString()
-                                                : (marksData[student.id]?.[subject]?.[selectedExam] || '');
-
-                                            return (
-                                                <View key={subject} style={[styles.cell, styles.cellSubject, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
-                                                    {/* 
-                                                        POINTER EVENTS FIX:
-                                                        When NOT editing (View Mode), disable touches on this wrapper.
-                                                        This passes touches through to the ScrollView, ensuring smooth scrolling.
-                                                    */}
-                                                    <View style={styles.inputWrapper} pointerEvents={isEditable ? 'auto' : 'none'}>
-                                                        <TextInput
-                                                            style={[
-                                                                styles.input,
-                                                                { backgroundColor: theme.inputBg, color: theme.textMain },
-                                                                !isEditable && { backgroundColor: theme.inputBgDisabled, color: theme.textPlaceholder },
-                                                                // If in View Mode (Edit button visible), show text as bold/darker for readability
-                                                                !isEditing && !isOverallView && { color: theme.textMain, fontWeight: '500' },
-                                                                isOverallView && { backgroundColor: theme.inputBgDisabled, color: theme.textMain, fontWeight: 'bold' }
-                                                            ]}
-                                                            keyboardType="numeric"
-                                                            maxLength={isOverallView ? 5 : 3}
-                                                            value={displayValue}
-                                                            onChangeText={(val) => updateMarks(student.id, subject, selectedExam, val)}
-                                                            editable={isEditable}
-                                                            placeholder={isEditable ? "-" : ""}
-                                                            placeholderTextColor={theme.textPlaceholder}
-                                                            selectTextOnFocus
-                                                        />
-                                                    </View>
-                                                </View>
-                                            );
-                                        })}
-
-                                        {/* Dynamic Columns: Marks Totals */}
-                                        {viewMode === 'marks' && (
-                                            <>
-                                                <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBg, borderRightColor: theme.tableBorder }]}>
-                                                    <Text style={[styles.cellText, styles.overallText]}>
-                                                        {subjects.reduce((sum, subject) => {
-                                                            const marks = isOverallView ? parseFloat(calculateOverallForSubject(student.id, subject)) || 0 : parseFloat(marksData[student.id]?.[subject]?.[selectedExam]) || 0;
-                                                            return sum + marks;
-                                                        }, 0) || '-'}
-                                                    </Text>
-                                                </View>
-                                                <View style={[styles.cell, styles.cellTotal, { backgroundColor: theme.successBgDark }]}>
-                                                    <Text style={[styles.cellText, styles.totalText]}>{studentGrandTotal || '-'}</Text>
-                                                </View>
-                                            </>
-                                        )}
-
-                                        {/* Dynamic Columns: Attendance */}
-                                        {viewMode === 'attendance' && MONTHS.map(month => {
-                                            const att = attendanceData[student.id]?.[month] || {};
-                                            return (
-                                                <View key={month} style={[styles.cell, styles.cellAttendance, { backgroundColor: theme.cardBg, borderRightColor: theme.tableBorder }]}>
-                                                    <View style={styles.attendanceInputContainer}>
-                                                        <TextInput
-                                                            style={[
-                                                                styles.attendanceInputBox, 
-                                                                { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
-                                                            ]}
-                                                            keyboardType="numeric"
-                                                            maxLength={2}
-                                                            placeholder="W"
-                                                            placeholderTextColor={theme.textPlaceholder}
-                                                            value={att.working_days}
-                                                            onChangeText={(val) => updateAttendance(student.id, month, 'working_days', val)}
-                                                            selectTextOnFocus
-                                                        />
-                                                        <Text style={[styles.attendanceSeparator, { color: theme.textSub }]}>/</Text>
-                                                        <TextInput
-                                                            style={[
-                                                                styles.attendanceInputBox, 
-                                                                { backgroundColor: theme.inputBg, color: theme.textMain, borderColor: theme.inputBorder }
-                                                            ]}
-                                                            keyboardType="numeric"
-                                                            maxLength={2}
-                                                            placeholder="P"
-                                                            placeholderTextColor={theme.textPlaceholder}
-                                                            value={att.present_days}
-                                                            onChangeText={(val) => updateAttendance(student.id, month, 'present_days', val)}
-                                                            selectTextOnFocus
-                                                        />
-                                                    </View>
-                                                </View>
-                                            );
-                                        })}
+                                    ))}
+                                    <View style={[styles.cellHeader, styles.cellTotal, { borderRightColor: theme.background }]}>
+                                        <Text style={styles.headerText}>Sub Tot</Text>
                                     </View>
-                                );
-                            })}
+                                    <View style={[styles.cellHeader, styles.cellTotal]}>
+                                        <Text style={styles.headerText}>Grand Total</Text>
+                                    </View>
+                                </>
+                            ) : (
+                                <>
+                                    {MONTHS.map(month => (
+                                        <View key={month} style={[styles.cellHeader, styles.cellAttendance, { borderRightColor: theme.background }]}>
+                                            <Text style={styles.headerText}>{month.substring(0, 3)}</Text>
+                                            <Text style={styles.subHeaderText}>(Wrk / Pre)</Text>
+                                        </View>
+                                    ))}
+                                </>
+                            )}
                         </View>
-                    </ScrollView>
+
+                        {/* 2. TABLE BODY (FLATLIST FOR VERTICAL SCROLLING) */}
+                        {isSwitchingTab ? (
+                            <View style={[styles.loaderContainer, { height: 200 }]}>
+                                <ActivityIndicator size="large" color={theme.primary} />
+                                <Text style={{ marginTop: 10, color: theme.textSub }}>Loading table...</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                key={viewMode} // Forces fresh render when switching tabs
+                                data={sortedStudents}
+                                renderItem={renderItem}
+                                keyExtractor={item => item.id.toString()}
+                                // Render fewer items initially for Attendance to speed up mount
+                                initialNumToRender={viewMode === 'attendance' ? 6 : 12} 
+                                maxToRenderPerBatch={viewMode === 'attendance' ? 5 : 10}
+                                windowSize={5} 
+                                removeClippedSubviews={true} 
+                                contentContainerStyle={{ paddingBottom: 80 }}
+                                refreshControl={viewMode === 'attendance' ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} /> : null}
+                                keyboardShouldPersistTaps="handled"
+                            />
+                        )}
+                    </View>
                 </ScrollView>
             </View>
 
@@ -695,14 +787,6 @@ const styles = StyleSheet.create({
     loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
     // --- SCROLL CONTAINERS ---
-    verticalScroll: { 
-        flex: 1, 
-        width: '100%',
-    },
-    verticalScrollContent: {
-        flexGrow: 1,
-        paddingBottom: 80, // Space for the save button
-    },
     horizontalScroll: {
         width: '100%',
     },
@@ -746,7 +830,7 @@ const styles = StyleSheet.create({
 
     // --- TABLE STRUCTURE ---
     tableWrapper: { 
-        minWidth: width, // Ensures table spans at least full screen width
+        minWidth: width, 
         paddingHorizontal: 10,
     },
     tableRow: { 
@@ -777,7 +861,7 @@ const styles = StyleSheet.create({
 
     // RESPONSIVE COLUMN WIDTHS
     cellRollNo: { width: 50 },
-    cellName: { width: 140 }, // Fixed width for name to keep it readable
+    cellName: { width: 140 },
     cellSubject: { width: 75 },
     cellTotal: { width: 75 },
     cellAttendance: { width: 130 },
@@ -832,9 +916,10 @@ const styles = StyleSheet.create({
 
     // ACTION BUTTON CONTAINER
     actionButtonContainer: {
+        position: 'absolute',
+        bottom: 20,
         width: '100%',
         alignItems: 'center',
-        paddingBottom: 20,
     },
     saveButton: { width: '90%', padding: 14, borderRadius: 25, alignItems: 'center', elevation: 3 },
     saveButtonDisabled: { opacity: 0.6 },

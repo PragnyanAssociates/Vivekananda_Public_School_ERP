@@ -9,6 +9,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
 import apiClient from '../api/client';
 
+// --- NEW IMPORT: DatePicker Library ---
+// Ensure you have installed: npm install @react-native-community/datetimepicker
+import DateTimePicker from '@react-native-community/datetimepicker';
+
 // Enable Layout Animation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -93,6 +97,10 @@ const AdminLM = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [currentSubjectInput, setCurrentSubjectInput] = useState('');
+
+  // --- NEW STATE: Date Picker State ---
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeDateField, setActiveDateField] = useState<string | null>(null);
 
   // List State
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
@@ -219,6 +227,57 @@ const AdminLM = () => {
     }
 
     return { valid: true, msg: '' };
+  };
+
+  // --- NEW HELPERS: CALENDAR LOGIC ---
+  
+  // 1. Convert "DD/MM/YYYY" string to JS Date object for the Picker
+  const getDateObject = (dateString: string) => {
+    if (!dateString) return new Date();
+    const parts = dateString.split('/');
+    if (parts.length === 3) {
+      // parts[0] = Day, parts[1] = Month, parts[2] = Year
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // JS months are 0-11
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+    return new Date();
+  };
+
+  // 2. Handle Date Selection
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    // On Android, dismissing the picker sends event.type = 'dismissed'
+    if (event.type === 'dismissed') {
+      setShowDatePicker(false);
+      setActiveDateField(null);
+      return;
+    }
+
+    // If on Android, hide immediately. On iOS, you might keep it open (or hide).
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+
+    if (selectedDate && activeDateField) {
+      const day = selectedDate.getDate().toString().padStart(2, '0');
+      const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
+      const year = selectedDate.getFullYear();
+      
+      const formattedDate = `${day}/${month}/${year}`;
+      setFormData({ ...formData, [activeDateField]: formattedDate });
+    }
+
+    // Cleanup active field on Android close
+    if (Platform.OS === 'android') {
+      setActiveDateField(null);
+    }
+  };
+
+  // 3. Trigger Picker
+  const showDatepicker = (fieldName: string) => {
+    setActiveDateField(fieldName);
+    setShowDatePicker(true);
   };
 
   // --- INPUT SANITIZATION LOGIC ---
@@ -810,30 +869,45 @@ const AdminLM = () => {
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>PEN No.</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="PEN Number" placeholderTextColor={COLORS.iconGrey} value={formData.pen_no} onChangeText={(val) => validateInput('pen_no', val)} />
                   
+                  {/* --- UPDATED: Admission Date with Calendar (Student) --- */}
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Admission Date</Text>
-                  <TextInput 
-                    style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
-                    placeholder="DD/MM/YYYY" 
-                    placeholderTextColor={COLORS.iconGrey} 
-                    value={formData.admission_date} 
-                    onChangeText={(val) => validateInput('admission_date', val)}
-                    keyboardType="numeric" 
-                  />
+                  <TouchableOpacity 
+                    onPress={() => showDatepicker('admission_date')}
+                    style={[styles.datePickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                  >
+                    <TextInput 
+                        style={[styles.dateInputText, { color: COLORS.textMain }]} 
+                        placeholder="DD/MM/YYYY" 
+                        placeholderTextColor={COLORS.iconGrey} 
+                        value={formData.admission_date} 
+                        editable={false}
+                        pointerEvents="none"
+                    />
+                    <Icon name="event" size={22} color={COLORS.iconGrey} style={styles.dateIcon} />
+                  </TouchableOpacity>
+
                 </>
               ) : (
                 <>
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
 
+                  {/* --- UPDATED: Joining Date with Calendar (Teacher/Others) --- */}
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Joining Date</Text>
-                  <TextInput 
-                    style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} 
-                    placeholder="DD/MM/YYYY" 
-                    placeholderTextColor={COLORS.iconGrey} 
-                    value={formData.joining_date} 
-                    onChangeText={(val) => validateInput('joining_date', val)} 
-                    keyboardType="numeric"
-                  />
+                  <TouchableOpacity 
+                    onPress={() => showDatepicker('joining_date')}
+                    style={[styles.datePickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                  >
+                    <TextInput 
+                        style={[styles.dateInputText, { color: COLORS.textMain }]} 
+                        placeholder="DD/MM/YYYY" 
+                        placeholderTextColor={COLORS.iconGrey} 
+                        value={formData.joining_date} 
+                        editable={false}
+                        pointerEvents="none"
+                    />
+                    <Icon name="event" size={22} color={COLORS.iconGrey} style={styles.dateIcon} />
+                  </TouchableOpacity>
 
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Previous Salary</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Amount" placeholderTextColor={COLORS.iconGrey} value={formData.previous_salary} onChangeText={(val) => validateInput('previous_salary', val)} keyboardType="numeric" />
@@ -857,6 +931,17 @@ const AdminLM = () => {
             </ScrollView>
           </Animatable.View>
         </KeyboardAvoidingView>
+
+        {/* --- NEW COMPONENT: Date Picker Modal --- */}
+        {showDatePicker && (
+            <DateTimePicker
+                value={getDateObject(formData[activeDateField!])}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onDateChange}
+                maximumDate={new Date()} // Prevent future dates
+            />
+        )}
       </Modal>
     </SafeAreaView>
   );
@@ -1134,6 +1219,24 @@ const styles = StyleSheet.create({
   },
   passwordInput: { flex: 1, paddingHorizontal: 15, paddingVertical: 12, fontSize: 15 },
   eyeIcon: { padding: 10 },
+  
+  // --- New Date Picker Styles ---
+  datePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 15,
+  },
+  dateInputText: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  dateIcon: {
+    padding: 10,
+  },
 
   pickerWrapper: {
     borderRadius: 8, borderWidth: 1,

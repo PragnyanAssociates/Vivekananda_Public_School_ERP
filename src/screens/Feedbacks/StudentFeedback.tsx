@@ -88,6 +88,9 @@ const AnimatedBar = ({ percentage, rating, label, roll, color, colors }) => {
         outputRange: ['0%', `${percentage}%`]
     });
 
+    // --- UPDATED: Show up to 8 chars instead of just splitting by space ---
+    const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
+
     return (
         <View style={styles.barWrapper}>
             <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{Math.round(percentage)}%</Text>
@@ -102,7 +105,7 @@ const AnimatedBar = ({ percentage, rating, label, roll, color, colors }) => {
             </Text>
 
             <Text style={[styles.barLabelBottom, { color: colors.textMain }]} numberOfLines={1}>
-                {label.split(' ')[0]} 
+                {displayLabel} 
             </Text>
             
             <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>

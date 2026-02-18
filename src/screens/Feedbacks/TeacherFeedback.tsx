@@ -20,7 +20,7 @@ const LightColors = {
   textSub: '#546E7A',
   border: '#CFD8DC',
   inputBg: '#FAFAFA',
-  success: '#10b981', // Updated from reference for feedback specific green
+  success: '#10b981', 
   danger: '#ef4444',
   warning: '#FFC107',
   blue: '#3b82f6',
@@ -105,6 +105,9 @@ const AnimatedBar = ({ percentage, rating, label, color, colors }: any) => {
     outputRange: ['0%', `${percentage}%`]
   });
 
+  // --- UPDATED: Truncate logic to show more than just initial "G" ---
+  const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
+
   return (
     <View style={styles.barWrapper}>
       <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{Math.round(percentage)}%</Text>
@@ -112,7 +115,7 @@ const AnimatedBar = ({ percentage, rating, label, color, colors }: any) => {
         <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
       </View>
       <Text style={[styles.barLabelBottom, { color: colors.textSub }]} numberOfLines={1}>
-        {label.split(' ')[0]}
+        {displayLabel}
       </Text>
       <View style={{flexDirection:'row', alignItems:'center', marginTop:2}}>
          <Text style={{fontSize:10, fontWeight:'bold', color: colors.textSub}}>{rating}</Text>
@@ -299,12 +302,14 @@ const TeacherFeedback = () => {
       const res = await apiClient.get('/feedback/classes');
       setAllClasses(res.data);
       if (res.data.length > 0) {
+        // Default to first class if available
         const defaultClass = res.data.includes("Class 10") ? "Class 10" : res.data[0];
         setSelectedClass(defaultClass);
       }
     } catch (e) { console.error(e); }
   };
 
+  // --- REVERTED: Standard logic for specific classes (All Classes removed from main screen) ---
   useEffect(() => {
     if (user?.role === 'admin' && selectedClass) {
       const loadTeachers = async () => {
@@ -326,6 +331,7 @@ const TeacherFeedback = () => {
     }
   }, [selectedClass, user]);
 
+  // --- REVERTED: Standard review logic ---
   useEffect(() => {
     if (user?.role === 'admin' && selectedClass && selectedTeacherId) {
       const loadReviews = async () => {
@@ -526,10 +532,12 @@ const TeacherFeedback = () => {
                 style={[styles.picker, { color: colors.textMain }]}
                 dropdownIconColor={colors.textSub}
               >
+                {/* --- UPDATED: Removed "All Classes" from here --- */}
                 {allClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
               </Picker>
             </View>
             
+            {/* Show Teacher Picker only if valid class selected */}
             {selectedClass !== '' && (
               <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.cardBg }]}>
                 <Picker
@@ -606,7 +614,7 @@ const TeacherFeedback = () => {
                       {matrixData.teachers.map((t) => (
                         <View key={t.id} style={{width: TEACHER_COL_WIDTH, justifyContent:'center', alignItems:'center', paddingHorizontal: 2}}>
                           <Text style={[styles.th, { textAlign: 'center', color: isDark ? '#fff' : '#4338ca' }]} numberOfLines={2}>
-                            {t.full_name.split(' ')[0]}
+                            {t.full_name.length > 8 ? t.full_name.substring(0, 8) + '...' : t.full_name}
                           </Text>
                         </View>
                       ))}
