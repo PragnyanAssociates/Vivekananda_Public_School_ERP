@@ -5,6 +5,7 @@
  * - Fully Responsive
  * - Fixes 500 Error by sending ISO Date
  * - DD/MM/YYYY Format Display
+ * - FIX ADDED: Added Lab Type Picker to satisfy DB 'NOT NULL' constraint.
  */
 
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
@@ -205,7 +206,7 @@ const TeacherAdminLabsScreen = () => {
             setFormData({ 
                 title: lab.title, 
                 subject: lab.subject, 
-                lab_type: lab.lab_type, 
+                lab_type: lab.lab_type || '', // Ensure it's not null
                 description: lab.description, 
                 access_url: lab.access_url || '',
                 topic: lab.topic || '',
@@ -224,8 +225,9 @@ const TeacherAdminLabsScreen = () => {
     };
 
     const handleSave = async () => {
-        if (!formData.title || !formData.description || !formData.subject) {
-            return Alert.alert("Validation Error", "Title, Subject, and Description are required.");
+        // --- FIX: Validation added for lab_type ---
+        if (!formData.title || !formData.description || !formData.subject || !formData.lab_type) {
+            return Alert.alert("Validation Error", "Title, Subject, Lab Type, and Description are required.");
         }
         
         setIsSaving(true);
@@ -233,6 +235,7 @@ const TeacherAdminLabsScreen = () => {
         Object.keys(formData).forEach(key => {
             // @ts-ignore
             const value = formData[key];
+            // Ensure empty strings are not ignored if they are required, but for FormData usually we append present values
             if (value) { data.append(key, value); }
         });
 
@@ -398,6 +401,24 @@ const TeacherAdminLabsScreen = () => {
                                 value={formData.subject} 
                                 onChangeText={t => setFormData({...formData, subject: t})} 
                             />
+
+                            {/* --- FIX: Added Lab Type Picker here --- */}
+                            <Text style={[styles.label, { color: theme.textSub }]}>Lab Type*</Text>
+                            <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
+                                <Picker 
+                                    selectedValue={formData.lab_type} 
+                                    onValueChange={(itemValue) => setFormData({...formData, lab_type: itemValue})}
+                                    style={{ color: theme.textMain }}
+                                    dropdownIconColor={theme.textMain}
+                                >
+                                    <Picker.Item label="-- Select Type --" value="" color={theme.textSub}/>
+                                    <Picker.Item label="Video / Lecture" value="Video" color={theme.textMain}/>
+                                    <Picker.Item label="Simulation" value="Simulation" color={theme.textMain}/>
+                                    <Picker.Item label="PDF / Document" value="PDF" color={theme.textMain}/>
+                                    <Picker.Item label="Live Class" value="Live Class" color={theme.textMain}/>
+                                    <Picker.Item label="External Link" value="Link" color={theme.textMain}/>
+                                </Picker>
+                            </View>
                             
                             <Text style={[styles.label, { color: theme.textSub }]}>Topic / Chapter</Text>
                             <TextInput 

@@ -233,6 +233,50 @@ const createBulkNotifications = async (dbOrConnection, recipientIds, senderName,
         console.error('[NOTIFICATION ERROR] Bulk:', error);
     }
 };
+// ==========================================================
+// --- NOTIFICATIONS API ROUTES (NEW) ---
+// ==========================================================
+
+// GET all notifications for the logged-in user (THIS ROUTE ALREADY EXISTS)
+app.get('/api/notifications', verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        console.log(`[NOTIFICATIONS GET] Fetching notifications for recipient_id: ${userId}`); 
+
+        const query = 'SELECT * FROM notifications WHERE recipient_id = ? ORDER BY created_at DESC';
+        const [notifications] = await db.query(query, [userId]);
+        res.json(notifications);
+    } catch (error) {
+        console.error("Error fetching notifications:", error);
+        res.status(500).json({ message: 'Failed to fetch notifications.' });
+    }
+});
+
+// ★★★ THIS IS THE MISSING ROUTE - ADD THIS CODE BLOCK ★★★
+// MARK a single notification as read
+app.put('/api/notifications/:notificationId/read', verifyToken, async (req, res) => {
+    try {
+        const { notificationId } = req.params;
+        const userId = req.user.id; // Get user ID from the token for security
+
+        console.log(`[NOTIFICATIONS UPDATE] User ${userId} marking notification ${notificationId} as read.`);
+
+        // This query is secure: it ensures a user can only update THEIR OWN notifications.
+        const query = 'UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?';
+        const [result] = await db.query(query, [notificationId, userId]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Notification not found or you do not have permission to update it.' });
+        }
+
+        res.status(200).json({ message: 'Notification marked as read.' });
+    } catch (error) {
+        console.error("Error marking notification as read:", error);
+        res.status(500).json({ message: 'Failed to update notification.' });
+    }
+});
+
+
 
 
 // ==========================================================
@@ -5929,51 +5973,6 @@ io.on('connection', (socket) => {
     });
 });
 
-
-
-
-// ==========================================================
-// --- NOTIFICATIONS API ROUTES (NEW) ---
-// ==========================================================
-
-// GET all notifications for the logged-in user (THIS ROUTE ALREADY EXISTS)
-app.get('/api/notifications', verifyToken, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        console.log(`[NOTIFICATIONS GET] Fetching notifications for recipient_id: ${userId}`); 
-
-        const query = 'SELECT * FROM notifications WHERE recipient_id = ? ORDER BY created_at DESC';
-        const [notifications] = await db.query(query, [userId]);
-        res.json(notifications);
-    } catch (error) {
-        console.error("Error fetching notifications:", error);
-        res.status(500).json({ message: 'Failed to fetch notifications.' });
-    }
-});
-
-// ★★★ THIS IS THE MISSING ROUTE - ADD THIS CODE BLOCK ★★★
-// MARK a single notification as read
-app.put('/api/notifications/:notificationId/read', verifyToken, async (req, res) => {
-    try {
-        const { notificationId } = req.params;
-        const userId = req.user.id; // Get user ID from the token for security
-
-        console.log(`[NOTIFICATIONS UPDATE] User ${userId} marking notification ${notificationId} as read.`);
-
-        // This query is secure: it ensures a user can only update THEIR OWN notifications.
-        const query = 'UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_id = ?';
-        const [result] = await db.query(query, [notificationId, userId]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Notification not found or you do not have permission to update it.' });
-        }
-
-        res.status(200).json({ message: 'Notification marked as read.' });
-    } catch (error) {
-        console.error("Error marking notification as read:", error);
-        res.status(500).json({ message: 'Failed to update notification.' });
-    }
-});
 
 
 

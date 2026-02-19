@@ -1,3 +1,12 @@
+/**
+ * File: src/screens/notifications/NotificationsScreen.js
+ * Purpose: Displays a list of user notifications with filters and navigation.
+ * Updates:
+ * - FIXED: Date format updated to "DD/MM/YYYY HH:MM AM/PM".
+ * - RESPONSIVE: Layout adapts to screen width/height.
+ * - THEME: Consistent Dark/Light mode support.
+ */
+
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View,
@@ -20,9 +29,10 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Animatable from 'react-native-animatable';
 
-import apiClient from '../api/client'; 
-import { useAuth } from '../context/AuthContext'; 
+import apiClient from '../../api/client'; // Adjust path based on your folder structure
+import { useAuth } from '../../context/AuthContext'; // Adjust path based on your folder structure
 
+// --- SCREEN DIMENSIONS FOR RESPONSIVENESS ---
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -111,28 +121,32 @@ const getIconForTitle = (title) => {
     return notificationIcons.default;
 };
 
-// --- CORRECTED DATE FORMATTER (Matching GroupChatScreen Logic) ---
-const formatNotificationDate = (dateInput) => {
-  if (!dateInput) return '';
-  try {
-      // Logic borrowed from GroupChatScreen: new Date(timestamp)
-      // This respects the string sent from the server without adding extra timezone offsets
-      const date = new Date(dateInput);
-      
-      if (isNaN(date.getTime())) return String(dateInput);
+// --- FIX: UPDATED DATE FORMATTER (DD/MM/YYYY HH:MM AM/PM) ---
+const formatNotificationDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        // Ensure valid date
+        if (isNaN(date.getTime())) return String(dateString);
 
-      // Extract Time (HH:MM AM/PM)
-      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      
-      // Extract Date (DD/MM/YYYY)
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
+        // Date Parts
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
+        const year = date.getFullYear();
 
-      return `${day}/${month}/${year} • ${timeStr}`;
-  } catch (e) { 
-      return String(dateInput); 
-  }
+        // Time Parts
+        let hours = date.getHours();
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        
+        hours = hours % 12;
+        hours = hours ? hours : 12; // Convert 0 to 12
+
+        // Result: 20/02/2026 02:20 PM
+        return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+    } catch (e) {
+        return String(dateString);
+    }
 };
 
 const NotificationsScreen = ({ onUnreadCountChange }) => {
@@ -149,6 +163,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Hide default header
   useLayoutEffect(() => {
       navigation.setOptions({ headerShown: false });
   }, [navigation]);
@@ -350,6 +365,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
     return true;
   });
 
+  // Get dynamic styles based on theme
   const styles = getStyles(theme);
 
   const renderItem = ({ item, index }) => {
@@ -372,7 +388,7 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
                         <Text style={styles.message} numberOfLines={3}>{item.message}</Text>
                         <View style={styles.footer}>
                             <Text style={styles.sender}>{item.sender_name || 'System'}</Text>
-                            {/* Updated Time Format */}
+                            {/* Uses the corrected DD/MM/YYYY format */}
                             <Text style={styles.date}>{formatNotificationDate(item.created_at)}</Text>
                         </View>
                     </View>
@@ -441,67 +457,187 @@ const NotificationsScreen = ({ onUnreadCountChange }) => {
   );
 };
 
-// --- STYLES ---
+// --- STYLES (RESPONSIVE & THEMED) ---
 const getStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.background },
+  container: { 
+    flex: 1, 
+    backgroundColor: theme.background 
+  },
   
   // Header Card
   headerCard: {
-    paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center',
-    marginTop: 15, marginBottom: 10, borderRadius: 12,
-    flexDirection: 'row', alignItems: 'center', backgroundColor: theme.cardBg,
-    elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    // Responsive width logic
+    width: width > 600 ? '90%' : '96%', 
+    alignSelf: 'center',
+    marginTop: 15, 
+    marginBottom: 10, 
+    borderRadius: 12,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: theme.cardBg,
+    elevation: 3, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    shadowOffset: { width: 0, height: 2 },
     shadowColor: theme.shadow
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  backButton: { padding: 5, marginRight: 5 },
-  headerIconContainer: {
-    borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center',
-    marginRight: 12, backgroundColor: theme.iconBg
+  headerLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1 
   },
-  headerTextContainer: { justifyContent: 'center', flex: 1 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: theme.textMain },
-  headerSubtitle: { fontSize: 13, color: theme.textSub, marginTop: 2 },
+  backButton: { 
+    padding: 5, 
+    marginRight: 5 
+  },
+  headerIconContainer: {
+    borderRadius: 30, 
+    width: 45, 
+    height: 45, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    marginRight: 12, 
+    backgroundColor: theme.iconBg
+  },
+  headerTextContainer: { 
+    justifyContent: 'center', 
+    flex: 1 
+  },
+  headerTitle: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: theme.textMain 
+  },
+  headerSubtitle: { 
+    fontSize: 13, 
+    color: theme.textSub, 
+    marginTop: 2 
+  },
 
   // Filters
   filterContainer: {
-    flexDirection: 'row', backgroundColor: theme.background,
-    marginHorizontal: 15, marginBottom: 10
+    flexDirection: 'row', 
+    backgroundColor: theme.background,
+    marginHorizontal: width * 0.04, // Responsive margin
+    marginBottom: 10
   },
   filterButton: {
-    flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 20,
-    borderWidth: 1, borderColor: theme.border, marginRight: 8,
+    flex: 1, 
+    paddingVertical: 8, 
+    alignItems: 'center', 
+    borderRadius: 20,
+    borderWidth: 1, 
+    borderColor: theme.border, 
+    marginRight: 8,
     backgroundColor: theme.cardBg
   },
-  filterButtonActive: { backgroundColor: theme.primary, borderColor: theme.primary },
-  filterText: { fontSize: 13, fontWeight: '600', color: theme.textSub },
-  filterTextActive: { color: '#fff' },
+  filterButtonActive: { 
+    backgroundColor: theme.primary, 
+    borderColor: theme.primary 
+  },
+  filterText: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: theme.textSub 
+  },
+  filterTextActive: { 
+    color: theme.white 
+  },
 
   // List Items
-  listContent: { paddingHorizontal: width * 0.03, paddingBottom: 20 },
-  card: {
-    backgroundColor: theme.cardBg, borderRadius: 12, padding: 15, marginBottom: 12,
-    elevation: 2, shadowColor: theme.shadow, shadowOpacity: 0.05, shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 }, borderLeftWidth: 4, borderLeftColor: 'transparent'
+  listContent: { 
+    paddingHorizontal: width * 0.03, 
+    paddingBottom: 20 
   },
-  unreadCard: { backgroundColor: theme.unreadBg, borderLeftColor: theme.primary },
+  card: {
+    backgroundColor: theme.cardBg, 
+    borderRadius: 12, 
+    padding: 15, 
+    marginBottom: 12,
+    elevation: 2, 
+    shadowColor: theme.shadow, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 }, 
+    borderLeftWidth: 4, 
+    borderLeftColor: 'transparent',
+    width: width > 600 ? '95%' : '100%',
+    alignSelf: 'center'
+  },
+  unreadCard: { 
+    backgroundColor: theme.unreadBg, 
+    borderLeftColor: theme.primary 
+  },
   
-  row: { flexDirection: 'row', alignItems: 'flex-start' },
-  icon: { width: 36, height: 36, resizeMode: 'contain', marginRight: 15, marginTop: 2 },
-  content: { flex: 1 },
+  row: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start' 
+  },
+  icon: { 
+    width: 36, 
+    height: 36, 
+    resizeMode: 'contain', 
+    marginRight: 15, 
+    marginTop: 2 
+  },
+  content: { 
+    flex: 1 
+  },
   
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  title: { fontSize: 15, fontWeight: 'bold', color: theme.textMain, flex: 1 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.primary },
+  headerRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 4 
+  },
+  title: { 
+    fontSize: 15, 
+    fontWeight: 'bold', 
+    color: theme.textMain, 
+    flex: 1 
+  },
+  dot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: theme.primary 
+  },
   
-  message: { fontSize: 13, color: theme.textSub, lineHeight: 18, marginBottom: 8 },
+  message: { 
+    fontSize: 13, 
+    color: theme.textSub, 
+    lineHeight: 18, 
+    marginBottom: 8 
+  },
   
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sender: { fontSize: 12, color: theme.primary, fontWeight: '600' },
-  date: { fontSize: 11, color: theme.textLight, fontStyle: 'italic' },
+  footer: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
+  sender: { 
+    fontSize: 12, 
+    color: theme.primary, 
+    fontWeight: '600' 
+  },
+  date: { 
+    fontSize: 11, 
+    color: theme.textLight, 
+    fontStyle: 'italic' 
+  },
 
-  emptyBox: { alignItems: 'center', justifyContent: 'center', marginTop: 80 },
-  emptyText: { marginTop: 10, color: theme.textSub, fontSize: 16 }
+  emptyBox: { 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginTop: 80 
+  },
+  emptyText: { 
+    marginTop: 10, 
+    color: theme.textSub, 
+    fontSize: 16 
+  }
 });
 
 export default NotificationsScreen;

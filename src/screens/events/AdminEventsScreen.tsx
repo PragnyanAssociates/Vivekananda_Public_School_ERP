@@ -1,9 +1,13 @@
 /**
  * File: src/screens/events/AdminEventsScreen.js
  * Purpose: Admin screen to manage School Events (View/Add/Edit/Delete).
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
- * FIX: Timezone correction to prevent +5:30h shift.
+ * Updated: 
+ * - Responsive Design (Tablet/Phone compatible).
+ * - Dark/Light Mode support.
+ * - FIX: Timezone correction (prevent +5:30h shift).
+ * - FIX: Date Format displayed as DD/MM/YYYY.
  */
+
 import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, 
@@ -74,26 +78,40 @@ const DarkColors = {
     emptyIcon: '#475569'
 };
 
-// --- HELPER FUNCTIONS (FIXED TIME FORMATTING) ---
+// --- HELPER: FORMAT DATE (DD/MM/YYYY HH:MM AM/PM) ---
+const formatDisplayDate = (dateObj) => {
+    if (!dateObj) return '';
+    const day = dateObj.getDate().toString().padStart(2, '0');
+    const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+    const year = dateObj.getFullYear();
+    
+    let hours = dateObj.getHours();
+    const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; 
+    
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+};
 
+// --- HELPER: PARSE SERVER DATE WITHOUT TIMEZONE SHIFT ---
 const parseServerDateTime = (dateTimeString) => {
     if (!dateTimeString) return new Date();
     
     // 1. Convert to string to be safe
     let dateStr = String(dateTimeString);
 
-    // 2. Remove 'Z' (UTC marker) if present to prevent timezone shift (+5:30)
+    // 2. Remove 'Z' (UTC marker) if present to prevent browser/native automatic conversion
     if (dateStr.endsWith('Z')) {
         dateStr = dateStr.slice(0, -1);
     }
 
     // 3. Ensure it uses 'T' separator for ISO compatibility
-    // "2026-02-18 13:44:00" -> "2026-02-18T13:44:00"
     if (dateStr.includes(' ') && !dateStr.includes('T')) {
         dateStr = dateStr.replace(' ', 'T');
     }
 
-    // 4. Create Date object (This will now be treated as Local Time)
+    // 4. Create Date object
     const date = new Date(dateStr);
 
     // Fallback: If invalid, try regex parsing
@@ -108,9 +126,9 @@ const parseServerDateTime = (dateTimeString) => {
     return date;
 };
 
+// --- HELPER: FORMAT FOR SERVER (YYYY-MM-DD HH:MM:SS) ---
 const formatDateTimeForServer = (date) => {
     const pad = (num) => String(num).padStart(2, '0');
-    // Sends local time numbers (e.g. 13:44)
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 };
 
@@ -209,7 +227,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
 
     return (
         <View style={styles.container}>
-            {/* --- HEADER CARD (No Back Button) --- */}
+            {/* --- HEADER CARD --- */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
@@ -249,6 +267,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
                         </View>
                     }
                     contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </View>
@@ -257,17 +276,21 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
 
 // --- EVENT CARD COMPONENT ---
 const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
+    // Parse using the helper to ensure correctness
     const date = parseServerDateTime(event.event_datetime);
+    
+    // Display elements
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = date.getDate();
-    // Format Time: 1:44 PM
-    const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    // Use the formatter for the expanded view
+    const fullFormattedDate = formatDisplayDate(date);
 
     return (
         <Animatable.View animation="fadeInUp" duration={500} style={styles.cardWrapper}>
             <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
                     <View style={styles.cardContent}>
+                        {/* Date Badge */}
                         <View style={[styles.dateBlock, { backgroundColor: theme.dateBlockBg }]}>
                             <Text style={[styles.dateMonth, { color: theme.dateTextSub }]}>{month}</Text>
                             <Text style={[styles.dateDay, { color: theme.dateTextMain }]}>{day}</Text>
@@ -295,7 +318,8 @@ const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
 
                 {isExpanded && (
                     <View style={[styles.expandedContainer, { borderTopColor: theme.border, backgroundColor: theme.expandedBg }]}>
-                        <InfoRow icon="clock-outline" text={time} theme={theme} />
+                        {/* Shows DD/MM/YYYY HH:MM AM/PM */}
+                        <InfoRow icon="calendar-clock" text={fullFormattedDate} theme={theme} />
                         {event.creator_name && <InfoRow icon="account-circle-outline" text={`Created by: ${event.creator_name}`} theme={theme} />}
                         <InfoRow icon="text" text={event.description || "No description provided."} theme={theme} />
                     </View>
@@ -325,6 +349,8 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const [targetClass, setTargetClass] = useState(isEditMode ? eventToEdit.target_class : 'All');
     const [classes, setClasses] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Date Picker State
     const [date, setDate] = useState(initialDate);
     const [showPicker, setShowPicker] = useState(false);
     const [mode, setMode] = useState('date');
@@ -334,8 +360,19 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     }, []);
 
     const onChangeDateTime = (event, selectedValue) => {
-        setShowPicker(Platform.OS === 'ios');
-        if (selectedValue) { setDate(new Date(selectedValue)); }
+        // Android closes picker automatically, iOS needs manual handling if desired
+        if (Platform.OS === 'android') setShowPicker(false);
+        
+        if (event.type === 'set' && selectedValue) {
+            const currentDate = selectedValue;
+            if (Platform.OS === 'android' && mode === 'date') {
+                setDate(currentDate);
+                // Optional: Automatically show time picker after date
+                // setMode('time'); setShowPicker(true);
+            } else {
+                setDate(currentDate);
+            }
+        }
     };
 
     const showMode = (currentMode) => {
@@ -364,7 +401,8 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
         }
     };
     
-    const getFormattedDate = (d) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    // Display in form as DD/MM/YYYY
+    const displayDate = formatDisplayDate(date);
 
     return (
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
@@ -383,19 +421,24 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.formContainer}>
+            <ScrollView contentContainerStyle={styles.formContainer} showsVerticalScrollIndicator={false}>
                 <FormInput theme={theme} icon="format-title" placeholder="Event Title *" value={title} onChangeText={setTitle} />
                 <FormInput theme={theme} icon="tag-outline" placeholder="Category (e.g., Academic)" value={category} onChangeText={setCategory} />
                 
-                <Text style={[styles.label, { color: theme.textSub }]}>Date & Time *</Text>
+                <Text style={[styles.label, { color: theme.textSub }]}>Date & Time (DD/MM/YYYY)</Text>
                 <View style={styles.dateTimePickerContainer}>
                     <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} onPress={() => showMode('date')}>
                         <MaterialCommunityIcons name="calendar" size={20} color={theme.primary} />
-                        <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>{getFormattedDate(date)}</Text>
+                        <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>
+                            {/* Shows Date Part */}
+                            {date.getDate().toString().padStart(2,'0')}/{ (date.getMonth()+1).toString().padStart(2,'0') }/{date.getFullYear()}
+                        </Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.dateTimePickerButton, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]} onPress={() => showMode('time')}>
                         <MaterialCommunityIcons name="clock-outline" size={20} color={theme.primary} />
-                        <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>{date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</Text>
+                        <Text style={[styles.dateTimePickerText, { color: theme.textMain }]}>
+                            {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </Text>
                     </TouchableOpacity>
                 </View>
                 
@@ -418,7 +461,6 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishButtonText}>{isEditMode ? "Save Changes" : "Publish Event"}</Text>}
                 </TouchableOpacity>
                 
-                {/* Note: Removed minimumDate to allow editing past events if necessary */}
                 {showPicker && (
                     <DateTimePicker 
                         value={date} 
@@ -453,7 +495,7 @@ const styles = StyleSheet.create({
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -492,7 +534,11 @@ const styles = StyleSheet.create({
 
     // --- LIST STYLES ---
     listContent: { paddingHorizontal: width * 0.02, paddingBottom: 100 },
-    cardWrapper: { marginBottom: 15 },
+    cardWrapper: { 
+        width: width > 600 ? '90%' : '96%', // Responsive width
+        alignSelf: 'center',
+        marginBottom: 15 
+    },
     
     card: { 
         borderRadius: 12, 
@@ -541,7 +587,12 @@ const styles = StyleSheet.create({
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
 
     // --- FORM STYLES ---
-    formContainer: { paddingHorizontal: 15, paddingBottom: 40 },
+    formContainer: { 
+        paddingHorizontal: 15, 
+        paddingBottom: 40,
+        width: width > 600 ? '80%' : '100%', // Responsive form width
+        alignSelf: 'center'
+    },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 4, marginTop: 10 },
     inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1, marginBottom: 15 },
     inputIcon: { marginHorizontal: 10 },

@@ -1,8 +1,12 @@
 /**
  * File: src/screens/events/StudentEventsScreen.tsx
  * Purpose: Display list of school events with details view.
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header.
+ * Updated: 
+ * - Responsive Design (Tablet/Phone compatible).
+ * - Dark/Light Mode support.
+ * - FIX: Date Format displayed as DD/MM/YYYY.
  */
+
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, 
@@ -57,6 +61,26 @@ const DarkColors = {
     emptyIcon: '#475569'
 };
 
+// --- HELPER: FORMAT DATE (DD/MM/YYYY) ---
+const formatDisplayDate = (isoString: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+
+    // Time formatting
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+};
+
 const StudentEventsScreen = () => {
     // Theme Hooks
     const colorScheme = useColorScheme();
@@ -72,7 +96,7 @@ const StudentEventsScreen = () => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
 
-    const handleViewDetails = (eventId) => { setSelectedEventId(eventId); setView('details'); };
+    const handleViewDetails = (eventId: any) => { setSelectedEventId(eventId); setView('details'); };
     const handleBackToList = () => { setSelectedEventId(null); setView('list'); };
     
     return (
@@ -84,7 +108,7 @@ const StudentEventsScreen = () => {
     );
 };
 
-const EventListView = ({ onViewDetails, theme }) => {
+const EventListView = ({ onViewDetails, theme }: any) => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const { user } = useAuth();
@@ -95,7 +119,9 @@ const EventListView = ({ onViewDetails, theme }) => {
         setLoading(true);
         try {
             const response = await apiClient.get(`/events/all-for-user/${user.id}`);
-            setEvents(response.data);
+            // Sort events by date descending
+            const sorted = response.data.sort((a:any, b:any) => new Date(b.event_datetime).getTime() - new Date(a.event_datetime).getTime());
+            setEvents(sorted);
         } catch (error) { Alert.alert("Error", "Could not load school events."); }
         finally { setLoading(false); }
     }, [user]);
@@ -130,7 +156,7 @@ const EventListView = ({ onViewDetails, theme }) => {
             ) : (
                 <FlatList
                     data={events}
-                    keyExtractor={item => item.id.toString()}
+                    keyExtractor={(item:any) => item.id.toString()}
                     renderItem={({ item, index }) => (
                         <Animatable.View animation="fadeInUp" duration={500} delay={index * 100}>
                             <EventCard event={item} onViewDetails={onViewDetails} theme={theme} />
@@ -143,13 +169,14 @@ const EventListView = ({ onViewDetails, theme }) => {
                         </View>
                     }
                     contentContainerStyle={styles.listContainer}
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </View>
     );
 };
 
-const EventCard = ({ event, onViewDetails, theme }) => {
+const EventCard = ({ event, onViewDetails, theme }: any) => {
     const date = new Date(event.event_datetime);
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = date.getDate();
@@ -187,8 +214,8 @@ const EventCard = ({ event, onViewDetails, theme }) => {
     );
 };
 
-const EventDetailsView = ({ eventId, onBack, theme }) => {
-    const [details, setDetails] = useState(null);
+const EventDetailsView = ({ eventId, onBack, theme }: any) => {
+    const [details, setDetails] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     const fetchDetails = useCallback(async () => {
@@ -210,7 +237,8 @@ const EventDetailsView = ({ eventId, onBack, theme }) => {
     if (!details || !details.event) return ( <View style={styles.centered}><Text style={{color: theme.textMain}}>Event not found.</Text></View> );
     
     const { event } = details;
-    const eventDate = new Date(event.event_datetime).toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    // Format: DD/MM/YYYY HH:MM AM/PM
+    const formattedDate = formatDisplayDate(event.event_datetime);
 
     return (
         <View style={styles.container}>
@@ -230,7 +258,7 @@ const EventDetailsView = ({ eventId, onBack, theme }) => {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.detailsPageContainer}>
+            <ScrollView contentContainerStyle={styles.detailsPageContainer} showsVerticalScrollIndicator={false}>
                 {event.category && (
                     <View style={[styles.tagContainerLarge, { backgroundColor: theme.iconBg }]}>
                         <Text style={[styles.tagTextLarge, { color: theme.primary }]}>{event.category}</Text>
@@ -240,7 +268,7 @@ const EventDetailsView = ({ eventId, onBack, theme }) => {
                 <Text style={[styles.detailsTitle, { color: theme.textMain }]}>{event.title}</Text>
                 
                 <View style={[styles.infoBox, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
-                    <InfoRow icon="calendar-clock" text={eventDate} theme={theme} />
+                    <InfoRow icon="calendar-clock" text={formattedDate} theme={theme} />
                     <View style={[styles.divider, { backgroundColor: theme.divider }]} />
                     <InfoRow icon="map-marker-outline" text={event.location || 'To be determined'} theme={theme} />
                     <View style={[styles.divider, { backgroundColor: theme.divider }]} />
@@ -254,7 +282,7 @@ const EventDetailsView = ({ eventId, onBack, theme }) => {
     );
 };
 
-const InfoRow = ({ icon, text, theme }) => (
+const InfoRow = ({ icon, text, theme }: any) => (
     <View style={styles.infoRow}>
         <MaterialCommunityIcons name={icon} size={20} color={theme.primary} style={{marginRight: 15}} />
         <Text style={[styles.infoText, { color: theme.textMain }]}>{text}</Text>
@@ -270,7 +298,7 @@ const styles = StyleSheet.create({
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -300,7 +328,8 @@ const styles = StyleSheet.create({
     // List & Cards
     listContainer: { paddingHorizontal: width * 0.02, paddingBottom: 40 },
     cardWrapper: {
-        width: '100%',
+        width: width > 600 ? '90%' : '100%', // Responsive width
+        alignSelf: 'center',
         paddingHorizontal: 10,
         marginBottom: 15
     },
@@ -346,7 +375,12 @@ const styles = StyleSheet.create({
     emptyText: { textAlign: 'center', marginTop: 10, fontSize: 16 },
 
     // Details View
-    detailsPageContainer: { paddingHorizontal: 20, paddingBottom: 40 },
+    detailsPageContainer: { 
+        paddingHorizontal: 20, 
+        paddingBottom: 40,
+        width: width > 600 ? '80%' : '100%', // Responsive container
+        alignSelf: 'center'
+    },
     tagContainerLarge: { 
         alignSelf: 'flex-start', 
         paddingHorizontal: 12, 

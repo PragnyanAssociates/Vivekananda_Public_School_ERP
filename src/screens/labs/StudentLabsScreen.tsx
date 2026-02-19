@@ -1,16 +1,17 @@
 /**
  * File: src/screens/labs/StudentLabsScreen.tsx
  * Purpose: Display list of Digital Labs assigned to the student's class.
- * Updated: 
+ * Updated:
  * - Fixed Responsive Layout for all screen sizes.
  * - Consistent Dark/Light mode colors.
- * - Full code provided with comments.
+ * - Uses updated LabCard with correct Date formatting.
+ * - Pull-to-refresh enabled.
  */
 
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { 
-    View, Text, FlatList, StyleSheet, ActivityIndicator, 
-    RefreshControl, SafeAreaView, useColorScheme, StatusBar, Dimensions 
+import {
+    View, Text, FlatList, StyleSheet, ActivityIndicator,
+    RefreshControl, SafeAreaView, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -25,7 +26,7 @@ const { width } = Dimensions.get('window');
 // --- THEME CONFIGURATION (Master Style Guide) ---
 const LightColors = {
     primary: '#008080',
-    background: '#F2F5F8', 
+    background: '#F2F5F8',
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
@@ -37,7 +38,7 @@ const LightColors = {
 
 const DarkColors = {
     primary: '#008080',
-    background: '#121212', 
+    background: '#121212',
     cardBg: '#1E1E1E',
     textMain: '#E0E0E0',
     textSub: '#B0B0B0',
@@ -55,7 +56,7 @@ const StudentLabsScreen = () => {
 
     const { user } = useAuth();
     const navigation = useNavigation();
-    
+
     // --- STATE MANAGEMENT ---
     const [labs, setLabs] = useState<Lab[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -69,12 +70,20 @@ const StudentLabsScreen = () => {
 
     // --- API CALLS ---
     const fetchLabs = useCallback(async () => {
-        if (!user || !user.class_group) {
-            setError('Could not determine your class. Please log in again.');
+        if (!user) {
+            setError('User session not found.');
+            setIsLoading(false);
+            return;
+        }
+
+        // Safety check if user has class_group
+        if (!user.class_group) {
+            setError('You are not assigned to a class group. Please contact admin.');
             setIsLoading(false);
             setIsRefreshing(false);
             return;
         }
+
         try {
             setError(null);
             // Fetch labs specific to student's class group
@@ -146,7 +155,7 @@ const StudentLabsScreen = () => {
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                     <View style={styles.cardWrapper}>
-                        {/* Render LabCard passing theme implicitly handled inside LabCard */}
+                        {/* Student View: No edit/delete props passed */}
                         <LabCard lab={item} />
                     </View>
                 )}
@@ -175,15 +184,15 @@ const StudentLabsScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-    
+
     // Header
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
         width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
-        marginTop: 10,
-        marginBottom: 8,
+        marginTop: 15,
+        marginBottom: 10,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
@@ -204,7 +213,7 @@ const styles = StyleSheet.create({
     },
     headerTextContainer: { justifyContent: 'center' },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
-    headerSubtitle: { fontSize: 13 },
+    headerSubtitle: { fontSize: 13, marginTop: 2 },
 
     // List
     cardWrapper: {
