@@ -2275,44 +2275,47 @@ app.delete('/api/ptm/:id', verifyToken, async (req, res) => {
 
 
 // ==========================================================
-// --- DIGITAL LABS API ROUTES (UPDATED) ---
+// --- DIGITAL LABS API ROUTES (FIXED) ---
 // ==========================================================
-// This section handles creating, fetching, and managing digital lab resources.
-// It uses the 'upload' multer instance you already configured.
 
-// Helper function for creating bulk notifications (assuming it exists elsewhere)
-// async function createBulkNotifications(connection, recipientIds, senderName, title, message, link) { ... }
+// Helper: Convert ISO Date (from App) to MySQL Format (YYYY-MM-DD HH:MM:SS)
+const formatToMySQLDateTime = (isoString) => {
+    if (!isoString) return null;
+    try {
+        const date = new Date(isoString);
+        // Ensure we get a valid date
+        if (isNaN(date.getTime())) return null; 
+        return date.toISOString().slice(0, 19).replace('T', ' ');
+    } catch (e) {
+        return null;
+    }
+};
 
-// ★ 1. MODIFIED: GET labs for a specific STUDENT's class (includes teacher name)
+// ★ 1. GET labs for a specific STUDENT's class
 app.get('/api/labs/student/:classGroup', async (req, res) => {
     const { classGroup } = req.params;
     try {
-        // Query now JOINS with the users table to fetch the creator's name.
         const query = `
-            SELECT 
-                dl.*, 
-                u.full_name as teacher_name 
+            SELECT dl.*, u.full_name as teacher_name 
             FROM digital_labs dl
             LEFT JOIN users u ON dl.created_by = u.id
             WHERE dl.class_group = ? OR dl.class_group IS NULL OR dl.class_group = ''
-            ORDER BY dl.created_at DESC
+            ORDER BY dl.class_datetime DESC, dl.created_at DESC
         `;
         const [labs] = await db.query(query, [classGroup]);
         res.status(200).json(labs);
     } catch (error) {
-        console.error("GET /api/labs/student/:classGroup Error:", error);
+        console.error("GET Student Labs Error:", error);
         res.status(500).json({ message: 'Error fetching digital labs.' });
     }
 });
 
-// ★ 2. MODIFIED: GET all labs created by a specific TEACHER (includes teacher name)
+// ★ 2. GET all labs created by a specific TEACHER
 app.get('/api/labs/teacher/:teacherId', async (req, res) => {
     const { teacherId } = req.params;
     try {
         const query = `
-            SELECT 
-                dl.*, 
-                u.full_name as teacher_name 
+            SELECT dl.*, u.full_name as teacher_name 
             FROM digital_labs dl
             LEFT JOIN users u ON dl.created_by = u.id
             WHERE dl.created_by = ? 
@@ -2321,14 +2324,13 @@ app.get('/api/labs/teacher/:teacherId', async (req, res) => {
         const [labs] = await db.query(query, [teacherId]);
         res.status(200).json(labs);
     } catch (error) {
-        console.error("GET /api/labs/teacher/:teacherId Error:", error);
+        console.error("GET Teacher Labs Error:", error);
         res.status(500).json({ message: 'Error fetching labs.' });
     }
 });
 
-// ★ 3. MODIFIED: POST a new digital lab (handles all new fields)
+// ★ 3. POST a new digital lab (FIXED DATE HANDLING)
 app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
-    // Destructure all new fields from the request body
     const { 
         title, subject, lab_type, class_group, description, access_url, 
         created_by, topic, video_url, meet_link, class_datetime 
@@ -2340,16 +2342,17 @@ app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name
     const cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : null;
     const file_path = labFile ? `/uploads/${labFile.filename}` : null;
     
-    // A lab should have at least one way to be accessed
     if (!access_url && !file_path && !video_url && !meet_link) {
-        return res.status(400).json({ message: 'You must provide an Access URL, Video URL, Meet Link, or upload a Lab File.' });
+        return res.status(400).json({ message: 'Please provide at least one: URL, Video, Meet Link, or File.' });
     }
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // Updated INSERT query with all new columns
+        // FIX: Convert ISO date to MySQL format
+        const mysqlDateTime = formatToMySQLDateTime(class_datetime);
+
         const query = `
             INSERT INTO digital_labs (
                 title, subject, lab_type, class_group, description, access_url, 
@@ -2358,36 +2361,39 @@ app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
-        // Use 'NULL' for empty strings to avoid database errors, especially for datetime.
-        const classDateTimeValue = class_datetime ? class_datetime : null;
-
         await connection.query(query, [
             title, subject, lab_type, class_group || null, description, access_url || null, 
-            created_by || null, topic || null, video_url || null, meet_link || null, classDateTimeValue,
+            created_by || null, topic || null, video_url || null, meet_link || null, mysqlDateTime,
             file_path, cover_image_url
         ]);
         
-        // --- MODIFIED NOTIFICATION LOGIC ---
-        let usersToNotifyQuery;
-        if (class_group) {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
-        } else {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        }
-        const [usersToNotify] = await usersToNotifyQuery;
-        
-        if (usersToNotify.length > 0) {
-            const [[creator]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = creator.full_name || "School Administration";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = `New Digital Lab: ${subject}`;
-            const notificationMessage = `A new lab titled "${title}" has been added by ${senderName}.`;
-
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
+        // --- NOTIFICATION LOGIC (Wrapped in Try/Catch so it doesn't fail the upload) ---
+        try {
+            let usersToNotifyQuery;
+            if (class_group) {
+                 usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
+            } else {
+                 usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
+            }
+            const [usersToNotify] = await usersToNotifyQuery;
+            
+            if (usersToNotify.length > 0) {
+                const [[creator]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
+                const senderName = creator ? creator.full_name : "Admin";
+                const recipientIds = usersToNotify.map(u => u.id);
+                
+                // Only call this if your createBulkNotifications function is defined and working
+                if (typeof createBulkNotifications === 'function') {
+                    await createBulkNotifications(connection, recipientIds, senderName, `New Lab: ${subject}`, `New lab "${title}" added.`, '/labs');
+                }
+            }
+        } catch (notifError) {
+            console.warn("Notification failed, but Lab was created:", notifError.message);
+            // We do NOT rollback here, because the lab was created successfully.
         }
         
         await connection.commit();
-        res.status(201).json({ message: 'Digital lab created and users notified successfully!' });
+        res.status(201).json({ message: 'Digital lab created successfully!' });
     } catch (error) {
         await connection.rollback();
         console.error("POST /api/labs Error:", error);
@@ -2398,10 +2404,9 @@ app.post('/api/labs', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name
 });
 
 
-// ★ 4. MODIFIED: UPDATE an existing lab (handles all new fields)
+// ★ 4. UPDATE an existing lab (FIXED DATE HANDLING)
 app.put('/api/labs/:id', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'labFile', maxCount: 1 }]), async (req, res) => {
     const { id } = req.params;
-    // Destructure all new fields
     const { 
         title, subject, lab_type, class_group, description, access_url, 
         created_by, topic, video_url, meet_link, class_datetime 
@@ -2411,21 +2416,21 @@ app.put('/api/labs/:id', upload.fields([{ name: 'coverImage', maxCount: 1 }, { n
     try {
         await connection.beginTransaction();
 
-        const [existingLabRows] = await connection.query('SELECT cover_image_url, file_path FROM digital_labs WHERE id = ?', [id]);
-        if (existingLabRows.length === 0) {
+        const [existing] = await connection.query('SELECT cover_image_url, file_path FROM digital_labs WHERE id = ?', [id]);
+        if (existing.length === 0) {
             await connection.rollback();
             return res.status(404).json({ message: 'Lab not found.' });
         }
-        const existingLab = existingLabRows[0];
 
         const coverImageFile = req.files['coverImage'] ? req.files['coverImage'][0] : null;
         const labFile = req.files['labFile'] ? req.files['labFile'][0] : null;
 
-        let cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : existingLab.cover_image_url;
-        let file_path = labFile ? `/uploads/${labFile.filename}` : existingLab.file_path;
-        const classDateTimeValue = class_datetime ? class_datetime : null;
+        let cover_image_url = coverImageFile ? `/uploads/${coverImageFile.filename}` : existing[0].cover_image_url;
+        let file_path = labFile ? `/uploads/${labFile.filename}` : existing[0].file_path;
 
-        // Updated UPDATE query with all new columns
+        // FIX: Convert ISO date to MySQL format
+        const mysqlDateTime = formatToMySQLDateTime(class_datetime);
+
         const query = `
             UPDATE digital_labs SET 
                 title = ?, subject = ?, lab_type = ?, class_group = ?, description = ?, 
@@ -2435,29 +2440,10 @@ app.put('/api/labs/:id', upload.fields([{ name: 'coverImage', maxCount: 1 }, { n
         `;
         await connection.query(query, [
             title, subject, lab_type, class_group || null, description, 
-            access_url || null, topic || null, video_url || null, meet_link || null, classDateTimeValue,
+            access_url || null, topic || null, video_url || null, meet_link || null, mysqlDateTime,
             file_path, cover_image_url, id
         ]);
         
-        // --- Notification on update ---
-        let usersToNotifyQuery;
-        if (class_group) {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role = 'student' AND class_group = ? AND id != ?", [class_group, created_by]);
-        } else {
-             usersToNotifyQuery = connection.query("SELECT id FROM users WHERE role IN ('student', 'teacher') AND id != ?", [created_by]);
-        }
-        const [usersToNotify] = await usersToNotifyQuery;
-
-        if (usersToNotify.length > 0) {
-            const [[editor]] = await connection.query("SELECT full_name FROM users WHERE id = ?", [created_by]);
-            const senderName = editor.full_name || "School Administration";
-            const recipientIds = usersToNotify.map(u => u.id);
-            const notificationTitle = `Digital Lab Updated: ${subject}`;
-            const notificationMessage = `The lab "${title}" has been updated.`;
-
-            await createBulkNotifications(connection, recipientIds, senderName, notificationTitle, notificationMessage, '/labs');
-        }
-
         await connection.commit();
         res.status(200).json({ message: 'Digital lab updated successfully!' });
     } catch (error) {

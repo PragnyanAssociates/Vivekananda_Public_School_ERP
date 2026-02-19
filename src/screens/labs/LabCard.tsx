@@ -1,23 +1,16 @@
 /**
  * File: src/screens/labs/LabCard.tsx
- * Purpose: Display individual Lab details with responsive design and theme support.
+ * Purpose: Display individual Lab details.
  * Updated: 
- * - Multi-button support (Watch, Join, View, Download).
- * - DD/MM/YYYY Date Format.
- * - Responsive layout.
+ * - Fixed Date Formatting to DD/MM/YYYY.
+ * - Responsive Card Widths (Tablet vs Phone).
+ * - Consistent Theming.
  */
 
 import React from 'react';
 import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Image, 
-  Linking, 
-  Alert, 
-  useColorScheme,
-  Dimensions 
+  View, Text, StyleSheet, TouchableOpacity, Image, Linking, 
+  Alert, useColorScheme, Dimensions 
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -34,13 +27,11 @@ const LightColors = {
   border: '#f0f0f0',
   timeBg: '#FFF3E0',
   timeText: '#E65100',
-  
   // Button Colors
   fileBtn: '#2E7D32', // Green
   videoBtn: '#C62828', // Red
   meetBtn: '#1565C0', // Blue
   linkBtn: '#6A1B9A', // Purple
-  
   white: '#ffffff',
   iconPlaceholder: '#EEE'
 };
@@ -53,13 +44,11 @@ const DarkColors = {
   border: '#333333',
   timeBg: '#3E2723',
   timeText: '#FFAB91',
-  
-  // Button Colors (Slightly lighter for dark mode visibility)
+  // Button Colors (Adjusted for Dark Mode)
   fileBtn: '#388E3C',
   videoBtn: '#D32F2F',
   meetBtn: '#1976D2',
   linkBtn: '#7B1FA2',
-  
   white: '#ffffff',
   iconPlaceholder: '#333'
 };
@@ -87,23 +76,42 @@ interface LabCardProps {
   onDelete?: (id: number) => void;
 }
 
+// --- HELPER: DATE FORMATTING (DD/MM/YYYY) ---
+// This ensures the time displayed is accurate to the user's timezone
+const formatDateTime = (isoString: string): string => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    
+    // Date Part
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    
+    // Time Part
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; 
+    
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+};
+
 export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
-  // Theme Hooks
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? DarkColors : LightColors;
 
   const canManage = onEdit && onDelete;
 
-  // Handle Edit/Delete Menu
   const handleMenuPress = () => {
     Alert.alert(
       "Manage Lab",
       `Options for "${lab.title}"`,
       [
-        { text: "CANCEL", style: "cancel" },
-        { text: "EDIT", onPress: () => onEdit && onEdit(lab) },
-        { text: "DELETE", style: "destructive", onPress: () => onDelete && onDelete(lab.id) }
+        { text: "Cancel", style: "cancel" },
+        { text: "Edit Details", onPress: () => onEdit && onEdit(lab) },
+        { text: "Delete", style: "destructive", onPress: () => onDelete && onDelete(lab.id) }
       ]
     );
   };
@@ -122,24 +130,17 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
     handleOpenLink(`${SERVER_URL}${lab.file_path}`);
   };
 
-  // Image Source Logic
   const imageSource = lab.cover_image_url 
     ? { uri: `${SERVER_URL}${lab.cover_image_url}` }
-    : require('../../assets/default-lab-icon.png'); // Ensure this image exists, or use a backup
-  
-  // Date Formatter: DD/MM/YYYY HH:MM
-  const formattedDateTime = lab.class_datetime 
-    ? (() => {
-        const d = new Date(lab.class_datetime);
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      })()
-    : null;
+    : { uri: 'https://via.placeholder.com/150' }; // Use a valid placeholder or local asset
+
+  // Use the helper to get the correct DD/MM/YYYY format
+  const formattedTime = lab.class_datetime ? formatDateTime(lab.class_datetime) : null;
 
   return (
     <View style={[styles.cardContainer, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
       
-      {/* 1. Header Section */}
+      {/* 1. Header & Title */}
       <View style={styles.cardHeader}>
         <View style={styles.headerLeft}>
           <Image 
@@ -148,7 +149,7 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
             resizeMode="cover"
           />
           <View style={styles.textContainer}>
-            <Text style={[styles.title, { color: theme.textMain }]} numberOfLines={1}>
+            <Text style={[styles.title, { color: theme.textMain }]} numberOfLines={2}>
               {lab.title}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSub }]} numberOfLines={1}>
@@ -161,14 +162,14 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
           <TouchableOpacity 
             onPress={handleMenuPress} 
             style={styles.menuBtn}
-            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+            hitSlop={{top: 15, bottom: 15, left: 15, right: 15}}
           >
             <MaterialIcons name="more-vert" size={24} color={theme.textSub} />
           </TouchableOpacity>
         )}
       </View>
       
-      {/* 2. Meta Info (Class & Teacher) */}
+      {/* 2. Meta (Class & Teacher) */}
       <View style={styles.metaContainer}>
         <Text style={[styles.metaInfo, { color: theme.textMeta }]}>
           Class: <Text style={[styles.metaBold, { color: theme.textSub }]}>{lab.class_group || 'All'}</Text>
@@ -181,10 +182,10 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
       </View>
 
       {/* 3. Scheduled Date Badge */}
-      {formattedDateTime && (
+      {formattedTime && (
         <View style={[styles.timeInfo, { backgroundColor: theme.timeBg }]}>
           <MaterialIcons name="event" size={16} color={theme.timeText} />
-          <Text style={[styles.timeText, { color: theme.timeText }]}>{formattedDateTime}</Text>
+          <Text style={[styles.timeText, { color: theme.timeText }]}>{formattedTime}</Text>
         </View>
       )}
 
@@ -193,48 +194,32 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
         {lab.description}
       </Text>
       
-      {/* 5. Action Buttons Grid (Responsive) */}
+      {/* 5. Responsive Button Grid */}
       <View style={styles.buttonGrid}>
         
-        {/* VIDEO BUTTON */}
         {lab.video_url ? (
-            <TouchableOpacity 
-                style={[styles.actionBtn, { backgroundColor: theme.videoBtn }]} 
-                onPress={() => handleOpenLink(lab.video_url)}
-            >
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.videoBtn }]} onPress={() => handleOpenLink(lab.video_url)}>
                 <MaterialIcons name="play-circle-outline" size={20} color={theme.white} />
                 <Text style={[styles.btnText, { color: theme.white }]}>Watch</Text>
             </TouchableOpacity>
         ) : null}
 
-        {/* MEET BUTTON */}
         {lab.meet_link ? (
-            <TouchableOpacity 
-                style={[styles.actionBtn, { backgroundColor: theme.meetBtn }]} 
-                onPress={() => handleOpenLink(lab.meet_link)}
-            >
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.meetBtn }]} onPress={() => handleOpenLink(lab.meet_link)}>
                 <MaterialCommunityIcons name="video-account" size={20} color={theme.white} />
-                <Text style={[styles.btnText, { color: theme.white }]}>Join Meet</Text>
+                <Text style={[styles.btnText, { color: theme.white }]}>Join</Text>
             </TouchableOpacity>
         ) : null}
 
-        {/* EXTERNAL LINK BUTTON */}
         {lab.access_url ? (
-            <TouchableOpacity 
-                style={[styles.actionBtn, { backgroundColor: theme.linkBtn }]} 
-                onPress={() => handleOpenLink(lab.access_url)}
-            >
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.linkBtn }]} onPress={() => handleOpenLink(lab.access_url)}>
                 <MaterialCommunityIcons name="web" size={20} color={theme.white} />
-                <Text style={[styles.btnText, { color: theme.white }]}>Open Link</Text>
+                <Text style={[styles.btnText, { color: theme.white }]}>Open</Text>
             </TouchableOpacity>
         ) : null}
 
-        {/* DOWNLOAD BUTTON */}
         {lab.file_path ? (
-          <TouchableOpacity 
-            style={[styles.actionBtn, { backgroundColor: theme.fileBtn }]} 
-            onPress={handleOpenFile}
-          >
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.fileBtn }]} onPress={handleOpenFile}>
             <MaterialIcons name="file-download" size={20} color={theme.white} />
             <Text style={[styles.btnText, { color: theme.white }]}>Download</Text>
           </TouchableOpacity>
@@ -248,36 +233,36 @@ export const LabCard = ({ lab, onEdit, onDelete }: LabCardProps) => {
 const styles = StyleSheet.create({
   cardContainer: { 
     borderRadius: 12, 
-    marginHorizontal: 12, // Responsive margin
     marginVertical: 8, 
     padding: 15, 
     elevation: 2, 
-    shadowColor: "#000", 
     shadowOffset: { width: 0, height: 1 }, 
     shadowOpacity: 0.1, 
     shadowRadius: 3, 
     borderWidth: 1,
-    width: width > 600 ? '95%' : '94%', // Slight adjustment for tablets vs phones
+    // Responsive Width Logic
+    width: width > 600 ? '90%' : '96%', 
     alignSelf: 'center'
   },
   cardHeader: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'flex-start', 
-    marginBottom: 8 
+    marginBottom: 10 
   },
   headerLeft: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    flex: 1 
+    flex: 1,
+    paddingRight: 10
   },
   textContainer: {
     flex: 1,
     justifyContent: 'center'
   },
   menuBtn: { 
-    padding: 2,
-    marginLeft: 5 
+    padding: 4,
+    marginLeft: 0 
   },
   iconImage: { 
     width: 48, 
@@ -288,7 +273,8 @@ const styles = StyleSheet.create({
   title: { 
     fontSize: 17, 
     fontWeight: 'bold',
-    marginBottom: 2
+    marginBottom: 2,
+    flexWrap: 'wrap'
   },
   subtitle: { 
     fontSize: 13, 
@@ -296,7 +282,7 @@ const styles = StyleSheet.create({
   },
   metaContainer: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 10,
     flexWrap: 'wrap'
   },
   metaInfo: { 
@@ -308,10 +294,10 @@ const styles = StyleSheet.create({
   timeInfo: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    paddingVertical: 4, 
-    paddingHorizontal: 8, 
+    paddingVertical: 5, 
+    paddingHorizontal: 10, 
     borderRadius: 6, 
-    marginBottom: 10,
+    marginBottom: 12,
     alignSelf: 'flex-start'
   },
   timeText: { 
@@ -329,7 +315,7 @@ const styles = StyleSheet.create({
   buttonGrid: { 
     flexDirection: 'row', 
     flexWrap: 'wrap', 
-    gap: 8, // Gap between buttons
+    gap: 8, 
   },
   actionBtn: { 
     flexDirection: 'row', 
@@ -338,8 +324,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10, 
     paddingHorizontal: 12,
     borderRadius: 8, 
-    flexGrow: 1, // Expand to fill space
-    minWidth: '45%' // Ensure at least 2 buttons per row on small screens
+    flexGrow: 1, 
+    // Ensure buttons don't get too small on mobile
+    minWidth: width > 400 ? '30%' : '45%' 
   },
   btnText: { 
     fontSize: 13, 
