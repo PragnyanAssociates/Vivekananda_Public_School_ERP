@@ -129,7 +129,7 @@ const StudentDashboard = ({ navigation }) => {
       imageSource: 'https://cdn-icons-png.flaticon.com/128/1995/1995574.png',
       subModules: [
         { id: 'qa10', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'StudentPTMScreen' },
-        { id: 'qa60', title: 'Teacher Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'TeacherFeedback' },
+        { id: 'qa60', title: 'Teacher Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'TeacherFeedback' },
       ]
     },
     {
@@ -144,7 +144,6 @@ const StudentDashboard = ({ navigation }) => {
         { id: 'qa20', title: 'Syllabus Tracking', imageSource: 'https://cdn-icons-png.flaticon.com/128/1584/1584937.png', navigateToTab: 'StudentSyllabusNavigator' },
         { id: 'qa8', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'StudentExamsScreen' },
         { id: 'qa16', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'StudentExamScreen' },
-        { id: 'qa14', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
       ]
     },
     {
@@ -162,12 +161,13 @@ const StudentDashboard = ({ navigation }) => {
     },
     {
       id: 'cat_Extracurricular',
-      title: 'Extracurricular Activities',
-      subtitle: 'Sports & Kitchen',
+      title: 'More Apps',
+      subtitle: 'Group Chat, Sports & Kitchen',
       imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png',
       subModules: [
         { id: 'qa12', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
         { id: 'qa15', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'StudentEventsScreen' },
+        { id: 'qa14', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
       ]
     },
   ];

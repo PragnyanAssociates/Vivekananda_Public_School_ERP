@@ -237,11 +237,18 @@ const createBulkNotifications = async (dbOrConnection, recipientIds, senderName,
 // --- NOTIFICATIONS API ROUTES (NEW) ---
 // ==========================================================
 
-// GET all notifications for the logged-in user (THIS ROUTE ALREADY EXISTS)
+// GET all notifications for the logged-in user (THIS ROUTE HAS THE 90-DAY AUTO-DELETE)
 app.get('/api/notifications', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        console.log(`[NOTIFICATIONS GET] Fetching notifications for recipient_id: ${userId}`); 
+        console.log(`[NOTIFICATIONS GET] Fetching notifications for recipient_id: ${userId}`);
+
+        // ★★★ ADDED: AUTO-DELETE LOGIC FOR 90 DAYS ★★★
+        // This query runs automatically in the background to delete notifications older than 90 days
+        // for this specific user before fetching their list.
+        const deleteOldQuery = 'DELETE FROM notifications WHERE recipient_id = ? AND created_at < NOW() - INTERVAL 90 DAY';
+        await db.query(deleteOldQuery, [userId]);
+        // ★★★ END OF AUTO-DELETE LOGIC ★★★
 
         const query = 'SELECT * FROM notifications WHERE recipient_id = ? ORDER BY created_at DESC';
         const [notifications] = await db.query(query, [userId]);
@@ -252,13 +259,12 @@ app.get('/api/notifications', verifyToken, async (req, res) => {
     }
 });
 
-// ★★★ THIS IS THE MISSING ROUTE - ADD THIS CODE BLOCK ★★★
 // MARK a single notification as read
 app.put('/api/notifications/:notificationId/read', verifyToken, async (req, res) => {
     try {
         const { notificationId } = req.params;
         const userId = req.user.id; // Get user ID from the token for security
-
+        
         console.log(`[NOTIFICATIONS UPDATE] User ${userId} marking notification ${notificationId} as read.`);
 
         // This query is secure: it ensures a user can only update THEIR OWN notifications.

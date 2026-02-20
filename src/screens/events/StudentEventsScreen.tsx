@@ -168,9 +168,9 @@ const EventListView = ({ onViewDetails, theme }: any) => {
             {/* --- HEADER CARD --- */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    {/* <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                         <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialCommunityIcons name="calendar-star" size={24} color={theme.primary} />
                     </View>

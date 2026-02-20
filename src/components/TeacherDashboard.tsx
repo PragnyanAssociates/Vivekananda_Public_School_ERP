@@ -125,6 +125,7 @@ const TeacherDashboard = ({ navigation }) => {
             { id: 'qa1', title: 'My Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceReportScreen' },
             { id: 'qa2', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'TeacherAdminPTMScreen' },
             { id: 'qa3', title: 'Gallery', imageSource: 'https://cdn-icons-png.flaticon.com/128/8418/8418513.png', navigateTo: 'Gallery' },
+            { id: 'qa15', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateTo: 'ReportScreen' },
             { id: 'qa4', title: 'About Us', imageSource: 'https://cdn-icons-png.flaticon.com/128/3815/3815523.png', navigateToTab: 'AboutUs' },  
         ]
     },
@@ -136,7 +137,7 @@ const TeacherDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa5', title: 'Students Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
             { id: 'qa6', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-            { id: 'qa7', title: 'Student Feedback', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
+            { id: 'qa7', title: 'Student Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
             { id: 'qa8', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
         ]
     },
@@ -152,8 +153,6 @@ const TeacherDashboard = ({ navigation }) => {
             { id: 'qa12', title: 'Online Class', imageSource: 'https://cdn-icons-png.flaticon.com/128/8388/8388104.png', navigateToTab: 'OnlineClassScreen' },
             { id: 'qa13', title: 'Exams', imageSource: 'https://cdn-icons-png.flaticon.com/128/12886/12886027.png', navigateToTab: 'TeacherAdminExamsScreen' },
             { id: 'qa14', title: 'Exam Schedules', imageSource: 'https://cdn-icons-png.flaticon.com/128/15447/15447954.png', navigateToTab: 'TeacherAdminExamScreen' },
-            { id: 'qa15', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/1378/1378646.png', navigateTo: 'ReportScreen' },
-            { id: 'qa16', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
         ]
     },
     {
@@ -171,11 +170,12 @@ const TeacherDashboard = ({ navigation }) => {
     },
     {
         id: 'cat_Extracurricular',
-        title: 'Extracurricular Activities',
-        subtitle: 'Sports & Kitchen',
+        title: 'More Apps',
+        subtitle: 'Group Chat, Sports & Kitchen',
         imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png',
         subModules: [
             { id: 'qa22', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
+            { id: 'qa16', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
             { id: 'qa23', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
         ]
     },
