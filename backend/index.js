@@ -6084,54 +6084,50 @@ app.post('/api/online-classes', verifyToken, videoUpload.single('videoFile'), as
 });
 
 
-// PUT (Update) - NOW HANDLES VIDEO REPLACEMENT AND DATE/TIME UPDATES
+// PUT (Update) - FIXED: Now updates Date, Time, Class, Subject, and Teacher
 app.put('/api/online-classes/:id', verifyToken, videoUpload.single('videoFile'), async (req, res) => {
     const { id } = req.params;
-    // --- UPDATED: Added class_datetime, teacher_id, subject, class_group to destructured body ---
+    // Get all fields including class_datetime
     const { title, meet_link, description, topic, class_datetime, teacher_id, subject, class_group } = req.body;
     
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // 1. Check if class exists and get old video info
+        // 1. Check if class exists
         const [[existingClass]] = await connection.query('SELECT * FROM online_classes WHERE id = ?', [id]);
         if (!existingClass) {
             await connection.rollback();
             return res.status(404).json({ message: 'Class not found.' });
         }
 
+        // 2. Handle Video File Replacement (if new video uploaded)
         let newVideoUrl = existingClass.video_url;
-
-        // 2. If a new file is uploaded, replace the old one
         if (req.file) {
             if (existingClass.video_url) {
                 const oldFilename = path.basename(existingClass.video_url);
                 const oldFilePath = path.join(__dirname, '../data/uploads', oldFilename); 
-                
-                fs.unlink(oldFilePath, (err) => {
-                    if (err) console.log("Old video file not found or could not be deleted:", err.message);
-                    else console.log("Old video file deleted:", oldFilePath);
-                });
+                fs.unlink(oldFilePath, (err) => { if (err) console.error("Error deleting old video:", err); });
             }
             newVideoUrl = `/uploads/${req.file.filename}`;
         }
 
-        // --- UPDATED: Format the datetime for MySQL if it exists ---
+        // 3. Handle Date Formatting (CRITICAL FIX)
         let formattedDate = existingClass.class_datetime;
         if (class_datetime) {
+            // Convert ISO string from frontend to MySQL DATETIME format
             const jsDate = new Date(class_datetime);
             formattedDate = jsDate.toISOString().slice(0, 19).replace('T', ' ');
         }
         
-        // --- UPDATED: Also fetch teacher name if teacher_id changed ---
+        // 4. Handle Teacher Name Update (if teacher changed)
         let teacherName = existingClass.teacher_name;
         if (teacher_id && String(teacher_id) !== String(existingClass.teacher_id)) {
              const [[teacher]] = await connection.query('SELECT full_name FROM users WHERE id = ?', [teacher_id]);
              if (teacher) teacherName = teacher.full_name;
         }
 
-        // --- UPDATED: SQL Query now updates ALL fields ---
+        // 5. Update Database
         const query = `
             UPDATE online_classes 
             SET title = ?, 
@@ -6152,11 +6148,11 @@ app.put('/api/online-classes/:id', verifyToken, videoUpload.single('videoFile'),
             description || existingClass.description, 
             topic || existingClass.topic, 
             newVideoUrl, 
-            formattedDate,              // Updated Date
-            class_group || existingClass.class_group, // Updated Group
-            subject || existingClass.subject,         // Updated Subject
-            teacher_id || existingClass.teacher_id,   // Updated Teacher ID
-            teacherName,                              // Updated Teacher Name
+            formattedDate,              // <--- The fixed date
+            class_group || existingClass.class_group, 
+            subject || existingClass.subject,         
+            teacher_id || existingClass.teacher_id,   
+            teacherName,                              
             id
         ]);
 

@@ -14,11 +14,9 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Video from 'react-native-video';
 import * as Animatable from 'react-native-animatable';
 
-// Get device dimensions for responsive adjustments
 const { width, height } = Dimensions.get('window');
 
-// --- THEME CONFIGURATION (Master Style Guide) ---
-// Ensures consistent colors across Light and Dark modes
+// --- THEME CONFIGURATION ---
 const LightColors = {
     primary: '#008080',
     background: '#F5F7FA',
@@ -53,7 +51,7 @@ const DarkColors = {
     placeholder: '#616161'
 };
 
-// --- TYPE DEFINITIONS ---
+// --- TYPES ---
 interface OnlineClass {
     id: number; title: string; class_group: string; subject: string; teacher_id: number;
     teacher_name: string; class_datetime: string; meet_link?: string | null;
@@ -66,10 +64,11 @@ interface FormData {
     meet_link: string; description: string; topic: string;
 }
 
-// --- HELPER: DATE FORMATTING (DD/MM/YYYY) ---
+// --- HELPER: DATE FORMATTING ---
 const formatDateTime = (isoString: string): string => {
     if (!isoString) return 'Select Date & Time';
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
     
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -79,7 +78,7 @@ const formatDateTime = (isoString: string): string => {
     const minutes = date.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = hours ? hours : 12; 
     
     return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
 };
@@ -104,8 +103,10 @@ const OnlineClassScreen: React.FC = () => {
     
     const initialFormState: FormData = { title: '', class_group: '', subject: '', teacher_id: '', meet_link: '', description: '', topic: '' };
     const [formData, setFormData] = useState<FormData>(initialFormState);
+    
     const [date, setDate] = useState(new Date());
     const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+    
     const [selectedVideo, setSelectedVideo] = useState<Asset | null>(null);
     const [videoPlayerVisible, setVideoPlayerVisible] = useState(false);
     const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
@@ -130,13 +131,9 @@ const OnlineClassScreen: React.FC = () => {
 
     useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
     
-    // --- UPDATED: Fetch Subjects/Teachers even when editing ---
-    // Removed 'isEditing' check so lists update if user changes Class Group
     useEffect(() => {
         const fetchClassSpecificData = async () => {
             if (!modalVisible || !formData.class_group) return;
-            
-            // We don't wipe state immediately to prevent flicker if values exist
             try {
                 const [subjectsRes, teachersRes] = await Promise.all([
                     apiClient.get(`/subjects-for-class/${formData.class_group}`),
@@ -152,7 +149,6 @@ const OnlineClassScreen: React.FC = () => {
     }, [formData.class_group, modalVisible]);
 
     const handleClassChange = (classValue: string) => {
-        // When class changes, we clear subject/teacher to force re-selection or re-validation
         setFormData({ ...formData, class_group: classValue, subject: '', teacher_id: '' });
     };
 
@@ -167,52 +163,38 @@ const OnlineClassScreen: React.FC = () => {
     const { liveClasses, recordedClasses } = useMemo(() => {
         const live = filteredClasses.filter(c => c.class_type === 'live');
         const recorded = filteredClasses.filter(c => c.class_type === 'recorded');
-        
-        // --- UPDATED: Sorting Logic Changed (Latest First) ---
-        // Both Live and Recorded classes now sort Descending (Latest/Newest -> Oldest)
-        // b - a ensures the larger (newer) timestamp comes first
         live.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
         recorded.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
-        
         return { liveClasses: live, recordedClasses: recorded };
     }, [filteredClasses]);
 
-    // --- FIX: UPDATED PICKER CHANGE LOGIC ---
-    // This now correctly preserves the Time when changing Date, and Date when changing Time
+    // --- FIX: Robust Date Picker Logic ---
     const onPickerChange = (event: DateTimePickerEvent, selectedValue?: Date) => {
-        // If user cancels, we just close the picker
         if (event.type === 'dismissed') {
             setPickerMode(null);
             return;
         }
 
         if (event.type === 'set' && selectedValue) {
-            // 1. User selected a DATE
             if (pickerMode === 'date') {
-                setPickerMode(null); // Close date picker
-                
-                // Create a copy of the CURRENT date state
+                setPickerMode(null);
+                // Create new date object preserving current time
                 const newDate = new Date(date);
-                // Update only the Year, Month, Day from selection (Keep existing Time)
                 newDate.setFullYear(selectedValue.getFullYear(), selectedValue.getMonth(), selectedValue.getDate());
-                
                 setDate(newDate);
 
-                // Small delay before opening Time picker to ensure state settles (prevents glitches)
-                setTimeout(() => {
+                // Small delay before opening Time picker (Android fix)
+                if (Platform.OS === 'android') {
+                    setTimeout(() => setPickerMode('time'), 100);
+                } else {
                     setPickerMode('time');
-                }, 100); 
-
-            // 2. User selected a TIME
+                }
             } else if (pickerMode === 'time') {
-                setPickerMode(null); // Close time picker
-                
-                // Create a copy of the CURRENT date state
+                setPickerMode(null);
+                // Create new date object preserving current date
                 const newDate = new Date(date);
-                // Update only the Hours and Minutes (Keep existing Year/Month/Day)
                 newDate.setHours(selectedValue.getHours());
                 newDate.setMinutes(selectedValue.getMinutes());
-                
                 setDate(newDate);
             }
         }
@@ -232,7 +214,7 @@ const OnlineClassScreen: React.FC = () => {
                 description: classItem.description || '', 
                 topic: classItem.topic || '', 
             });
-            // Ensure we create a new Date object from the ISO string
+            // Ensure proper Date object creation
             setDate(new Date(classItem.class_datetime)); 
             setSelectedVideo(null);
         } else {
@@ -255,7 +237,6 @@ const OnlineClassScreen: React.FC = () => {
         if (!user) return Alert.alert("Error", "User not found.");
         if (!formData.title) return Alert.alert("Validation Error", "Title is required.");
         
-        // --- UPDATED: Validation applies to both Edit and Create now ---
         if (!formData.class_group || !formData.subject || !formData.teacher_id) {
             return Alert.alert("Validation Error", "Please fill all required fields (Class, Subject, Teacher).");
         }
@@ -274,13 +255,11 @@ const OnlineClassScreen: React.FC = () => {
         data.append('topic', formData.topic);
         data.append('class_type', modalClassType);
         
-        // --- UPDATED: Append these fields for BOTH Create and Edit ---
-        // This ensures if a user edits the Class/Subject/Date, it is sent to backend
+        // Critical: Append all fields for both Edit and Create
         data.append('class_group', formData.class_group);
         data.append('subject', formData.subject);
         data.append('teacher_id', String(formData.teacher_id));
-        // Important: Send the date as ISO string
-        data.append('class_datetime', date.toISOString());
+        data.append('class_datetime', date.toISOString()); // Sends the updated date
 
         if (modalClassType === 'live') {
             data.append('meet_link', formData.meet_link);
@@ -290,7 +269,6 @@ const OnlineClassScreen: React.FC = () => {
 
         try { 
             if (isEditing && currentClass) {
-                // Ensure backend accepts these new fields in PUT request
                 await apiClient.put(`/online-classes/${currentClass.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }); 
                 Alert.alert("Success", "Class updated successfully."); 
             } else {
@@ -321,7 +299,6 @@ const OnlineClassScreen: React.FC = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
             
-            {/* --- HEADER CARD --- */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
@@ -341,7 +318,6 @@ const OnlineClassScreen: React.FC = () => {
                 )}
             </View>
 
-            {/* --- TABS --- */}
             <View style={[styles.tabContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                 <TouchableOpacity style={[styles.tabButton, view === 'live' && { borderBottomColor: COLORS.primary, borderBottomWidth: 3, backgroundColor: isDark ? '#252525' : '#F0FDF4' }]} onPress={() => setView('live')}>
                     <Text style={[styles.tabButtonText, { color: view === 'live' ? COLORS.primary : COLORS.textSub }]}>Live Classes</Text>
@@ -374,7 +350,7 @@ const OnlineClassScreen: React.FC = () => {
                 contentContainerStyle={styles.listContentContainer}
             />
           
-            {/* --- MODAL --- */}
+            {/* MODAL */}
             <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
                 <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: COLORS.modalOverlay }]} activeOpacity={1} onPress={() => setModalVisible(false)}>
                     <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: COLORS.cardBg }]}>
@@ -400,7 +376,6 @@ const OnlineClassScreen: React.FC = () => {
                                 onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                             />
                             
-                            {/* --- UPDATED: Picker Enabled even in Edit Mode --- */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Class</Text>
                             <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                                 <Picker 
@@ -443,16 +418,23 @@ const OnlineClassScreen: React.FC = () => {
                                 </Picker>
                             </View>
                             
-                            {/* --- UPDATED: Date Picker Enabled in Edit Mode --- */}
+                            {/* DATE PICKER INPUT */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Date & Time</Text>
                             <TouchableOpacity 
-                                disabled={false} 
                                 onPress={() => setPickerMode('date')} 
                                 style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, justifyContent: 'center', height: 50 }]}
                             >
                                 <Text style={{ color: COLORS.textMain }}>{formatDateTime(date.toISOString())}</Text>
                             </TouchableOpacity>
-                            {pickerMode && <DateTimePicker value={date} mode={pickerMode} is24Hour={false} display="default" onChange={onPickerChange}/>}
+                            {pickerMode && (
+                                <DateTimePicker 
+                                    value={date} 
+                                    mode={pickerMode} 
+                                    is24Hour={false} 
+                                    display="default" 
+                                    onChange={onPickerChange}
+                                />
+                            )}
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Topic</Text>
                             <TextInput 
@@ -524,7 +506,7 @@ const OnlineClassScreen: React.FC = () => {
     );
 };
 
-// --- CARD COMPONENT ---
+// --- CLASS CARD COMPONENT ---
 const ClassCard = ({ classItem, onEdit, onDelete, onJoinOrWatch, userRole, colors, isPrivilegedUser }) => {
     const isFutureClass = new Date(classItem.class_datetime) >= new Date();
     const canJoin = (userRole === 'admin' || userRole === 'teacher') || (userRole === 'student' && isFutureClass);
@@ -591,7 +573,6 @@ const InfoRow = ({ icon, text, color, textColor }) => (
     </View>
 );
 
-// --- STYLES ---
 const styles = StyleSheet.create({ 
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }, 
     container: { flex: 1 }, 
