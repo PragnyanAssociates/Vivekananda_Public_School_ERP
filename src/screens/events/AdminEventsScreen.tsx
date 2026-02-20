@@ -2,10 +2,9 @@
  * File: src/screens/events/AdminEventsScreen.js
  * Purpose: Admin screen to manage School Events (View/Add/Edit/Delete).
  * Updated: 
- * - Responsive Design (Tablet/Phone compatible).
- * - Dark/Light Mode support.
- * - FIX: Timezone correction (prevent +5:30h shift).
- * - FIX: Date Format displayed as DD/MM/YYYY.
+ * - FIX: Solved +5:30 Timezone shift.
+ * - Format: DD/MM/YYYY.
+ * - Responsive Design.
  */
 
 import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
@@ -78,22 +77,6 @@ const DarkColors = {
     emptyIcon: '#475569'
 };
 
-// --- HELPER: FORMAT DATE (DD/MM/YYYY HH:MM AM/PM) ---
-const formatDisplayDate = (dateObj) => {
-    if (!dateObj) return '';
-    const day = dateObj.getDate().toString().padStart(2, '0');
-    const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-    const year = dateObj.getFullYear();
-    
-    let hours = dateObj.getHours();
-    const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12; 
-    
-    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
-};
-
 // --- HELPER: PARSE SERVER DATE WITHOUT TIMEZONE SHIFT ---
 const parseServerDateTime = (dateTimeString) => {
     if (!dateTimeString) return new Date();
@@ -124,6 +107,22 @@ const parseServerDateTime = (dateTimeString) => {
     }
 
     return date;
+};
+
+// --- HELPER: FORMAT FOR DISPLAY (DD/MM/YYYY) ---
+const formatDisplayDate = (dateObj) => {
+    if (!dateObj) return '';
+    const day = dateObj.getDate().toString().padStart(2, '0');
+    const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+    const year = dateObj.getFullYear();
+    
+    let hours = dateObj.getHours();
+    const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; 
+    
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
 };
 
 // --- HELPER: FORMAT FOR SERVER (YYYY-MM-DD HH:MM:SS) ---

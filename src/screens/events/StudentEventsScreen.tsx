@@ -2,9 +2,10 @@
  * File: src/screens/events/StudentEventsScreen.tsx
  * Purpose: Display list of school events with details view.
  * Updated: 
- * - Responsive Design (Tablet/Phone compatible).
- * - Dark/Light Mode support.
- * - FIX: Date Format displayed as DD/MM/YYYY.
+ * - FIX: Removed 5:30 hours offset by stripping UTC 'Z' marker.
+ * - Format: DD/MM/YYYY.
+ * - Responsive Design.
+ * - Dark/Light Mode.
  */
 
 import React, { useState, useCallback, useLayoutEffect } from 'react';
@@ -61,11 +62,40 @@ const DarkColors = {
     emptyIcon: '#475569'
 };
 
+// --- HELPER: PARSE SERVER DATE WITHOUT TIMEZONE SHIFT ---
+// This ensures we don't add +5:30 hours
+const parseServerDateTime = (dateTimeString: any) => {
+    if (!dateTimeString) return new Date();
+    
+    // 1. Convert to string to be safe
+    let dateStr = String(dateTimeString);
+
+    // 2. CRITICAL: Remove 'Z' (UTC marker) so phone doesn't add 5:30 hours
+    if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1);
+    }
+
+    // 3. Ensure it uses 'T' separator for ISO compatibility
+    if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T');
+    }
+
+    // 4. Create Date object (This is now "Floating Time")
+    const date = new Date(dateStr);
+
+    // Fallback: If invalid, return current date
+    if (isNaN(date.getTime())) {
+        return new Date();
+    }
+
+    return date;
+};
+
 // --- HELPER: FORMAT DATE (DD/MM/YYYY) ---
-const formatDisplayDate = (isoString: string) => {
+const formatDisplayDate = (isoString: any) => {
     if (!isoString) return '';
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return isoString;
+    // Use the parser that removes the timezone offset
+    const date = parseServerDateTime(isoString);
 
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -177,7 +207,9 @@ const EventListView = ({ onViewDetails, theme }: any) => {
 };
 
 const EventCard = ({ event, onViewDetails, theme }: any) => {
-    const date = new Date(event.event_datetime);
+    // FIX: Use parseServerDateTime to avoid +5:30 shift
+    const date = parseServerDateTime(event.event_datetime);
+    
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = date.getDate();
 

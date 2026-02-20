@@ -177,18 +177,43 @@ const OnlineClassScreen: React.FC = () => {
         return { liveClasses: live, recordedClasses: recorded };
     }, [filteredClasses]);
 
+    // --- FIX: UPDATED PICKER CHANGE LOGIC ---
+    // This now correctly preserves the Time when changing Date, and Date when changing Time
     const onPickerChange = (event: DateTimePickerEvent, selectedValue?: Date) => {
-        setPickerMode(null);
+        // If user cancels, we just close the picker
+        if (event.type === 'dismissed') {
+            setPickerMode(null);
+            return;
+        }
+
         if (event.type === 'set' && selectedValue) {
-            const currentDate = selectedValue;
+            // 1. User selected a DATE
             if (pickerMode === 'date') {
-                setDate(currentDate);
-                setPickerMode('time');
+                setPickerMode(null); // Close date picker
+                
+                // Create a copy of the CURRENT date state
+                const newDate = new Date(date);
+                // Update only the Year, Month, Day from selection (Keep existing Time)
+                newDate.setFullYear(selectedValue.getFullYear(), selectedValue.getMonth(), selectedValue.getDate());
+                
+                setDate(newDate);
+
+                // Small delay before opening Time picker to ensure state settles (prevents glitches)
+                setTimeout(() => {
+                    setPickerMode('time');
+                }, 100); 
+
+            // 2. User selected a TIME
             } else if (pickerMode === 'time') {
-                const finalDate = new Date(date);
-                finalDate.setHours(currentDate.getHours());
-                finalDate.setMinutes(currentDate.getMinutes());
-                setDate(finalDate);
+                setPickerMode(null); // Close time picker
+                
+                // Create a copy of the CURRENT date state
+                const newDate = new Date(date);
+                // Update only the Hours and Minutes (Keep existing Year/Month/Day)
+                newDate.setHours(selectedValue.getHours());
+                newDate.setMinutes(selectedValue.getMinutes());
+                
+                setDate(newDate);
             }
         }
     };
@@ -207,6 +232,7 @@ const OnlineClassScreen: React.FC = () => {
                 description: classItem.description || '', 
                 topic: classItem.topic || '', 
             });
+            // Ensure we create a new Date object from the ISO string
             setDate(new Date(classItem.class_datetime)); 
             setSelectedVideo(null);
         } else {
@@ -253,6 +279,7 @@ const OnlineClassScreen: React.FC = () => {
         data.append('class_group', formData.class_group);
         data.append('subject', formData.subject);
         data.append('teacher_id', String(formData.teacher_id));
+        // Important: Send the date as ISO string
         data.append('class_datetime', date.toISOString());
 
         if (modalClassType === 'live') {
