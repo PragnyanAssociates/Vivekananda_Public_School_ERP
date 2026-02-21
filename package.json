@@ -1,5 +1,5 @@
 {
-  "name": "school_app",
+  "name": "VPS_ERP",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -15,7 +15,6 @@
     "@flyerhq/react-native-link-preview": "^1.6.0",
     "@googlemaps/polyline-codec": "^1.0.28",
     "@mapbox/polyline": "^1.2.1",
-    "@maplibre/maplibre-react-native": "^10.4.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-camera-roll/camera-roll": "^7.10.2",
     "@react-native-community/checkbox": "^0.5.20",
