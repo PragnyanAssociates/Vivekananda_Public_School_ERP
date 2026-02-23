@@ -64,8 +64,8 @@ import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 import PerformanceFilter from '../screens/report/PerformanceFilter';
 import TeacherFilter from '../screens/report/TeacherFilter';
-import StudentFeedback from '../screens/Feedbacks/StudentFeedback';
-import TeacherFeedback from '../screens/Feedbacks/TeacherFeedback';
+import StudentLessonFeedback from '../screens/Feedbacks/StudentLessonFeedback';
+import TeacherLessonFeedback from '../screens/Feedbacks/TeacherLessonFeedback';
 import StudentAttendance from '../screens/StudentAttendance';
 
 // --- CONSTANTS ---
@@ -147,7 +147,7 @@ const AdminDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa6', title: 'Staff View', imageSource: 'https://cdn-icons-png.flaticon.com/128/12105/12105197.png', navigateToTab: 'StaffNavigator' },
             { id: 'qa8', title: 'Teacher Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/12404/12404284.png', navigateToTab: 'TeacherAttendanceMarkingScreen' },
-            { id: 'qa9', title: 'Teacher review', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'TeacherFeedback' },
+            { id: 'qa9', title: 'Teacher review', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'TeacherLessonFeedback' },
             { id: 'qa10', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/11277/11277118.png', navigateToTab: 'TeacherAdminPTMScreen' },
             { id: 'qa7', title: 'Teachers Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/3094/3094829.png', navigateToTab: 'TeacherFilter' },
             { id: 'qa22', title: 'Marks Entry', imageSource: 'https://cdn-icons-png.flaticon.com/128/18479/18479099.png', navigateTo: 'ReportScreen' },
@@ -161,7 +161,7 @@ const AdminDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa11', title: 'Students List', imageSource: 'https://cdn-icons-png.flaticon.com/128/16405/16405976.png', navigateToTab: 'StudentStackNavigator' },
             { id: 'qa13', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'StudentAttendance' },
-            { id: 'qa14', title: 'Student review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
+            { id: 'qa14', title: 'Student review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentLessonFeedback' },
             { id: 'qa15', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
             { id: 'qa12', title: 'Students  Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
         ]
@@ -453,8 +453,8 @@ const AdminDashboard = ({ navigation }) => {
         case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleModuleBack} /><LibraryHomeScreen /></> );
         case 'PerformanceFilter': return ( <><ContentScreenHeader title="Student Status Report" onBack={handleModuleBack} /><PerformanceFilter /></> );
         case 'TeacherFilter': return ( <><ContentScreenHeader title="Teacher Status Report" onBack={handleModuleBack} /><TeacherFilter /></> );
-        case 'StudentFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleModuleBack} /><StudentFeedback /></> );
-        case 'TeacherFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><TeacherFeedback /></> );
+        case 'StudentLessonFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleModuleBack} /><StudentLessonFeedback /></> );
+        case 'TeacherLessonFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><TeacherLessonFeedback /></> );
         case 'StudentAttendance': return ( <><ContentScreenHeader title="Student Attendance" onBack={handleModuleBack} /><StudentAttendance /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={[styles.fallbackText, {color: theme.textPrimary}]}>Content not available.</Text><TouchableOpacity onPress={() => switchTab('home')}><Text style={styles.fallbackLink}>Go Home</Text></TouchableOpacity></View> );

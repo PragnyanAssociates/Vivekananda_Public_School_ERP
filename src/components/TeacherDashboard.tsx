@@ -55,7 +55,7 @@ import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
 import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 import PerformanceFilter from '../screens/report/PerformanceFilter';
-import StudentFeedback from '../screens/Feedbacks/StudentFeedback';
+import TeacherLessonFeedback from '../screens/Feedbacks/TeacherLessonFeedback';
 
 // --- Constants & Colors ---
 const { width: windowWidth } = Dimensions.get('window');
@@ -137,7 +137,7 @@ const TeacherDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa5', title: 'Students Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
             { id: 'qa6', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'Attendance' },
-            { id: 'qa7', title: 'Student Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentFeedback' },
+            { id: 'qa7', title: 'Student Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'TeacherLessonFeedback' },
             { id: 'qa8', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
         ]
     },
@@ -424,7 +424,7 @@ const TeacherDashboard = ({ navigation }) => {
       case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleModuleBack} /><TransportScreen /></> );
       case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleModuleBack} /><LibraryHomeScreen /></> );
       case 'PerformanceFilter': return ( <><ContentScreenHeader title="Students Status Report" onBack={handleModuleBack} /><PerformanceFilter /></> );
-      case 'StudentFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleModuleBack} /><StudentFeedback /></> );
+      case 'TeacherLessonFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleModuleBack} /><TeacherLessonFeedback /></> );
 
       default: return ( <><ContentScreenHeader title={capitalize(activeTab)} onBack={() => switchTab('home')} /><View style={[styles.fallbackContent, {backgroundColor: theme.background}]}><Text style={[styles.fallbackText, {color: theme.textSecondary}]}>Content not available yet.</Text></View></> );
     }

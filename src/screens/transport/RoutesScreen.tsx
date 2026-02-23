@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView,
     Modal, TextInput, Alert, ActivityIndicator, ScrollView
 } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+// import MapLibreGL from '@maplibre/maplibre-react-native';
 import Geolocation from 'react-native-geolocation-service';
 import { io } from 'socket.io-client';
 import { useNavigation } from '@react-navigation/native';
@@ -15,14 +15,14 @@ import { useAuth } from '../../context/AuthContext';
 import { SERVER_URL } from '../../../apiConfig';
 
 // --- CONFIG ---
-const MAPTILER_KEY = 'LcjtfAnfWsn73mRnaArK'; 
+// const MAPTILER_KEY = 'LcjtfAnfWsn73mRnaArK'; 
 
 // ✅ CORRECT: Using Vector Style JSON for full details (roads, buildings, names)
-const STYLE_URL = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
+// const STYLE_URL = `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`;
 
 // ✅ FIXED: Proper Initialization
-MapLibreGL.setAccessToken(null); 
-MapLibreGL.setConnected(true);
+// MapLibreGL.setAccessToken(null); 
+// MapLibreGL.setConnected(true);
 
 const socket = io(SERVER_URL);
 

@@ -51,7 +51,7 @@ import DictionaryScreen from '../screens/dictionary/DictionaryScreen';
 import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 import MyPerformance from '../screens/report/MyPerformance';
-import TeacherFeedback from '../screens/Feedbacks/TeacherFeedback';
+import StudentLessonFeedback from '../screens/Feedbacks/StudentLessonFeedback';
 
 const { width: windowWidth } = Dimensions.get('window');
 const BOTTOM_NAV_HEIGHT = 70;
@@ -129,7 +129,7 @@ const StudentDashboard = ({ navigation }) => {
       imageSource: 'https://cdn-icons-png.flaticon.com/128/1995/1995574.png',
       subModules: [
         { id: 'qa10', title: 'PTM', imageSource: 'https://cdn-icons-png.flaticon.com/128/3214/3214781.png', navigateToTab: 'StudentPTMScreen' },
-        { id: 'qa60', title: 'Teacher Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'TeacherFeedback' },
+        { id: 'qa60', title: 'Teacher Review', imageSource: 'https://cdn-icons-png.flaticon.com/128/8540/8540828.png', navigateToTab: 'StudentLessonFeedback' },
       ]
     },
     {
@@ -408,7 +408,7 @@ const StudentDashboard = ({ navigation }) => {
       case 'TransportScreen': return ( <><ContentScreenHeader title="Transport" onBack={handleModuleBack} /><TransportScreen /></> );
       case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleModuleBack} /><LibraryHomeScreen /></> );
       case 'MyPerformance': return ( <><ContentScreenHeader title="My Performance" onBack={handleModuleBack} /><MyPerformance /></> );
-      case 'TeacherFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><TeacherFeedback /></> );
+      case 'StudentLessonFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><StudentLessonFeedback /></> );
 
       default: return ( 
           <View style={[styles.fallbackContent, {backgroundColor: theme.background}]}>
