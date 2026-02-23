@@ -21,7 +21,7 @@ const DarkColors = {
     warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525'
 };
 
-// Helper to format Date
+// Formatting strictly DD/MM/YYYY
 const formatDate = (isoString) => {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -58,8 +58,7 @@ const TeacherLessonFeedback = () => {
     const fetchClasses = async () => {
         setLoading(true);
         try {
-            // For admins, we might use a generic route. Adjust to your admin logic if necessary.
-            const targetId = isAdmin ? 1 : user.id; // Usually admins can see all, adjust endpoint if needed
+            const targetId = isAdmin ? 1 : user.id; // Adjust logic for admin fetch if required
             const res = await apiClient.get(`/lesson-feedback/teacher/classes/${targetId}`);
             setClasses(res.data);
         } catch (e) { Alert.alert('Error', 'Failed to load classes.'); }
@@ -70,8 +69,25 @@ const TeacherLessonFeedback = () => {
         setSelectedClass(classItem);
         setLoading(true);
         try {
+            // Dual Fetch for absolute reliability
+            let fetchedLessons = [];
             const res = await apiClient.get(`/lesson-feedback/lessons/${classItem.class_group}/${classItem.subject_name}`);
-            setLessons(res.data);
+            
+            if (res.data && res.data.length > 0) {
+                fetchedLessons = res.data;
+            } else {
+                const fallbackRes = await apiClient.get(`/syllabus/teacher/${classItem.class_group}/${classItem.subject_name}`);
+                if (fallbackRes.data && fallbackRes.data.lessons) {
+                    fetchedLessons = fallbackRes.data.lessons;
+                }
+            }
+            
+            const mapped = fetchedLessons.map((l, i) => ({
+                id: l.id || l.lesson_id || i,
+                lesson_name: l.lesson_name || l.lessonName
+            }));
+            
+            setLessons(mapped);
             setViewStep('lessons');
         } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
         setLoading(false);

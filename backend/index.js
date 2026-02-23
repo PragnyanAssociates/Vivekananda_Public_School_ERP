@@ -10692,15 +10692,17 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (NEW) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED & FIXED) ---
 // ==========================================================
 
-// 1. [STUDENT] Get subjects for a student's class (from timetable)
+// 1. [STUDENT] Get subjects for a student's class
 app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
     try {
         const { class_group } = req.params;
+        // FIXED: Query 'syllabus' instead of 'timetables'. 
+        // This ensures ONLY subjects that actually have lessons defined will be shown.
         const [subjects] = await db.query(
-            `SELECT DISTINCT subject_name FROM timetables WHERE class_group = ? AND subject_name IS NOT NULL`,
+            `SELECT DISTINCT subject_name FROM syllabus WHERE class_group = ? AND subject_name IS NOT NULL AND subject_name != '' ORDER BY subject_name`,
             [class_group]
         );
         res.json(subjects.map(s => s.subject_name));
@@ -10713,11 +10715,30 @@ app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) =
 app.get('/api/lesson-feedback/lessons/:class_group/:subject_name', async (req, res) => {
     try {
         const { class_group, subject_name } = req.params;
-        const [lessons] = await db.query(
-            `SELECT id, lesson_name FROM syllabus WHERE class_group = ? AND subject_name = ?`,
+        
+        // FIXED: Extract lessons properly based on the syllabus table structure
+        const [rows] = await db.query(
+            `SELECT id, lessons FROM syllabus WHERE class_group = ? AND subject_name = ? LIMIT 1`,
             [class_group, subject_name]
         );
-        res.json(lessons);
+        
+        if (rows.length === 0) {
+            return res.json([]);
+        }
+
+        let lessonsJson = rows[0].lessons;
+        // If it's a stringified JSON array, parse it
+        if (typeof lessonsJson === 'string') {
+            lessonsJson = JSON.parse(lessonsJson);
+        }
+
+        // Map the array to guarantee consistent naming for the frontend
+        const mappedLessons = (lessonsJson || []).map((l, index) => ({
+            id: l.lesson_id || index + 1,
+            lesson_name: l.lesson_name || l.lessonName
+        }));
+        
+        res.json(mappedLessons);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -10770,8 +10791,12 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
 app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => {
     try {
         const { teacher_id } = req.params;
+        // FIXED: Only return subjects that actually have a syllabus built for them
         const [classes] = await db.query(
-            `SELECT DISTINCT class_group, subject_name FROM timetables WHERE teacher_id = ?`,
+            `SELECT DISTINCT t.class_group, t.subject_name 
+             FROM timetables t
+             JOIN syllabus s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
+             WHERE t.teacher_id = ?`,
             [teacher_id]
         );
         res.json(classes);

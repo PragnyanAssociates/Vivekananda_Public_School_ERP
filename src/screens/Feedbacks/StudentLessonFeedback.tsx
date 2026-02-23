@@ -35,7 +35,7 @@ const QUESTIONS = [
     "How will you tell this to your friend?"
 ];
 
-// Helper to format Date
+// Formatting to strictly DD/MM/YYYY
 const formatDate = (isoString) => {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -59,7 +59,7 @@ const StudentLessonFeedback = () => {
     const [selectedSubject, setSelectedSubject] = useState('');
     const [selectedLesson, setSelectedLesson] = useState('');
 
-    // Form State (initialized with the 10 questions)
+    // Form State
     const [answers, setAnswers] = useState(
         QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null }))
     );
@@ -83,10 +83,30 @@ const StudentLessonFeedback = () => {
         setSelectedSubject(subject);
         setLoading(true);
         try {
+            // Fetch lessons with dual-fetch fallback to guarantee loading
+            let fetchedLessons = [];
             const res = await apiClient.get(`/lesson-feedback/lessons/${user.class_group}/${subject}`);
-            setLessons(res.data);
+            
+            if (res.data && res.data.length > 0) {
+                fetchedLessons = res.data;
+            } else {
+                // Fallback to existing syllabus route if needed
+                const fallbackRes = await apiClient.get(`/syllabus/teacher/${user.class_group}/${subject}`);
+                if (fallbackRes.data && fallbackRes.data.lessons) {
+                    fetchedLessons = fallbackRes.data.lessons;
+                }
+            }
+            
+            const mapped = fetchedLessons.map((l, i) => ({
+                id: l.id || l.lesson_id || i,
+                lesson_name: l.lesson_name || l.lessonName
+            }));
+            
+            setLessons(mapped);
             setViewStep('lessons');
-        } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
+        } catch (e) { 
+            Alert.alert('Error', 'Failed to load lessons.'); 
+        }
         setLoading(false);
     };
 
@@ -97,7 +117,6 @@ const StudentLessonFeedback = () => {
             const res = await apiClient.get(`/lesson-feedback/student/submission/${user.id}/${user.class_group}/${selectedSubject}/${lessonName}`);
             
             if (res.data && res.data.answers) {
-                // If submission exists, merge saved answers with our hardcoded questions for display
                 const savedAnswers = res.data.answers;
                 const mergedAnswers = QUESTIONS.map((q, i) => {
                     const existing = savedAnswers.find(sa => sa.q_no === i + 1);
@@ -107,7 +126,6 @@ const StudentLessonFeedback = () => {
                 setRemarks(res.data.teaching_remarks || '');
                 setIsMarked(res.data.is_marked);
             } else {
-                // Reset form to blank questions
                 setAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
                 setRemarks('');
                 setIsMarked(false);
@@ -176,7 +194,7 @@ const StudentLessonFeedback = () => {
                                         <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{sub}</Text>
                                         <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
                                     </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No subjects found.</Text>}
+                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No subjects found with lessons.</Text>}
                             </ScrollView>
                         </>
                     )}
