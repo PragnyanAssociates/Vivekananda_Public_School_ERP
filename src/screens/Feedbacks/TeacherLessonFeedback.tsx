@@ -21,7 +21,6 @@ const DarkColors = {
     warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525'
 };
 
-// Formatting strictly DD/MM/YYYY
 const formatDate = (isoString) => {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -69,25 +68,8 @@ const TeacherLessonFeedback = () => {
         setSelectedClass(classItem);
         setLoading(true);
         try {
-            // Dual Fetch for absolute reliability
-            let fetchedLessons = [];
             const res = await apiClient.get(`/lesson-feedback/lessons/${classItem.class_group}/${classItem.subject_name}`);
-            
-            if (res.data && res.data.length > 0) {
-                fetchedLessons = res.data;
-            } else {
-                const fallbackRes = await apiClient.get(`/syllabus/teacher/${classItem.class_group}/${classItem.subject_name}`);
-                if (fallbackRes.data && fallbackRes.data.lessons) {
-                    fetchedLessons = fallbackRes.data.lessons;
-                }
-            }
-            
-            const mapped = fetchedLessons.map((l, i) => ({
-                id: l.id || l.lesson_id || i,
-                lesson_name: l.lesson_name || l.lessonName
-            }));
-            
-            setLessons(mapped);
+            setLessons(res.data);
             setViewStep('lessons');
         } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
         setLoading(false);

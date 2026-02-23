@@ -10692,54 +10692,44 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED & FIXED) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED FOR YOUR SCHEMA) ---
 // ==========================================================
 
 // 1. [STUDENT] Get subjects for a student's class
+// ONLY returns subjects that are in their timetable AND have an active syllabus
 app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
     try {
         const { class_group } = req.params;
-        // FIXED: Query 'syllabus' instead of 'timetables'. 
-        // This ensures ONLY subjects that actually have lessons defined will be shown.
         const [subjects] = await db.query(
-            `SELECT DISTINCT subject_name FROM syllabus WHERE class_group = ? AND subject_name IS NOT NULL AND subject_name != '' ORDER BY subject_name`,
+            `SELECT DISTINCT s.subject_name 
+             FROM syllabuses s
+             JOIN timetables t ON s.class_group = t.class_group AND s.subject_name = t.subject_name
+             WHERE s.class_group = ? 
+             ORDER BY s.subject_name ASC`,
             [class_group]
         );
         res.json(subjects.map(s => s.subject_name));
     } catch (error) {
+        console.error("Error fetching subjects:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 2. [STUDENT & TEACHER] Get lessons for a subject from syllabus
+// 2. [STUDENT & TEACHER] Get lessons for a subject from syllabus_lessons
 app.get('/api/lesson-feedback/lessons/:class_group/:subject_name', async (req, res) => {
     try {
         const { class_group, subject_name } = req.params;
-        
-        // FIXED: Extract lessons properly based on the syllabus table structure
-        const [rows] = await db.query(
-            `SELECT id, lessons FROM syllabus WHERE class_group = ? AND subject_name = ? LIMIT 1`,
+        const [lessons] = await db.query(
+            `SELECT sl.id, sl.lesson_name 
+             FROM syllabuses s
+             JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
+             WHERE s.class_group = ? AND s.subject_name = ?
+             ORDER BY sl.to_date ASC`,
             [class_group, subject_name]
         );
-        
-        if (rows.length === 0) {
-            return res.json([]);
-        }
-
-        let lessonsJson = rows[0].lessons;
-        // If it's a stringified JSON array, parse it
-        if (typeof lessonsJson === 'string') {
-            lessonsJson = JSON.parse(lessonsJson);
-        }
-
-        // Map the array to guarantee consistent naming for the frontend
-        const mappedLessons = (lessonsJson || []).map((l, index) => ({
-            id: l.lesson_id || index + 1,
-            lesson_name: l.lesson_name || l.lessonName
-        }));
-        
-        res.json(mappedLessons);
+        res.json(lessons);
     } catch (error) {
+        console.error("Error fetching lessons:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -10749,11 +10739,13 @@ app.get('/api/lesson-feedback/student/submission/:student_id/:class_group/:subje
     try {
         const { student_id, class_group, subject_name, lesson_name } = req.params;
         const [submission] = await db.query(
-            `SELECT * FROM lesson_feedbacks WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
+            `SELECT * FROM lesson_feedbacks 
+             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
             [student_id, class_group, subject_name, lesson_name]
         );
         res.json(submission[0] || null);
     } catch (error) {
+        console.error("Error fetching submission:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -10765,7 +10757,8 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
         
         // Ensure student can't edit if already marked
         const [existing] = await db.query(
-            `SELECT is_marked FROM lesson_feedbacks WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
+            `SELECT is_marked FROM lesson_feedbacks 
+             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
             [student_id, class_group, subject_name, lesson_name]
         );
 
@@ -10783,24 +10776,26 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
         );
         res.json({ success: true, message: "Feedback saved successfully!" });
     } catch (error) {
+        console.error("Error submitting feedback:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects
+// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects (Only those with a Syllabus)
 app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => {
     try {
         const { teacher_id } = req.params;
-        // FIXED: Only return subjects that actually have a syllabus built for them
         const [classes] = await db.query(
             `SELECT DISTINCT t.class_group, t.subject_name 
              FROM timetables t
-             JOIN syllabus s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
-             WHERE t.teacher_id = ?`,
+             JOIN syllabuses s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
+             WHERE t.teacher_id = ?
+             ORDER BY t.class_group ASC`,
             [teacher_id]
         );
         res.json(classes);
     } catch (error) {
+        console.error("Error fetching teacher classes:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -10823,6 +10818,7 @@ app.get('/api/lesson-feedback/teacher/students/:class_group/:subject_name/:lesso
         );
         res.json(students);
     } catch (error) {
+        console.error("Error fetching students list:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -10841,6 +10837,7 @@ app.post('/api/lesson-feedback/teacher/mark', async (req, res) => {
         );
         res.json({ success: true, message: "Marks saved successfully!" });
     } catch (error) {
+        console.error("Error saving marks:", error);
         res.status(500).json({ error: error.message });
     }
 });

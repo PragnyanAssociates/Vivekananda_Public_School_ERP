@@ -83,26 +83,8 @@ const StudentLessonFeedback = () => {
         setSelectedSubject(subject);
         setLoading(true);
         try {
-            // Fetch lessons with dual-fetch fallback to guarantee loading
-            let fetchedLessons = [];
             const res = await apiClient.get(`/lesson-feedback/lessons/${user.class_group}/${subject}`);
-            
-            if (res.data && res.data.length > 0) {
-                fetchedLessons = res.data;
-            } else {
-                // Fallback to existing syllabus route if needed
-                const fallbackRes = await apiClient.get(`/syllabus/teacher/${user.class_group}/${subject}`);
-                if (fallbackRes.data && fallbackRes.data.lessons) {
-                    fetchedLessons = fallbackRes.data.lessons;
-                }
-            }
-            
-            const mapped = fetchedLessons.map((l, i) => ({
-                id: l.id || l.lesson_id || i,
-                lesson_name: l.lesson_name || l.lessonName
-            }));
-            
-            setLessons(mapped);
+            setLessons(res.data);
             setViewStep('lessons');
         } catch (e) { 
             Alert.alert('Error', 'Failed to load lessons.'); 
