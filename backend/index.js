@@ -10692,10 +10692,10 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED WITH STRICT MATH & TEACHER REMARKS) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED WITH GRAPH & ADMIN FIX) ---
 // ==========================================================
 
-// Helper function to calculate total marks from JSON answers
+// HELPER: Strictly calculate total marks from JSON answers
 const calculateScore = (answersJson) => {
     if (!answersJson) return 0;
     let answers = [];
@@ -10706,19 +10706,18 @@ const calculateScore = (answersJson) => {
     let score = 0;
     if (Array.isArray(answers)) {
         answers.forEach(a => { 
-            // Strictly check if mark is 1 to prevent string/type math errors
-            if (parseInt(a.mark, 10) === 1) {
-                score += 1; 
-            }
+            if (parseInt(a.mark, 10) === 1) score += 1; 
         });
     }
     return score;
 };
 
-// 1. [STUDENT] Get subjects for a student's class
-app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
+// 1. [STUDENT] Get subjects with aggregated marks
+app.get('/api/lesson-feedback/student/subjects-with-marks/:class_group/:student_id', async (req, res) => {
     try {
-        const { class_group } = req.params;
+        const { class_group, student_id } = req.params;
+        
+        // 1. Get subjects
         const [subjects] = await db.query(
             `SELECT DISTINCT s.subject_name 
              FROM syllabuses s
@@ -10727,14 +10726,48 @@ app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) =
              ORDER BY s.subject_name ASC`,
             [class_group]
         );
-        res.json(subjects.map(s => s.subject_name));
+
+        // 2. Get marked feedbacks for this student
+        const [feedbacks] = await db.query(
+            `SELECT subject_name, lesson_name, answers 
+             FROM lesson_feedbacks 
+             WHERE student_id = ? AND class_group = ? AND is_marked = 1
+             ORDER BY id DESC`,
+            [student_id, class_group]
+        );
+
+        // 3. Aggregate safely per subject
+        const subjectsWithScores = subjects.map(sub => {
+            const subFeedbacks = feedbacks.filter(f => f.subject_name === sub.subject_name);
+            const processedLessons = new Set();
+            let totalObtained = 0;
+            let totalMax = 0;
+
+            subFeedbacks.forEach(fb => {
+                if (!processedLessons.has(fb.lesson_name)) {
+                    processedLessons.add(fb.lesson_name);
+                    totalObtained += calculateScore(fb.answers);
+                    totalMax += 10;
+                }
+            });
+
+            return {
+                subject_name: sub.subject_name,
+                total_obtained: totalObtained,
+                total_max: totalMax,
+                has_marks: totalMax > 0,
+                percentage: totalMax > 0 ? ((totalObtained / totalMax) * 100) : 0
+            };
+        });
+
+        res.json(subjectsWithScores);
     } catch (error) {
-        console.error("Error fetching subjects:", error);
+        console.error("Error fetching subjects with marks:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 2. [STUDENT] Get specific student's lessons with strictly aggregated marks
+// 2. [STUDENT] Get specific student's lessons with marks
 app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name } = req.params;
@@ -10832,19 +10865,64 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
     }
 });
 
-// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects
-app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => {
+// 5. [TEACHER/ADMIN] Get Classes with Aggregated Marks
+app.get('/api/lesson-feedback/teacher/classes-with-marks/:user_id/:role', async (req, res) => {
     try {
-        const { teacher_id } = req.params;
-        const [classes] = await db.query(
-            `SELECT DISTINCT t.class_group, t.subject_name 
-             FROM timetables t
-             JOIN syllabuses s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
-             WHERE t.teacher_id = ?
-             ORDER BY t.class_group ASC`,
-            [teacher_id]
+        const { user_id, role } = req.params;
+        let classes = [];
+
+        // ADMIN FIX: Admin sees ALL syllabuses regardless of timetable
+        if (role === 'admin') {
+            const [allClasses] = await db.query(
+                `SELECT DISTINCT class_group, subject_name FROM syllabuses ORDER BY class_group ASC, subject_name ASC`
+            );
+            classes = allClasses;
+        } else {
+            // Teacher sees only their timetable subjects that have a syllabus
+            const [teacherClasses] = await db.query(
+                `SELECT DISTINCT t.class_group, t.subject_name 
+                 FROM timetables t
+                 JOIN syllabuses s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
+                 WHERE t.teacher_id = ?
+                 ORDER BY t.class_group ASC`,
+                [user_id]
+            );
+            classes = teacherClasses;
+        }
+
+        // Fetch all marked feedbacks to aggregate scores for the outer screen
+        const [feedbacks] = await db.query(
+            `SELECT class_group, subject_name, student_id, lesson_name, answers 
+             FROM lesson_feedbacks 
+             WHERE is_marked = 1
+             ORDER BY id DESC`
         );
-        res.json(classes);
+
+        const classesWithScores = classes.map(c => {
+            const cFeedbacks = feedbacks.filter(f => f.class_group === c.class_group && f.subject_name === c.subject_name);
+            const processedKeys = new Set();
+            let totalObtained = 0;
+            let totalMax = 0;
+
+            cFeedbacks.forEach(fb => {
+                const uniqueKey = `${fb.student_id}-${fb.lesson_name}`;
+                if (!processedKeys.has(uniqueKey)) {
+                    processedKeys.add(uniqueKey);
+                    totalObtained += calculateScore(fb.answers);
+                    totalMax += 10;
+                }
+            });
+
+            return {
+                ...c,
+                total_obtained: totalObtained,
+                total_max: totalMax,
+                has_marks: totalMax > 0,
+                percentage: totalMax > 0 ? ((totalObtained / totalMax) * 100) : 0
+            };
+        });
+
+        res.json(classesWithScores);
     } catch (error) {
         console.error("Error fetching teacher classes:", error);
         res.status(500).json({ error: error.message });
@@ -10875,7 +10953,6 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
         const studentsWithScores = students.map(student => {
             let totalObtained = 0;
             let totalPossible = 0;
-            
             const processedLessons = new Set();
 
             feedbacks.forEach(fb => {
@@ -10892,7 +10969,8 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
                 ...student,
                 total_obtained: totalObtained,
                 total_max: totalPossible,
-                has_marks: totalPossible > 0 
+                has_marks: totalPossible > 0,
+                percentage: totalPossible > 0 ? ((totalObtained / totalPossible) * 100) : 0
             };
         });
 
@@ -10958,9 +11036,8 @@ app.post('/api/lesson-feedback/teacher/mark', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name, answers, teacher_id, teacher_remarks_checkboxes } = req.body;
         const answersJson = JSON.stringify(answers);
-        const remarksJson = JSON.stringify(teacher_remarks_checkboxes || []); // Default to empty array
+        const remarksJson = JSON.stringify(teacher_remarks_checkboxes || []); 
 
-        // Clean update to latest row
         await db.query(
             `UPDATE lesson_feedbacks 
              SET answers = ?, is_marked = true, teacher_id = ?, teacher_remarks_checkboxes = ?

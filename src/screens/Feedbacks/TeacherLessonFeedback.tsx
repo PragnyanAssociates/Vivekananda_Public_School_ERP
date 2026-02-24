@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
-    ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions
+    ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions, Modal, Animated, Easing
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client'; 
@@ -13,18 +13,51 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', success: '#27AE60', danger: '#E53935', 
-    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444'
+    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444', graphBg: '#F0F0F0'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', success: '#27AE60', danger: '#EF5350', 
-    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444'
+    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444', graphBg: '#333333'
 };
 
 const TEACHER_REMARK_OPTIONS = [
     "Irregular", "Unfocused", "Unhealthy", 
     "Poor Performance", "Needs improvement", "None of the above"
 ];
+
+// --- ANIMATED BAR COMPONENT ---
+const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
+    const animatedHeight = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(animatedHeight, {
+            toValue: percentage,
+            duration: 1000,
+            useNativeDriver: false,
+            easing: Easing.out(Easing.poly(4)),
+        }).start();
+    }, [percentage]);
+
+    const heightStyle = animatedHeight.interpolate({
+        inputRange: [0, 100],
+        outputRange: ['0%', '100%']
+    });
+
+    const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
+
+    return (
+        <View style={styles.barWrapper}>
+            <Text style={[styles.barLabelTop, { color: colors.textMain }]}>{topLabel}</Text>
+            <View style={[styles.barTrack, { backgroundColor: colors.graphBg }]}>
+                <Animated.View style={[styles.barFill, { height: heightStyle, backgroundColor: color }]} />
+            </View>
+            <Text style={[styles.barLabelBottom, { color: colors.textSub }]} numberOfLines={1}>
+                {displayLabel}
+            </Text>
+        </View>
+    );
+};
 
 const TeacherLessonFeedback = () => {
     const { user } = useAuth();
@@ -34,6 +67,7 @@ const TeacherLessonFeedback = () => {
 
     const [viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
+    const [showGraph, setShowGraph] = useState(false);
 
     const [classes, setClasses] = useState([]);
     const [students, setStudents] = useState([]);
@@ -45,17 +79,15 @@ const TeacherLessonFeedback = () => {
 
     const [answers, setAnswers] = useState([]);
     const [remarks, setRemarks] = useState('');
-    const [teacherRemarks, setTeacherRemarks] = useState([]); // NEW: State for checkboxes
+    const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
-    useEffect(() => {
-        if (user) fetchClasses();
-    }, [user]);
+    useEffect(() => { if (user) fetchClasses(); }, [user]);
 
     const fetchClasses = async () => {
         setLoading(true);
         try {
-            const targetId = isAdmin ? 1 : user.id; 
-            const res = await apiClient.get(`/lesson-feedback/teacher/classes/${targetId}`);
+            const role = isAdmin ? 'admin' : 'teacher';
+            const res = await apiClient.get(`/lesson-feedback/teacher/classes-with-marks/${user.id}/${role}`);
             setClasses(res.data);
         } catch (e) { Alert.alert('Error', 'Failed to load classes.'); }
         setLoading(false);
@@ -95,14 +127,10 @@ const TeacherLessonFeedback = () => {
             setAnswers(res.data.answers || []);
             setRemarks(res.data.teaching_remarks || '');
             
-            // NEW: Load existing teacher remarks checkboxes
             let parsedRemarks = [];
             try {
-                if (typeof res.data.teacher_remarks_checkboxes === 'string') {
-                    parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
-                } else if (Array.isArray(res.data.teacher_remarks_checkboxes)) {
-                    parsedRemarks = res.data.teacher_remarks_checkboxes;
-                }
+                if (typeof res.data.teacher_remarks_checkboxes === 'string') parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
+                else if (Array.isArray(res.data.teacher_remarks_checkboxes)) parsedRemarks = res.data.teacher_remarks_checkboxes;
             } catch (e) {}
             setTeacherRemarks(parsedRemarks);
             
@@ -118,23 +146,14 @@ const TeacherLessonFeedback = () => {
         setAnswers(newAnswers);
     };
 
-    // NEW: Handle Checkbox toggles
     const handleTeacherRemarkToggle = (option) => {
         if (isAdmin) return;
         setTeacherRemarks(prev => {
-            if (option === "None of the above") {
-                // If "None" is clicked, uncheck everything else
-                return prev.includes("None of the above") ? [] : ["None of the above"];
-            } else {
-                // Uncheck "None of the above" if another option is clicked
-                let newArr = prev.filter(item => item !== "None of the above");
-                if (newArr.includes(option)) {
-                    newArr = newArr.filter(item => item !== option);
-                } else {
-                    newArr.push(option);
-                }
-                return newArr;
-            }
+            if (option === "None of the above") return prev.includes("None of the above") ? [] : ["None of the above"];
+            let newArr = prev.filter(item => item !== "None of the above");
+            if (newArr.includes(option)) newArr = newArr.filter(item => item !== option);
+            else newArr.push(option);
+            return newArr;
         });
     };
 
@@ -147,9 +166,7 @@ const TeacherLessonFeedback = () => {
                 class_group: selectedClass.class_group,
                 subject_name: selectedClass.subject_name,
                 lesson_name: selectedLesson.lesson_name,
-                answers,
-                teacher_id: user.id,
-                teacher_remarks_checkboxes: teacherRemarks // NEW: send checkboxes to backend
+                answers, teacher_id: user.id, teacher_remarks_checkboxes: teacherRemarks
             });
             Alert.alert('Success', 'Marks and remarks saved successfully!');
             handleStudentSelect(selectedStudent); 
@@ -157,21 +174,28 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    const renderHeader = (title, subtitle, showBack, backAction) => (
+    const renderHeader = (title, subtitle, showBack, backAction, showGraphBtn) => (
         <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {showBack && (
-                    <TouchableOpacity onPress={backAction} style={{ marginRight: 15 }}>
-                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    {showBack && (
+                        <TouchableOpacity onPress={backAction} style={{ marginRight: 15 }}>
+                            <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
+                        </TouchableOpacity>
+                    )}
+                    <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
+                        <MaterialIcons name="fact-check" size={24} color={COLORS.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{title}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{subtitle}</Text>
+                    </View>
+                </View>
+                {showGraphBtn && (
+                    <TouchableOpacity style={styles.graphBtnTop} onPress={() => setShowGraph(true)}>
+                        <MaterialIcons name="bar-chart" size={26} color={COLORS.primary} />
                     </TouchableOpacity>
                 )}
-                <View style={[styles.headerIconContainer, { backgroundColor: COLORS.iconBg }]}>
-                    <MaterialIcons name="fact-check" size={24} color={COLORS.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{title}</Text>
-                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{subtitle}</Text>
-                </View>
             </View>
         </View>
     );
@@ -185,7 +209,7 @@ const TeacherLessonFeedback = () => {
                     {/* STEP 1: CLASSES */}
                     {viewStep === 'classes' && (
                         <>
-                            {renderHeader("Marking Dashboard", "Select a Class & Subject", false)}
+                            {renderHeader(isAdmin ? "All Classes Dashboard" : "My Classes", "Select a Class & Subject", false, null, false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {classes.length > 0 ? classes.map((c, idx) => (
                                     <TouchableOpacity key={idx} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleClassSelect(c)}>
@@ -193,7 +217,17 @@ const TeacherLessonFeedback = () => {
                                             <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{c.class_group}</Text>
                                             <Text style={{ color: COLORS.textSub, marginTop: 4 }}>{c.subject_name}</Text>
                                         </View>
-                                        <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+
+                                        <View style={styles.badgeContainer}>
+                                            {c.has_marks && (
+                                                <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
+                                                    <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>
+                                                        {c.total_obtained}/{c.total_max}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+                                        </View>
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No assigned classes found.</Text>}
                             </ScrollView>
@@ -203,7 +237,10 @@ const TeacherLessonFeedback = () => {
                     {/* STEP 2: STUDENTS */}
                     {viewStep === 'students' && (
                         <>
-                            {renderHeader(`${selectedClass.class_group} - ${selectedClass.subject_name}`, "Select a Student", true, () => setViewStep('classes'))}
+                            {/* Pass showGraphBtn=true here */}
+                            {renderHeader(`${selectedClass.class_group} - ${selectedClass.subject_name}`, "Select a Student", true, () => {
+                                setViewStep('classes'); fetchClasses();
+                            }, true)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {students.length > 0 ? students.map((student, idx) => (
                                     <TouchableOpacity 
@@ -239,7 +276,9 @@ const TeacherLessonFeedback = () => {
                     {/* STEP 3: LESSONS */}
                     {viewStep === 'lessons' && (
                         <>
-                            {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => setViewStep('students'))}
+                            {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => {
+                                setViewStep('students'); handleClassSelect(selectedClass); 
+                            }, false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {lessons.length > 0 ? lessons.map((lesson) => (
                                     <TouchableOpacity 
@@ -280,7 +319,7 @@ const TeacherLessonFeedback = () => {
                     {/* STEP 4: GRADING & REMARKS */}
                     {viewStep === 'grading' && (
                         <>
-                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'))}
+                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'), false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 
                                 <View style={[styles.remarksBox, { backgroundColor: COLORS.rowAlt, borderColor: COLORS.border }]}>
@@ -317,10 +356,8 @@ const TeacherLessonFeedback = () => {
                                     </View>
                                 ))}
 
-                                {/* --- NEW: TEACHER REMARKS CHECKBOXES --- */}
                                 <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, paddingBottom: 5 }]}>
                                     <Text style={[styles.label, { color: COLORS.primary, marginBottom: 10 }]}>Teacher Remarks (Check all that apply):</Text>
-                                    
                                     {TEACHER_REMARK_OPTIONS.map(opt => {
                                         const isChecked = teacherRemarks.includes(opt);
                                         return (
@@ -353,6 +390,48 @@ const TeacherLessonFeedback = () => {
                     )}
                 </>
             )}
+
+            {/* --- GRAPH MODAL --- */}
+            <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
+                <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
+                    <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
+                        <TouchableOpacity onPress={() => setShowGraph(false)} style={{ padding: 5 }}>
+                            <MaterialIcons name="close" size={26} color={COLORS.textMain} />
+                        </TouchableOpacity>
+                        <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>Performance Analytics</Text>
+                        <View style={{ width: 30 }}/>
+                    </View>
+
+                    <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginTop: 20 }}>
+                        Student Ranking ({selectedClass?.class_group} - {selectedClass?.subject_name})
+                    </Text>
+
+                    <View style={styles.graphContainer}>
+                        {students.filter(s => s.has_marks).length > 0 ? (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end', paddingTop: 30 }}>
+                                {[...students]
+                                    .filter(s => s.has_marks)
+                                    .sort((a, b) => b.percentage - a.percentage) 
+                                    .map((item, idx) => (
+                                    <AnimatedBar 
+                                        key={idx}
+                                        percentage={item.percentage}
+                                        topLabel={`${item.total_obtained}/${item.total_max}`}
+                                        label={item.full_name}
+                                        color={COLORS.primary}
+                                        colors={COLORS}
+                                    />
+                                ))}
+                            </ScrollView>
+                        ) : (
+                            <View style={{ alignItems: 'center', marginTop: 100 }}>
+                                <MaterialIcons name="bar-chart" size={50} color={COLORS.textSub} />
+                                <Text style={{ color: COLORS.textSub, marginTop: 10 }}>No graded students available for graph.</Text>
+                            </View>
+                        )}
+                    </View>
+                </SafeAreaView>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -363,6 +442,7 @@ const styles = StyleSheet.create({
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
+    graphBtnTop: { padding: 8, backgroundColor: '#E0F2F1', borderRadius: 8 },
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
@@ -381,13 +461,22 @@ const styles = StyleSheet.create({
     markBtn: { width: 45, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
     markBtnText: { fontWeight: 'bold', fontSize: 16, color: '#777' },
     
-    // Checkbox Styles
     checkboxRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     checkboxText: { marginLeft: 10, fontSize: 15, fontWeight: '500' },
     
     saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 5 },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-    emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 }
+    emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 },
+
+    // Modal & Graph
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold' },
+    graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 10, height: 250, justifyContent: 'flex-end' },
+    barLabelTop: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
+    barTrack: { width: 40, height: 200, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
+    barFill: { width: '100%', borderRadius: 6 },
+    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center', width: '100%' }
 });
 
 export default TeacherLessonFeedback;
