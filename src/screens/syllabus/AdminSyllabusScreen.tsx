@@ -55,7 +55,7 @@ const formatDateForBackend = (dateObj) => {
 
 // --- Main Component ---
 const AdminSyllabusScreen = () => {
-    const [view, setView] = useState('classes'); // 'classes' | 'subjects' | 'createOrEdit' | 'progressDetail'
+    const [view, setView] = useState('classes'); 
     const [selectedClass, setSelectedClass] = useState(null);
     const [selectedSyllabus, setSelectedSyllabus] = useState(null);
 
@@ -127,8 +127,8 @@ const ClassListScreen = ({ onSelectClass }) => {
                 <FlatList
                     data={allClasses}
                     keyExtractor={(item) => item}
-                    numColumns={2} // <--- Enables the 2 column grid
-                    columnWrapperStyle={styles.rowWrapper} // <--- Spaces the columns out evenly
+                    numColumns={2} 
+                    columnWrapperStyle={styles.rowWrapper} 
                     contentContainerStyle={{ paddingBottom: 100, paddingTop: 5 }}
                     renderItem={({ item, index }) => {
                         const theme = DYNAMIC_COLORS[index % DYNAMIC_COLORS.length];
@@ -137,25 +137,15 @@ const ClassListScreen = ({ onSelectClass }) => {
                             <TouchableOpacity 
                                 style={[
                                     styles.dynamicClassCard, 
-                                    { 
-                                        borderColor: theme.border, 
-                                        backgroundColor: isDark ? COLORS.cardBg : theme.bg 
-                                    }
+                                    { borderColor: theme.border, backgroundColor: isDark ? COLORS.cardBg : theme.bg }
                                 ]} 
                                 onPress={() => onSelectClass(item)}
                                 activeOpacity={0.7}
                             >
-                                <Text 
-                                    style={[styles.dynamicClassText, { color: isDark ? theme.border : theme.text }]}
-                                    numberOfLines={1}
-                                >
+                                <Text style={[styles.dynamicClassText, { color: isDark ? theme.border : theme.text }]} numberOfLines={1}>
                                     {item}
                                 </Text>
-                                <MaterialIcons 
-                                    name="chevron-right" 
-                                    size={24} // Slightly smaller icon for the smaller boxes
-                                    color={isDark ? theme.border : theme.text} 
-                                />
+                                <MaterialIcons name="chevron-right" size={24} color={isDark ? theme.border : theme.text} />
                             </TouchableOpacity>
                         );
                     }}
@@ -236,9 +226,7 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
                                 <MaterialIcons name="more-vert" size={26} color={COLORS.iconGrey} />
                             </TouchableOpacity>
                         </View>
-                        
                         <View style={[styles.divider, { backgroundColor: COLORS.divider }]} />
-                        
                         <View style={styles.cardInfoRow}>
                             <MaterialIcons name="library-books" size={16} color={COLORS.textSub} />
                             <Text style={[styles.cardDetailText, { color: COLORS.textSub }]}>{item.lesson_count} Lessons</Text>
@@ -247,7 +235,6 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
                              <MaterialIcons name="person" size={16} color={COLORS.textSub} />
                             <Text style={[styles.cardDetailText, { color: COLORS.textSub }]}>{item.creator_name}</Text>
                         </View>
-                        
                         <TouchableOpacity style={[styles.viewProgressButton, { backgroundColor: COLORS.primary }]} onPress={() => onViewProgress(item)}>
                             <Text style={styles.buttonTextSmall}>View Progress</Text>
                             <MaterialIcons name="arrow-forward" size={16} color="#fff" />
@@ -262,17 +249,19 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
     );
 };
 
-// --- Sub-Component 3: Create/Edit Form (Tabbed) ---
+// --- Sub-Component 3: Create/Edit Form (Tabbed & Multiple Exams Enabled) ---
 const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     const isEditMode = !!initialSyllabus;
     
-    const [activeTab, setActiveTab] = useState('lessons'); // 'lessons' | 'exams'
+    const [activeTab, setActiveTab] = useState('lessons'); 
     const [selectedSubject, setSelectedSubject] = useState(isEditMode ? initialSyllabus.subject_name : '');
     const [selectedTeacherId, setSelectedTeacherId] = useState(isEditMode ? initialSyllabus.creator_id.toString() : '');
-    const [lessons, setLessons] = useState([{ id: Date.now(), lessonName: '', examType: 'Unassigned', fromDate: new Date(), toDate: new Date() }]);
+    
+    // CHANGED: examTypes is now an array to support multiple exam assignments
+    const [lessons, setLessons] = useState([{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
     const [examFilter, setExamFilter] = useState('AT1');
 
     const [availableSubjects, setAvailableSubjects] = useState([]);
@@ -297,11 +286,12 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                     const formattedLessons = syllabusDetailsRes.data.lessons.map(l => ({ 
                         id: l.id || Date.now() + Math.random(),
                         lessonName: l.lesson_name, 
-                        examType: l.exam_type || 'Unassigned',
+                        // Parse comma separated backend string to array
+                        examTypes: l.exam_type ? l.exam_type.split(',').map(e => e.trim()) : [],
                         fromDate: new Date(l.from_date), 
                         toDate: new Date(l.to_date) 
                     }));
-                    setLessons(formattedLessons.length > 0 ? formattedLessons : [{ id: Date.now(), lessonName: '', examType: 'Unassigned', fromDate: new Date(), toDate: new Date() }]);
+                    setLessons(formattedLessons.length > 0 ? formattedLessons : [{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
                 }
             } catch (e) { Alert.alert("Error", "Could not load data."); } 
             finally { setIsLoading(false); }
@@ -320,12 +310,17 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
         }
     };
 
+    // CHANGED: Toggle logic to add/remove examFilter from the array
     const toggleLessonExam = (index) => {
         const newLessons = [...lessons];
-        if (newLessons[index].examType === examFilter) {
-            newLessons[index].examType = 'Unassigned';
+        const currentExams = newLessons[index].examTypes || [];
+        
+        if (currentExams.includes(examFilter)) {
+            // Remove exam if already selected
+            newLessons[index].examTypes = currentExams.filter(e => e !== examFilter);
         } else {
-            newLessons[index].examType = examFilter;
+            // Add exam
+            newLessons[index].examTypes = [...currentExams, examFilter];
         }
         setLessons(newLessons);
     };
@@ -335,14 +330,14 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
         
         const validLessons = lessons.filter(l => l.lessonName.trim()).map(l => ({
             lessonName: l.lessonName, 
-            examType: l.examType,
+            examType: l.examTypes.join(', '), // Send as CSV string to backend
             fromDate: formatDateForBackend(l.fromDate), 
             toDate: formatDateForBackend(l.toDate)
         }));
 
         if (validLessons.length === 0) return Alert.alert("Required", "Add at least one valid lesson.");
         
-        const unassignedCount = validLessons.filter(l => l.examType === 'Unassigned').length;
+        const unassignedCount = validLessons.filter(l => !l.examType || l.examType.trim() === '').length;
         if (unassignedCount > 0) {
             return Alert.alert("Missing Exam Types", `Please assign an Exam Type to all lessons. ${unassignedCount} lesson(s) unassigned.`);
         }
@@ -376,16 +371,10 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
             </View>
             
             <View style={[styles.tabContainer, { backgroundColor: COLORS.cardBg }]}>
-                <TouchableOpacity 
-                    style={[styles.tabButton, activeTab === 'lessons' && { borderBottomColor: COLORS.primary, borderBottomWidth: 3 }]} 
-                    onPress={() => setActiveTab('lessons')}
-                >
+                <TouchableOpacity style={[styles.tabButton, activeTab === 'lessons' && { borderBottomColor: COLORS.primary, borderBottomWidth: 3 }]} onPress={() => setActiveTab('lessons')}>
                     <Text style={[styles.tabText, { color: activeTab === 'lessons' ? COLORS.primary : COLORS.textSub }]}>Assign Lessons</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                    style={[styles.tabButton, activeTab === 'exams' && { borderBottomColor: COLORS.primary, borderBottomWidth: 3 }]} 
-                    onPress={() => setActiveTab('exams')}
-                >
+                <TouchableOpacity style={[styles.tabButton, activeTab === 'exams' && { borderBottomColor: COLORS.primary, borderBottomWidth: 3 }]} onPress={() => setActiveTab('exams')}>
                     <Text style={[styles.tabText, { color: activeTab === 'exams' ? COLORS.primary : COLORS.textSub }]}>Assign Exam Type</Text>
                 </TouchableOpacity>
             </View>
@@ -441,7 +430,7 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                                     </View>
                                 </View>
                             ))}
-                            <TouchableOpacity style={[styles.addLessonBtn, { borderColor: COLORS.primary, backgroundColor: isDark ? 'transparent' : '#F0FDF4' }]} onPress={() => setLessons([...lessons, { id: Date.now(), lessonName: '', examType: 'Unassigned', fromDate: new Date(), toDate: new Date() }])}>
+                            <TouchableOpacity style={[styles.addLessonBtn, { borderColor: COLORS.primary, backgroundColor: isDark ? 'transparent' : '#F0FDF4' }]} onPress={() => setLessons([...lessons, { id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }])}>
                                 <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>+ Add Lesson</Text>
                             </TouchableOpacity>
                         </View>
@@ -457,10 +446,11 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                             </Picker>
                         </View>
 
-                        <Text style={[styles.sectionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.divider }]}>Lessons</Text>
+                        <Text style={[styles.sectionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.divider }]}>Lessons (Select for {examFilter})</Text>
                         
                         {lessons.map((lesson, index) => {
-                            const isSelected = lesson.examType === examFilter;
+                            // Check if examFilter is in the array
+                            const isSelected = lesson.examTypes && lesson.examTypes.includes(examFilter);
                             return (
                                 <TouchableOpacity 
                                     key={lesson.id} 
@@ -477,10 +467,13 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                                         <Text style={{ color: COLORS.textMain, fontSize: 16, fontWeight: isSelected ? '600' : '400' }}>
                                             {lesson.lessonName || `Lesson #${index + 1}`}
                                         </Text>
-                                        {lesson.examType !== 'Unassigned' && !isSelected && (
-                                            <Text style={{ fontSize: 11, color: COLORS.textSub, marginTop: 2 }}>Assigned to: {lesson.examType}</Text>
-                                        )}
-                                        {lesson.examType === 'Unassigned' && (
+                                        
+                                        {/* Display comma separated exams assigned */}
+                                        {lesson.examTypes && lesson.examTypes.length > 0 ? (
+                                            <Text style={{ fontSize: 11, color: COLORS.textSub, marginTop: 2 }}>
+                                                Assigned to: {lesson.examTypes.join(', ')}
+                                            </Text>
+                                        ) : (
                                             <Text style={{ fontSize: 11, color: COLORS.danger, marginTop: 2 }}>Unassigned</Text>
                                         )}
                                     </View>
@@ -488,9 +481,7 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                             )
                         })}
                         
-                        {lessons.length === 0 && (
-                            <Text style={{ color: COLORS.textSub, textAlign: 'center', marginTop: 20 }}>No lessons added yet. Go to Assign Lessons tab.</Text>
-                        )}
+                        {lessons.length === 0 && <Text style={{ color: COLORS.textSub, textAlign: 'center', marginTop: 20 }}>No lessons added yet. Go to Assign Lessons tab.</Text>}
                     </View>
                 )}
                 
@@ -503,7 +494,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
         </SafeAreaView>
     );
 };
-
 
 // --- Sub-Component 4: Progress View ---
 const AdminProgressView = ({ syllabus, onBack }) => {
@@ -590,34 +580,15 @@ const styles = StyleSheet.create({
     cleanHeaderTitle: { fontSize: 20, fontWeight: 'bold' },
 
     // Grid Wrapper for 2-column layout
-    rowWrapper: {
-        justifyContent: 'space-between',
-        paddingHorizontal: 15,
-        marginBottom: 14
-    },
+    rowWrapper: { justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 14 },
 
     // 2-Column Dynamic Colorful Class Cards
     dynamicClassCard: {
-        width: '48%', // Half width minus gap
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        paddingVertical: 16, 
-        paddingHorizontal: 14, 
-        borderRadius: 12, 
-        borderWidth: 1.5,
-        elevation: 1, 
-        shadowOpacity: 0.05, 
-        shadowRadius: 2, 
-        shadowOffset: { width: 0, height: 1 }
+        width: '48%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        paddingVertical: 16, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5,
+        elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }
     },
-    dynamicClassText: { 
-        fontSize: 15, 
-        fontWeight: '700', 
-        letterSpacing: 0.3,
-        flex: 1, // Ensures text doesn't push the icon out
-        marginRight: 5
-    },
+    dynamicClassText: { fontSize: 15, fontWeight: '700', letterSpacing: 0.3, flex: 1, marginRight: 5 },
 
     // Subject List Cards
     card: { borderRadius: 12, marginVertical: 6, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, width: '96%', alignSelf: 'center' },

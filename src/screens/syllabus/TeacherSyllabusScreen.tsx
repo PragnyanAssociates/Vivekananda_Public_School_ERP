@@ -12,41 +12,21 @@ import { createStackNavigator } from '@react-navigation/stack';
 const Stack = createStackNavigator();
 const { width } = Dimensions.get('window');
 
-// --- THEME CONFIGURATION (Master Style Guide) ---
+// --- THEME CONFIGURATION ---
 const LightColors = {
-    primary: '#008080',
-    background: '#F5F7FA',
-    cardBg: '#FFFFFF',
-    textMain: '#263238',
-    textSub: '#546E7A',
-    border: '#CFD8DC',
-    inputBg: '#FAFAFA',
-    iconGrey: '#90A4AE',
-    danger: '#E53935',
-    success: '#43A047',
-    warning: '#FFA000',
-    headerIconBg: '#E0F2F1',
-    divider: '#f0f2f5',
-    filterBg: '#FFFFFF',
-    filterTabBg: '#f1f5f9'
+    primary: '#008080', background: '#F5F7FA', cardBg: '#FFFFFF',
+    textMain: '#263238', textSub: '#546E7A', border: '#CFD8DC',
+    inputBg: '#FAFAFA', iconGrey: '#90A4AE', danger: '#E53935',
+    success: '#43A047', warning: '#FFA000', headerIconBg: '#E0F2F1',
+    divider: '#f0f2f5', filterBg: '#FFFFFF', filterTabBg: '#f1f5f9'
 };
 
 const DarkColors = {
-    primary: '#008080',
-    background: '#121212',
-    cardBg: '#1E1E1E',
-    textMain: '#E0E0E0',
-    textSub: '#B0B0B0',
-    border: '#333333',
-    inputBg: '#2C2C2C',
-    iconGrey: '#757575',
-    danger: '#EF5350',
-    success: '#66BB6A',
-    warning: '#FFA726',
-    headerIconBg: '#333333',
-    divider: '#2C2C2C',
-    filterBg: '#1E1E1E',
-    filterTabBg: '#2C2C2C'
+    primary: '#008080', background: '#121212', cardBg: '#1E1E1E',
+    textMain: '#E0E0E0', textSub: '#B0B0B0', border: '#333333',
+    inputBg: '#2C2C2C', iconGrey: '#757575', danger: '#EF5350',
+    success: '#66BB6A', warning: '#FFA726', headerIconBg: '#333333',
+    divider: '#2C2C2C', filterBg: '#1E1E1E', filterTabBg: '#2C2C2C'
 };
 
 const FILTER_TYPES = ["Overall", "AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
@@ -93,7 +73,6 @@ const TeacherSyllabusListScreen = ({ navigation }) => {
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={COLORS.background} />
             
-            {/* Header Card */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerContentWrapper}>
                     <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
@@ -141,11 +120,9 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     
-    // State for filtering
     const [fullLessonList, setFullLessonList] = useState([]); 
     const [filteredLessons, setFilteredLessons] = useState([]);
     const [selectedFilter, setSelectedFilter] = useState("Overall");
-
     const [overview, setOverview] = useState({ completed: 0, missed: 0, left: 0 });
     const [isLoading, setIsLoading] = useState(true);
 
@@ -159,15 +136,11 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
             const progressData = progressResponse.data;
 
             setFullLessonList(progressData);
-            // Apply default filter 'Overall'
             setFilteredLessons(progressData);
             calculateStats(progressData);
 
-        } catch (error) {
-            Alert.alert("Notice", "Syllabus not found for this subject.");
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (error) { Alert.alert("Notice", "Syllabus not found for this subject."); } 
+        finally { setIsLoading(false); }
     }, [classGroup, subjectName]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
@@ -178,7 +151,8 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
         if (filterType === "Overall") {
             updatedList = fullLessonList;
         } else {
-            updatedList = fullLessonList.filter(l => l.exam_type === filterType);
+            // CHANGED: Use .includes() because exam_type can be a comma-separated string like "AT1, SA1"
+            updatedList = fullLessonList.filter(l => l.exam_type && l.exam_type.includes(filterType));
         }
         setFilteredLessons(updatedList);
         calculateStats(updatedList);
@@ -189,7 +163,7 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
         dataList.forEach(l => {
             if (l.status === 'Completed') stats.completed++;
             else if (l.status === 'Missed') stats.missed++;
-            else stats.left++; // Pending
+            else stats.left++;
         });
         setOverview(stats);
     };
@@ -197,8 +171,7 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
     const handleStatusUpdate = (lessonId, newStatus) => {
         const action = newStatus === 'Pending' ? 'reset' : 'mark';
         Alert.alert(
-            "Confirm Update", 
-            `Do you want to ${action} this lesson as ${newStatus}?`,
+            "Confirm Update", `Do you want to ${action} this lesson as ${newStatus}?`,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
@@ -211,7 +184,7 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                                 status: newStatus,
                                 teacher_id: teacher.id
                             });
-                            fetchData(); // Reload data
+                            fetchData(); 
                         } catch (error) { Alert.alert("Error", "Update failed."); }
                     } 
                 }
@@ -223,18 +196,14 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
-            
-            {/* Header Card */}
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerContentWrapper}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10, padding: 4}}>
                         <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
-
                     <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
                          <MaterialIcons name="trending-up" size={24} color={COLORS.primary} />
                     </View>
-                    
                     <View style={styles.headerTextContainer}>
                         <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{subjectName}</Text>
                         <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{classGroup} • Progress</Text>
@@ -242,7 +211,6 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                 </View>
             </View>
 
-            {/* Filter Bar */}
             <View style={[styles.filterBarContainer, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
                     {FILTER_TYPES.map((type) => (
@@ -251,16 +219,13 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                             style={[styles.filterTab, selectedFilter === type ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.filterTabBg }]}
                             onPress={() => handleFilter(type)}
                         >
-                            <Text style={[styles.filterText, { color: selectedFilter === type ? '#FFF' : COLORS.textSub }]}>
-                                {type}
-                            </Text>
+                            <Text style={[styles.filterText, { color: selectedFilter === type ? '#FFF' : COLORS.textSub }]}>{type}</Text>
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
-                {/* Stats Grid */}
                 <View style={[styles.statsContainer, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                     <View style={styles.statBox}>
                         <Text style={[styles.statNum, {color: COLORS.success}]}>{overview.completed}</Text>
@@ -295,9 +260,7 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                                 <View style={styles.statusActionRow}>
                                     <View style={[styles.badge, isCompleted ? { backgroundColor: isDark ? '#052e16' : '#dcfce7' } : { backgroundColor: isDark ? '#450a0a' : '#fee2e2' }]}>
                                         <MaterialIcons name={isCompleted ? "check" : "close"} size={14} color={isCompleted ? COLORS.success : COLORS.danger} />
-                                        <Text style={[styles.badgeText, { color: isCompleted ? COLORS.success : COLORS.danger }]}>
-                                            {lesson.status}
-                                        </Text>
+                                        <Text style={[styles.badgeText, { color: isCompleted ? COLORS.success : COLORS.danger }]}>{lesson.status}</Text>
                                     </View>
                                     <TouchableOpacity onPress={() => handleStatusUpdate(lesson.lesson_id, 'Pending')}>
                                         <Text style={[styles.editLink, { color: COLORS.textSub }]}>Edit</Text>
@@ -328,22 +291,11 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // Header Style
     headerCard: {
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%',
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center',
+        marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row',
+        alignItems: 'center', justifyContent: 'space-between', elevation: 3,
+        shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerContentWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -351,7 +303,6 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 1 },
 
-    // List Card
     card: { flexDirection: 'row', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 12, elevation: 2, shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, width: '96%', alignSelf: 'center' },
     iconBox: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
     cardContent: { flex: 1 },
@@ -359,26 +310,22 @@ const styles = StyleSheet.create({
     cardSubtitle: { fontSize: 13 },
     emptyText: { textAlign: 'center', marginTop: 50 },
     
-    // Filter Bar
     filterBarContainer: { borderBottomWidth: 1, marginBottom: 10 },
     filterScroll: { paddingHorizontal: 15, paddingVertical: 12 },
     filterTab: { marginRight: 15, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20 },
     filterText: { fontWeight: '600', fontSize: 14 },
 
-    // Stats
     statsContainer: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, marginBottom: 15, borderRadius: 12, marginHorizontal: 15, marginTop: 10, elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     statBox: { alignItems: 'center' },
     statNum: { fontSize: 24, fontWeight: '800' },
     statLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-    // Lesson Card
     lessonCard: { marginHorizontal: 15, marginBottom: 12, borderRadius: 12, padding: 15, borderWidth: 1, elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     lessonHeader: { marginBottom: 12 },
     lessonTitle: { fontSize: 16, fontWeight: '600' },
     dateText: { fontSize: 13, marginTop: 4 },
     examBadge: { fontSize: 10, alignSelf:'flex-start', paddingHorizontal:6, paddingVertical:2, borderRadius: 4, marginTop:4, overflow:'hidden', fontWeight: 'bold' },
     
-    // Actions
     statusActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
     badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
     badgeText: { fontSize: 12, fontWeight: '700', marginLeft: 5 },

@@ -3797,7 +3797,7 @@ app.get('/api/performance/teacher/:teacherId/:academicYear', verifyToken, async 
 
 
 // ==========================================================
-// --- SYLLABUS Tracking API ROUTES (UPDATED) ---
+// --- SYLLABUS Tracking API ROUTES (UPDATED FOR MULTIPLE EXAM TYPES) ---
 // ==========================================================
 
 // GET a unique list of all subjects from the 'users' table
@@ -3835,10 +3835,11 @@ app.get('/api/subjects/all-unique', async (req, res) => {
     }
 });
 
-// ADMIN: Create a new syllabus (Updated for Exam Type & Date Range)
+// ADMIN: Create a new syllabus
 app.post('/api/syllabus/create', async (req, res) => {
     const { class_group, subject_name, lessons, creator_id } = req.body;
     // lessons array expects: { lessonName, examType, fromDate, toDate }
+    // Now examType will be a string like "AT1, SA1"
 
     if (!class_group || !subject_name || !lessons || !creator_id) {
         return res.status(400).json({ message: "Missing required fields." });
@@ -3849,7 +3850,6 @@ app.post('/api/syllabus/create', async (req, res) => {
         const [syllabusResult] = await connection.query('INSERT INTO syllabuses (class_group, subject_name, creator_id) VALUES (?, ?, ?)', [class_group, subject_name, creator_id]);
         const newSyllabusId = syllabusResult.insertId;
 
-        // Map new fields (exam_type, from_date, to_date)
         const lessonValues = lessons.map(lesson => [
             newSyllabusId, 
             lesson.lessonName, 
@@ -3903,7 +3903,7 @@ app.post('/api/syllabus/create', async (req, res) => {
     }
 });
 
-// ADMIN: UPDATE an existing syllabus (Updated for Exam Type & Date Range)
+// ADMIN: UPDATE an existing syllabus
 app.put('/api/syllabus/:syllabusId', async (req, res) => {
     const { syllabusId } = req.params;
     const { lessons, creator_id } = req.body;
@@ -3924,7 +3924,7 @@ app.put('/api/syllabus/:syllabusId', async (req, res) => {
         // Delete old lessons
         await connection.query("DELETE FROM syllabus_lessons WHERE syllabus_id = ?", [syllabusId]);
         
-        // Insert new lessons with new fields
+        // Insert new lessons 
         const lessonValues = lessons.map(lesson => [
             syllabusId, 
             lesson.lessonName, 
@@ -4033,7 +4033,7 @@ app.get('/api/teachers/all-simple', async (req, res) => {
     }
 });
 
-// ADMIN: Get detailed progress for a syllabus (Updated columns)
+// ADMIN: Get detailed progress for a syllabus
 app.get('/api/syllabus/class-progress/:syllabusId', async (req, res) => {
     const { syllabusId } = req.params;
     try {
@@ -4063,13 +4063,13 @@ app.get('/api/syllabus/class-progress/:syllabusId', async (req, res) => {
     }
 });
 
-// TEACHER: Get syllabus and lessons for a specific class/subject (Updated columns)
+// TEACHER: Get syllabus and lessons for a specific class/subject
 app.get('/api/syllabus/teacher/:classGroup/:subjectName', async (req, res) => {
     const { classGroup, subjectName } = req.params;
     try {
         const [[syllabus]] = await db.query('SELECT id, class_group, subject_name FROM syllabuses WHERE class_group = ? AND subject_name = ?', [classGroup, subjectName]);
         if (!syllabus) return res.status(404).json({ message: 'Syllabus not found for this class and subject.' });
-        // Fetch new columns
+        
         const [lessons] = await db.query('SELECT id, lesson_name, exam_type, from_date, to_date FROM syllabus_lessons WHERE syllabus_id = ? ORDER BY to_date ASC', [syllabus.id]);
         res.json({ ...syllabus, lessons });
     } catch (error) { console.error("Error fetching teacher syllabus:", error); res.status(500).json({ message: 'Failed to fetch syllabus.' }); }
@@ -4136,13 +4136,13 @@ app.get('/api/syllabus/student/overview/:studentId', async (req, res) => {
     } catch (error) { console.error("Error fetching student overview:", error); res.status(500).json({ message: 'Failed to fetch progress overview.' }); }
 });
 
-// STUDENT: Get their detailed progress for one subject (Updated columns)
+// STUDENT: Get their detailed progress for one subject
 app.get('/api/syllabus/student/subject-details/:syllabusId/:studentId', async (req, res) => {
     const { syllabusId, studentId } = req.params;
     try {
         const [[syllabus]] = await db.query('SELECT * FROM syllabuses WHERE id = ?', [syllabusId]);
         if (!syllabus) return res.status(404).json({ message: 'Syllabus not found.' });
-        // Updated query to include exam_type, from_date, to_date
+        
         const [lessonsWithStatus] = await db.query(`
             SELECT sl.id, sl.lesson_name, sl.exam_type, sl.from_date, sl.to_date, sp.status 
             FROM syllabus_lessons sl 
