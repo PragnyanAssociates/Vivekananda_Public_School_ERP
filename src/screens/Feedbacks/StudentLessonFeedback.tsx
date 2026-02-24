@@ -4,7 +4,7 @@ import {
     ActivityIndicator, Alert, TextInput, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import apiClient from '../../api/client'; // Adjust path based on your folder structure
+import apiClient from '../../api/client'; // Adjust path
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -13,12 +13,12 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60',
-    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935'
+    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935', redBox: '#E53935'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', inputBg: '#2C2C2C', success: '#27AE60',
-    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350'
+    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF5350'
 };
 
 // --- EXACT 10 QUESTIONS ---
@@ -35,7 +35,7 @@ const QUESTIONS = [
     "How will you tell this to your friend?"
 ];
 
-// Formatting to strictly DD/MM/YYYY
+// Formats to strictly DD/MM/YYYY
 const formatDate = (isoString) => {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -79,11 +79,12 @@ const StudentLessonFeedback = () => {
         setLoading(false);
     };
 
+    // --- NEW: Calls the new student-lessons endpoint that aggregates marks ---
     const handleSubjectSelect = async (subject) => {
         setSelectedSubject(subject);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/lessons/${user.class_group}/${subject}`);
+            const res = await apiClient.get(`/lesson-feedback/student/lessons/${user.id}/${user.class_group}/${subject}`);
             setLessons(res.data);
             setViewStep('lessons');
         } catch (e) { 
@@ -92,11 +93,11 @@ const StudentLessonFeedback = () => {
         setLoading(false);
     };
 
-    const handleLessonSelect = async (lessonName) => {
-        setSelectedLesson(lessonName);
+    const handleLessonSelect = async (lesson) => {
+        setSelectedLesson(lesson.lesson_name);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/student/submission/${user.id}/${user.class_group}/${selectedSubject}/${lessonName}`);
+            const res = await apiClient.get(`/lesson-feedback/student/submission/${user.id}/${user.class_group}/${selectedSubject}/${lesson.lesson_name}`);
             
             if (res.data && res.data.answers) {
                 const savedAnswers = res.data.answers;
@@ -136,7 +137,8 @@ const StudentLessonFeedback = () => {
                 teaching_remarks: remarks
             });
             Alert.alert('Success', 'Feedback submitted!');
-            setViewStep('lessons');
+            // Refresh lessons to update status
+            handleSubjectSelect(selectedSubject);
         } catch (e) { Alert.alert('Error', e.response?.data?.message || 'Failed to submit.'); }
         setLoading(false);
     };
@@ -187,9 +189,30 @@ const StudentLessonFeedback = () => {
                             {renderHeader(selectedSubject, "Select a Lesson", true, () => setViewStep('subjects'))}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {lessons.length > 0 ? lessons.map((lesson) => (
-                                    <TouchableOpacity key={lesson.id} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleLessonSelect(lesson.lesson_name)}>
-                                        <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{lesson.lesson_name}</Text>
-                                        <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+                                    <TouchableOpacity key={lesson.id} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleLessonSelect(lesson)}>
+                                        <Text style={[styles.cardTitle, { color: COLORS.textMain }]} numberOfLines={2}>
+                                            {lesson.lesson_name}
+                                        </Text>
+                                        
+                                        {/* --- NEW: Rendering Marks & Status correctly --- */}
+                                        {lesson.is_marked ? (
+                                            <View style={styles.badgeContainer}>
+                                                <View style={[styles.scoreBox, { borderColor: COLORS.redBox }]}>
+                                                    <Text style={[styles.scoreText, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                                </View>
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
+                                                    <Text style={styles.badgeText}>MARKED</Text>
+                                                </View>
+                                            </View>
+                                        ) : lesson.is_submitted ? (
+                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
+                                                <Text style={styles.badgeText}>PENDING</Text>
+                                            </View>
+                                        ) : (
+                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
+                                                <Text style={styles.badgeText}>NOT DONE</Text>
+                                            </View>
+                                        )}
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
                             </ScrollView>
@@ -263,7 +286,12 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1 },
-    cardTitle: { fontSize: 16, fontWeight: '600', flex: 1 },
+    cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
+    badgeContainer: { flexDirection: 'row', alignItems: 'center' },
+    scoreBox: { borderWidth: 2, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
+    scoreText: { fontWeight: 'bold', fontSize: 14 },
+    statusBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4 },
+    badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
     questionBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     questionLabel: { fontSize: 14, fontWeight: 'bold' },
     markBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },

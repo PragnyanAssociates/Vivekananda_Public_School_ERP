@@ -10692,8 +10692,23 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED FLOW) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED WITH MARKS) ---
 // ==========================================================
+
+// Helper function to calculate total marks from JSON answers
+const calculateScore = (answersJson) => {
+    if (!answersJson) return 0;
+    let answers = [];
+    try {
+        answers = typeof answersJson === 'string' ? JSON.parse(answersJson) : answersJson;
+    } catch(e) { return 0; }
+    
+    let score = 0;
+    if (Array.isArray(answers)) {
+        answers.forEach(a => { if (a.mark === 1) score += 1; });
+    }
+    return score;
+};
 
 // 1. [STUDENT] Get subjects for a student's class
 app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
@@ -10714,19 +10729,35 @@ app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) =
     }
 });
 
-// 2. [STUDENT] Get lessons for a subject from syllabus_lessons
-app.get('/api/lesson-feedback/lessons/:class_group/:subject_name', async (req, res) => {
+// 2. [STUDENT] Get specific student's lessons with marks
+app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_name', async (req, res) => {
     try {
-        const { class_group, subject_name } = req.params;
+        const { student_id, class_group, subject_name } = req.params;
         const [lessons] = await db.query(
-            `SELECT sl.id, sl.lesson_name 
+            `SELECT sl.id, sl.lesson_name,
+                CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
+                IFNULL(lf.is_marked, false) as is_marked,
+                lf.answers
              FROM syllabuses s
              JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
+             LEFT JOIN lesson_feedbacks lf 
+                ON lf.lesson_name = sl.lesson_name 
+                AND lf.student_id = ? 
+                AND lf.class_group = ? 
+                AND lf.subject_name = ?
              WHERE s.class_group = ? AND s.subject_name = ?
              ORDER BY sl.to_date ASC`,
-            [class_group, subject_name]
+            [student_id, class_group, subject_name, class_group, subject_name]
         );
-        res.json(lessons);
+
+        // Calculate marks for the student view
+        const lessonsWithScores = lessons.map(lesson => ({
+            ...lesson,
+            obtained_marks: lesson.is_marked ? calculateScore(lesson.answers) : 0,
+            max_marks: 10 // Fixed 10 questions
+        }));
+
+        res.json(lessonsWithScores);
     } catch (error) {
         console.error("Error fetching lessons:", error);
         res.status(500).json({ error: error.message });
@@ -10798,10 +10829,12 @@ app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => 
     }
 });
 
-// 6. [TEACHER/ADMIN] Get ALL Students in a selected Class
-app.get('/api/lesson-feedback/teacher/class-students/:class_group', async (req, res) => {
+// 6. [TEACHER/ADMIN] Get ALL Students in a Class + Aggregate Marks
+app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name', async (req, res) => {
     try {
-        const { class_group } = req.params;
+        const { class_group, subject_name } = req.params;
+        
+        // Fetch all students for the class
         const [students] = await db.query(
             `SELECT u.id as student_id, u.full_name, p.roll_no
              FROM users u
@@ -10810,14 +10843,40 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group', async (req, 
              ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`,
             [class_group]
         );
-        res.json(students);
+
+        // Fetch all marked feedbacks for this class and subject
+        const [feedbacks] = await db.query(
+            `SELECT student_id, answers FROM lesson_feedbacks 
+             WHERE class_group = ? AND subject_name = ? AND is_marked = 1`,
+            [class_group, subject_name]
+        );
+
+        // Calculate aggregated marks (e.g., 25 / 50)
+        const studentsWithScores = students.map(student => {
+            const studentFeedbacks = feedbacks.filter(f => f.student_id === student.student_id);
+            let total_obtained = 0;
+            let total_max = studentFeedbacks.length * 10; // 10 questions per lesson
+
+            studentFeedbacks.forEach(fb => {
+                total_obtained += calculateScore(fb.answers);
+            });
+
+            return {
+                ...student,
+                total_obtained,
+                total_max,
+                has_marks: studentFeedbacks.length > 0
+            };
+        });
+
+        res.json(studentsWithScores);
     } catch (error) {
         console.error("Error fetching students:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 7. [TEACHER/ADMIN] Get specific Student's Lessons with Submission Status
+// 7. [TEACHER/ADMIN] Get specific Student's Lessons with Status and Marks
 app.get('/api/lesson-feedback/teacher/student-lessons/:class_group/:subject_name/:student_id', async (req, res) => {
     try {
         const { class_group, subject_name, student_id } = req.params;
@@ -10825,7 +10884,8 @@ app.get('/api/lesson-feedback/teacher/student-lessons/:class_group/:subject_name
         const [lessons] = await db.query(
             `SELECT sl.id, sl.lesson_name,
                 CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
-                IFNULL(lf.is_marked, false) as is_marked
+                IFNULL(lf.is_marked, false) as is_marked,
+                lf.answers
              FROM syllabuses s
              JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
              LEFT JOIN lesson_feedbacks lf 
@@ -10837,7 +10897,15 @@ app.get('/api/lesson-feedback/teacher/student-lessons/:class_group/:subject_name
              ORDER BY sl.to_date ASC`,
             [student_id, class_group, subject_name, class_group, subject_name]
         );
-        res.json(lessons);
+
+        // Calculate marks for the specific lessons
+        const lessonsWithScores = lessons.map(lesson => ({
+            ...lesson,
+            obtained_marks: lesson.is_marked ? calculateScore(lesson.answers) : 0,
+            max_marks: 10
+        }));
+
+        res.json(lessonsWithScores);
     } catch (error) {
         console.error("Error fetching student lessons:", error);
         res.status(500).json({ error: error.message });

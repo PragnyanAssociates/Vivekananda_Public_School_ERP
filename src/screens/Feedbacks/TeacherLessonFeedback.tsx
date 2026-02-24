@@ -4,7 +4,7 @@ import {
     ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import apiClient from '../../api/client'; // Adjust path based on your folder structure
+import apiClient from '../../api/client'; // Adjust path
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -13,12 +13,12 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', success: '#27AE60', danger: '#E53935', 
-    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA'
+    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#E53935'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', success: '#27AE60', danger: '#EF5350', 
-    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525'
+    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF5350'
 };
 
 const formatDate = (isoString) => {
@@ -33,7 +33,6 @@ const TeacherLessonFeedback = () => {
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
 
-    // FLOW: classes -> students -> lessons -> grading
     const [viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
 
@@ -66,23 +65,25 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    // 2. Select Class -> Fetch Students
+    // 2. Select Class -> Fetch Students AND Aggregate Scores
     const handleClassSelect = async (classItem) => {
         setSelectedClass(classItem);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${classItem.class_group}`);
+            // --- NEW: Calls the endpoint that returns students + aggregated total scores ---
+            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${classItem.class_group}/${classItem.subject_name}`);
             setStudents(res.data);
             setViewStep('students');
         } catch (e) { Alert.alert('Error', 'Failed to load students.'); }
         setLoading(false);
     };
 
-    // 3. Select Student -> Fetch Lessons with Statuses
+    // 3. Select Student -> Fetch Lessons with Statuses & Scores
     const handleStudentSelect = async (student) => {
         setSelectedStudent(student);
         setLoading(true);
         try {
+            // --- NEW: Calls the endpoint returning lesson scores natively ---
             const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedClass.class_group}/${selectedClass.subject_name}/${student.student_id}`);
             setLessons(res.data);
             setViewStep('lessons');
@@ -115,7 +116,7 @@ const TeacherLessonFeedback = () => {
         setAnswers(newAnswers);
     };
 
-    // 6. Save Marks -> Return to Lessons view for that student
+    // 6. Save Marks -> Return to Lessons view
     const handleSaveMarks = async () => {
         if (isAdmin) return;
         setLoading(true);
@@ -190,10 +191,25 @@ const TeacherLessonFeedback = () => {
                                         onPress={() => handleStudentSelect(student)}
                                     >
                                         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                            <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>{student.roll_no || '-'}</Text>
-                                            <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>{student.full_name}</Text>
+                                            <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>
+                                                {(idx + 1).toString().padStart(2, '0')}
+                                            </Text>
+                                            <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>
+                                                {student.full_name}
+                                            </Text>
                                         </View>
-                                        <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+
+                                        {/* --- NEW: Red Aggregated Score Box --- */}
+                                        <View style={styles.badgeContainer}>
+                                            {student.has_marks && (
+                                                <View style={[styles.scoreBoxLarge, { borderColor: COLORS.redBox }]}>
+                                                    <Text style={[styles.scoreTextLarge, { color: COLORS.redBox }]}>
+                                                        {student.total_obtained}/{student.total_max}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+                                        </View>
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
                             </ScrollView>
@@ -211,13 +227,29 @@ const TeacherLessonFeedback = () => {
                                         style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
                                         onPress={() => handleLessonSelect(lesson)}
                                     >
-                                        <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]}>{lesson.lesson_name}</Text>
+                                        <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]} numberOfLines={2}>
+                                            {lesson.lesson_name}
+                                        </Text>
                                         
-                                        <View style={[styles.statusBadge, { backgroundColor: lesson.is_marked ? COLORS.success : (lesson.is_submitted ? COLORS.warning : COLORS.danger) }]}>
-                                            <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                                {lesson.is_marked ? 'Marked' : (lesson.is_submitted ? 'Pending' : 'No Data')}
-                                            </Text>
-                                        </View>
+                                        {/* --- NEW: Render Score Box & MARKED Badges --- */}
+                                        {lesson.is_marked ? (
+                                            <View style={styles.badgeContainer}>
+                                                <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
+                                                    <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                                </View>
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
+                                                    <Text style={styles.badgeText}>MARKED</Text>
+                                                </View>
+                                            </View>
+                                        ) : lesson.is_submitted ? (
+                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
+                                                <Text style={styles.badgeText}>PENDING</Text>
+                                            </View>
+                                        ) : (
+                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
+                                                <Text style={styles.badgeText}>NO DATA</Text>
+                                            </View>
+                                        )}
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found in syllabus.</Text>}
                             </ScrollView>
@@ -285,8 +317,18 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1 },
-    cardTitle: { fontSize: 16, fontWeight: '600', flex: 1 },
-    statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, marginLeft: 10 },
+    cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
+    
+    // BADGES & SCORES
+    badgeContainer: { flexDirection: 'row', alignItems: 'center' },
+    scoreBoxLarge: { borderWidth: 2, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
+    scoreTextLarge: { fontWeight: 'bold', fontSize: 18 },
+    scoreBoxSmall: { borderWidth: 2, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
+    scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
+    badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+    
+    // GRADING UI
     remarksBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     questionBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     label: { fontSize: 13, fontWeight: 'bold' },
