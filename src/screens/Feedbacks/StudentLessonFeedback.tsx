@@ -4,7 +4,7 @@ import {
     ActivityIndicator, Alert, TextInput, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import apiClient from '../../api/client'; // Adjust path
+import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -21,7 +21,6 @@ const DarkColors = {
     warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF4444'
 };
 
-// --- EXACT 10 QUESTIONS ---
 const QUESTIONS = [
     "Why should we learn this lesson?",
     "Who made or found this?",
@@ -35,13 +34,6 @@ const QUESTIONS = [
     "How will you tell this to your friend?"
 ];
 
-// Formats to strictly DD/MM/YYYY
-const formatDate = (isoString) => {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-};
-
 const StudentLessonFeedback = () => {
     const { user } = useAuth();
     const isDark = useColorScheme() === 'dark';
@@ -51,20 +43,19 @@ const StudentLessonFeedback = () => {
     const [viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
-    // Data States
     const [subjects, setSubjects] = useState([]);
     const [lessons, setLessons] = useState([]);
-    
-    // Selections
     const [selectedSubject, setSelectedSubject] = useState('');
     const [selectedLesson, setSelectedLesson] = useState('');
 
-    // Form State
     const [answers, setAnswers] = useState(
         QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null }))
     );
     const [remarks, setRemarks] = useState('');
     const [isMarked, setIsMarked] = useState(false);
+    
+    // NEW: Teacher Remarks array shown to student
+    const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
     useEffect(() => {
         if (user?.class_group) fetchSubjects();
@@ -86,9 +77,7 @@ const StudentLessonFeedback = () => {
             const res = await apiClient.get(`/lesson-feedback/student/lessons/${user.id}/${user.class_group}/${subject}`);
             setLessons(res.data);
             setViewStep('lessons');
-        } catch (e) { 
-            Alert.alert('Error', 'Failed to load lessons.'); 
-        }
+        } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
         setLoading(false);
     };
 
@@ -107,10 +96,23 @@ const StudentLessonFeedback = () => {
                 setAnswers(mergedAnswers);
                 setRemarks(res.data.teaching_remarks || '');
                 setIsMarked(res.data.is_marked);
+
+                // Extract Teacher Remarks if they exist
+                let parsedRemarks = [];
+                try {
+                    if (typeof res.data.teacher_remarks_checkboxes === 'string') {
+                        parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
+                    } else if (Array.isArray(res.data.teacher_remarks_checkboxes)) {
+                        parsedRemarks = res.data.teacher_remarks_checkboxes;
+                    }
+                } catch (e) {}
+                setTeacherRemarks(parsedRemarks);
+
             } else {
                 setAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
                 setRemarks('');
                 setIsMarked(false);
+                setTeacherRemarks([]);
             }
             setViewStep('form');
         } catch (e) { Alert.alert('Error', 'Failed to load submission.'); }
@@ -136,7 +138,6 @@ const StudentLessonFeedback = () => {
                 teaching_remarks: remarks
             });
             Alert.alert('Success', 'Feedback submitted!');
-            // Refresh lessons to update status
             handleSubjectSelect(selectedSubject);
         } catch (e) { Alert.alert('Error', e.response?.data?.message || 'Failed to submit.'); }
         setLoading(false);
@@ -265,6 +266,31 @@ const StudentLessonFeedback = () => {
                                     />
                                 </View>
 
+                                {/* --- NEW: TEACHER REMARKS VISIBLE TO STUDENT --- */}
+                                {isMarked && teacherRemarks.length > 0 && (
+                                    <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                        <Text style={[styles.questionLabel, { color: COLORS.primary, marginBottom: 10 }]}>Teacher's Feedback:</Text>
+                                        <View style={styles.tagsContainer}>
+                                            {teacherRemarks.map(rmk => {
+                                                const isGood = rmk === 'None of the above';
+                                                return (
+                                                    <View key={rmk} style={[
+                                                        styles.tag, 
+                                                        { 
+                                                            borderColor: isGood ? COLORS.success : COLORS.danger, 
+                                                            backgroundColor: isGood ? COLORS.success + '20' : COLORS.danger + '20' 
+                                                        }
+                                                    ]}>
+                                                        <Text style={[styles.tagText, { color: isGood ? COLORS.success : COLORS.danger }]}>
+                                                            {rmk}
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                )}
+
                                 {!isMarked && !isAdmin && (
                                     <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary }]} onPress={handleSave}>
                                         <Text style={styles.saveBtnText}>Submit Answers</Text>
@@ -288,7 +314,6 @@ const styles = StyleSheet.create({
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
-    // BADGES & SCORES
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
     scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
@@ -299,6 +324,12 @@ const styles = StyleSheet.create({
     questionLabel: { fontSize: 14, fontWeight: 'bold' },
     markBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 60, textAlignVertical: 'top', fontSize: 14 },
+    
+    // Checkbox Tags for Student View
+    tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, borderWidth: 1 },
+    tagText: { fontWeight: 'bold', fontSize: 13 },
+
     saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 10 },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 }

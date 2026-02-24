@@ -4,7 +4,7 @@ import {
     ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import apiClient from '../../api/client'; // Adjust path
+import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -21,11 +21,10 @@ const DarkColors = {
     warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444'
 };
 
-const formatDate = (isoString) => {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-};
+const TEACHER_REMARK_OPTIONS = [
+    "Irregular", "Unfocused", "Unhealthy", 
+    "Poor Performance", "Needs improvement", "None of the above"
+];
 
 const TeacherLessonFeedback = () => {
     const { user } = useAuth();
@@ -36,25 +35,22 @@ const TeacherLessonFeedback = () => {
     const [viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
 
-    // Data States
     const [classes, setClasses] = useState([]);
     const [students, setStudents] = useState([]);
     const [lessons, setLessons] = useState([]);
     
-    // Selections
     const [selectedClass, setSelectedClass] = useState(null);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [selectedLesson, setSelectedLesson] = useState(null);
 
-    // Grading State
     const [answers, setAnswers] = useState([]);
     const [remarks, setRemarks] = useState('');
+    const [teacherRemarks, setTeacherRemarks] = useState([]); // NEW: State for checkboxes
 
     useEffect(() => {
         if (user) fetchClasses();
     }, [user]);
 
-    // 1. Fetch Classes assigned to Teacher
     const fetchClasses = async () => {
         setLoading(true);
         try {
@@ -65,7 +61,6 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    // 2. Select Class -> Fetch Students AND Aggregate Scores
     const handleClassSelect = async (classItem) => {
         setSelectedClass(classItem);
         setLoading(true);
@@ -77,7 +72,6 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    // 3. Select Student -> Fetch Lessons with Statuses & Scores
     const handleStudentSelect = async (student) => {
         setSelectedStudent(student);
         setLoading(true);
@@ -89,7 +83,6 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    // 4. Select Lesson -> Fetch Grading Form
     const handleLessonSelect = async (lesson) => {
         setSelectedLesson(lesson);
         if (!lesson.is_submitted) {
@@ -101,12 +94,23 @@ const TeacherLessonFeedback = () => {
             const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedClass.class_group}/${selectedClass.subject_name}/${lesson.lesson_name}`);
             setAnswers(res.data.answers || []);
             setRemarks(res.data.teaching_remarks || '');
+            
+            // NEW: Load existing teacher remarks checkboxes
+            let parsedRemarks = [];
+            try {
+                if (typeof res.data.teacher_remarks_checkboxes === 'string') {
+                    parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
+                } else if (Array.isArray(res.data.teacher_remarks_checkboxes)) {
+                    parsedRemarks = res.data.teacher_remarks_checkboxes;
+                }
+            } catch (e) {}
+            setTeacherRemarks(parsedRemarks);
+            
             setViewStep('grading');
         } catch (e) { Alert.alert('Error', 'Failed to load answers.'); }
         setLoading(false);
     };
 
-    // 5. Toggle Marks
     const handleMarkToggle = (index, markValue) => {
         if (isAdmin) return;
         const newAnswers = [...answers];
@@ -114,7 +118,26 @@ const TeacherLessonFeedback = () => {
         setAnswers(newAnswers);
     };
 
-    // 6. Save Marks -> Return to Lessons view
+    // NEW: Handle Checkbox toggles
+    const handleTeacherRemarkToggle = (option) => {
+        if (isAdmin) return;
+        setTeacherRemarks(prev => {
+            if (option === "None of the above") {
+                // If "None" is clicked, uncheck everything else
+                return prev.includes("None of the above") ? [] : ["None of the above"];
+            } else {
+                // Uncheck "None of the above" if another option is clicked
+                let newArr = prev.filter(item => item !== "None of the above");
+                if (newArr.includes(option)) {
+                    newArr = newArr.filter(item => item !== option);
+                } else {
+                    newArr.push(option);
+                }
+                return newArr;
+            }
+        });
+    };
+
     const handleSaveMarks = async () => {
         if (isAdmin) return;
         setLoading(true);
@@ -125,15 +148,15 @@ const TeacherLessonFeedback = () => {
                 subject_name: selectedClass.subject_name,
                 lesson_name: selectedLesson.lesson_name,
                 answers,
-                teacher_id: user.id
+                teacher_id: user.id,
+                teacher_remarks_checkboxes: teacherRemarks // NEW: send checkboxes to backend
             });
-            Alert.alert('Success', 'Marks saved successfully!');
-            handleStudentSelect(selectedStudent); // Refresh lesson list for the student
+            Alert.alert('Success', 'Marks and remarks saved successfully!');
+            handleStudentSelect(selectedStudent); 
         } catch (e) { Alert.alert('Error', 'Failed to save marks.'); }
         setLoading(false);
     };
 
-    // Reusable Header Component
     const renderHeader = (title, subtitle, showBack, backAction) => (
         <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -197,7 +220,6 @@ const TeacherLessonFeedback = () => {
                                             </Text>
                                         </View>
 
-                                        {/* --- NEW: Red Aggregated Score Box exactly like screenshot --- */}
                                         <View style={styles.badgeContainer}>
                                             {student.has_marks && (
                                                 <View style={[styles.scoreBoxLarge, { borderColor: COLORS.redBox }]}>
@@ -230,7 +252,6 @@ const TeacherLessonFeedback = () => {
                                         </Text>
                                         
                                         <View style={styles.badgeContainer}>
-                                            {/* --- NEW: Red Outlined Score Box next to Badges --- */}
                                             {lesson.is_marked ? (
                                                 <>
                                                     <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
@@ -256,7 +277,7 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 4: GRADING */}
+                    {/* STEP 4: GRADING & REMARKS */}
                     {viewStep === 'grading' && (
                         <>
                             {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'))}
@@ -296,6 +317,32 @@ const TeacherLessonFeedback = () => {
                                     </View>
                                 ))}
 
+                                {/* --- NEW: TEACHER REMARKS CHECKBOXES --- */}
+                                <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, paddingBottom: 5 }]}>
+                                    <Text style={[styles.label, { color: COLORS.primary, marginBottom: 10 }]}>Teacher Remarks (Check all that apply):</Text>
+                                    
+                                    {TEACHER_REMARK_OPTIONS.map(opt => {
+                                        const isChecked = teacherRemarks.includes(opt);
+                                        return (
+                                            <TouchableOpacity 
+                                                key={opt} 
+                                                style={styles.checkboxRow} 
+                                                onPress={() => handleTeacherRemarkToggle(opt)} 
+                                                disabled={isAdmin}
+                                            >
+                                                <MaterialIcons 
+                                                    name={isChecked ? "check-box" : "check-box-outline-blank"} 
+                                                    size={24} 
+                                                    color={isChecked ? COLORS.primary : COLORS.iconGrey} 
+                                                />
+                                                <Text style={[styles.checkboxText, { color: isChecked ? COLORS.primary : COLORS.textMain }]}>
+                                                    {opt}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )
+                                    })}
+                                </View>
+
                                 {!isAdmin && (
                                     <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary }]} onPress={handleSaveMarks}>
                                         <Text style={styles.saveBtnText}>Save Marks</Text>
@@ -319,23 +366,26 @@ const styles = StyleSheet.create({
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
-    // BADGES & SCORES (With exact red outlined design)
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
     scoreBoxLarge: { borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
-    scoreTextLarge: { fontWeight: 'bold', fontSize: 18 },
+    scoreTextLarge: { fontWeight: 'bold', fontSize: 16 },
     scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
     badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
     
-    // GRADING UI
     remarksBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     questionBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     label: { fontSize: 13, fontWeight: 'bold' },
     gradingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 12 },
     markBtn: { width: 45, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
     markBtnText: { fontWeight: 'bold', fontSize: 16, color: '#777' },
-    saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 10 },
+    
+    // Checkbox Styles
+    checkboxRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+    checkboxText: { marginLeft: 10, fontSize: 15, fontWeight: '500' },
+    
+    saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 5 },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 }
 });

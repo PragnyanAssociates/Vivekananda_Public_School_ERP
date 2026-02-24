@@ -10692,7 +10692,7 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED WITH STRICT MATH) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED WITH STRICT MATH & TEACHER REMARKS) ---
 // ==========================================================
 
 // Helper function to calculate total marks from JSON answers
@@ -10706,8 +10706,10 @@ const calculateScore = (answersJson) => {
     let score = 0;
     if (Array.isArray(answers)) {
         answers.forEach(a => { 
-            // Strictly check if mark is 1
-            if (Number(a.mark) === 1) score += 1; 
+            // Strictly check if mark is 1 to prevent string/type math errors
+            if (parseInt(a.mark, 10) === 1) {
+                score += 1; 
+            }
         });
     }
     return score;
@@ -10732,48 +10734,64 @@ app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) =
     }
 });
 
-// 2. [STUDENT] Get specific student's lessons with marks
+// 2. [STUDENT] Get specific student's lessons with strictly aggregated marks
 app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name } = req.params;
+        
         const [lessons] = await db.query(
-            `SELECT sl.id, sl.lesson_name,
-                CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
-                IFNULL(lf.is_marked, false) as is_marked,
-                lf.answers
+            `SELECT sl.id, sl.lesson_name 
              FROM syllabuses s
              JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
-             LEFT JOIN lesson_feedbacks lf 
-                ON lf.lesson_name = sl.lesson_name 
-                AND lf.student_id = ? 
-                AND lf.class_group = ? 
-                AND lf.subject_name = ?
              WHERE s.class_group = ? AND s.subject_name = ?
              ORDER BY sl.to_date ASC`,
-            [student_id, class_group, subject_name, class_group, subject_name]
+            [class_group, subject_name]
         );
 
-        // Calculate marks for the student view natively
-        const lessonsWithScores = lessons.map(lesson => ({
-            ...lesson,
-            obtained_marks: lesson.is_marked ? calculateScore(lesson.answers) : 0,
-            max_marks: 10 // Strictly out of 10 per lesson
-        }));
+        const [feedbacks] = await db.query(
+            `SELECT lesson_name, is_marked, answers 
+             FROM lesson_feedbacks 
+             WHERE student_id = ? AND class_group = ? AND subject_name = ?
+             ORDER BY id DESC`,
+            [student_id, class_group, subject_name]
+        );
 
-        res.json(lessonsWithScores);
+        const mergedLessons = lessons.map(lesson => {
+            const fb = feedbacks.find(f => f.lesson_name === lesson.lesson_name);
+            if (fb) {
+                const isMarked = fb.is_marked === 1 || fb.is_marked === true;
+                return {
+                    ...lesson,
+                    is_submitted: true,
+                    is_marked: isMarked,
+                    obtained_marks: isMarked ? calculateScore(fb.answers) : 0,
+                    max_marks: 10
+                };
+            }
+            return {
+                ...lesson,
+                is_submitted: false,
+                is_marked: false,
+                obtained_marks: 0,
+                max_marks: 10
+            };
+        });
+
+        res.json(mergedLessons);
     } catch (error) {
         console.error("Error fetching lessons:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 3. [STUDENT & TEACHER] Get specific lesson submission
+// 3. [STUDENT & TEACHER] Get specific lesson submission (LIMIT 1)
 app.get('/api/lesson-feedback/student/submission/:student_id/:class_group/:subject_name/:lesson_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name } = req.params;
         const [submission] = await db.query(
             `SELECT * FROM lesson_feedbacks 
-             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
+             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?
+             ORDER BY id DESC LIMIT 1`,
             [student_id, class_group, subject_name, lesson_name]
         );
         res.json(submission[0] || null);
@@ -10790,11 +10808,12 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
         
         const [existing] = await db.query(
             `SELECT is_marked FROM lesson_feedbacks 
-             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
+             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?
+             ORDER BY id DESC LIMIT 1`,
             [student_id, class_group, subject_name, lesson_name]
         );
 
-        if (existing.length > 0 && existing[0].is_marked) {
+        if (existing.length > 0 && (existing[0].is_marked === 1 || existing[0].is_marked === true)) {
             return res.status(403).json({ message: "Cannot edit. Teacher has already marked this." });
         }
 
@@ -10837,7 +10856,6 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
     try {
         const { class_group, subject_name } = req.params;
         
-        // Fetch all students for the class
         const [students] = await db.query(
             `SELECT u.id as student_id, u.full_name, p.roll_no
              FROM users u
@@ -10847,39 +10865,34 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
             [class_group]
         );
 
-        // Fetch all MARKED feedbacks for this class and subject
         const [feedbacks] = await db.query(
             `SELECT student_id, lesson_name, answers FROM lesson_feedbacks 
-             WHERE class_group = ? AND subject_name = ? AND is_marked = 1`,
+             WHERE class_group = ? AND subject_name = ? AND is_marked = 1
+             ORDER BY id DESC`,
             [class_group, subject_name]
         );
 
-        // Calculate aggregated marks safely
         const studentsWithScores = students.map(student => {
-            // Find all marked feedbacks strictly belonging to this student ID
-            const studentFeedbacks = feedbacks.filter(f => String(f.student_id) === String(student.student_id));
+            let totalObtained = 0;
+            let totalPossible = 0;
             
-            // Deduplicate by lesson_name to prevent double counting if database had duplicate rows
-            const uniqueFeedbacksMap = new Map();
-            studentFeedbacks.forEach(fb => {
-                uniqueFeedbacksMap.set(fb.lesson_name, fb);
-            });
+            const processedLessons = new Set();
 
-            const uniqueMarkedLessons = Array.from(uniqueFeedbacksMap.values());
-            
-            let total_obtained = 0;
-            // IMPORTANT: max marks is EXACTLY 10 multiplied by the number of lessons graded
-            let total_max = uniqueMarkedLessons.length * 10; 
-
-            uniqueMarkedLessons.forEach(fb => {
-                total_obtained += calculateScore(fb.answers);
+            feedbacks.forEach(fb => {
+                if (String(fb.student_id) === String(student.student_id)) {
+                    if (!processedLessons.has(fb.lesson_name)) {
+                        processedLessons.add(fb.lesson_name);
+                        totalObtained += calculateScore(fb.answers);
+                        totalPossible += 10; 
+                    }
+                }
             });
 
             return {
                 ...student,
-                total_obtained,
-                total_max,
-                has_marks: uniqueMarkedLessons.length > 0
+                total_obtained: totalObtained,
+                total_max: totalPossible,
+                has_marks: totalPossible > 0 
             };
         });
 
@@ -10896,49 +10909,66 @@ app.get('/api/lesson-feedback/teacher/student-lessons/:class_group/:subject_name
         const { class_group, subject_name, student_id } = req.params;
         
         const [lessons] = await db.query(
-            `SELECT sl.id, sl.lesson_name,
-                CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
-                IFNULL(lf.is_marked, false) as is_marked,
-                lf.answers
+            `SELECT sl.id, sl.lesson_name
              FROM syllabuses s
              JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
-             LEFT JOIN lesson_feedbacks lf 
-                ON lf.lesson_name = sl.lesson_name 
-                AND lf.student_id = ? 
-                AND lf.class_group = ? 
-                AND lf.subject_name = ?
              WHERE s.class_group = ? AND s.subject_name = ?
              ORDER BY sl.to_date ASC`,
-            [student_id, class_group, subject_name, class_group, subject_name]
+            [class_group, subject_name]
         );
 
-        // Calculate marks for the specific lessons
-        const lessonsWithScores = lessons.map(lesson => ({
-            ...lesson,
-            obtained_marks: lesson.is_marked ? calculateScore(lesson.answers) : 0,
-            max_marks: 10
-        }));
+        const [feedbacks] = await db.query(
+            `SELECT lesson_name, is_marked, answers 
+             FROM lesson_feedbacks 
+             WHERE student_id = ? AND class_group = ? AND subject_name = ?
+             ORDER BY id DESC`,
+            [student_id, class_group, subject_name]
+        );
 
-        res.json(lessonsWithScores);
+        const mergedLessons = lessons.map(lesson => {
+            const fb = feedbacks.find(f => f.lesson_name === lesson.lesson_name);
+            if (fb) {
+                const isMarked = fb.is_marked === 1 || fb.is_marked === true;
+                return {
+                    ...lesson,
+                    is_submitted: true,
+                    is_marked: isMarked,
+                    obtained_marks: isMarked ? calculateScore(fb.answers) : 0,
+                    max_marks: 10
+                };
+            }
+            return {
+                ...lesson,
+                is_submitted: false,
+                is_marked: false,
+                obtained_marks: 0,
+                max_marks: 10
+            };
+        });
+
+        res.json(mergedLessons);
     } catch (error) {
         console.error("Error fetching student lessons:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 8. [TEACHER] Teacher saves marks (0 or 1)
+// 8. [TEACHER] Teacher saves marks AND Teacher Remarks
 app.post('/api/lesson-feedback/teacher/mark', async (req, res) => {
     try {
-        const { student_id, class_group, subject_name, lesson_name, answers, teacher_id } = req.body;
+        const { student_id, class_group, subject_name, lesson_name, answers, teacher_id, teacher_remarks_checkboxes } = req.body;
         const answersJson = JSON.stringify(answers);
+        const remarksJson = JSON.stringify(teacher_remarks_checkboxes || []); // Default to empty array
 
+        // Clean update to latest row
         await db.query(
             `UPDATE lesson_feedbacks 
-             SET answers = ?, is_marked = true, teacher_id = ?
-             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
-            [answersJson, teacher_id, student_id, class_group, subject_name, lesson_name]
+             SET answers = ?, is_marked = true, teacher_id = ?, teacher_remarks_checkboxes = ?
+             WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?
+             ORDER BY id DESC LIMIT 1`,
+            [answersJson, teacher_id, remarksJson, student_id, class_group, subject_name, lesson_name]
         );
-        res.json({ success: true, message: "Marks saved successfully!" });
+        res.json({ success: true, message: "Marks and remarks saved successfully!" });
     } catch (error) {
         console.error("Error saving marks:", error);
         res.status(500).json({ error: error.message });
