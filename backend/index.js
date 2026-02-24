@@ -10692,7 +10692,7 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED WITH MARKS) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED WITH STRICT MATH) ---
 // ==========================================================
 
 // Helper function to calculate total marks from JSON answers
@@ -10705,7 +10705,10 @@ const calculateScore = (answersJson) => {
     
     let score = 0;
     if (Array.isArray(answers)) {
-        answers.forEach(a => { if (a.mark === 1) score += 1; });
+        answers.forEach(a => { 
+            // Strictly check if mark is 1
+            if (Number(a.mark) === 1) score += 1; 
+        });
     }
     return score;
 };
@@ -10750,11 +10753,11 @@ app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_
             [student_id, class_group, subject_name, class_group, subject_name]
         );
 
-        // Calculate marks for the student view
+        // Calculate marks for the student view natively
         const lessonsWithScores = lessons.map(lesson => ({
             ...lesson,
             obtained_marks: lesson.is_marked ? calculateScore(lesson.answers) : 0,
-            max_marks: 10 // Fixed 10 questions
+            max_marks: 10 // Strictly out of 10 per lesson
         }));
 
         res.json(lessonsWithScores);
@@ -10829,7 +10832,7 @@ app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => 
     }
 });
 
-// 6. [TEACHER/ADMIN] Get ALL Students in a Class + Aggregate Marks
+// 6. [TEACHER/ADMIN] Get ALL Students in a Class + Strict Aggregated Marks
 app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name', async (req, res) => {
     try {
         const { class_group, subject_name } = req.params;
@@ -10844,20 +10847,31 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
             [class_group]
         );
 
-        // Fetch all marked feedbacks for this class and subject
+        // Fetch all MARKED feedbacks for this class and subject
         const [feedbacks] = await db.query(
-            `SELECT student_id, answers FROM lesson_feedbacks 
+            `SELECT student_id, lesson_name, answers FROM lesson_feedbacks 
              WHERE class_group = ? AND subject_name = ? AND is_marked = 1`,
             [class_group, subject_name]
         );
 
-        // Calculate aggregated marks (e.g., 25 / 50)
+        // Calculate aggregated marks safely
         const studentsWithScores = students.map(student => {
-            const studentFeedbacks = feedbacks.filter(f => f.student_id === student.student_id);
-            let total_obtained = 0;
-            let total_max = studentFeedbacks.length * 10; // 10 questions per lesson
-
+            // Find all marked feedbacks strictly belonging to this student ID
+            const studentFeedbacks = feedbacks.filter(f => String(f.student_id) === String(student.student_id));
+            
+            // Deduplicate by lesson_name to prevent double counting if database had duplicate rows
+            const uniqueFeedbacksMap = new Map();
             studentFeedbacks.forEach(fb => {
+                uniqueFeedbacksMap.set(fb.lesson_name, fb);
+            });
+
+            const uniqueMarkedLessons = Array.from(uniqueFeedbacksMap.values());
+            
+            let total_obtained = 0;
+            // IMPORTANT: max marks is EXACTLY 10 multiplied by the number of lessons graded
+            let total_max = uniqueMarkedLessons.length * 10; 
+
+            uniqueMarkedLessons.forEach(fb => {
                 total_obtained += calculateScore(fb.answers);
             });
 
@@ -10865,7 +10879,7 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
                 ...student,
                 total_obtained,
                 total_max,
-                has_marks: studentFeedbacks.length > 0
+                has_marks: uniqueMarkedLessons.length > 0
             };
         });
 

@@ -13,12 +13,12 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60',
-    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935', redBox: '#E53935'
+    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935', redBox: '#EF4444'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', inputBg: '#2C2C2C', success: '#27AE60',
-    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF5350'
+    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF4444'
 };
 
 // --- EXACT 10 QUESTIONS ---
@@ -79,7 +79,6 @@ const StudentLessonFeedback = () => {
         setLoading(false);
     };
 
-    // --- NEW: Calls the new student-lessons endpoint that aggregates marks ---
     const handleSubjectSelect = async (subject) => {
         setSelectedSubject(subject);
         setLoading(true);
@@ -194,25 +193,26 @@ const StudentLessonFeedback = () => {
                                             {lesson.lesson_name}
                                         </Text>
                                         
-                                        {/* --- NEW: Rendering Marks & Status correctly --- */}
-                                        {lesson.is_marked ? (
-                                            <View style={styles.badgeContainer}>
-                                                <View style={[styles.scoreBox, { borderColor: COLORS.redBox }]}>
-                                                    <Text style={[styles.scoreText, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                        <View style={styles.badgeContainer}>
+                                            {lesson.is_marked ? (
+                                                <>
+                                                    <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
+                                                        <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                                    </View>
+                                                    <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
+                                                        <Text style={styles.badgeText}>MARKED</Text>
+                                                    </View>
+                                                </>
+                                            ) : lesson.is_submitted ? (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
+                                                    <Text style={styles.badgeText}>PENDING</Text>
                                                 </View>
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
-                                                    <Text style={styles.badgeText}>MARKED</Text>
+                                            ) : (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
+                                                    <Text style={styles.badgeText}>NO DATA</Text>
                                                 </View>
-                                            </View>
-                                        ) : lesson.is_submitted ? (
-                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
-                                                <Text style={styles.badgeText}>PENDING</Text>
-                                            </View>
-                                        ) : (
-                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
-                                                <Text style={styles.badgeText}>NOT DONE</Text>
-                                            </View>
-                                        )}
+                                            )}
+                                        </View>
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
                             </ScrollView>
@@ -281,22 +281,25 @@ const StudentLessonFeedback = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    headerCard: { padding: 15, width: width * 0.94, alignSelf: 'center', marginTop: 15, marginBottom: 5, borderRadius: 12, elevation: 2 },
+    headerCard: { padding: 15, width: '94%', alignSelf: 'center', marginTop: 15, marginBottom: 5, borderRadius: 12, elevation: 2 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
-    card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1 },
+    card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
+    
+    // BADGES & SCORES
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
-    scoreBox: { borderWidth: 2, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
-    scoreText: { fontWeight: 'bold', fontSize: 14 },
-    statusBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4 },
+    scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
+    scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
     badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
-    questionBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
+    
+    questionBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     questionLabel: { fontSize: 14, fontWeight: 'bold' },
     markBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 60, textAlignVertical: 'top', fontSize: 14 },
-    saveBtn: { padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+    saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 10 },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 }
 });

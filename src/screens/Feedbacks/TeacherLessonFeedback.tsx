@@ -13,12 +13,12 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', success: '#27AE60', danger: '#E53935', 
-    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#E53935'
+    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', success: '#27AE60', danger: '#EF5350', 
-    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF5350'
+    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444'
 };
 
 const formatDate = (isoString) => {
@@ -70,7 +70,6 @@ const TeacherLessonFeedback = () => {
         setSelectedClass(classItem);
         setLoading(true);
         try {
-            // --- NEW: Calls the endpoint that returns students + aggregated total scores ---
             const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${classItem.class_group}/${classItem.subject_name}`);
             setStudents(res.data);
             setViewStep('students');
@@ -83,7 +82,6 @@ const TeacherLessonFeedback = () => {
         setSelectedStudent(student);
         setLoading(true);
         try {
-            // --- NEW: Calls the endpoint returning lesson scores natively ---
             const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedClass.class_group}/${selectedClass.subject_name}/${student.student_id}`);
             setLessons(res.data);
             setViewStep('lessons');
@@ -199,7 +197,7 @@ const TeacherLessonFeedback = () => {
                                             </Text>
                                         </View>
 
-                                        {/* --- NEW: Red Aggregated Score Box --- */}
+                                        {/* --- NEW: Red Aggregated Score Box exactly like screenshot --- */}
                                         <View style={styles.badgeContainer}>
                                             {student.has_marks && (
                                                 <View style={[styles.scoreBoxLarge, { borderColor: COLORS.redBox }]}>
@@ -231,25 +229,27 @@ const TeacherLessonFeedback = () => {
                                             {lesson.lesson_name}
                                         </Text>
                                         
-                                        {/* --- NEW: Render Score Box & MARKED Badges --- */}
-                                        {lesson.is_marked ? (
-                                            <View style={styles.badgeContainer}>
-                                                <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
-                                                    <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                        <View style={styles.badgeContainer}>
+                                            {/* --- NEW: Red Outlined Score Box next to Badges --- */}
+                                            {lesson.is_marked ? (
+                                                <>
+                                                    <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
+                                                        <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                                    </View>
+                                                    <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
+                                                        <Text style={styles.badgeText}>MARKED</Text>
+                                                    </View>
+                                                </>
+                                            ) : lesson.is_submitted ? (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
+                                                    <Text style={styles.badgeText}>PENDING</Text>
                                                 </View>
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
-                                                    <Text style={styles.badgeText}>MARKED</Text>
+                                            ) : (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
+                                                    <Text style={styles.badgeText}>NO DATA</Text>
                                                 </View>
-                                            </View>
-                                        ) : lesson.is_submitted ? (
-                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
-                                                <Text style={styles.badgeText}>PENDING</Text>
-                                            </View>
-                                        ) : (
-                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
-                                                <Text style={styles.badgeText}>NO DATA</Text>
-                                            </View>
-                                        )}
+                                            )}
+                                        </View>
                                     </TouchableOpacity>
                                 )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found in syllabus.</Text>}
                             </ScrollView>
@@ -312,30 +312,30 @@ const TeacherLessonFeedback = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    headerCard: { padding: 15, width: width * 0.94, alignSelf: 'center', marginTop: 15, marginBottom: 5, borderRadius: 12, elevation: 2 },
+    headerCard: { padding: 15, width: '94%', alignSelf: 'center', marginTop: 15, marginBottom: 5, borderRadius: 12, elevation: 2 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
-    card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1 },
+    card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
-    // BADGES & SCORES
+    // BADGES & SCORES (With exact red outlined design)
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
-    scoreBoxLarge: { borderWidth: 2, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
+    scoreBoxLarge: { borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextLarge: { fontWeight: 'bold', fontSize: 18 },
-    scoreBoxSmall: { borderWidth: 2, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
+    scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
     badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
     
     // GRADING UI
-    remarksBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
-    questionBox: { padding: 15, borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
+    remarksBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
+    questionBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     label: { fontSize: 13, fontWeight: 'bold' },
     gradingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 12 },
     markBtn: { width: 45, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
     markBtnText: { fontWeight: 'bold', fontSize: 16, color: '#777' },
-    saveBtn: { padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+    saveBtn: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, alignItems: 'center', marginTop: 10 },
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 }
 });
