@@ -10692,11 +10692,10 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED FOR YOUR SCHEMA) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED FLOW) ---
 // ==========================================================
 
 // 1. [STUDENT] Get subjects for a student's class
-// ONLY returns subjects that are in their timetable AND have an active syllabus
 app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
     try {
         const { class_group } = req.params;
@@ -10715,7 +10714,7 @@ app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) =
     }
 });
 
-// 2. [STUDENT & TEACHER] Get lessons for a subject from syllabus_lessons
+// 2. [STUDENT] Get lessons for a subject from syllabus_lessons
 app.get('/api/lesson-feedback/lessons/:class_group/:subject_name', async (req, res) => {
     try {
         const { class_group, subject_name } = req.params;
@@ -10734,7 +10733,7 @@ app.get('/api/lesson-feedback/lessons/:class_group/:subject_name', async (req, r
     }
 });
 
-// 3. [STUDENT] Get Student's specific lesson submission
+// 3. [STUDENT & TEACHER] Get specific lesson submission
 app.get('/api/lesson-feedback/student/submission/:student_id/:class_group/:subject_name/:lesson_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name } = req.params;
@@ -10755,7 +10754,6 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name, answers, teaching_remarks } = req.body;
         
-        // Ensure student can't edit if already marked
         const [existing] = await db.query(
             `SELECT is_marked FROM lesson_feedbacks 
              WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?`,
@@ -10781,7 +10779,7 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
     }
 });
 
-// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects (Only those with a Syllabus)
+// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects
 app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => {
     try {
         const { teacher_id } = req.params;
@@ -10800,30 +10798,53 @@ app.get('/api/lesson-feedback/teacher/classes/:teacher_id', async (req, res) => 
     }
 });
 
-// 6. [TEACHER/ADMIN] Get Students list with submission status for a specific lesson
-app.get('/api/lesson-feedback/teacher/students/:class_group/:subject_name/:lesson_name', async (req, res) => {
+// 6. [TEACHER/ADMIN] Get ALL Students in a selected Class
+app.get('/api/lesson-feedback/teacher/class-students/:class_group', async (req, res) => {
     try {
-        const { class_group, subject_name, lesson_name } = req.params;
-        
+        const { class_group } = req.params;
         const [students] = await db.query(
-            `SELECT u.id as student_id, u.full_name, p.roll_no,
-                CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
-                IFNULL(lf.is_marked, false) as is_marked
+            `SELECT u.id as student_id, u.full_name, p.roll_no
              FROM users u
              LEFT JOIN user_profiles p ON u.id = p.user_id
-             LEFT JOIN lesson_feedbacks lf ON u.id = lf.student_id AND lf.lesson_name = ? AND lf.subject_name = ?
              WHERE u.role = 'student' AND u.class_group = ?
              ORDER BY CAST(p.roll_no AS UNSIGNED) ASC`,
-            [lesson_name, subject_name, class_group]
+            [class_group]
         );
         res.json(students);
     } catch (error) {
-        console.error("Error fetching students list:", error);
+        console.error("Error fetching students:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 7. [TEACHER] Teacher saves marks (0 or 1)
+// 7. [TEACHER/ADMIN] Get specific Student's Lessons with Submission Status
+app.get('/api/lesson-feedback/teacher/student-lessons/:class_group/:subject_name/:student_id', async (req, res) => {
+    try {
+        const { class_group, subject_name, student_id } = req.params;
+        
+        const [lessons] = await db.query(
+            `SELECT sl.id, sl.lesson_name,
+                CASE WHEN lf.id IS NOT NULL THEN true ELSE false END as is_submitted,
+                IFNULL(lf.is_marked, false) as is_marked
+             FROM syllabuses s
+             JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
+             LEFT JOIN lesson_feedbacks lf 
+                ON lf.lesson_name = sl.lesson_name 
+                AND lf.student_id = ? 
+                AND lf.class_group = ? 
+                AND lf.subject_name = ?
+             WHERE s.class_group = ? AND s.subject_name = ?
+             ORDER BY sl.to_date ASC`,
+            [student_id, class_group, subject_name, class_group, subject_name]
+        );
+        res.json(lessons);
+    } catch (error) {
+        console.error("Error fetching student lessons:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 8. [TEACHER] Teacher saves marks (0 or 1)
 app.post('/api/lesson-feedback/teacher/mark', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name, answers, teacher_id } = req.body;

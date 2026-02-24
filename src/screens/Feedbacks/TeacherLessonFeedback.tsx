@@ -33,18 +33,19 @@ const TeacherLessonFeedback = () => {
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
 
+    // FLOW: classes -> students -> lessons -> grading
     const [viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
 
     // Data States
     const [classes, setClasses] = useState([]);
-    const [lessons, setLessons] = useState([]);
     const [students, setStudents] = useState([]);
+    const [lessons, setLessons] = useState([]);
     
     // Selections
     const [selectedClass, setSelectedClass] = useState(null);
-    const [selectedLesson, setSelectedLesson] = useState('');
     const [selectedStudent, setSelectedStudent] = useState(null);
+    const [selectedLesson, setSelectedLesson] = useState(null);
 
     // Grading State
     const [answers, setAnswers] = useState([]);
@@ -54,47 +55,51 @@ const TeacherLessonFeedback = () => {
         if (user) fetchClasses();
     }, [user]);
 
+    // 1. Fetch Classes assigned to Teacher
     const fetchClasses = async () => {
         setLoading(true);
         try {
-            const targetId = isAdmin ? 1 : user.id; // Adjust logic for admin fetch if required
+            const targetId = isAdmin ? 1 : user.id; 
             const res = await apiClient.get(`/lesson-feedback/teacher/classes/${targetId}`);
             setClasses(res.data);
         } catch (e) { Alert.alert('Error', 'Failed to load classes.'); }
         setLoading(false);
     };
 
+    // 2. Select Class -> Fetch Students
     const handleClassSelect = async (classItem) => {
         setSelectedClass(classItem);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/lessons/${classItem.class_group}/${classItem.subject_name}`);
-            setLessons(res.data);
-            setViewStep('lessons');
-        } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
-        setLoading(false);
-    };
-
-    const handleLessonSelect = async (lessonName) => {
-        setSelectedLesson(lessonName);
-        setLoading(true);
-        try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/students/${selectedClass.class_group}/${selectedClass.subject_name}/${lessonName}`);
+            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${classItem.class_group}`);
             setStudents(res.data);
             setViewStep('students');
         } catch (e) { Alert.alert('Error', 'Failed to load students.'); }
         setLoading(false);
     };
 
+    // 3. Select Student -> Fetch Lessons with Statuses
     const handleStudentSelect = async (student) => {
         setSelectedStudent(student);
-        if (!student.is_submitted) {
-            Alert.alert("Pending", "Student has not submitted answers yet.");
+        setLoading(true);
+        try {
+            const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedClass.class_group}/${selectedClass.subject_name}/${student.student_id}`);
+            setLessons(res.data);
+            setViewStep('lessons');
+        } catch (e) { Alert.alert('Error', 'Failed to load student lessons.'); }
+        setLoading(false);
+    };
+
+    // 4. Select Lesson -> Fetch Grading Form
+    const handleLessonSelect = async (lesson) => {
+        setSelectedLesson(lesson);
+        if (!lesson.is_submitted) {
+            Alert.alert("Pending", "Student has not submitted answers for this lesson yet.");
             return;
         }
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/student/submission/${student.student_id}/${selectedClass.class_group}/${selectedClass.subject_name}/${selectedLesson}`);
+            const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedClass.class_group}/${selectedClass.subject_name}/${lesson.lesson_name}`);
             setAnswers(res.data.answers || []);
             setRemarks(res.data.teaching_remarks || '');
             setViewStep('grading');
@@ -102,6 +107,7 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
+    // 5. Toggle Marks
     const handleMarkToggle = (index, markValue) => {
         if (isAdmin) return;
         const newAnswers = [...answers];
@@ -109,6 +115,7 @@ const TeacherLessonFeedback = () => {
         setAnswers(newAnswers);
     };
 
+    // 6. Save Marks -> Return to Lessons view for that student
     const handleSaveMarks = async () => {
         if (isAdmin) return;
         setLoading(true);
@@ -117,16 +124,17 @@ const TeacherLessonFeedback = () => {
                 student_id: selectedStudent.student_id,
                 class_group: selectedClass.class_group,
                 subject_name: selectedClass.subject_name,
-                lesson_name: selectedLesson,
+                lesson_name: selectedLesson.lesson_name,
                 answers,
                 teacher_id: user.id
             });
             Alert.alert('Success', 'Marks saved successfully!');
-            handleLessonSelect(selectedLesson); // Go back and refresh student list
+            handleStudentSelect(selectedStudent); // Refresh lesson list for the student
         } catch (e) { Alert.alert('Error', 'Failed to save marks.'); }
         setLoading(false);
     };
 
+    // Reusable Header Component
     const renderHeader = (title, subtitle, showBack, backAction) => (
         <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -170,25 +178,10 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 2: LESSONS */}
-                    {viewStep === 'lessons' && (
-                        <>
-                            {renderHeader(`${selectedClass.class_group} - ${selectedClass.subject_name}`, "Select a Lesson", true, () => setViewStep('classes'))}
-                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
-                                {lessons.length > 0 ? lessons.map((lesson) => (
-                                    <TouchableOpacity key={lesson.id} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleLessonSelect(lesson.lesson_name)}>
-                                        <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{lesson.lesson_name}</Text>
-                                        <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
-                                    </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found in syllabus.</Text>}
-                            </ScrollView>
-                        </>
-                    )}
-
-                    {/* STEP 3: STUDENTS LIST */}
+                    {/* STEP 2: STUDENTS */}
                     {viewStep === 'students' && (
                         <>
-                            {renderHeader(selectedLesson, "Select a Student to Mark", true, () => setViewStep('lessons'))}
+                            {renderHeader(`${selectedClass.class_group} - ${selectedClass.subject_name}`, "Select a Student", true, () => setViewStep('classes'))}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {students.length > 0 ? students.map((student, idx) => (
                                     <TouchableOpacity 
@@ -200,14 +193,33 @@ const TeacherLessonFeedback = () => {
                                             <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>{student.roll_no || '-'}</Text>
                                             <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>{student.full_name}</Text>
                                         </View>
+                                        <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+                                    </TouchableOpacity>
+                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
+                            </ScrollView>
+                        </>
+                    )}
+
+                    {/* STEP 3: LESSONS */}
+                    {viewStep === 'lessons' && (
+                        <>
+                            {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => setViewStep('students'))}
+                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+                                {lessons.length > 0 ? lessons.map((lesson) => (
+                                    <TouchableOpacity 
+                                        key={lesson.id} 
+                                        style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
+                                        onPress={() => handleLessonSelect(lesson)}
+                                    >
+                                        <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]}>{lesson.lesson_name}</Text>
                                         
-                                        <View style={[styles.statusBadge, { backgroundColor: student.is_marked ? COLORS.success : (student.is_submitted ? COLORS.warning : COLORS.danger) }]}>
+                                        <View style={[styles.statusBadge, { backgroundColor: lesson.is_marked ? COLORS.success : (lesson.is_submitted ? COLORS.warning : COLORS.danger) }]}>
                                             <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                                {student.is_marked ? 'Marked' : (student.is_submitted ? 'Pending' : 'No Data')}
+                                                {lesson.is_marked ? 'Marked' : (lesson.is_submitted ? 'Pending' : 'No Data')}
                                             </Text>
                                         </View>
                                     </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
+                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found in syllabus.</Text>}
                             </ScrollView>
                         </>
                     )}
@@ -215,7 +227,7 @@ const TeacherLessonFeedback = () => {
                     {/* STEP 4: GRADING */}
                     {viewStep === 'grading' && (
                         <>
-                            {renderHeader(selectedStudent.full_name, selectedLesson, true, () => setViewStep('students'))}
+                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'))}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 
                                 <View style={[styles.remarksBox, { backgroundColor: COLORS.rowAlt, borderColor: COLORS.border }]}>

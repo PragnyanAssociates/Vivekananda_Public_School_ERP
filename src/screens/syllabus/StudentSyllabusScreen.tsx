@@ -30,7 +30,9 @@ const DarkColors = {
     divider: '#2C2C2C', progressUnfilled: '#37474F'
 };
 
-const FILTER_TYPES = ["Overall", "AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+// CHANGED: Match universal filter arrays
+const EXAM_TYPES = ["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+const FILTER_TYPES = ["Overall", ...EXAM_TYPES];
 
 // Helper for DD/MM/YYYY
 const formatDate = (isoString) => {
@@ -180,13 +182,18 @@ const StudentLessonListScreen = ({ route, navigation }) => {
         fetchLessons();
     }, [user, syllabusId]);
 
+    // CHANGED: Filter logic handling multiple exam types properly via array check
     const handleFilter = (type) => {
         setSelectedFilter(type);
         if (type === "Overall") {
             setFilteredList(fullList);
         } else {
-            // CHANGED: Use .includes() for multiple exams
-            setFilteredList(fullList.filter(l => l.exam_type && l.exam_type.includes(type)));
+            setFilteredList(fullList.filter(l => {
+                if (!l.exam_type) return false;
+                // Split comma separated string into array, trim spaces, and check inclusion
+                const examsArray = l.exam_type.split(',').map(e => e.trim());
+                return examsArray.includes(type);
+            }));
         }
     };
 
@@ -237,6 +244,7 @@ const StudentLessonListScreen = ({ route, navigation }) => {
                            </View>
                            <View style={styles.lessonContent}>
                                 <Text style={[styles.lessonName, { color: isDone ? COLORS.textSub : COLORS.textMain, textDecorationLine: isDone ? 'line-through' : 'none' }]}>{item.lesson_name}</Text>
+                                {/* Displays correctly even if comma separated */}
                                 <Text style={[styles.examBadge, { color: COLORS.primary }]}>{item.exam_type}</Text>
                                 <Text style={[styles.lessonDate, { color: COLORS.textSub }]}>
                                     Due: {formatDate(item.from_date)} - {formatDate(item.to_date)}

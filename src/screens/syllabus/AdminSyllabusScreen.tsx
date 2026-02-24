@@ -18,7 +18,7 @@ const LightColors = {
     textMain: '#263238', textSub: '#546E7A', border: '#CFD8DC',
     inputBg: '#FAFAFA', iconGrey: '#90A4AE', danger: '#E53935',
     success: '#43A047', warning: '#FFA000', headerIconBg: '#E0F2F1',
-    divider: '#f0f2f5', tabInactive: '#eceff1'
+    divider: '#f0f2f5', tabInactive: '#eceff1', filterTabBg: '#f1f5f9'
 };
 
 const DarkColors = {
@@ -26,19 +26,21 @@ const DarkColors = {
     textMain: '#E0E0E0', textSub: '#B0B0B0', border: '#333333',
     inputBg: '#2C2C2C', iconGrey: '#757575', danger: '#EF5350',
     success: '#66BB6A', warning: '#FFA726', headerIconBg: '#333333',
-    divider: '#2C2C2C', tabInactive: '#263238'
+    divider: '#2C2C2C', tabInactive: '#263238', filterTabBg: '#2C2C2C'
 };
 
+// CHANGED: Exported Exam Types for consistent use
 const EXAM_TYPES = ["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+const FILTER_TYPES = ["Overall", ...EXAM_TYPES];
 
 // --- DYNAMIC CARD COLORS ---
 const DYNAMIC_COLORS = [
-    { border: '#0D9488', bg: '#F0FDFA', text: '#0F766E' }, // Teal
-    { border: '#0284C7', bg: '#F0F9FF', text: '#0369A1' }, // Blue
-    { border: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9' }, // Violet
-    { border: '#EA580C', bg: '#FFF7ED', text: '#C2410C' }, // Orange
-    { border: '#E11D48', bg: '#FFF1F2', text: '#BE123C' }, // Rose
-    { border: '#16A34A', bg: '#F0FDF4', text: '#15803D' }, // Green
+    { border: '#0D9488', bg: '#F0FDFA', text: '#0F766E' }, 
+    { border: '#0284C7', bg: '#F0F9FF', text: '#0369A1' }, 
+    { border: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9' }, 
+    { border: '#EA580C', bg: '#FFF7ED', text: '#C2410C' }, 
+    { border: '#E11D48', bg: '#FFF1F2', text: '#BE123C' }, 
+    { border: '#16A34A', bg: '#F0FDF4', text: '#15803D' }, 
 ];
 
 // --- HELPERS ---
@@ -132,13 +134,9 @@ const ClassListScreen = ({ onSelectClass }) => {
                     contentContainerStyle={{ paddingBottom: 100, paddingTop: 5 }}
                     renderItem={({ item, index }) => {
                         const theme = DYNAMIC_COLORS[index % DYNAMIC_COLORS.length];
-                        
                         return (
                             <TouchableOpacity 
-                                style={[
-                                    styles.dynamicClassCard, 
-                                    { borderColor: theme.border, backgroundColor: isDark ? COLORS.cardBg : theme.bg }
-                                ]} 
+                                style={[styles.dynamicClassCard, { borderColor: theme.border, backgroundColor: isDark ? COLORS.cardBg : theme.bg }]} 
                                 onPress={() => onSelectClass(item)}
                                 activeOpacity={0.7}
                             >
@@ -249,7 +247,7 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
     );
 };
 
-// --- Sub-Component 3: Create/Edit Form (Tabbed & Multiple Exams Enabled) ---
+// --- Sub-Component 3: Create/Edit Form ---
 const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -260,7 +258,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
     const [selectedSubject, setSelectedSubject] = useState(isEditMode ? initialSyllabus.subject_name : '');
     const [selectedTeacherId, setSelectedTeacherId] = useState(isEditMode ? initialSyllabus.creator_id.toString() : '');
     
-    // CHANGED: examTypes is now an array to support multiple exam assignments
     const [lessons, setLessons] = useState([{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
     const [examFilter, setExamFilter] = useState('AT1');
 
@@ -286,7 +283,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                     const formattedLessons = syllabusDetailsRes.data.lessons.map(l => ({ 
                         id: l.id || Date.now() + Math.random(),
                         lessonName: l.lesson_name, 
-                        // Parse comma separated backend string to array
                         examTypes: l.exam_type ? l.exam_type.split(',').map(e => e.trim()) : [],
                         fromDate: new Date(l.from_date), 
                         toDate: new Date(l.to_date) 
@@ -310,16 +306,13 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
         }
     };
 
-    // CHANGED: Toggle logic to add/remove examFilter from the array
     const toggleLessonExam = (index) => {
         const newLessons = [...lessons];
         const currentExams = newLessons[index].examTypes || [];
         
         if (currentExams.includes(examFilter)) {
-            // Remove exam if already selected
             newLessons[index].examTypes = currentExams.filter(e => e !== examFilter);
         } else {
-            // Add exam
             newLessons[index].examTypes = [...currentExams, examFilter];
         }
         setLessons(newLessons);
@@ -330,7 +323,7 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
         
         const validLessons = lessons.filter(l => l.lessonName.trim()).map(l => ({
             lessonName: l.lessonName, 
-            examType: l.examTypes.join(', '), // Send as CSV string to backend
+            examType: l.examTypes.join(', '), // CSV format for DB
             fromDate: formatDateForBackend(l.fromDate), 
             toDate: formatDateForBackend(l.toDate)
         }));
@@ -449,7 +442,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                         <Text style={[styles.sectionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.divider }]}>Lessons (Select for {examFilter})</Text>
                         
                         {lessons.map((lesson, index) => {
-                            // Check if examFilter is in the array
                             const isSelected = lesson.examTypes && lesson.examTypes.includes(examFilter);
                             return (
                                 <TouchableOpacity 
@@ -468,7 +460,6 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                                             {lesson.lessonName || `Lesson #${index + 1}`}
                                         </Text>
                                         
-                                        {/* Display comma separated exams assigned */}
                                         {lesson.examTypes && lesson.examTypes.length > 0 ? (
                                             <Text style={{ fontSize: 11, color: COLORS.textSub, marginTop: 2 }}>
                                                 Assigned to: {lesson.examTypes.join(', ')}
@@ -495,12 +486,16 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
     );
 };
 
-// --- Sub-Component 4: Progress View ---
+// --- Sub-Component 4: Progress View (Admin View with Filter logic) ---
 const AdminProgressView = ({ syllabus, onBack }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
+    
+    // CHANGED: Added states for filtering in Admin side
     const [auditLog, setAuditLog] = useState([]);
+    const [filteredLogs, setFilteredLogs] = useState([]);
+    const [selectedFilter, setSelectedFilter] = useState("Overall");
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -509,11 +504,27 @@ const AdminProgressView = ({ syllabus, onBack }) => {
             try {
                 const response = await apiClient.get(`/syllabus/class-progress/${syllabus.id}`);
                 setAuditLog(response.data);
+                setFilteredLogs(response.data); // Initial set
             } catch (error) { Alert.alert("Error", "Could not load progress."); } 
             finally { setIsLoading(false); }
         };
         fetchProgress();
     }, [syllabus]);
+
+    // CHANGED: Filter logic handling multiple exam types properly via array check
+    const handleFilter = (type) => {
+        setSelectedFilter(type);
+        if (type === "Overall") {
+            setFilteredLogs(auditLog);
+        } else {
+            setFilteredLogs(auditLog.filter(l => {
+                if (!l.exam_type) return false;
+                // Split comma separated string into array, trim spaces, and check inclusion
+                const examsArray = l.exam_type.split(',').map(e => e.trim());
+                return examsArray.includes(type);
+            }));
+        }
+    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
@@ -528,10 +539,25 @@ const AdminProgressView = ({ syllabus, onBack }) => {
                     </View>
                 </View>
             </View>
+
+            {/* CHANGED: Admin Filter Bar Added */}
+            <View style={[styles.filterBarContainer, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                    {FILTER_TYPES.map((type) => (
+                        <TouchableOpacity 
+                            key={type} 
+                            style={[styles.filterTab, selectedFilter === type ? { backgroundColor: COLORS.primary } : { backgroundColor: COLORS.filterTabBg }]}
+                            onPress={() => handleFilter(type)}
+                        >
+                            <Text style={[styles.filterText, { color: selectedFilter === type ? '#FFF' : COLORS.textSub }]}>{type}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
             
             {isLoading ? <ActivityIndicator size="large" style={{ marginTop: 50 }} color={COLORS.primary}/> : (
                 <FlatList
-                    data={auditLog}
+                    data={filteredLogs}
                     keyExtractor={(item) => item.lesson_id.toString()}
                     contentContainerStyle={{ padding: 15 }}
                     renderItem={({ item }) => (
@@ -539,7 +565,8 @@ const AdminProgressView = ({ syllabus, onBack }) => {
                             <View style={[styles.statusStrip, { backgroundColor: item.status === 'Completed' ? COLORS.success : item.status === 'Missed' ? COLORS.danger : COLORS.warning }]} />
                             <View style={styles.logContent}>
                                 <Text style={[styles.logTitle, { color: COLORS.textMain }]}>{item.lesson_name}</Text>
-                                <Text style={styles.examBadge}>{item.exam_type}</Text>
+                                {/* Display comma separated exam types safely */}
+                                <Text style={styles.examBadge}>{item.exam_type || 'Unassigned'}</Text>
                                 <View style={styles.logMetaRow}>
                                     <Text style={[styles.logMetaText, { color: COLORS.textSub }]}>{formatDateDisplay(item.from_date)} - {formatDateDisplay(item.to_date)}</Text>
                                     <Text style={[styles.statusBadge, { color: item.status === 'Completed' ? COLORS.success : item.status === 'Missed' ? COLORS.danger : COLORS.warning }]}>{item.status}</Text>
@@ -547,6 +574,7 @@ const AdminProgressView = ({ syllabus, onBack }) => {
                             </View>
                         </View>
                     )}
+                    ListEmptyComponent={<Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found for {selectedFilter}.</Text>}
                 />
             )}
         </SafeAreaView>
@@ -558,7 +586,6 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     
-    // Core Header
     headerCard: {
         paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', 
         marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', 
@@ -571,7 +598,6 @@ const styles = StyleSheet.create({
     headerBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-    // Clean Header (For Class Selection Screen)
     cleanHeader: {
         paddingVertical: 18, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 15, 
         borderRadius: 12, alignItems: 'center', elevation: 2,
@@ -579,10 +605,7 @@ const styles = StyleSheet.create({
     },
     cleanHeaderTitle: { fontSize: 20, fontWeight: 'bold' },
 
-    // Grid Wrapper for 2-column layout
     rowWrapper: { justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 14 },
-
-    // 2-Column Dynamic Colorful Class Cards
     dynamicClassCard: {
         width: '48%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingVertical: 16, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5,
@@ -590,7 +613,6 @@ const styles = StyleSheet.create({
     },
     dynamicClassText: { fontSize: 15, fontWeight: '700', letterSpacing: 0.3, flex: 1, marginRight: 5 },
 
-    // Subject List Cards
     card: { borderRadius: 12, marginVertical: 6, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, width: '96%', alignSelf: 'center' },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
     cardTitle: { fontSize: 17, fontWeight: 'bold' },
@@ -604,12 +626,16 @@ const styles = StyleSheet.create({
     buttonTextSmall: { color: '#fff', fontWeight: '600', fontSize: 13, marginRight: 5 },
     emptyText: { textAlign: 'center', marginTop: 40 },
 
-    // Tabbed Navigation
+    // Filter Bar Styles
+    filterBarContainer: { borderBottomWidth: 1, marginBottom: 10 },
+    filterScroll: { paddingHorizontal: 15, paddingVertical: 12 },
+    filterTab: { marginRight: 15, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20 },
+    filterText: { fontWeight: '600', fontSize: 14 },
+
     tabContainer: { flexDirection: 'row', width: '96%', alignSelf: 'center', borderRadius: 8, overflow: 'hidden', marginBottom: 5 },
     tabButton: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
     tabText: { fontSize: 14, fontWeight: 'bold' },
 
-    // Form
     formContainer: { padding: 15 },
     formSection: { borderRadius: 12, padding: 15, marginBottom: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     sectionHeader: { fontSize: 16, fontWeight: '700', marginBottom: 10, borderBottomWidth: 1, paddingBottom: 10 },
@@ -617,7 +643,6 @@ const styles = StyleSheet.create({
     inputWrapper: { borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
     input: { borderWidth: 1, padding: 12, borderRadius: 8, fontSize: 15 },
     
-    // Lessons UI
     lessonRow: { marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1 },
     lessonHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
     lessonIndex: { fontSize: 13, fontWeight: 'bold' },
@@ -626,15 +651,12 @@ const styles = StyleSheet.create({
     dateText: { fontWeight: '600', fontSize: 13 },
     addLessonBtn: { padding: 12, borderStyle: 'dashed', borderWidth: 1, borderRadius: 10, alignItems: 'center', marginTop: 5 },
     
-    // Assign Exam Checkboxes
     checkboxRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
 
-    // Buttons
     saveButton: { padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 30, width: '100%', alignSelf: 'center' },
     saveButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 
-    // Progress Log
-    logCard: { flexDirection: 'row', marginBottom: 10, borderRadius: 12, overflow: 'hidden', elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
+    logCard: { flexDirection: 'row', marginBottom: 10, marginHorizontal: 2, borderRadius: 12, overflow: 'hidden', elevation: 1, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     statusStrip: { width: 6 },
     logContent: { flex: 1, padding: 12 },
     logTitle: { fontSize: 15, fontWeight: '600' },

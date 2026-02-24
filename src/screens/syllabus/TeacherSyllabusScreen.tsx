@@ -29,7 +29,9 @@ const DarkColors = {
     divider: '#2C2C2C', filterBg: '#1E1E1E', filterTabBg: '#2C2C2C'
 };
 
-const FILTER_TYPES = ["Overall", "AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+// CHANGED: Match universal filter arrays
+const EXAM_TYPES = ["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+const FILTER_TYPES = ["Overall", ...EXAM_TYPES];
 
 // Helper to format date strictly as DD/MM/YYYY
 const formatDate = (isoString) => {
@@ -145,14 +147,19 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
+    // CHANGED: Filter logic handling multiple exam types properly via array check
     const handleFilter = (filterType) => {
         setSelectedFilter(filterType);
         let updatedList = [];
         if (filterType === "Overall") {
             updatedList = fullLessonList;
         } else {
-            // CHANGED: Use .includes() because exam_type can be a comma-separated string like "AT1, SA1"
-            updatedList = fullLessonList.filter(l => l.exam_type && l.exam_type.includes(filterType));
+            updatedList = fullLessonList.filter(l => {
+                if (!l.exam_type) return false;
+                // Split comma separated string into array, trim spaces, and check inclusion
+                const examsArray = l.exam_type.split(',').map(e => e.trim());
+                return examsArray.includes(filterType);
+            });
         }
         setFilteredLessons(updatedList);
         calculateStats(updatedList);
@@ -250,6 +257,7 @@ const TeacherLessonProgressScreen = ({ route, navigation }) => {
                         <View key={lesson.lesson_id} style={[styles.lessonCard, { backgroundColor: COLORS.cardBg, borderColor: isOverdue ? COLORS.danger : COLORS.border, shadowColor: COLORS.border }]}>
                             <View style={styles.lessonHeader}>
                                 <Text style={[styles.lessonTitle, { color: COLORS.textMain }]}>{lesson.lesson_name}</Text>
+                                {/* Displays correctly even if comma separated */}
                                 <Text style={[styles.examBadge, { color: COLORS.primary, backgroundColor: isDark ? COLORS.inputBg : '#E0F2F1' }]}>{lesson.exam_type}</Text>
                                 <Text style={[styles.dateText, { color: isOverdue ? COLORS.danger : COLORS.textSub }]}>
                                     Due: {formatDate(lesson.from_date)} - {formatDate(lesson.to_date)}
