@@ -242,14 +242,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: -13, 
     opacity: 0.8,
-    marginTop: 20,
+    marginTop: 10,
     color: '#121dc2', 
   },
   companyLogo: {
     width: 220, 
     height: 100,
     marginTop: 10,
-    marginBottom: 20, 
+    marginBottom: 1, 
   },
 });
 
