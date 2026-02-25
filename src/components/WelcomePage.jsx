@@ -1,3 +1,4 @@
+// Date Modified: 25/02/2026 (DD/MM/YYYY)
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -62,7 +63,7 @@ const WelcomePage = () => {
         duration: 800,
         useNativeDriver: true,
       }),
-      Animated.stagger(200, [
+      Animated.stagger(200,[
         Animated.spring(logoScaleAnim, {
           toValue: 1,
           friction: 4,
@@ -75,7 +76,7 @@ const WelcomePage = () => {
         }),
       ]),
     ]).start();
-  }, [fadeAnim, slideUpAnim, logoScaleAnim]);
+  },[fadeAnim, slideUpAnim, logoScaleAnim]);
 
   const handleGetStarted = () => {
     navigation.navigate('HomeScreen');
@@ -110,35 +111,56 @@ const WelcomePage = () => {
         {/* Dynamic Overlay based on Theme */}
         <Animated.View style={[styles.overlay, animatedContainerStyle, { backgroundColor: theme.overlay }]}>
           
-          <Animated.Image
-            source={require("../assets/logo.png")}
-            style={[styles.logo, animatedLogoStyle]}
-            resizeMode="contain"
-          />
-          
-          <Animated.Text 
-            style={[
-              styles.tagline, 
-              animatedContentStyle, 
-              { 
-                color: theme.text,
-                textShadowColor: theme.textShadow 
-              }
-            ]}
-          >
-            The unified platform to manage your institution's resources and operations.
-          </Animated.Text>
-          
-          <Animated.View style={animatedContentStyle}>
-            <TouchableOpacity 
-              style={[styles.button, { backgroundColor: theme.primary, shadowColor: theme.shadow }]} 
-              onPress={handleGetStarted} 
-              activeOpacity={0.8}
+          {/* --- MODIFIED SECTION: Wrapper --- */}
+          {/* Grouped the main content inside a View to shift them all further upwards seamlessly */}
+          <View style={styles.mainContent}>
+            {/* Main Logo */}
+            <Animated.Image
+              source={require("../assets/logo.png")}
+              style={[styles.logo, animatedLogoStyle]}
+              resizeMode="contain"
+            />
+            
+            {/* Tagline Text */}
+            <Animated.Text 
+              style={[
+                styles.tagline, 
+                animatedContentStyle, 
+                { 
+                  color: theme.text,
+                  textShadowColor: theme.textShadow 
+                }
+              ]}
             >
-              <Text style={[styles.buttonText, { color: theme.buttonText }]}>Get Started</Text>
-              <Icon name="arrowright" size={24} color={theme.buttonText} />
-            </TouchableOpacity>
+              The unified platform to manage your institution's resources and operations.
+            </Animated.Text>
+            
+            {/* Get Started Button */}
+            <Animated.View style={animatedContentStyle}>
+              <TouchableOpacity 
+                style={[styles.button, { backgroundColor: theme.primary, shadowColor: theme.shadow }]} 
+                onPress={handleGetStarted} 
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.buttonText, { color: theme.buttonText }]}>Get Started</Text>
+                <Icon name="arrowright" size={24} color={theme.buttonText} />
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+          {/* --------------------------------------- */}
+
+          {/* --- MODIFIED SECTION: Powered By Footer --- */}
+          {/* Position further shifted up via responsive bottom spacing in styles to match the upper block */}
+          <Animated.View style={[styles.footerContainer, { opacity: fadeAnim }]}>
+            <Text style={[styles.poweredByText, { color: theme.text }]}>Powered by:</Text>
+            
+            <Image
+              source={require('../assets/pragnyan-logo.png')} 
+              style={styles.companyLogo}
+              resizeMode="contain"
+            />
           </Animated.View>
+          {/* --------------------------------------- */}
 
         </Animated.View>
       </ImageBackground>
@@ -155,26 +177,34 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  // The overlay layout logic
   overlay: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: width * 0.05, // 5% of screen width
+    paddingHorizontal: width * 0.05, 
+    position: 'relative', 
+  },
+  // --- UPDATED STYLE ---
+  // Shifts the entire central block (Logo, Tagline, Button) further upwards responsibly
+  mainContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginTop: -height * 0.24, // CHANGED from 0.12 to 0.24: Moves the block significantly higher to reach the marked line
   },
   logo: {
-    width: width * 0.85, // Responsive: 85% of screen width
-    height: width * 0.7, // Keep aspect ratio roughly consistent
-    marginBottom: -height * 0.08, // Adjust overlap dynamically
+    width: width * 0.85, 
+    height: width * 0.7, 
+    marginBottom: -height * 0.08, 
   },
   tagline: {
-    fontSize: width > 360 ? 18 : 16, // Smaller font for smaller screens
+    fontSize: width > 360 ? 18 : 16, 
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 26,
     maxWidth: '95%',
     fontStyle: "italic",
-    marginBottom: height * 0.08, // Responsive margin
+    marginBottom: height * 0.08, 
     marginTop: 0,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -198,6 +228,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginRight: 12,
+  },
+  // --- UPDATED STYLE ---
+  footerContainer: {
+    position: 'absolute',
+    bottom: height * 0.16, // CHANGED from 0.08 to 0.16: Moved footer significantly higher to maintain distance from the button
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column', 
+  },
+  poweredByText: {
+    fontSize: 22,
+    fontWeight: '500',
+    marginBottom: -13, 
+    opacity: 0.8,
+    marginTop: 20,
+    color: '#121dc2', 
+  },
+  companyLogo: {
+    width: 220, 
+    height: 100,
+    marginTop: 10,
+    marginBottom: 20, 
   },
 });
 

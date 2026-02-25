@@ -7,28 +7,36 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60',
-    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935', redBox: '#EF4444', graphBg: '#F0F0F0'
+    warning: '#FFA000', iconBg: '#E0F2F1', danger: '#E53935', redBox: '#EF4444', 
+    graphBg: '#F0F0F0', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', inputBg: '#2C2C2C', success: '#27AE60',
-    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF4444', graphBg: '#333333'
+    warning: '#FFA726', iconBg: '#333333', danger: '#EF5350', redBox: '#EF4444', 
+    graphBg: '#333333', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
 };
 
-const QUESTIONS = [
+const QUESTIONS =[
     "Why should we learn this lesson?", "Who made or found this?", "What is this lesson about?",
     "Can you explain this in your own words?", "Where do we see this in our daily life?",
     "Tell 3 important words from this lesson.", "Can you give one example?",
     "What was hard for you in this lesson?", "Did you understand it better now?", "How will you tell this to your friend?"
 ];
 
-// --- ANIMATED BAR COMPONENT ---
+// Helper to determine Graph Bar Color
+const getBarColor = (percentage, colors) => {
+    if (percentage >= 80) return colors.graphGreen;
+    if (percentage >= 50) return colors.graphBlue;  
+    return colors.graphRed;                         
+};
+
 const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
@@ -43,7 +51,7 @@ const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
 
     const heightStyle = animatedHeight.interpolate({
         inputRange: [0, 100],
-        outputRange: ['0%', '100%']
+        outputRange:['0%', '100%']
     });
 
     const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
@@ -67,7 +75,7 @@ const StudentLessonFeedback = () => {
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
 
-    const [viewStep, setViewStep] = useState('subjects'); 
+    const[viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
     const [subjects, setSubjects] = useState([]);
@@ -75,12 +83,11 @@ const StudentLessonFeedback = () => {
     const [selectedSubject, setSelectedSubject] = useState('');
     const [selectedLesson, setSelectedLesson] = useState('');
 
-    const [answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
+    const[answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
     const [remarks, setRemarks] = useState('');
     const [isMarked, setIsMarked] = useState(false);
     const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
-    // Graph Modal State
     const [showGraph, setShowGraph] = useState(false);
 
     useEffect(() => { if (user?.class_group) fetchSubjects(); }, [user]);
@@ -120,7 +127,7 @@ const StudentLessonFeedback = () => {
                 setRemarks(res.data.teaching_remarks || '');
                 setIsMarked(res.data.is_marked);
 
-                let parsedRemarks = [];
+                let parsedRemarks =[];
                 try {
                     if (typeof res.data.teacher_remarks_checkboxes === 'string') parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
                     else if (Array.isArray(res.data.teacher_remarks_checkboxes)) parsedRemarks = res.data.teacher_remarks_checkboxes;
@@ -136,7 +143,7 @@ const StudentLessonFeedback = () => {
     };
 
     const handleAnswerChange = (index, text) => {
-        const newAnswers = [...answers];
+        const newAnswers =[...answers];
         newAnswers[index].answer = text;
         setAnswers(newAnswers);
     };
@@ -172,7 +179,6 @@ const StudentLessonFeedback = () => {
                         <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{subtitle}</Text>
                     </View>
                 </View>
-                
                 {showGraphBtn && (
                     <TouchableOpacity style={styles.graphBtnTop} onPress={() => setShowGraph(true)}>
                         <MaterialIcons name="bar-chart" size={26} color={COLORS.primary} />
@@ -196,7 +202,6 @@ const StudentLessonFeedback = () => {
                                 {subjects.length > 0 ? subjects.map((sub, idx) => (
                                     <TouchableOpacity key={idx} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleSubjectSelect(sub.subject_name)}>
                                         <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{sub.subject_name}</Text>
-                                        
                                         <View style={styles.badgeContainer}>
                                             {sub.has_marks && (
                                                 <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
@@ -217,8 +222,7 @@ const StudentLessonFeedback = () => {
                     {viewStep === 'lessons' && (
                         <>
                             {renderHeader(selectedSubject, "Select a Lesson", true, () => {
-                                setViewStep('subjects');
-                                fetchSubjects(); // Refresh outer scores when going back
+                                setViewStep('subjects'); fetchSubjects(); 
                             }, false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {lessons.length > 0 ? lessons.map((lesson) => (
@@ -226,7 +230,6 @@ const StudentLessonFeedback = () => {
                                         <Text style={[styles.cardTitle, { color: COLORS.textMain }]} numberOfLines={2}>
                                             {lesson.lesson_name}
                                         </Text>
-                                        
                                         <View style={styles.badgeContainer}>
                                             {lesson.is_marked ? (
                                                 <>
@@ -345,14 +348,14 @@ const StudentLessonFeedback = () => {
                         {subjects.length > 0 ? (
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end', paddingTop: 30 }}>
                                 {[...subjects]
-                                    .sort((a, b) => b.percentage - a.percentage) // Sort High to Low
+                                    .sort((a, b) => b.percentage - a.percentage) 
                                     .map((item, idx) => (
                                     <AnimatedBar 
                                         key={idx}
                                         percentage={item.percentage}
                                         topLabel={`${Math.round(item.percentage)}%`}
                                         label={item.subject_name}
-                                        color={COLORS.primary}
+                                        color={getBarColor(item.percentage, COLORS)}
                                         colors={COLORS}
                                     />
                                 ))}
@@ -363,6 +366,22 @@ const StudentLessonFeedback = () => {
                                 <Text style={{ color: COLORS.textSub, marginTop: 10 }}>No data available for graph.</Text>
                             </View>
                         )}
+                    </View>
+
+                    {/* --- GUIDANCE LEGEND FOOTER --- */}
+                    <View style={[styles.legendFooter, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphGreen }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Above Avg (≥80%)</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphBlue }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Avg (50-79%)</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphRed }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Below Avg (&lt;50%)</Text>
+                        </View>
                     </View>
                 </SafeAreaView>
             </Modal>
@@ -398,15 +417,19 @@ const styles = StyleSheet.create({
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 },
 
-    // Modal & Graph
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
     modalTitle: { fontSize: 18, fontWeight: 'bold' },
     graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 10, height: 250, justifyContent: 'flex-end' },
+    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 10, height: 230, justifyContent: 'flex-end' },
     barLabelTop: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
-    barTrack: { width: 40, height: 200, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
+    barTrack: { width: 40, height: 180, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 6 },
-    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center', width: '100%' }
+    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 20, textAlign: 'center', width: '100%' },
+    
+    legendFooter: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 10, borderTopWidth: 1 },
+    legendItem: { flexDirection: 'row', alignItems: 'center' },
+    legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+    legendText: { fontSize: 12, fontWeight: '700' }
 });
 
 export default StudentLessonFeedback;

@@ -10692,13 +10692,13 @@ app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
 
 
 // ==========================================================
-// --- LESSON FEEDBACK API ROUTES (UPDATED WITH GRAPH & ADMIN FIX) ---
+// --- LESSON FEEDBACK API ROUTES (UPDATED WITH STRICT MATH & TEACHER NAME) ---
 // ==========================================================
 
 // HELPER: Strictly calculate total marks from JSON answers
 const calculateScore = (answersJson) => {
     if (!answersJson) return 0;
-    let answers = [];
+    let answers =[];
     try {
         answers = typeof answersJson === 'string' ? JSON.parse(answersJson) : answersJson;
     } catch(e) { return 0; }
@@ -10706,18 +10706,18 @@ const calculateScore = (answersJson) => {
     let score = 0;
     if (Array.isArray(answers)) {
         answers.forEach(a => { 
-            if (parseInt(a.mark, 10) === 1) score += 1; 
+            if (parseInt(a.mark, 10) === 1) {
+                score += 1; 
+            }
         });
     }
     return score;
 };
 
-// 1. [STUDENT] Get subjects with aggregated marks
-app.get('/api/lesson-feedback/student/subjects-with-marks/:class_group/:student_id', async (req, res) => {
+// 1. [STUDENT] Get subjects for a student's class
+app.get('/api/lesson-feedback/student/subjects/:class_group', async (req, res) => {
     try {
-        const { class_group, student_id } = req.params;
-        
-        // 1. Get subjects
+        const { class_group } = req.params;
         const [subjects] = await db.query(
             `SELECT DISTINCT s.subject_name 
              FROM syllabuses s
@@ -10726,48 +10726,14 @@ app.get('/api/lesson-feedback/student/subjects-with-marks/:class_group/:student_
              ORDER BY s.subject_name ASC`,
             [class_group]
         );
-
-        // 2. Get marked feedbacks for this student
-        const [feedbacks] = await db.query(
-            `SELECT subject_name, lesson_name, answers 
-             FROM lesson_feedbacks 
-             WHERE student_id = ? AND class_group = ? AND is_marked = 1
-             ORDER BY id DESC`,
-            [student_id, class_group]
-        );
-
-        // 3. Aggregate safely per subject
-        const subjectsWithScores = subjects.map(sub => {
-            const subFeedbacks = feedbacks.filter(f => f.subject_name === sub.subject_name);
-            const processedLessons = new Set();
-            let totalObtained = 0;
-            let totalMax = 0;
-
-            subFeedbacks.forEach(fb => {
-                if (!processedLessons.has(fb.lesson_name)) {
-                    processedLessons.add(fb.lesson_name);
-                    totalObtained += calculateScore(fb.answers);
-                    totalMax += 10;
-                }
-            });
-
-            return {
-                subject_name: sub.subject_name,
-                total_obtained: totalObtained,
-                total_max: totalMax,
-                has_marks: totalMax > 0,
-                percentage: totalMax > 0 ? ((totalObtained / totalMax) * 100) : 0
-            };
-        });
-
-        res.json(subjectsWithScores);
+        res.json(subjects.map(s => s.subject_name));
     } catch (error) {
-        console.error("Error fetching subjects with marks:", error);
+        console.error("Error fetching subjects:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// 2. [STUDENT] Get specific student's lessons with marks
+// 2. [STUDENT] Get specific student's lessons with strictly aggregated marks
 app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name } = req.params;
@@ -10777,16 +10743,14 @@ app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_
              FROM syllabuses s
              JOIN syllabus_lessons sl ON s.id = sl.syllabus_id
              WHERE s.class_group = ? AND s.subject_name = ?
-             ORDER BY sl.to_date ASC`,
-            [class_group, subject_name]
+             ORDER BY sl.to_date ASC`,[class_group, subject_name]
         );
 
         const [feedbacks] = await db.query(
             `SELECT lesson_name, is_marked, answers 
              FROM lesson_feedbacks 
              WHERE student_id = ? AND class_group = ? AND subject_name = ?
-             ORDER BY id DESC`,
-            [student_id, class_group, subject_name]
+             ORDER BY id DESC`,[student_id, class_group, subject_name]
         );
 
         const mergedLessons = lessons.map(lesson => {
@@ -10821,11 +10785,10 @@ app.get('/api/lesson-feedback/student/lessons/:student_id/:class_group/:subject_
 app.get('/api/lesson-feedback/student/submission/:student_id/:class_group/:subject_name/:lesson_name', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name } = req.params;
-        const [submission] = await db.query(
+        const[submission] = await db.query(
             `SELECT * FROM lesson_feedbacks 
              WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?
-             ORDER BY id DESC LIMIT 1`,
-            [student_id, class_group, subject_name, lesson_name]
+             ORDER BY id DESC LIMIT 1`,[student_id, class_group, subject_name, lesson_name]
         );
         res.json(submission[0] || null);
     } catch (error) {
@@ -10855,8 +10818,7 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
         await db.query(
             `INSERT INTO lesson_feedbacks (student_id, class_group, subject_name, lesson_name, answers, teaching_remarks)
              VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE answers = VALUES(answers), teaching_remarks = VALUES(teaching_remarks)`,
-            [student_id, class_group, subject_name, lesson_name, answersJson, teaching_remarks]
+             ON DUPLICATE KEY UPDATE answers = VALUES(answers), teaching_remarks = VALUES(teaching_remarks)`,[student_id, class_group, subject_name, lesson_name, answersJson, teaching_remarks]
         );
         res.json({ success: true, message: "Feedback saved successfully!" });
     } catch (error) {
@@ -10865,24 +10827,26 @@ app.post('/api/lesson-feedback/student/submit', async (req, res) => {
     }
 });
 
-// 5. [TEACHER/ADMIN] Get Classes with Aggregated Marks
+// 5. [TEACHER/ADMIN] Get Teacher's assigned classes & subjects (UPDATED TO FETCH TEACHER NAME)
 app.get('/api/lesson-feedback/teacher/classes-with-marks/:user_id/:role', async (req, res) => {
     try {
         const { user_id, role } = req.params;
         let classes = [];
 
-        // ADMIN FIX: Admin sees ALL syllabuses regardless of timetable
         if (role === 'admin') {
-            const [allClasses] = await db.query(
-                `SELECT DISTINCT class_group, subject_name FROM syllabuses ORDER BY class_group ASC, subject_name ASC`
+            const[allClasses] = await db.query(
+                `SELECT DISTINCT s.class_group, s.subject_name, u.full_name as teacher_name 
+                 FROM syllabuses s
+                 LEFT JOIN users u ON s.creator_id = u.id
+                 ORDER BY s.class_group ASC, s.subject_name ASC`
             );
             classes = allClasses;
         } else {
-            // Teacher sees only their timetable subjects that have a syllabus
-            const [teacherClasses] = await db.query(
-                `SELECT DISTINCT t.class_group, t.subject_name 
+            const[teacherClasses] = await db.query(
+                `SELECT DISTINCT t.class_group, t.subject_name, u.full_name as teacher_name 
                  FROM timetables t
                  JOIN syllabuses s ON t.class_group = s.class_group AND t.subject_name = s.subject_name
+                 JOIN users u ON t.teacher_id = u.id
                  WHERE t.teacher_id = ?
                  ORDER BY t.class_group ASC`,
                 [user_id]
@@ -10890,7 +10854,6 @@ app.get('/api/lesson-feedback/teacher/classes-with-marks/:user_id/:role', async 
             classes = teacherClasses;
         }
 
-        // Fetch all marked feedbacks to aggregate scores for the outer screen
         const [feedbacks] = await db.query(
             `SELECT class_group, subject_name, student_id, lesson_name, answers 
              FROM lesson_feedbacks 
@@ -10929,7 +10892,7 @@ app.get('/api/lesson-feedback/teacher/classes-with-marks/:user_id/:role', async 
     }
 });
 
-// 6. [TEACHER/ADMIN] Get ALL Students in a Class + Strict Aggregated Marks
+// 6.[TEACHER/ADMIN] Get ALL Students in a Class + Strict Aggregated Marks
 app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name', async (req, res) => {
     try {
         const { class_group, subject_name } = req.params;
@@ -10946,8 +10909,7 @@ app.get('/api/lesson-feedback/teacher/class-students/:class_group/:subject_name'
         const [feedbacks] = await db.query(
             `SELECT student_id, lesson_name, answers FROM lesson_feedbacks 
              WHERE class_group = ? AND subject_name = ? AND is_marked = 1
-             ORDER BY id DESC`,
-            [class_group, subject_name]
+             ORDER BY id DESC`,[class_group, subject_name]
         );
 
         const studentsWithScores = students.map(student => {
@@ -11036,14 +10998,13 @@ app.post('/api/lesson-feedback/teacher/mark', async (req, res) => {
     try {
         const { student_id, class_group, subject_name, lesson_name, answers, teacher_id, teacher_remarks_checkboxes } = req.body;
         const answersJson = JSON.stringify(answers);
-        const remarksJson = JSON.stringify(teacher_remarks_checkboxes || []); 
+        const remarksJson = JSON.stringify(teacher_remarks_checkboxes ||[]); 
 
         await db.query(
             `UPDATE lesson_feedbacks 
              SET answers = ?, is_marked = true, teacher_id = ?, teacher_remarks_checkboxes = ?
              WHERE student_id = ? AND class_group = ? AND subject_name = ? AND lesson_name = ?
-             ORDER BY id DESC LIMIT 1`,
-            [answersJson, teacher_id, remarksJson, student_id, class_group, subject_name, lesson_name]
+             ORDER BY id DESC LIMIT 1`,[answersJson, teacher_id, remarksJson, student_id, class_group, subject_name, lesson_name]
         );
         res.json({ success: true, message: "Marks and remarks saved successfully!" });
     } catch (error) {

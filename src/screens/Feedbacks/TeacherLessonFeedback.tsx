@@ -4,6 +4,7 @@ import {
     ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions, Modal, Animated, Easing
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { Picker } from '@react-native-picker/picker'; // MUST BE IMPORTED
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,21 +14,39 @@ const { width } = Dimensions.get('window');
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', success: '#27AE60', danger: '#E53935', 
-    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444', graphBg: '#F0F0F0'
+    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444', 
+    graphBg: '#F0F0F0', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
     primary: '#008080', border: '#333333', success: '#27AE60', danger: '#EF5350', 
-    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444', graphBg: '#333333'
+    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444', 
+    graphBg: '#333333', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
 };
 
-const TEACHER_REMARK_OPTIONS = [
+// --- GRID COLORS ---
+const CLASS_COLORS =[
+    { border: '#0F766E', bg: '#F0FDF4' }, 
+    { border: '#4F46E5', bg: '#EEF2FF' }, 
+    { border: '#E11D48', bg: '#FFF1F2' }, 
+    { border: '#16A34A', bg: '#F0FDF4' }, 
+    { border: '#7C3AED', bg: '#F5F3FF' }, 
+    { border: '#EA580C', bg: '#FFF7ED' }  
+];
+
+const TEACHER_REMARK_OPTIONS =[
     "Irregular", "Unfocused", "Unhealthy", 
     "Poor Performance", "Needs improvement", "None of the above"
 ];
 
+const getBarColor = (percentage, colors) => {
+    if (percentage >= 80) return colors.graphGreen;
+    if (percentage >= 50) return colors.graphBlue;  
+    return colors.graphRed;                         
+};
+
 // --- ANIMATED BAR COMPONENT ---
-const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
+const AnimatedBar = ({ percentage, label, topLabel, rollNo, color, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -55,6 +74,9 @@ const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
             <Text style={[styles.barLabelBottom, { color: colors.textSub }]} numberOfLines={1}>
                 {displayLabel}
             </Text>
+            <Text style={[styles.barRollNo, { color: colors.primary }]}>
+                ({rollNo})
+            </Text>
         </View>
     );
 };
@@ -65,15 +87,19 @@ const TeacherLessonFeedback = () => {
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
 
-    const [viewStep, setViewStep] = useState('classes'); 
+    const[viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
-    const [showGraph, setShowGraph] = useState(false);
-
-    const [classes, setClasses] = useState([]);
-    const [students, setStudents] = useState([]);
-    const [lessons, setLessons] = useState([]);
     
-    const [selectedClass, setSelectedClass] = useState(null);
+    // Graph Modal & Sort State
+    const [showGraph, setShowGraph] = useState(false);
+    const[sortOrder, setSortOrder] = useState('roll_no'); // Default to Roll No
+
+    const[groupedClasses, setGroupedClasses] = useState({}); 
+    const [students, setStudents] = useState([]);
+    const[lessons, setLessons] = useState([]);
+    
+    const [selectedClassGroup, setSelectedClassGroup] = useState(''); 
+    const[selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [selectedLesson, setSelectedLesson] = useState(null);
 
@@ -88,16 +114,22 @@ const TeacherLessonFeedback = () => {
         try {
             const role = isAdmin ? 'admin' : 'teacher';
             const res = await apiClient.get(`/lesson-feedback/teacher/classes-with-marks/${user.id}/${role}`);
-            setClasses(res.data);
+            
+            const grouped = {};
+            res.data.forEach(item => {
+                if (!grouped[item.class_group]) grouped[item.class_group] =[];
+                grouped[item.class_group].push(item);
+            });
+            setGroupedClasses(grouped);
         } catch (e) { Alert.alert('Error', 'Failed to load classes.'); }
         setLoading(false);
     };
 
-    const handleClassSelect = async (classItem) => {
-        setSelectedClass(classItem);
+    const handleSubjectSelect = async (subjectItem) => {
+        setSelectedSubjectItem(subjectItem);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${classItem.class_group}/${classItem.subject_name}`);
+            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${subjectItem.class_group}/${subjectItem.subject_name}`);
             setStudents(res.data);
             setViewStep('students');
         } catch (e) { Alert.alert('Error', 'Failed to load students.'); }
@@ -108,7 +140,7 @@ const TeacherLessonFeedback = () => {
         setSelectedStudent(student);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedClass.class_group}/${selectedClass.subject_name}/${student.student_id}`);
+            const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${student.student_id}`);
             setLessons(res.data);
             setViewStep('lessons');
         } catch (e) { Alert.alert('Error', 'Failed to load student lessons.'); }
@@ -123,11 +155,11 @@ const TeacherLessonFeedback = () => {
         }
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedClass.class_group}/${selectedClass.subject_name}/${lesson.lesson_name}`);
-            setAnswers(res.data.answers || []);
+            const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
+            setAnswers(res.data.answers ||[]);
             setRemarks(res.data.teaching_remarks || '');
             
-            let parsedRemarks = [];
+            let parsedRemarks =[];
             try {
                 if (typeof res.data.teacher_remarks_checkboxes === 'string') parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
                 else if (Array.isArray(res.data.teacher_remarks_checkboxes)) parsedRemarks = res.data.teacher_remarks_checkboxes;
@@ -163,8 +195,8 @@ const TeacherLessonFeedback = () => {
         try {
             await apiClient.post('/lesson-feedback/teacher/mark', {
                 student_id: selectedStudent.student_id,
-                class_group: selectedClass.class_group,
-                subject_name: selectedClass.subject_name,
+                class_group: selectedSubjectItem.class_group,
+                subject_name: selectedSubjectItem.subject_name,
                 lesson_name: selectedLesson.lesson_name,
                 answers, teacher_id: user.id, teacher_remarks_checkboxes: teacherRemarks
             });
@@ -172,6 +204,33 @@ const TeacherLessonFeedback = () => {
             handleStudentSelect(selectedStudent); 
         } catch (e) { Alert.alert('Error', 'Failed to save marks.'); }
         setLoading(false);
+    };
+
+    const getSortedClasses = () => {
+        return Object.keys(groupedClasses).sort((a, b) => {
+            const valA = a.toUpperCase().replace(/\./g, '');
+            const valB = b.toUpperCase().replace(/\./g, '');
+            if (valA.includes('LKG')) return -1;
+            if (valB.includes('LKG')) return 1;
+            if (valA.includes('UKG')) return -1;
+            if (valB.includes('UKG')) return 1;
+            const numA = parseInt(valA.replace(/\D/g, ''), 10);
+            const numB = parseInt(valB.replace(/\D/g, ''), 10);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return valA.localeCompare(valB);
+        });
+    };
+
+    // Sort Logic for Graph
+    const getSortedStudentsForGraph = () => {
+        return [...students]
+            .filter(s => s.has_marks)
+            .sort((a, b) => {
+                if (sortOrder === 'high_to_low') return b.percentage - a.percentage;
+                if (sortOrder === 'low_to_high') return a.percentage - b.percentage;
+                // Default Roll No wise
+                return parseInt(a.roll_no || 0, 10) - parseInt(b.roll_no || 0, 10);
+            });
     };
 
     const renderHeader = (title, subtitle, showBack, backAction, showGraphBtn) => (
@@ -206,40 +265,61 @@ const TeacherLessonFeedback = () => {
 
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} /> : (
                 <>
-                    {/* STEP 1: CLASSES */}
+                    {/* STEP 1: CLASSES (GRID VIEW) */}
                     {viewStep === 'classes' && (
                         <>
-                            {renderHeader(isAdmin ? "All Classes Dashboard" : "My Classes", "Select a Class & Subject", false, null, false)}
-                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
-                                {classes.length > 0 ? classes.map((c, idx) => (
-                                    <TouchableOpacity key={idx} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleClassSelect(c)}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{c.class_group}</Text>
-                                            <Text style={{ color: COLORS.textSub, marginTop: 4 }}>{c.subject_name}</Text>
-                                        </View>
+                            {renderHeader(isAdmin ? "All Classes" : "My Classes", "Select a Class", false, null, false)}
+                            <ScrollView contentContainerStyle={styles.gridContainer}>
+                                {getSortedClasses().length > 0 ? getSortedClasses().map((className, idx) => {
+                                    const colorTheme = CLASS_COLORS[idx % CLASS_COLORS.length];
+                                    return (
+                                        <TouchableOpacity 
+                                            key={className} 
+                                            style={[styles.gridCard, { borderColor: colorTheme.border, backgroundColor: isDark ? COLORS.cardBg : colorTheme.bg }]} 
+                                            onPress={() => {
+                                                setSelectedClassGroup(className);
+                                                setViewStep('subjects');
+                                            }}
+                                        >
+                                            <Text style={[styles.gridText, { color: colorTheme.border }]}>{className}</Text>
+                                            <MaterialIcons name="chevron-right" size={20} color={colorTheme.border} />
+                                        </TouchableOpacity>
+                                    )
+                                }) : <Text style={[styles.emptyText, { color: COLORS.textSub, width: '100%' }]}>No classes found.</Text>}
+                            </ScrollView>
+                        </>
+                    )}
 
+                    {/* STEP 2: SUBJECTS (LIST VIEW) */}
+                    {viewStep === 'subjects' && (
+                        <>
+                            {renderHeader(selectedClassGroup, "Select a Subject", true, () => setViewStep('classes'), false)}
+                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+                                {groupedClasses[selectedClassGroup].map((sub, idx) => (
+                                    <TouchableOpacity key={idx} style={[styles.card, { backgroundColor: COLORS.cardBg }]} onPress={() => handleSubjectSelect(sub)}>
+                                        <Text style={[styles.cardTitle, { color: COLORS.textMain }]}>{sub.subject_name}</Text>
+                                        
                                         <View style={styles.badgeContainer}>
-                                            {c.has_marks && (
+                                            {sub.has_marks && (
                                                 <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
                                                     <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>
-                                                        {c.total_obtained}/{c.total_max}
+                                                        {sub.total_obtained}/{sub.total_max}
                                                     </Text>
                                                 </View>
                                             )}
                                             <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
                                         </View>
                                     </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No assigned classes found.</Text>}
+                                ))}
                             </ScrollView>
                         </>
                     )}
 
-                    {/* STEP 2: STUDENTS */}
+                    {/* STEP 3: STUDENTS */}
                     {viewStep === 'students' && (
                         <>
-                            {/* Pass showGraphBtn=true here */}
-                            {renderHeader(`${selectedClass.class_group} - ${selectedClass.subject_name}`, "Select a Student", true, () => {
-                                setViewStep('classes'); fetchClasses();
+                            {renderHeader(`${selectedSubjectItem.class_group} - ${selectedSubjectItem.subject_name}`, "Select a Student", true, () => {
+                                setViewStep('subjects'); fetchClasses();
                             }, true)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {students.length > 0 ? students.map((student, idx) => (
@@ -250,7 +330,7 @@ const TeacherLessonFeedback = () => {
                                     >
                                         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                                             <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>
-                                                {(idx + 1).toString().padStart(2, '0')}
+                                                {student.roll_no || '-'}
                                             </Text>
                                             <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>
                                                 {student.full_name}
@@ -273,11 +353,11 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 3: LESSONS */}
+                    {/* STEP 4: LESSONS */}
                     {viewStep === 'lessons' && (
                         <>
                             {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => {
-                                setViewStep('students'); handleClassSelect(selectedClass); 
+                                setViewStep('students'); handleSubjectSelect(selectedSubjectItem); 
                             }, false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {lessons.length > 0 ? lessons.map((lesson) => (
@@ -316,7 +396,7 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 4: GRADING & REMARKS */}
+                    {/* STEP 5: GRADING & REMARKS */}
                     {viewStep === 'grading' && (
                         <>
                             {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'), false)}
@@ -356,8 +436,10 @@ const TeacherLessonFeedback = () => {
                                     </View>
                                 ))}
 
+                                {/* --- TEACHER REMARKS CHECKBOXES --- */}
                                 <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, paddingBottom: 5 }]}>
                                     <Text style={[styles.label, { color: COLORS.primary, marginBottom: 10 }]}>Teacher Remarks (Check all that apply):</Text>
+                                    
                                     {TEACHER_REMARK_OPTIONS.map(opt => {
                                         const isChecked = teacherRemarks.includes(opt);
                                         return (
@@ -391,7 +473,7 @@ const TeacherLessonFeedback = () => {
                 </>
             )}
 
-            {/* --- GRAPH MODAL --- */}
+            {/* --- GRAPH MODAL WITH FILTER --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -402,33 +484,66 @@ const TeacherLessonFeedback = () => {
                         <View style={{ width: 30 }}/>
                     </View>
 
-                    <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginTop: 20 }}>
-                        Student Ranking ({selectedClass?.class_group} - {selectedClass?.subject_name})
+                    <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginTop: 15, marginBottom: 10 }}>
+                        Student Ranking ({selectedSubjectItem?.class_group} - {selectedSubjectItem?.subject_name})
                     </Text>
+
+                    {/* --- FILTER & TEACHER NAME BLOCK --- */}
+                    <View style={{ paddingHorizontal: 20, marginBottom: 15, width: '100%' }}>
+                        <View style={{ borderWidth: 1.5, borderColor: COLORS.primary, borderRadius: 8, overflow: 'hidden', backgroundColor: COLORS.cardBg }}>
+                            <Picker
+                                selectedValue={sortOrder}
+                                onValueChange={(val) => setSortOrder(val)}
+                                style={{ color: COLORS.primary, height: 45, width: '100%' }}
+                                dropdownIconColor={COLORS.primary}
+                            >
+                                <Picker.Item label="Roll No wise" value="roll_no" />
+                                <Picker.Item label="High to low" value="high_to_low" />
+                                <Picker.Item label="Low to High" value="low_to_high" />
+                            </Picker>
+                        </View>
+                        <Text style={{ textAlign: 'center', fontSize: 13, fontWeight: '700', color: COLORS.textSub, marginTop: 10 }}>
+                            Teacher: {selectedSubjectItem?.teacher_name || user?.full_name || 'N/A'}
+                        </Text>
+                    </View>
 
                     <View style={styles.graphContainer}>
                         {students.filter(s => s.has_marks).length > 0 ? (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end', paddingTop: 30 }}>
-                                {[...students]
-                                    .filter(s => s.has_marks)
-                                    .sort((a, b) => b.percentage - a.percentage) 
-                                    .map((item, idx) => (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: 'flex-end', paddingTop: 10 }}>
+                                {getSortedStudentsForGraph().map((item, idx) => (
                                     <AnimatedBar 
                                         key={idx}
                                         percentage={item.percentage}
                                         topLabel={`${item.total_obtained}/${item.total_max}`}
                                         label={item.full_name}
-                                        color={COLORS.primary}
+                                        rollNo={item.roll_no || '-'} 
+                                        color={getBarColor(item.percentage, COLORS)} 
                                         colors={COLORS}
                                     />
                                 ))}
                             </ScrollView>
                         ) : (
-                            <View style={{ alignItems: 'center', marginTop: 100 }}>
+                            <View style={{ alignItems: 'center', marginTop: 80 }}>
                                 <MaterialIcons name="bar-chart" size={50} color={COLORS.textSub} />
                                 <Text style={{ color: COLORS.textSub, marginTop: 10 }}>No graded students available for graph.</Text>
                             </View>
                         )}
+                    </View>
+
+                    {/* --- GUIDANCE LEGEND FOOTER --- */}
+                    <View style={[styles.legendFooter, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphGreen }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Above Avg (≥80%)</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphBlue }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Avg (50-79%)</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.graphRed }]} />
+                            <Text style={[styles.legendText, { color: COLORS.textSub }]}>Below Avg (&lt;50%)</Text>
+                        </View>
                     </View>
                 </SafeAreaView>
             </Modal>
@@ -443,6 +558,11 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
     graphBtnTop: { padding: 8, backgroundColor: '#E0F2F1', borderRadius: 8 },
+    
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: width * 0.03, paddingTop: 10, paddingBottom: 50 },
+    gridCard: { width: '48%', borderWidth: 1.5, borderRadius: 12, padding: 18, marginBottom: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1, shadowOpacity: 0.05 },
+    gridText: { fontSize: 16, fontWeight: 'bold' },
+
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
@@ -468,15 +588,20 @@ const styles = StyleSheet.create({
     saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
     emptyText: { textAlign: 'center', marginTop: 30, fontSize: 14 },
 
-    // Modal & Graph
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
     modalTitle: { fontSize: 18, fontWeight: 'bold' },
     graphContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 10, height: 250, justifyContent: 'flex-end' },
+    barWrapper: { alignItems: 'center', width: 60, marginHorizontal: 10, height: 230, justifyContent: 'flex-end' },
     barLabelTop: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
-    barTrack: { width: 40, height: 200, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
+    barTrack: { width: 40, height: 180, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 6 },
-    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center', width: '100%' }
+    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center', width: '100%' },
+    barRollNo: { fontSize: 11, fontWeight: 'bold', marginTop: 2, marginBottom: 20, textAlign: 'center', width: '100%' },
+
+    legendFooter: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 10, borderTopWidth: 1 },
+    legendItem: { flexDirection: 'row', alignItems: 'center' },
+    legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+    legendText: { fontSize: 12, fontWeight: '700' }
 });
 
 export default TeacherLessonFeedback;

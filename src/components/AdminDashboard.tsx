@@ -161,7 +161,6 @@ const AdminDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa11', title: 'Students List', imageSource: 'https://cdn-icons-png.flaticon.com/128/16405/16405976.png', navigateToTab: 'StudentStackNavigator' },
             { id: 'qa13', title: 'Student Attendance', imageSource: 'https://cdn-icons-png.flaticon.com/128/10293/10293877.png', navigateToTab: 'StudentAttendance' },
-            { id: 'qa14', title: 'Student review', imageSource: 'https://cdn-icons-png.flaticon.com/128/2839/2839244.png', navigateToTab: 'StudentLessonFeedback' },
             { id: 'qa15', title: 'Health Info', imageSource: 'https://cdn-icons-png.flaticon.com/128/2382/2382533.png', navigateToTab: 'TeacherHealthAdminScreen' },
             { id: 'qa12', title: 'Students  Performance Report', imageSource: 'https://cdn-icons-png.flaticon.com/128/15175/15175651.png', navigateToTab: 'PerformanceFilter' },
         ]
