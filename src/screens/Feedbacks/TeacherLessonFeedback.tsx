@@ -13,15 +13,17 @@ const { width } = Dimensions.get('window');
 // --- THEME CONFIGURATION ---
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
-    primary: '#008080', border: '#CFD8DC', success: '#27AE60', danger: '#E53935', 
-    warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', redBox: '#EF4444', 
-    graphBg: '#F0F0F0', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
+    primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60', 
+    danger: '#E53935', warning: '#FFA000', iconBg: '#E0F2F1', rowAlt: '#FAFAFA', 
+    redBox: '#EF4444', graphBg: '#F0F0F0', graphGreen: '#10B981', graphBlue: '#3B82F6', 
+    graphRed: '#EF4444'
 };
 const DarkColors = {
     background: '#121212', cardBg: '#1E1E1E', textMain: '#E0E0E0', textSub: '#B0B0B0',
-    primary: '#008080', border: '#333333', success: '#27AE60', danger: '#EF5350', 
-    warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', redBox: '#EF4444', 
-    graphBg: '#333333', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
+    primary: '#008080', border: '#333333', inputBg: '#2C2C2C', success: '#27AE60', 
+    danger: '#EF5350', warning: '#FFA726', iconBg: '#333333', rowAlt: '#252525', 
+    redBox: '#EF4444', graphBg: '#333333', graphGreen: '#10B981', graphBlue: '#3B82F6', 
+    graphRed: '#EF4444'
 };
 
 // --- GRID COLORS ---
@@ -95,10 +97,10 @@ const TeacherLessonFeedback = () => {
     const[sortOrder, setSortOrder] = useState('roll_no'); // Default to Roll No
 
     const[groupedClasses, setGroupedClasses] = useState({}); 
-    const [students, setStudents] = useState([]);
+    const[students, setStudents] = useState([]);
     const[lessons, setLessons] = useState([]);
     
-    const [selectedClassGroup, setSelectedClassGroup] = useState(''); 
+    const[selectedClassGroup, setSelectedClassGroup] = useState(''); 
     const[selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [selectedLesson, setSelectedLesson] = useState(null);
@@ -181,7 +183,7 @@ const TeacherLessonFeedback = () => {
     const handleTeacherRemarkToggle = (option) => {
         if (isAdmin) return;
         setTeacherRemarks(prev => {
-            if (option === "None of the above") return prev.includes("None of the above") ? [] : ["None of the above"];
+            if (option === "None of the above") return prev.includes("None of the above") ? [] :["None of the above"];
             let newArr = prev.filter(item => item !== "None of the above");
             if (newArr.includes(option)) newArr = newArr.filter(item => item !== option);
             else newArr.push(option);
@@ -223,7 +225,7 @@ const TeacherLessonFeedback = () => {
 
     // Sort Logic for Graph
     const getSortedStudentsForGraph = () => {
-        return [...students]
+        return[...students]
             .filter(s => s.has_marks)
             .sort((a, b) => {
                 if (sortOrder === 'high_to_low') return b.percentage - a.percentage;
@@ -473,7 +475,7 @@ const TeacherLessonFeedback = () => {
                 </>
             )}
 
-            {/* --- GRAPH MODAL WITH FILTER --- */}
+            {/* --- GRAPH MODAL WITH FIXED FILTER --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -490,16 +492,16 @@ const TeacherLessonFeedback = () => {
 
                     {/* --- FILTER & TEACHER NAME BLOCK --- */}
                     <View style={{ paddingHorizontal: 20, marginBottom: 15, width: '100%' }}>
-                        <View style={{ borderWidth: 1.5, borderColor: COLORS.primary, borderRadius: 8, overflow: 'hidden', backgroundColor: COLORS.cardBg }}>
+                        <View style={{ borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden', backgroundColor: COLORS.inputBg, height: 50, justifyContent: 'center' }}>
                             <Picker
                                 selectedValue={sortOrder}
                                 onValueChange={(val) => setSortOrder(val)}
-                                style={{ color: COLORS.primary, height: 45, width: '100%' }}
-                                dropdownIconColor={COLORS.primary}
+                                style={{ color: COLORS.textMain, width: '100%' }}
+                                dropdownIconColor={COLORS.textSub}
                             >
-                                <Picker.Item label="Roll No wise" value="roll_no" />
-                                <Picker.Item label="High to low" value="high_to_low" />
-                                <Picker.Item label="Low to High" value="low_to_high" />
+                                <Picker.Item label="Roll No wise" value="roll_no" style={{ fontSize: 15 }} />
+                                <Picker.Item label="High to low" value="high_to_low" style={{ fontSize: 15 }} />
+                                <Picker.Item label="Low to High" value="low_to_high" style={{ fontSize: 15 }} />
                             </Picker>
                         </View>
                         <Text style={{ textAlign: 'center', fontSize: 13, fontWeight: '700', color: COLORS.textSub, marginTop: 10 }}>
