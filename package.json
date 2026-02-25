@@ -13,8 +13,6 @@
   "dependencies": {
     "@flyerhq/react-native-chat-ui": "^1.4.3",
     "@flyerhq/react-native-link-preview": "^1.6.0",
-    "@googlemaps/polyline-codec": "^1.0.28",
-    "@mapbox/polyline": "^1.2.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-camera-roll/camera-roll": "^7.10.2",
     "@react-native-community/checkbox": "^0.5.20",
@@ -46,7 +44,6 @@
     "react-native-file-picker": "^0.0.21",
     "react-native-file-viewer": "^2.1.5",
     "react-native-fs": "^2.20.0",
-    "react-native-geolocation-service": "^5.3.1",
     "react-native-gesture-handler": "^2.25.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-html-to-pdf": "^0.12.0",
