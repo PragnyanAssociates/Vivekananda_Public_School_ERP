@@ -7,7 +7,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -30,7 +30,6 @@ const QUESTIONS =[
     "What was hard for you in this lesson?", "Did you understand it better now?", "How will you tell this to your friend?"
 ];
 
-// Helper to determine Graph Bar Color
 const getBarColor = (percentage, colors) => {
     if (percentage >= 80) return colors.graphGreen;
     if (percentage >= 50) return colors.graphBlue;  
@@ -78,9 +77,9 @@ const StudentLessonFeedback = () => {
     const[viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
-    const [subjects, setSubjects] = useState([]);
+    const[subjects, setSubjects] = useState([]);
     const [lessons, setLessons] = useState([]);
-    const [selectedSubject, setSelectedSubject] = useState('');
+    const[selectedSubject, setSelectedSubject] = useState('');
     const [selectedLesson, setSelectedLesson] = useState('');
 
     const[answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
@@ -194,7 +193,6 @@ const StudentLessonFeedback = () => {
 
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} /> : (
                 <>
-                    {/* STEP 1: SUBJECTS */}
                     {viewStep === 'subjects' && (
                         <>
                             {renderHeader("Lesson Feedback", "Select a Subject", false, null, true)}
@@ -218,7 +216,6 @@ const StudentLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 2: LESSONS */}
                     {viewStep === 'lessons' && (
                         <>
                             {renderHeader(selectedSubject, "Select a Lesson", true, () => {
@@ -256,7 +253,6 @@ const StudentLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 3: FORM */}
                     {viewStep === 'form' && (
                         <>
                             {renderHeader(selectedLesson, isMarked ? "Marked by Teacher (Read-only)" : "Answer Questions", true, () => setViewStep('lessons'), false)}
@@ -424,7 +420,7 @@ const styles = StyleSheet.create({
     barLabelTop: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
     barTrack: { width: 40, height: 180, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
     barFill: { width: '100%', borderRadius: 6 },
-    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 20, textAlign: 'center', width: '100%' },
+    barLabelBottom: { fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 40, textAlign: 'center', width: '100%' },
     
     legendFooter: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 10, borderTopWidth: 1 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
