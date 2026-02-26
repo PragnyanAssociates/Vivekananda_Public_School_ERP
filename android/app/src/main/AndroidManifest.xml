@@ -15,9 +15,6 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -35,17 +32,16 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
       android:supportsRtl="true"
-      android:requestLegacyExternalStorage="true"  
-      tools:node="replace">
+      android:requestLegacyExternalStorage="true" >
       
-      <meta-data
+      <!-- <meta-data
           android:name="com.google.android.geo.API_KEY"
-          android:value="AIzaSyCCDXLdlo8s5azxIty7zXJG0MTudafPAL0"/>
+          android:value="AIzaSyCCDXLdlo8s5azxIty7zXJG0MTudafPAL0"/> -->
 
           <!-- REQUIRED: Google Play services version meta-data -->
-      <meta-data
+      <!-- <meta-data
           android:name="com.google.android.gms.version"
-          android:value="@integer/google_play_services_version" />
+          android:value="@integer/google_play_services_version" /> -->
       
       <activity
         android:name=".MainActivity"

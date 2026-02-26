@@ -115,14 +115,14 @@ import SportsScreen from './src/screens/Extra_activity/SportsScreen';
 
 import DictionaryScreen from './src/screens/dictionary/DictionaryScreen';
 
-import TransportScreen from './src/screens/transport/TransportScreen';
-import PassengersScreen from './src/screens/transport/PassengersScreen';
-import VehicalDetails from './src/screens/transport/VehicalDetails';
-import BusStaffDetails from './src/screens/transport/BusStaffDetails';
-import RoutesScreen from './src/screens/transport/RoutesScreen';
-import ProofsScreen from './src/screens/transport/ProofsScreen';
-import ComplaintsScreen from './src/screens/transport/ComplaintsScreen';
-import VehicleLogScreen from './src/screens/transport/VehicleLogScreen';
+// import TransportScreen from './src/screens/transport/TransportScreen';
+// import PassengersScreen from './src/screens/transport/PassengersScreen';
+// import VehicalDetails from './src/screens/transport/VehicalDetails';
+// import BusStaffDetails from './src/screens/transport/BusStaffDetails';
+// import RoutesScreen from './src/screens/transport/RoutesScreen';
+// import ProofsScreen from './src/screens/transport/ProofsScreen';
+// import ComplaintsScreen from './src/screens/transport/ComplaintsScreen';
+// import VehicleLogScreen from './src/screens/transport/VehicleLogScreen';
 
 
 import LibraryHomeScreen from './src/screens/library/LibraryHomeScreen';
@@ -358,14 +358,14 @@ const AuthenticatedStack = () => {
 
       <Stack.Screen name="DictionaryScreen" component={DictionaryScreen} />
 
-      <Stack.Screen name="TransportScreen" component={TransportScreen} />
+      {/* <Stack.Screen name="TransportScreen" component={TransportScreen} />
       <Stack.Screen name="PassengersScreen" component={PassengersScreen} />
       <Stack.Screen name="VehicalDetails" component={VehicalDetails} />
       <Stack.Screen name="BusStaffDetails" component={BusStaffDetails} />
       <Stack.Screen name="RoutesScreen" component={RoutesScreen} />
       <Stack.Screen name="ProofsScreen" component={ProofsScreen} />
       <Stack.Screen name="ComplaintsScreen" component={ComplaintsScreen} />
-      <Stack.Screen name="VehicleLogScreen" component={VehicleLogScreen} />
+      <Stack.Screen name="VehicleLogScreen" component={VehicleLogScreen} /> */}
 
       
       <Stack.Screen name="LibraryHomeScreen" component={LibraryHomeScreen} />
