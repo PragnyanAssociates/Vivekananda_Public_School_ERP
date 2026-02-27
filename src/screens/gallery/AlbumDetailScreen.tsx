@@ -9,7 +9,7 @@ import Video from 'react-native-video';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import RNFetchBlob from 'rn-fetch-blob';
+import RNFetchBlob from 'react-native-blob-util';
 import * as Animatable from 'react-native-animatable';
 import FastImage from 'react-native-fast-image';
 import apiClient from '../../api/client';
