@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, 
   TextInput, Platform, UIManager, LayoutAnimation, SafeAreaView, useColorScheme, 
-  StatusBar, Dimensions
+  StatusBar, useWindowDimensions, Modal
 } from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -11,8 +11,6 @@ import TeacherReportView from './TeacherReportView';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
 
 // --- THEME DEFINITIONS ---
 const LightColors = {
@@ -41,7 +39,7 @@ const DarkColors = {
     inputBg: '#2C2C2C',
     success: '#66BB6A',
     danger: '#EF5350',
-    white: '#FFFFFF', // Text on buttons usually stays white
+    white: '#FFFFFF', 
     headerIconBg: '#333333',
     tabActiveBg: '#1A2733',
     placeholder: '#757575'
@@ -59,18 +57,21 @@ const formatDate = (date) => {
 const TeacherAttendanceMarkingScreen = () => {
   const { user } = useAuth();
   
+  // Responsive hook
+  const { width } = useWindowDimensions();
+  
   // Theme Hook
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const COLORS = isDark ? DarkColors : LightColors;
 
   const [activeTab, setActiveTab] = useState('marking');
-  const [teachers, setTeachers] = useState([]); 
+  const[teachers, setTeachers] = useState([]); 
   const [allTeachersForReport, setAllTeachersForReport] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [attendanceDate, setAttendanceDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const[searchQuery, setSearchQuery] = useState('');
   
   const [selectedTeacherId, setSelectedTeacherId] = useState(null);
   const [markingState, setMarkingState] = useState('LOADING');
@@ -90,19 +91,22 @@ const TeacherAttendanceMarkingScreen = () => {
     } finally {
         setIsLoading(false);
     }
-  }, []);
+  },[]);
   
   useEffect(() => {
       setIsLoading(true);
       loadMarkingDataForDate(attendanceDate);
-  }, [attendanceDate, loadMarkingDataForDate]); 
+  },[attendanceDate, loadMarkingDataForDate]); 
 
   const handleStatusChange = (teacherId, status) => {
     setTeachers(prev => prev.map(t => (t.id === teacherId ? { ...t, status } : t)));
   };
 
   const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(Platform.OS === 'ios');
+    // FIX FOR iOS: Do not auto-close on iOS, let the "Done" button handle it
+    if (Platform.OS === 'android') {
+        setShowDatePicker(false);
+    }
     if (selectedDate) setAttendanceDate(selectedDate);
   };
 
@@ -211,9 +215,9 @@ const TeacherAttendanceMarkingScreen = () => {
                 <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
                     <MaterialIcons name="person-pin" size={24} color={COLORS.primary} />
                 </View>
-                <View style={styles.headerTextContainer}>
-                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Teacher Attendance</Text>
-                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>Admin Control Panel</Text>
+                <View style={[styles.headerTextContainer, { maxWidth: width * 0.5 }]}>
+                    <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>Teacher Attendance</Text>
+                    <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]} numberOfLines={1}>Admin Control Panel</Text>
                 </View>
             </View>
             {activeTab === 'marking' && (
@@ -233,7 +237,36 @@ const TeacherAttendanceMarkingScreen = () => {
             </TouchableOpacity>
         </View>
 
-        {showDatePicker && <DateTimePicker value={attendanceDate} mode="date" display="default" onChange={handleDateChange} />}
+        {/* --- FIX FOR iOS DATE PICKER --- */}
+        {showDatePicker && (
+            Platform.OS === 'ios' ? (
+                <Modal transparent animationType="slide" visible={showDatePicker} onRequestClose={() => setShowDatePicker(false)}>
+                    <View style={styles.iosPickerOverlay}>
+                        <View style={[styles.iosPickerContainer, { backgroundColor: COLORS.cardBg }]}>
+                            <View style={[styles.iosPickerHeader, { borderBottomColor: COLORS.border }]}>
+                                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                    <Text style={{ color: COLORS.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                value={attendanceDate}
+                                mode="date"
+                                display="spinner"
+                                onChange={handleDateChange}
+                                textColor={COLORS.textMain}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+            ) : (
+                <DateTimePicker 
+                    value={attendanceDate} 
+                    mode="date" 
+                    display="default" 
+                    onChange={handleDateChange} 
+                />
+            )
+        )}
 
         {activeTab === 'marking' && (
             <View style={{flex: 1}}>
@@ -316,7 +349,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: {
         borderRadius: 30,
         width: 45,
@@ -325,10 +358,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
-    headerActionBtn: { padding: 8, backgroundColor: '#f0fdfa', borderRadius: 8, borderWidth: 1, borderColor: '#ccfbf1' },
+    headerActionBtn: { padding: 10, backgroundColor: '#f0fdfa', borderRadius: 8, borderWidth: 1, borderColor: '#ccfbf1', marginLeft: 10 },
 
     // Tabs
     tabContainer: { flexDirection: 'row', marginHorizontal: 15, marginBottom: 10, borderRadius: 8, overflow: 'hidden', elevation: 2, borderWidth: 1 },
@@ -369,6 +402,11 @@ const styles = StyleSheet.create({
     footerContainer: { position: 'absolute', bottom: 20, left: 20, right: 20 },
     submitFooterButton: { paddingVertical: 15, borderRadius: 30, alignItems: 'center', justifyContent: 'center', elevation: 5 },
     submitFooterText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+
+    // iOS Picker Styles
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 },
 });
 
 export default TeacherAttendanceMarkingScreen;

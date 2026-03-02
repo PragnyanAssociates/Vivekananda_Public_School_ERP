@@ -14,9 +14,11 @@ import {
   LayoutAnimation,
   Dimensions,
   StatusBar,
-  useColorScheme
+  Modal,
+  useColorScheme,
+  useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
@@ -69,7 +71,7 @@ const DarkColors = {
     shadow: '#000'
 };
 
-const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const CLASS_GROUPS =['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 // --- Helper: Date Formatter ---
 const formatDate = (date) => {
@@ -145,18 +147,18 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
     const isDark = colorScheme === 'dark';
     const colors = isDark ? DarkColors : LightColors;
 
-    const [viewMode, setViewMode] = useState('daily');
-    const [data, setData] = useState({ summary: {}, history: [] });
+    const[viewMode, setViewMode] = useState('daily');
+    const [data, setData] = useState({ summary: {}, history:[] });
     const [isLoading, setIsLoading] = useState(true);
     
     // Date States
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const[selectedDate, setSelectedDate] = useState(new Date());
     const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
     const [toDate, setToDate] = useState(new Date());
 
     // Pickers
     const [showMainPicker, setShowMainPicker] = useState(false);
-    const [showFromPicker, setShowFromPicker] = useState(false);
+    const[showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
 
     const fetchHistory = async () => {
@@ -185,9 +187,18 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
         if (viewMode !== 'custom') fetchHistory();
     }, [studentId, viewMode, selectedDate]);
 
+    // iOS Fix applied to DatePickers
     const onMainDateChange = (event, date) => {
-        setShowMainPicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') setShowMainPicker(false);
         if (date) setSelectedDate(date);
+    };
+    const onFromDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowFromPicker(false);
+        if (date) setFromDate(date);
+    };
+    const onToDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowToPicker(false);
+        if (date) setToDate(date);
     };
 
     const percentage = useMemo(() => {
@@ -263,9 +274,57 @@ const GenericStudentHistoryView = ({ studentId, headerTitle, onBack }) => {
                 </Animatable.View>
             )}
 
-            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
-            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
-            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
+            {/* iOS Fixed Date Pickers */}
+            {showMainPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showMainPicker} onRequestClose={() => setShowMainPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowMainPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={selectedDate} mode="date" display="spinner" onChange={onMainDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={selectedDate} mode="date" display="default" onChange={onMainDateChange} />
+            )}
+
+            {showFromPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showFromPicker} onRequestClose={() => setShowFromPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowFromPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={fromDate} mode="date" display="spinner" onChange={onFromDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={fromDate} mode="date" display="default" onChange={onFromDateChange} />
+            )}
+
+            {showToPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showToPicker} onRequestClose={() => setShowToPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowToPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={toDate} mode="date" display="spinner" onChange={onToDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={toDate} mode="date" display="default" onChange={onToDateChange} />
+            )}
 
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={colors.primary} /> : (
                 <FlatList
@@ -322,18 +381,26 @@ const GenericSummaryView = ({
     
     const [showMainPicker, setShowMainPicker] = useState(false);
     const [showFromPicker, setShowFromPicker] = useState(false);
-    const [showToPicker, setShowToPicker] = useState(false);
+    const[showToPicker, setShowToPicker] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredListData = useMemo(() => {
-        if (!listData) return [];
+        if (!listData) return[];
         if (!searchQuery) return listData;
         return listData.filter(student => student.full_name.toLowerCase().includes(searchQuery.toLowerCase()));
     }, [listData, searchQuery]);
 
     const handleDateChange = (event, date) => {
-        setShowMainPicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') setShowMainPicker(false);
         if (date) onDateChange(date);
+    };
+    const onFromDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowFromPicker(false);
+        if (date) setFromDate(date);
+    };
+    const onToDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowToPicker(false);
+        if (date) setToDate(date);
     };
 
     const valOverall = viewMode === 'daily' 
@@ -383,10 +450,10 @@ const GenericSummaryView = ({
                 )}
             </View>
 
-            {/* Pickers & Filters */}
+            {/* Custom Dropdown Triggers Passed as Props */}
             <View style={styles.pickerContainer}>
-                <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>{picker1}</View>
-                {picker2 && <View style={[styles.pickerWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>{picker2}</View>} 
+                {picker1}
+                {picker2} 
             </View>
 
             <View style={styles.toggleContainer}>
@@ -419,9 +486,57 @@ const GenericSummaryView = ({
                 </Animatable.View>
             )}
 
-            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={handleDateChange} />}
-            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if(d) setFromDate(d); }} />}
-            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if(d) setToDate(d); }} />}
+            {/* iOS Fixed Date Pickers */}
+            {showMainPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showMainPicker} onRequestClose={() => setShowMainPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowMainPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={selectedDate} mode="date" display="spinner" onChange={handleDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={selectedDate} mode="date" display="default" onChange={handleDateChange} />
+            )}
+
+            {showFromPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showFromPicker} onRequestClose={() => setShowFromPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowFromPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={fromDate} mode="date" display="spinner" onChange={onFromDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={fromDate} mode="date" display="default" onChange={onFromDateChange} />
+            )}
+
+            {showToPicker && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={showToPicker} onRequestClose={() => setShowToPicker(false)}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                    <TouchableOpacity onPress={() => setShowToPicker(false)}>
+                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker value={toDate} mode="date" display="spinner" onChange={onToDateChange} textColor={colors.textMain} />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : <DateTimePicker value={toDate} mode="date" display="default" onChange={onToDateChange} />
+            )}
 
             {isLoading ? <ActivityIndicator size="large" color={colors.primary} style={styles.loaderContainer} /> : (
                 <FlatList
@@ -495,20 +610,32 @@ const GenericSummaryView = ({
 
 // --- Teacher View Wrapper ---
 const TeacherSummaryView = ({ teacher }) => {
+    // Responsive hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const colors = isDark ? DarkColors : LightColors;
 
     const [assignments, setAssignments] = useState([]);
-    const [selectedClass, setSelectedClass] = useState('');
+    const[selectedClass, setSelectedClass] = useState('');
     const [selectedSubject, setSelectedSubject] = useState('');
-    const [summaryData, setSummaryData] = useState(null); 
+    const[summaryData, setSummaryData] = useState(null); 
     const [isLoading, setIsLoading] = useState(true);
     const [viewMode, setViewMode] = useState('daily');
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const[selectedDate, setSelectedDate] = useState(new Date());
     
     const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
     const [toDate, setToDate] = useState(new Date());
+
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
 
     useEffect(() => {
         const fetchAssignments = async () => {
@@ -531,7 +658,7 @@ const TeacherSummaryView = ({ teacher }) => {
 
     const fetchSummary = async () => {
         if (!teacher?.id || !selectedClass || !selectedSubject) {
-            setSummaryData({ overallSummary: {}, studentDetails: [] });
+            setSummaryData({ overallSummary: {}, studentDetails:[] });
             return;
         }
         setIsLoading(true);
@@ -545,7 +672,7 @@ const TeacherSummaryView = ({ teacher }) => {
             const response = await apiClient.get(url);
             setSummaryData(response.data);
         } catch (error) {
-            setSummaryData({ overallSummary: {}, studentDetails: [] });
+            setSummaryData({ overallSummary: {}, studentDetails:[] });
         } finally {
             setIsLoading(false);
         }
@@ -564,51 +691,104 @@ const TeacherSummaryView = ({ teacher }) => {
         setSelectedSubject(newSubjects[0] || '');
     };
 
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
+
     const picker1 = (
-        <Picker selectedValue={selectedClass} onValueChange={handleClassChange} enabled={uniqueClasses.length > 0} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
-            {uniqueClasses.length > 0 ? uniqueClasses.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />) : <Picker.Item label="No classes" value="" enabled={false} />}
-        </Picker>
+        <TouchableOpacity 
+            style={[styles.customDropdownTrigger, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+            onPress={() => openDropdown('Select Class', uniqueClasses.map(c => ({label: c, value: c})), selectedClass, handleClassChange)}
+            disabled={uniqueClasses.length === 0}
+        >
+            <Text style={{ color: uniqueClasses.length > 0 ? colors.textMain : colors.textSub, fontSize: 14 }} numberOfLines={1}>
+                {selectedClass || 'No classes'}
+            </Text>
+            <Icon name="chevron-down" size={20} color={colors.textSub} />
+        </TouchableOpacity>
     );
 
     const picker2 = (
-        <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} enabled={subjectsForSelectedClass.length > 0} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
-             {subjectsForSelectedClass.length > 0 ? subjectsForSelectedClass.map(s => <Picker.Item key={s} label={s} value={s} style={{fontSize: 14}} />) : <Picker.Item label="No subjects" value="" enabled={false} />}
-        </Picker>
+        <TouchableOpacity 
+            style={[styles.customDropdownTrigger, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+            onPress={() => openDropdown('Select Subject', subjectsForSelectedClass.map(s => ({label: s, value: s})), selectedSubject, setSelectedSubject)}
+            disabled={subjectsForSelectedClass.length === 0}
+        >
+            <Text style={{ color: subjectsForSelectedClass.length > 0 ? colors.textMain : colors.textSub, fontSize: 14 }} numberOfLines={1}>
+                {selectedSubject || 'No subjects'}
+            </Text>
+            <Icon name="chevron-down" size={20} color={colors.textSub} />
+        </TouchableOpacity>
     );
 
     return (
-        <GenericSummaryView
-            picker1={picker1}
-            picker2={picker2}
-            listData={summaryData?.studentDetails || []}
-            summaryData={summaryData}
-            isLoading={isLoading}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            selectedDate={selectedDate}
-            onDateChange={setSelectedDate}
-            fromDate={fromDate} setFromDate={setFromDate}
-            toDate={toDate} setToDate={setToDate}
-            onRangeFetch={fetchSummary}
-        />
+        <>
+            <GenericSummaryView
+                picker1={picker1}
+                picker2={picker2}
+                listData={summaryData?.studentDetails ||[]}
+                summaryData={summaryData}
+                isLoading={isLoading}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                fromDate={fromDate} setFromDate={setFromDate}
+                toDate={toDate} setToDate={setToDate}
+                onRangeFetch={fetchSummary}
+            />
+
+            {/* SHARED CUSTOM DROPDOWN MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: colors.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: colors.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: colors.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: colors.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </>
     );
 };
 
 // --- Admin View Wrapper ---
 const AdminAttendanceView = () => {
+  // Responsive hook
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? DarkColors : LightColors;
 
   const [selectedClass, setSelectedClass] = useState(CLASS_GROUPS[0]);
   const [summaryData, setSummaryData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const[isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState('daily');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   
   const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
   const [toDate, setToDate] = useState(new Date());
+
+  // Custom Dropdown State
+  const[showClassPicker, setShowClassPicker] = useState(false);
 
   const fetchSummary = async () => {
       if (!selectedClass) return;
@@ -623,7 +803,7 @@ const AdminAttendanceView = () => {
         const response = await apiClient.get(url);
         setSummaryData(response.data);
       } catch (error) {
-        setSummaryData({ overallSummary: {}, studentDetails: [] });
+        setSummaryData({ overallSummary: {}, studentDetails:[] });
       } finally {
         setIsLoading(false);
       }
@@ -638,26 +818,58 @@ const AdminAttendanceView = () => {
   }
 
   const picker1 = (
-    <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} style={[styles.picker, {color: colors.textMain}]} dropdownIconColor={colors.textMain}>
-        {CLASS_GROUPS.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
-    </Picker>
+    <TouchableOpacity 
+        style={[styles.customDropdownTrigger, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+        onPress={() => setShowClassPicker(true)}
+    >
+        <Text style={{ color: colors.textMain, fontSize: 14 }} numberOfLines={1}>{selectedClass}</Text>
+        <Icon name="chevron-down" size={20} color={colors.textSub} />
+    </TouchableOpacity>
   );
 
   return (
-    <GenericSummaryView
-        picker1={picker1}
-        listData={summaryData?.studentDetails || []}
-        summaryData={summaryData}
-        isLoading={isLoading}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        onSelectStudent={setSelectedStudent}
-        selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
-        fromDate={fromDate} setFromDate={setFromDate}
-        toDate={toDate} setToDate={setToDate}
-        onRangeFetch={fetchSummary}
-    />
+    <>
+        <GenericSummaryView
+            picker1={picker1}
+            listData={summaryData?.studentDetails ||[]}
+            summaryData={summaryData}
+            isLoading={isLoading}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            onSelectStudent={setSelectedStudent}
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            fromDate={fromDate} setFromDate={setFromDate}
+            toDate={toDate} setToDate={setToDate}
+            onRangeFetch={fetchSummary}
+        />
+
+        {/* CUSTOM CLASS SELECTOR MODAL */}
+        <Modal visible={showClassPicker} transparent animationType="fade" onRequestClose={() => setShowClassPicker(false)}>
+            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowClassPicker(false)}>
+                <View style={[styles.dropdownModal, { backgroundColor: colors.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                    <Text style={[styles.dropdownTitle, { color: colors.primary }]}>Select Class</Text>
+                    <FlatList
+                        data={CLASS_GROUPS}
+                        keyExtractor={(item) => item}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity 
+                                style={[styles.dropdownItem, { borderBottomColor: colors.border }]} 
+                                onPress={() => {
+                                    setSelectedClass(item);
+                                    setShowClassPicker(false);
+                                }}
+                            >
+                                <Text style={[styles.dropdownItemText, { color: colors.textMain, fontWeight: selectedClass === item ? 'bold' : 'normal' }]}>
+                                    {item}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    />
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    </>
   );
 };
 
@@ -670,9 +882,9 @@ const TeacherLiveAttendanceView = ({ route, teacher }) => {
     const navigation = useNavigation();
     const { class_group, subject_name, date, period_number } = route?.params || {};
     
-    const [students, setStudents] = useState([]);
+    const[students, setStudents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const[isSubmitting, setIsSubmitting] = useState(false);
     const [attendanceAlreadyMarked, setAttendanceAlreadyMarked] = useState(false);
 
     useEffect(() => {
@@ -819,7 +1031,7 @@ const styles = StyleSheet.create({
   headerCard: {
       paddingHorizontal: 15,
       paddingVertical: 12,
-      width: '95%', 
+      width: '96%', 
       alignSelf: 'center',
       marginTop: 10,
       marginBottom: 10,
@@ -860,24 +1072,24 @@ const styles = StyleSheet.create({
       borderWidth: 1,
   },
 
-  // Pickers & Filters
+  // Pickers & Filters (Updated for Custom Dropdown)
   pickerContainer: { 
       flexDirection: 'row', 
-      paddingHorizontal: '2.5%', 
+      paddingHorizontal: 15, 
       marginBottom: 5, 
       width: '100%',
-      justifyContent: 'space-between'
+      justifyContent: 'space-between',
+      gap: 10
   },
-  pickerWrapper: { 
+  customDropdownTrigger: { 
       flex: 1, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      justifyContent: 'space-between', 
       borderWidth: 1, 
       borderRadius: 8, 
       height: 45, 
-      justifyContent: 'center',
-      marginHorizontal: 2 
-  },
-  picker: { 
-      width: '100%', 
+      paddingHorizontal: 10 
   },
   
   // Summary Cards
@@ -885,7 +1097,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       justifyContent: 'space-between', 
       paddingVertical: 15, 
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       marginBottom: 10, 
       borderRadius: 12, 
@@ -912,7 +1124,7 @@ const styles = StyleSheet.create({
   searchBarContainer: { 
       flexDirection: 'row', 
       alignItems: 'center', 
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       marginBottom: 10, 
       borderRadius: 8, 
@@ -933,7 +1145,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       alignItems: 'center', 
       padding: 15, 
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       marginVertical: 5, 
       borderRadius: 10, 
@@ -985,7 +1197,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row', 
       alignItems: 'center', 
       justifyContent: 'center', 
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       marginBottom: 10 
   },
@@ -1017,7 +1229,7 @@ const styles = StyleSheet.create({
 
   // History List
   historyDayCard: { 
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       marginVertical: 6, 
       borderRadius: 8, 
@@ -1038,7 +1250,7 @@ const styles = StyleSheet.create({
 
   // --- NO RECORD CARD STYLES ---
   noRecordCard: {
-      width: '95%',
+      width: '96%',
       alignSelf: 'center',
       paddingVertical: 40,
       alignItems: 'center',
@@ -1109,6 +1321,17 @@ const styles = StyleSheet.create({
   footerContainer: { position: 'absolute', bottom: 20, left: 20, right: 20 },
   submitFooterButton: { backgroundColor: '#008080', paddingVertical: 15, borderRadius: 30, alignItems: 'center', justifyContent: 'center', elevation: 5 },
   submitFooterText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+
+  // Custom Dropdown & iOS Modal Styles
+  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+  dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+  dropdownItemText: { fontSize: 16, textAlign: 'center' },
+
+  iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 }
 });
 
 export default AttendanceScreen;

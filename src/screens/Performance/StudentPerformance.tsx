@@ -1,7 +1,7 @@
 /**
  * File: src/screens/report/StudentPerformance.tsx
  * Purpose: View class-wise student performance.
- * Updated: Responsive Design & Dark/Light Mode Support.
+ * Updated: Fixed iOS Dropdown Overlap & Crash-free Responsiveness.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -9,7 +9,6 @@ import {
     TouchableOpacity, Modal, ScrollView, Animated, Easing, Dimensions,
     Platform, UIManager, LayoutAnimation, RefreshControl, StatusBar, useColorScheme
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,20 +25,20 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const CLASS_SUBJECTS: any = {
-    'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
+    'LKG': ['All Subjects'], 'UKG':['All Subjects'], 
+    'Class 1':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 2':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
+    'Class 3':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 4':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
+    'Class 5':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 6':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
+    'Class 7':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 8':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
+    'Class 9':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 10':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
-const SENIOR_CLASSES = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const SENIOR_CLASSES =['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const EXAM_NAME_TO_CODE: any = {
     'Assignment-1': 'AT1', 'Unitest-1': 'UT1', 
@@ -51,7 +50,7 @@ const EXAM_NAME_TO_CODE: any = {
     'AT3': 'AT3', 'UT3': 'UT3', 'AT4': 'AT4', 'UT4': 'UT4'
 };
 
-const EXAM_ORDER = ['AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4', 'Pre-Final', 'SA2'];
+const EXAM_ORDER =['AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4', 'Pre-Final', 'SA2'];
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -136,7 +135,7 @@ const AnimatedBar = ({ percentage, marks, label, color, height = 220, colors }: 
     }, [percentage]);
 
     const heightStyle = animatedHeight.interpolate({
-        inputRange: [0, 1],
+        inputRange:[0, 1],
         outputRange: ['0%', `${displayPercentage}%`]
     });
 
@@ -165,16 +164,16 @@ const StudentPerformance = () => {
 
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [expandedId, setExpandedId] = useState<number | null>(null);
+    const[expandedId, setExpandedId] = useState<number | null>(null);
 
     // View State
-    const [isTableView, setIsTableView] = useState(false);
+    const[isTableView, setIsTableView] = useState(false);
 
     const [classList, setClassList] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState('');
     
     // Data
-    const [students, setStudents] = useState<any[]>([]);
+    const[students, setStudents] = useState<any[]>([]);
     const [marksData, setMarksData] = useState<any[]>([]);
     const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); 
     const [attendanceMap, setAttendanceMap] = useState<any>({}); 
@@ -188,7 +187,7 @@ const StudentPerformance = () => {
 
     // Modals
     const [isGraphVisible, setIsGraphVisible] = useState(false); // For Exams
-    const [graphData, setGraphData] = useState<any>(null);
+    const[graphData, setGraphData] = useState<any>(null);
     
     const [isAttGraphVisible, setIsAttGraphVisible] = useState(false); // For Attendance
     const [attGraphData, setAttGraphData] = useState<any>(null);
@@ -200,12 +199,25 @@ const StudentPerformance = () => {
     const [compareSubject, setCompareSubject] = useState('All Subjects');
     const [compareSortBy, setCompareSortBy] = useState('desc'); // 'desc' = High to Low, 'asc' = Low to High, 'roll' = Roll No
 
+    // --- Custom Dropdown Config ---
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[] as { label: string, value: string }[],
+        selectedValue: '',
+        onSelect: (val: any) => {}
+    });
+
+    const openDropdown = (title: string, data: any[], selectedValue: string, onSelect: (val: any) => void) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
+
     // --- FETCH DATA ---
     useEffect(() => {
         const fetchClasses = async () => {
             try {
                 const response = await apiClient.get('/reports/classes');
-                const classes = response.data || [];
+                const classes = response.data ||[];
                 setClassList(classes);
                 if (classes.length > 0) setSelectedClass(classes[0]); 
             } catch (error) {
@@ -213,7 +225,7 @@ const StudentPerformance = () => {
             }
         };
         fetchClasses();
-    }, []);
+    },[]);
 
     useEffect(() => {
         if (selectedClass) {
@@ -242,8 +254,8 @@ const StudentPerformance = () => {
         try {
             const response = await apiClient.get(`/reports/class-data/${classGroup}`);
             setStudents(response.data.students || []);
-            setMarksData(response.data.marks || []);
-            setTeacherAssignments(response.data.assignments || []);
+            setMarksData(response.data.marks ||[]);
+            setTeacherAssignments(response.data.assignments ||[]);
         } catch (error) {
             console.error('Error fetching marks:', error);
         }
@@ -254,7 +266,7 @@ const StudentPerformance = () => {
             const response = await apiClient.get(`/attendance/admin-summary`, {
                 params: { classGroup: classGroup, viewMode: 'overall' }
             });
-            const attData = response.data?.studentDetails || [];
+            const attData = response.data?.studentDetails ||[];
             const attMap: any = {};
             attData.forEach((item: any) => {
                 const total = item.total_days || 0;
@@ -289,7 +301,7 @@ const StudentPerformance = () => {
                 }
             });
             
-            const history = response.data.history || [];
+            const history = response.data.history ||[];
             const monthsData: any = {};
             
             history.forEach((record: any) => {
@@ -367,16 +379,16 @@ const StudentPerformance = () => {
 
     useEffect(() => {
         if(isAttGraphVisible && attGraphData) {
-            setAttGraphData(prev => ({ ...prev, data: studentMonthlyAtt }));
+            setAttGraphData((prev: any) => ({ ...prev, data: studentMonthlyAtt }));
         }
     }, [studentMonthlyAtt]);
 
 
     // --- PROCESS DATA ---
     const processedData = useMemo(() => {
-        if (!selectedClass || students.length === 0) return [];
+        if (!selectedClass || students.length === 0) return[];
 
-        const subjects = CLASS_SUBJECTS[selectedClass] || [];
+        const subjects = CLASS_SUBJECTS[selectedClass] ||[];
         const subjectCount = subjects.length;
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
 
@@ -393,7 +405,7 @@ const StudentPerformance = () => {
         let results = students.map(student => {
             let studentTotalObtained = 0;
             let studentMaxTotal = 0; 
-            const examBreakdown: any[] = [];
+            const examBreakdown: any[] =[];
 
             EXAM_ORDER.forEach(examCode => {
                 let examObtained = 0;
@@ -467,14 +479,14 @@ const StudentPerformance = () => {
 
         return { students: results, activeExams };
 
-    }, [selectedClass, students, marksData, attendanceMap, sortBy]);
+    },[selectedClass, students, marksData, attendanceMap, sortBy]);
 
-    const studentList = processedData.students || [];
+    const studentList = processedData.students ||[];
     const availableExams = ['Overall', ...(processedData.activeExams || [])];
 
     // --- COMPARISON LOGIC ---
     const getComparisonData = () => {
-        if (studentList.length === 0) return [];
+        if (studentList.length === 0) return[];
         const isSeniorClass = SENIOR_CLASSES.includes(selectedClass);
 
         let data = studentList.map(student => {
@@ -765,28 +777,29 @@ const StudentPerformance = () => {
             </View>
 
             <View style={styles.filterContainer}>
-                <View style={[styles.filterBox, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                    <Picker 
-                        selectedValue={selectedClass} 
-                        onValueChange={setSelectedClass} 
-                        style={[styles.picker, { color: COLORS.textMain }]}
-                        dropdownIconColor={COLORS.textMain}
-                    >
-                        {classList.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
-                    </Picker>
-                </View>
-                <View style={[styles.filterBox, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                    <Picker 
-                        selectedValue={sortBy} 
-                        onValueChange={setSortBy} 
-                        style={[styles.picker, { color: COLORS.textMain }]}
-                        dropdownIconColor={COLORS.textMain}
-                    >
-                        <Picker.Item label="Roll No" value="roll_no" style={{fontSize: 14}} />
-                        <Picker.Item label="High to Low" value="desc" style={{fontSize: 14}} />
-                        <Picker.Item label="Low to High" value="asc" style={{fontSize: 14}} />
-                    </Picker>
-                </View>
+                {/* Custom Class Dropdown */}
+                <TouchableOpacity 
+                    style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                    onPress={() => openDropdown('Select Class', classList.map(c => ({label: c, value: c})), selectedClass, setSelectedClass)}
+                >
+                    <Text style={{ color: COLORS.textMain, fontSize: 14 }}>{selectedClass || 'Select Class'}</Text>
+                    <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                </TouchableOpacity>
+
+                {/* Custom Sort Dropdown */}
+                <TouchableOpacity 
+                    style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                    onPress={() => openDropdown('Sort By',[
+                        { label: 'Roll No', value: 'roll_no' },
+                        { label: 'High to Low', value: 'desc' },
+                        { label: 'Low to High', value: 'asc' }
+                    ], sortBy, setSortBy)}
+                >
+                    <Text style={{ color: COLORS.textMain, fontSize: 14 }}>
+                        {sortBy === 'roll_no' ? 'Roll No' : sortBy === 'desc' ? 'High to Low' : 'Low to High'}
+                    </Text>
+                    <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                </TouchableOpacity>
             </View>
 
             <View style={[styles.noteContainer, { backgroundColor: isDark ? '#333' : '#FFF8E1', borderColor: isDark ? '#444' : '#FFE0B2' }]}>
@@ -892,63 +905,52 @@ const StudentPerformance = () => {
                         </TouchableOpacity>
                     </View>
                     <View style={[styles.compareControls, { backgroundColor: COLORS.cardBg }]}>
-                        {/* Added Class Filter in Modal */}
+                        
                         <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Select Class:</Text>
-                        <View style={[styles.controlPicker, { marginBottom: 10, backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                            <Picker 
-                                selectedValue={selectedClass} 
-                                onValueChange={setSelectedClass}
-                                style={{color: COLORS.textMain}}
-                                dropdownIconColor={COLORS.textMain}
-                            >
-                                {classList.map(c => <Picker.Item key={c} label={c} value={c} style={{fontSize: 14}} />)}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customCompareTrigger, { marginBottom: 10, backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                            onPress={() => openDropdown('Select Class', classList.map(c => ({label: c, value: c})), selectedClass, setSelectedClass)}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 14 }}>{selectedClass}</Text>
+                            <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                        </TouchableOpacity>
 
                         <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Select Comparison Criterion:</Text>
-                        <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                            <Picker 
-                                selectedValue={compareExam} 
-                                onValueChange={setCompareExam}
-                                style={{color: COLORS.textMain}}
-                                dropdownIconColor={COLORS.textMain}
-                            >
-                                {availableExams.map(t => <Picker.Item key={t} label={t} value={t} style={{fontSize: 14}} />)}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customCompareTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                            onPress={() => openDropdown('Comparison Criterion', availableExams.map(t => ({label: t, value: t})), compareExam, setCompareExam)}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 14 }}>{compareExam}</Text>
+                            <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                        </TouchableOpacity>
                         
                         <View style={styles.controlRow}>
                              <View style={{ flex: 1, marginRight: 10 }}>
                                 <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Select Subject:</Text>
-                                <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                    <Picker 
-                                        selectedValue={compareSubject} 
-                                        onValueChange={setCompareSubject}
-                                        style={{color: COLORS.textMain}}
-                                        dropdownIconColor={COLORS.textMain}
-                                    >
-                                        <Picker.Item label="All Subjects" value="All Subjects" style={{fontSize: 14}} />
-                                        {(CLASS_SUBJECTS[selectedClass] || []).map((s: string) => (
-                                            <Picker.Item key={s} label={s} value={s} style={{fontSize: 14}} />
-                                        ))}
-                                    </Picker>
-                                </View>
+                                <TouchableOpacity 
+                                    style={[styles.customCompareTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                    onPress={() => openDropdown('Select Subject',['All Subjects', ...(CLASS_SUBJECTS[selectedClass] ||[])].map(s => ({label: s, value: s})), compareSubject, setCompareSubject)}
+                                >
+                                    <Text style={{ color: COLORS.textMain, fontSize: 14 }}>{compareSubject === 'All Subjects' ? 'All' : compareSubject}</Text>
+                                    <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                                </TouchableOpacity>
                             </View>
                             
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.controlLabel, { color: COLORS.textSub }]}>Sort Order:</Text>
-                                <View style={[styles.controlPicker, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                    <Picker 
-                                        selectedValue={compareSortBy} 
-                                        onValueChange={setCompareSortBy}
-                                        style={{color: COLORS.textMain}}
-                                        dropdownIconColor={COLORS.textMain}
-                                    >
-                                        <Picker.Item label="High to Low" value="desc" style={{fontSize: 14}} />
-                                        <Picker.Item label="Low to High" value="asc" style={{fontSize: 14}} />
-                                        <Picker.Item label="Roll No" value="roll" style={{fontSize: 14}} />
-                                    </Picker>
-                                </View>
+                                <TouchableOpacity 
+                                    style={[styles.customCompareTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                    onPress={() => openDropdown('Sort Order',[
+                                        { label: 'High to Low', value: 'desc' },
+                                        { label: 'Low to High', value: 'asc' },
+                                        { label: 'Roll No', value: 'roll' }
+                                    ], compareSortBy, setCompareSortBy)}
+                                >
+                                    <Text style={{ color: COLORS.textMain, fontSize: 14 }}>
+                                        {compareSortBy === 'desc' ? 'High to Low' : compareSortBy === 'asc' ? 'Low to High' : 'Roll No'}
+                                    </Text>
+                                    <Icon name="chevron-down" size={20} color={COLORS.textSub} />
+                                </TouchableOpacity>
                             </View>
                         </View>
 
@@ -999,12 +1001,43 @@ const StudentPerformance = () => {
                                     );
                                 })
                             ) : (
-                                <View style={styles.noDataContainer}><Text style={[styles.noDataTxt, { color: COLORS.textSub }]}>No data available for {compareExam} in {compareSubject}.</Text></View>
+                                <View style={styles.noDataContainer}>
+                                    <Text style={[styles.noDataTxt, { color: COLORS.textSub }]}>No data available for {compareExam} in {compareSubject}.</Text>
+                                </View>
                             )}
                         </ScrollView>
                     </View>
                 </View>
             </Modal>
+
+            {/* SHARED CUSTOM DROPDOWN SELECTOR MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg }]}>
+                        <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                            style={{ maxHeight: SCREEN_HEIGHT * 0.5 }}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </View>
     );
 };
@@ -1055,8 +1088,16 @@ const styles = StyleSheet.create({
 
     // --- FILTERS & NOTE ---
     filterContainer: { flexDirection: 'row', gap: 12, paddingHorizontal: 15, marginBottom: 5 },
-    filterBox: { flex: 1, borderRadius: 10, overflow: 'hidden', borderWidth: 1, height: 45, justifyContent: 'center' },
-    picker: { width: '100%' },
+    customDropdownTrigger: {
+        flex: 1, 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        height: 45, 
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12
+    },
     
     noteContainer: {
         marginHorizontal: 15,
@@ -1115,7 +1156,7 @@ const styles = StyleSheet.create({
 
     // Modals
     modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    graphModalCard: { width: '90%', borderRadius: 16, padding: 20, elevation: 15, maxHeight: SCREEN_HEIGHT * 0.8 },
+    graphModalCard: { width: '90%', borderRadius: 16, padding: 20, elevation: 15 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     modalHeaderTitle: { fontSize: 18, fontWeight: 'bold' },
     graphSubTitle: { textAlign: 'center', marginBottom: 25, fontSize: 14, fontWeight: '600', textTransform: 'uppercase' },
@@ -1144,10 +1185,10 @@ const styles = StyleSheet.create({
     compareControls: { padding: 16, marginBottom: 10 },
     controlRow: { flexDirection: 'row', marginTop: 15, justifyContent: 'space-between' },
     controlLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
-    controlPicker: { borderWidth: 1, borderRadius: 8, height: 45, justifyContent: 'center' },
+    customCompareTrigger: { borderWidth: 1, borderRadius: 8, height: 45, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
     compareGraphArea: { flex: 1, paddingVertical: 20 },
     compareGraphTitle: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', marginBottom: 20 },
-    noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', width: SCREEN_WIDTH },
+    noDataContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     noDataTxt: { marginTop: 10 },
 
     // --- SUMMARY CARD STYLES ---
@@ -1176,7 +1217,14 @@ const styles = StyleSheet.create({
     summaryValue: {
         fontSize: 13,
         fontWeight: 'bold',
-    }
+    },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { width: '85%', borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default StudentPerformance;

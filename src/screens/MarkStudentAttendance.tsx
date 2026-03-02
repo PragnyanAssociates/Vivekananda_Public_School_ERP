@@ -12,9 +12,10 @@ import {
   Modal,
   useColorScheme,
   StatusBar,
-  Dimensions
+  Dimensions,
+  useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -58,10 +59,13 @@ const DarkColors = {
     shadow: '#000'
 };
 
-const CLASS_GROUPS = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const CLASS_GROUPS =['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const DAYS =['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const MarkStudentAttendance = () => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -75,12 +79,15 @@ const MarkStudentAttendance = () => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     
+    // Custom Dropdown State
+    const [showClassPicker, setShowClassPicker] = useState(false);
+    
     // --- State: Data & Logic ---
     const [viewState, setViewState] = useState('selection'); // 'selection' | 'success' | 'marking'
     const [isLoading, setIsLoading] = useState(false);
-    const [students, setStudents] = useState<any[]>([]);
+    const[students, setStudents] = useState<any[]>([]);
     const [subjectName, setSubjectName] = useState(''); 
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const[isSubmitting, setIsSubmitting] = useState(false);
 
     // --- Format Date Helper ---
     const formatDate = (date: Date) => {
@@ -93,7 +100,9 @@ const MarkStudentAttendance = () => {
 
     // --- Handlers ---
     const handleDateChange = (event: any, date?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
         if (date) setSelectedDate(date);
     };
 
@@ -212,18 +221,15 @@ const MarkStudentAttendance = () => {
 
                 <View style={styles.contentContainer}>
                     <Text style={[styles.label, { color: COLORS.textSub }]}>Select Class</Text>
-                    <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Picker
-                            selectedValue={selectedClass}
-                            onValueChange={(itemValue) => setSelectedClass(itemValue)}
-                            dropdownIconColor={COLORS.textMain}
-                            style={[styles.picker, { color: COLORS.textMain }]}
-                        >
-                            {CLASS_GROUPS.map((cls) => (
-                                <Picker.Item key={cls} label={cls} value={cls} style={{fontSize: 14}} />
-                            ))}
-                        </Picker>
-                    </View>
+                    
+                    {/* CUSTOM CLASS DROPDOWN */}
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                        onPress={() => setShowClassPicker(true)}
+                    >
+                        <Text style={{ color: COLORS.textMain, fontSize: 16 }}>{selectedClass}</Text>
+                        <Icon name="chevron-down" size={24} color={COLORS.textSub} />
+                    </TouchableOpacity>
 
                     <Text style={[styles.label, { color: COLORS.textSub }]}>Select Date</Text>
                     <TouchableOpacity 
@@ -233,13 +239,36 @@ const MarkStudentAttendance = () => {
                         <Text style={[styles.dateText, { color: COLORS.textMain }]}>{formatDate(selectedDate)}</Text>
                         <Icon name="calendar" size={20} color={COLORS.primary} />
                     </TouchableOpacity>
+                    
+                    {/* FIXED IOS DATE PICKER */}
                     {showDatePicker && (
-                        <DateTimePicker
-                            value={selectedDate}
-                            mode="date"
-                            display="default"
-                            onChange={handleDateChange}
-                        />
+                        Platform.OS === 'ios' ? (
+                            <Modal transparent animationType="slide" visible={showDatePicker} onRequestClose={() => setShowDatePicker(false)}>
+                                <View style={styles.iosPickerOverlay}>
+                                    <View style={[styles.iosPickerContainer, { backgroundColor: COLORS.cardBg }]}>
+                                        <View style={[styles.iosPickerHeader, { borderBottomColor: COLORS.border }]}>
+                                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                                <Text style={{ color: COLORS.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        <DateTimePicker
+                                            value={selectedDate}
+                                            mode="date"
+                                            display="spinner"
+                                            onChange={handleDateChange}
+                                            textColor={COLORS.textMain}
+                                        />
+                                    </View>
+                                </View>
+                            </Modal>
+                        ) : (
+                            <DateTimePicker
+                                value={selectedDate}
+                                mode="date"
+                                display="default"
+                                onChange={handleDateChange}
+                            />
+                        )
                     )}
 
                     <TouchableOpacity style={[styles.proceedBtn, { backgroundColor: COLORS.primary }]} onPress={handleProceed}>
@@ -247,6 +276,33 @@ const MarkStudentAttendance = () => {
                         <Icon name="arrow-right" size={20} color="#fff" />
                     </TouchableOpacity>
                 </View>
+
+                {/* CUSTOM CLASS SELECTOR MODAL */}
+                <Modal visible={showClassPicker} transparent animationType="fade" onRequestClose={() => setShowClassPicker(false)}>
+                    <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowClassPicker(false)}>
+                        <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                            <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>Select Class</Text>
+                            <FlatList
+                                data={CLASS_GROUPS}
+                                keyExtractor={(item) => item}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity 
+                                        style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                        onPress={() => {
+                                            setSelectedClass(item);
+                                            setShowClassPicker(false);
+                                        }}
+                                    >
+                                        <Text style={[styles.dropdownItemText, { color: COLORS.textMain, fontWeight: selectedClass === item ? 'bold' : 'normal' }]}>
+                                            {item}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+
             </SafeAreaView>
         );
     }
@@ -411,12 +467,21 @@ const styles = StyleSheet.create({
     // --- SELECTION VIEW ---
     contentContainer: { padding: 20 },
     label: { fontSize: 14, marginBottom: 8, fontWeight: '600', marginTop: 10 },
-    pickerWrapper: { borderWidth: 1, borderRadius: 8, overflow: 'hidden', height: 50, justifyContent: 'center' },
-    picker: { width: '100%' },
+    
+    customDropdownTrigger: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        borderWidth: 1, 
+        borderRadius: 8, 
+        height: 50, 
+        paddingHorizontal: 15,
+        marginBottom: 15 
+    },
     
     datePickerBtn: { 
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        padding: 15, borderWidth: 1, borderRadius: 8, marginBottom: 30 
+        padding: 15, borderWidth: 1, borderRadius: 8, marginBottom: 30, height: 50 
     },
     dateText: { fontSize: 16, fontWeight: '500' },
     
@@ -457,6 +522,17 @@ const styles = StyleSheet.create({
         shadowColor: '#000', shadowOpacity: 0.2, shadowOffset: {width: 0, height: 3}
     },
     submitFooterText: { color: '#fff', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+
+    // Modals & iOS Picker
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' },
+    
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 }
 });
 
 export default MarkStudentAttendance;

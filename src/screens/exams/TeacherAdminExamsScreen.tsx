@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
     Alert, ScrollView, TextInput, Modal, SafeAreaView, useColorScheme, 
-    StatusBar, Dimensions, Platform 
+    StatusBar, Dimensions, Platform, useWindowDimensions 
 } from 'react-native';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import { useIsFocused } from '@react-navigation/native';
 import * as Animatable from 'react-native-animatable';
 
@@ -79,7 +79,7 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
 
-    const [exams, setExams] = useState([]);
+    const[exams, setExams] = useState([]);
     const [filteredExams, setFilteredExams] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -95,7 +95,7 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
         } catch (e) { 
             Alert.alert('Error', 'Failed to fetch exams.'); 
         } finally { setIsLoading(false); }
-    }, [user?.id]);
+    },[user?.id]);
 
     useEffect(() => {
         if (isFocused) { fetchExams(); }
@@ -114,8 +114,7 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
     const handleMenuPress = (exam) => {
         Alert.alert(
             "Manage Exam",
-            `Options for "${exam.title}"`,
-            [
+            `Options for "${exam.title}"`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit", onPress: () => onEdit(exam) },
                 { text: "Delete", style: "destructive", onPress: () => handleDelete(exam) }
@@ -124,7 +123,7 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
     };
 
     const handleDelete = (exam) => {
-        Alert.alert("Confirm Delete", "Permanently delete this exam?", [
+        Alert.alert("Confirm Delete", "Permanently delete this exam?",[
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete", style: "destructive",
@@ -219,6 +218,9 @@ const ExamList = ({ onCreateNew, onEdit, onViewSubmissions }) => {
 
 // --- View 2: Create OR Edit Exam ---
 const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     const { user } = useAuth();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -240,7 +242,7 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
     };
 
     // Start with 1 empty question template if creating new
-    const initialQuestions = isEditMode ? [] : [{
+    const initialQuestions = isEditMode ? [] :[{
         id: Date.now(),
         question_text: '', 
         question_type: 'multiple_choice',
@@ -250,10 +252,23 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
     }];
 
     const [examDetails, setExamDetails] = useState(initialExamDetails);
-    const [questions, setQuestions] = useState(initialQuestions);
+    const[questions, setQuestions] = useState(initialQuestions);
     const [isLoading, setIsLoading] = useState(isEditMode);
     const [isSaving, setIsSaving] = useState(false);
     const [studentClasses, setStudentClasses] = useState([]);
+
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
     
     useEffect(() => {
         const bootstrapData = async () => {
@@ -282,7 +297,7 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
             } finally { setIsLoading(false); }
         };
         bootstrapData();
-    }, [isEditMode, examToEdit, onFinish]);
+    },[isEditMode, examToEdit, onFinish]);
 
     const addQuestion = () => setQuestions([...questions, { id: Date.now(), question_text: '', question_type: 'multiple_choice', options: { A: '', B: '', C: '', D: '' }, correct_answer: '', marks: '1' }]);
     
@@ -359,13 +374,15 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
                         placeholderTextColor={COLORS.placeholder} 
                     />
 
+                    {/* CUSTOM CLASS DROPDOWN */}
                     <Text style={[styles.label, { color: COLORS.textSub }]}>Class *</Text>
-                    <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                        <Picker selectedValue={examDetails.class_group} onValueChange={v => setExamDetails({ ...examDetails, class_group: v })} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                            <Picker.Item label="-- Select Class --" value="" color={COLORS.textMain} />
-                            {studentClasses.map(c => <Picker.Item key={c} label={c} value={c} color={COLORS.textMain} />)}
-                        </Picker>
-                    </View>
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                        onPress={() => openDropdown('Select Class', studentClasses.map(c => ({label: c, value: c})), examDetails.class_group, v => setExamDetails({ ...examDetails, class_group: v }))}
+                    >
+                        <Text style={{ color: examDetails.class_group ? COLORS.textMain : COLORS.textSub, fontSize: 15 }}>{examDetails.class_group || '-- Select Class --'}</Text>
+                        <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                    </TouchableOpacity>
                     
                     <Text style={[styles.label, { color: COLORS.textSub }]}>Time Limit (mins)</Text>
                     <TextInput 
@@ -398,23 +415,31 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
                             onChangeText={t => handleQuestionChange(q.id, 'question_text', t)} 
                         />
                         
+                        {/* CUSTOM TYPE DROPDOWN */}
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Type</Text>
-                        <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                            <Picker selectedValue={q.question_type} onValueChange={v => handleQuestionChange(q.id, 'question_type', v)} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                                <Picker.Item label="Multiple Choice" value="multiple_choice" color={COLORS.textMain} />
-                                <Picker.Item label="Written Answer" value="short_answer" color={COLORS.textMain} />
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                            onPress={() => openDropdown('Question Type',[{label: 'Multiple Choice', value: 'multiple_choice'}, {label: 'Written Answer', value: 'short_answer'}], q.question_type, v => handleQuestionChange(q.id, 'question_type', v))}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 15 }}>{q.question_type === 'multiple_choice' ? 'Multiple Choice' : 'Written Answer'}</Text>
+                            <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                        </TouchableOpacity>
                         
                         {q.question_type === 'multiple_choice' && q.options && (<>
                             {Object.keys(q.options).map(key => (<TextInput key={key} style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]} placeholder={`Option ${key}`} placeholderTextColor={COLORS.placeholder} value={q.options[key]} onChangeText={t => handleOptionChange(q.id, key, t)} />))}
+                            
+                            {/* CUSTOM CORRECT ANSWER DROPDOWN */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Correct Answer</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={q.correct_answer} onValueChange={v => handleQuestionChange(q.id, 'correct_answer', v)} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="-- Select Correct --" value="" color={COLORS.textMain} />
-                                    {Object.keys(q.options).map(key => q.options[key] && <Picker.Item key={key} label={`Option ${key}`} value={key} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => {
+                                    const validOptions = Object.keys(q.options).filter(k => q.options[k]);
+                                    openDropdown('Correct Answer',[{label: '-- Select Correct --', value: ''}, ...validOptions.map(k => ({label: `Option ${k}`, value: k}))], q.correct_answer, v => handleQuestionChange(q.id, 'correct_answer', v));
+                                }}
+                            >
+                                <Text style={{ color: q.correct_answer ? COLORS.textMain : COLORS.textSub, fontSize: 15 }}>{q.correct_answer ? `Option ${q.correct_answer}` : '-- Select Correct --'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
                         </>)}
 
                         <Text style={[styles.label, { color: COLORS.textSub }]}>Marks</Text>
@@ -430,6 +455,33 @@ const CreateOrEditExamView = ({ examToEdit, onFinish }) => {
                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>{isEditMode ? 'Save Changes' : 'Publish Exam'}</Text>}
                 </TouchableOpacity>
             </ScrollView> 
+
+            {/* SHARED CUSTOM DROPDOWN SELECTOR MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView> 
     );
 };
@@ -442,13 +494,14 @@ const SubmissionsView = ({ exam, onBack }) => {
     const COLORS = isDark ? DarkColors : LightColors;
 
     const [submissions, setSubmissions] = useState([]);
-    const [filteredSubmissions, setFilteredSubmissions] = useState([]);
+    const[filteredSubmissions, setFilteredSubmissions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [gradingSubmission, setGradingSubmission] = useState(null);
-    const [submissionDetails, setSubmissionDetails] = useState([]);
+    const[submissionDetails, setSubmissionDetails] = useState([]);
     const [gradedAnswers, setGradedAnswers] = useState({});
     const [isSubmittingGrade, setIsSubmittingGrade] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const[searchQuery, setSearchQuery] = useState('');
+    const [activeTab, setActiveTab] = useState('All'); 
 
     const fetchSubmissions = useCallback(async () => {
         setIsLoading(true);
@@ -458,19 +511,27 @@ const SubmissionsView = ({ exam, onBack }) => {
             setFilteredSubmissions(response.data);
         } catch (e) { Alert.alert('Error', 'Failed to fetch submissions.'); } 
         finally { setIsLoading(false); }
-    }, [exam.exam_id]);
+    },[exam.exam_id]);
 
     useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
     // Handle Search
     useEffect(() => {
         const query = searchQuery.toLowerCase();
-        const filtered = submissions.filter(s => 
-            s.student_name.toLowerCase().includes(query) || 
-            (s.roll_no && s.roll_no.toLowerCase().includes(query))
-        );
-        setFilteredSubmissions(filtered);
-    }, [searchQuery, submissions]);
+        let result = submissions;
+        if (activeTab === 'Submitted') {
+            result = result.filter(item => item.submission_id);
+        } else if (activeTab === 'Pending') {
+            result = result.filter(item => !item.submission_id);
+        }
+        if (query) {
+            result = result.filter(s => 
+                s.student_name.toLowerCase().includes(query) || 
+                (s.roll_no && s.roll_no.toLowerCase().includes(query))
+            );
+        }
+        setFilteredSubmissions(result);
+    },[searchQuery, activeTab, submissions]);
 
     const openGradingModal = async (submission) => {
         setIsLoading(true);
@@ -502,57 +563,78 @@ const SubmissionsView = ({ exam, onBack }) => {
         <SafeAreaView style={[styles.container, { backgroundColor: COLORS.background }]}>
             <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}>
-                        <MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} />
-                    </TouchableOpacity>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>Submissions</Text>
+                    <TouchableOpacity onPress={onBack} style={{marginRight: 10, padding: 4}}><MaterialIcons name="arrow-back" size={24} color={COLORS.textMain} /></TouchableOpacity>
+                    <View style={{flex: 1}}>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain, fontSize: 18 }]} numberOfLines={1}>Submissions</Text>
                         <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]} numberOfLines={1}>{exam.title}</Text>
                     </View>
                 </View>
             </View>
 
+            <View style={styles.tabContainer}>
+                {['All', 'Submitted', 'Pending'].map((tab) => (
+                    <TouchableOpacity 
+                        key={tab} 
+                        style={[styles.tabButton, { backgroundColor: activeTab === tab ? COLORS.primary : COLORS.inputBg, borderColor: COLORS.border }]}
+                        onPress={() => setActiveTab(tab)}
+                    >
+                        <Text style={[styles.tabText, { color: activeTab === tab ? '#fff' : COLORS.textMain }]}>{tab}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
             <View style={[styles.searchContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                 <MaterialIcons name="search" size={22} color={COLORS.textSub} style={styles.searchIcon} />
-                <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search by name..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={setSearchQuery} />
+                <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search student..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={t => setSearchQuery(t)} />
             </View>
 
             <FlatList
                 data={filteredSubmissions}
-                keyExtractor={(item) => item.attempt_id.toString()}
+                keyExtractor={(item) => item.student_id.toString()}
                 renderItem={({ item }) => (
-                    <View style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
+                    <TouchableOpacity style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} onPress={() => { 
+                        if(item.submission_id) openGradingModal(item);
+                        else Alert.alert('Notice', 'This student has not submitted yet.');
+                    }}>
                         <View style={styles.cardHeaderRow}>
-                            <Text style={[styles.cardTitle, { color: COLORS.textMain }]} numberOfLines={1}>{item.roll_no ? `(${item.roll_no}) ` : ''}{item.student_name}</Text>
-                            {item.grade && <View style={[styles.gradeBadge, { backgroundColor: COLORS.blue }]}><Text style={styles.gradeBadgeText}>{item.grade}</Text></View>}
+                            <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]}>{item.roll_no ? `(${item.roll_no}) ` : ''}{item.student_name}</Text>
+                            {item.grade && <View style={[styles.gradeBadge, { backgroundColor: COLORS.blue }]}><Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{item.grade}</Text></View>}
                         </View>
-                        <Text style={[styles.cardDetail, { color: COLORS.textSub }]}>Status: <Text style={{fontWeight: 'bold', color: item.status === 'graded' ? COLORS.success : COLORS.textSub}}>{item.status}</Text></Text>
-                        <TouchableOpacity style={[styles.gradeButton, { backgroundColor: isDark ? '#333' : '#FFC107' }]} onPress={() => openGradingModal(item)}><Text style={{ color: isDark ? '#fff' : '#212529', fontWeight: 'bold' }}>{item.status === 'graded' ? 'Update Grade' : 'Grade Now'}</Text></TouchableOpacity>
-                    </View>
+                        <View style={styles.submittedContainer}>
+                            <MaterialIcons name={item.submission_id ? "check-circle" : "cancel"} size={18} color={item.submission_id ? COLORS.success : COLORS.iconGrey}/>
+                            <Text style={[styles.submittedText, { color: item.submission_id ? COLORS.success : COLORS.textSub }]}>{item.submission_id ? `Submitted: ${formatDateDisplay(item.submitted_at)}` : "Not Submitted"}</Text>
+                        </View>
+                    </TouchableOpacity>
                 )}
                 onRefresh={fetchSubmissions}
                 refreshing={isLoading}
-                ListEmptyComponent={!isLoading ? <View style={styles.center}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No submissions yet.</Text></View> : null}
-                contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 20 }}
+                ListEmptyComponent={!isLoading ? <View style={styles.center}><Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students found.</Text></View> : null}
+                contentContainerStyle={{ paddingHorizontal: width * 0.04, paddingBottom: 20 }}
             />
-            
+
             <Modal visible={!!gradingSubmission} onRequestClose={() => setGradingSubmission(null)} animationType="slide">
-                <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
-                    <ScrollView style={{ padding: 20 }}>
-                        <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>Grading: {gradingSubmission?.student_name}</Text>
-                        {isLoading ? <ActivityIndicator size="large" color={COLORS.primary} /> : submissionDetails.map((item, index) => (
-                            <View key={item.question_id} style={[styles.gradingItem, { borderBottomColor: COLORS.border }]}>
-                                <Text style={[styles.questionText, { color: COLORS.textMain }]}>{index + 1}. {item.question_text}</Text>
-                                <Text style={[styles.studentAnswer, { backgroundColor: isDark ? '#222' : '#F0F0F0', color: COLORS.textMain }]}>Answer: {item.answer_text || 'None'}</Text>
-                                <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]} keyboardType="number-pad" placeholder={`Max Marks: ${item.marks}`} placeholderTextColor={COLORS.placeholder} value={String(gradedAnswers[item.question_id] ?? '')} onChangeText={text => setGradedAnswers({...gradedAnswers, [item.question_id]: text})} />
-                            </View>
-                        ))}
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setGradingSubmission(null)}><Text style={styles.modalBtnText}>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.success }]} onPress={submitGrade} disabled={isSubmittingGrade}><Text style={styles.modalBtnText}>Submit</Text></TouchableOpacity>
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{flex: 1, backgroundColor: COLORS.background}}>
+                    <SafeAreaView style={{ flex: 1 }}>
+                        <View style={[styles.modalHeaderBar, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.divider }]}>
+                            <Text style={[styles.modalFormTitle, { color: COLORS.textMain }]}>Submission</Text>
+                            <TouchableOpacity onPress={() => setGradingSubmission(null)}><MaterialIcons name="close" size={24} color={COLORS.textMain} /></TouchableOpacity>
                         </View>
-                    </ScrollView>
-                </SafeAreaView>
+                        <ScrollView style={{ padding: 20 }}>
+                            <Text style={[styles.modalStudentName, { color: COLORS.textMain }]}>{gradingSubmission?.student_name}</Text>
+                            {isLoading ? <ActivityIndicator size="large" color={COLORS.primary} /> : submissionDetails.map((item, index) => (
+                                <View key={item.question_id} style={[styles.gradingItem, { borderBottomColor: COLORS.border }]}>
+                                    <Text style={[styles.questionText, { color: COLORS.textMain }]}>{index + 1}. {item.question_text}</Text>
+                                    <Text style={[styles.studentAnswer, { backgroundColor: isDark ? '#222' : '#F0F0F0', color: COLORS.textMain }]}>Answer: {item.answer_text || 'None'}</Text>
+                                    <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]} keyboardType="number-pad" placeholder={`Max Marks: ${item.marks}`} placeholderTextColor={COLORS.placeholder} value={String(gradedAnswers[item.question_id] ?? '')} onChangeText={text => setGradedAnswers({...gradedAnswers,[item.question_id]: text})} />
+                                </View>
+                            ))}
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setGradingSubmission(null)}><Text style={styles.modalBtnText}>Cancel</Text></TouchableOpacity>
+                                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: COLORS.success }]} onPress={submitGrade} disabled={isSubmittingGrade}><Text style={styles.modalBtnText}>Submit</Text></TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    </SafeAreaView>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );
@@ -567,17 +649,18 @@ const styles = StyleSheet.create({
     headerCard: { paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
     headerBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 },
     headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-    
-    // Card
-    card: { borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } },
+    tabContainer: { flexDirection: 'row', paddingHorizontal: 15, marginBottom: 10, justifyContent: 'space-between' },
+    tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', marginHorizontal: 4, borderRadius: 20, borderWidth: 1 },
+    tabText: { fontWeight: 'bold', fontSize: 13 },
+    card: { borderRadius: 12, marginBottom: 15, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
     cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
     menuIcon: { padding: 4 },
-    cardTitle: { fontSize: 16, fontWeight: 'bold' },
+    cardTitle: { fontSize: 16, fontWeight: 'bold', flexShrink: 1 },
     cardSubtitle: { fontSize: 13, marginTop: 4 },
     footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1 },
     viewSubmissionsBtn: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', gap: 5 },
@@ -589,7 +672,7 @@ const styles = StyleSheet.create({
     formSection: { padding: 15, borderRadius: 12, marginBottom: 15, borderWidth: 1 },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     input: { borderWidth: 1, padding: 12, borderRadius: 10, fontSize: 15, marginBottom: 10 },
-    pickerContainer: { borderWidth: 1, borderRadius: 10, marginBottom: 15, overflow: 'hidden', justifyContent: 'center' },
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 10, marginBottom: 15, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
     questionEditor: { borderWidth: 1, borderRadius: 12, padding: 15, marginVertical: 10 },
     questionEditorTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10 },
     headerTitleSecondary: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
@@ -602,10 +685,8 @@ const styles = StyleSheet.create({
     searchContainer: { flexDirection: 'row', borderRadius: 10, marginHorizontal: 15, marginBottom: 15, alignItems: 'center', paddingHorizontal: 10, borderWidth: 1, height: 45 },
     searchIcon: { marginRight: 8 },
     searchInput: { flex: 1, height: 45, fontSize: 15 },
-    cardDetail: { fontSize: 13, marginTop: 2 },
     
     // Grading
-    gradeButton: { marginTop: 12, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
     gradeBadge: { flexDirection: 'row', borderRadius: 12, paddingVertical: 2, paddingHorizontal: 8, alignItems: 'center' },
     gradeBadgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
@@ -617,6 +698,17 @@ const styles = StyleSheet.create({
     modalBtnText: { color: '#fff', fontWeight: 'bold' },
     cancelBtn: { backgroundColor: '#6c757d' },
     emptyText: { textAlign: 'center', marginTop: 50, fontSize: 15 },
+    modalHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
+    modalStudentName: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
+    submittedContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+    submittedText: { marginLeft: 8, fontSize: 13 },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherAdminExamsScreen;

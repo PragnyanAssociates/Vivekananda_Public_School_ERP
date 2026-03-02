@@ -2,17 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, 
   TextInput, Alert, ScrollView, Linking, SafeAreaView, useColorScheme, Platform, 
-  Dimensions, KeyboardAvoidingView, StatusBar
+  KeyboardAvoidingView, StatusBar, useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; 
 
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { MeetingCard, Meeting } from './MeetingCard'; // Ensure correct path
-
-const { width, height } = Dimensions.get('window');
 
 interface Teacher { id: number; full_name: string; }
 
@@ -48,19 +46,28 @@ const TeacherAdminPTMScreen = () => {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? DarkColors : LightColors;
+  const { width, height } = useWindowDimensions(); // Dynamic dimensions for responsiveness
   
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const[meetings, setMeetings] = useState<Meeting[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const[isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   
   const initialFormState = { meeting_datetime: '', teacher_id: '', class_group: '', subject_focus: '', status: 'Scheduled', notes: '', meeting_link: '' };
-  const [formData, setFormData] = useState(initialFormState);
+  const[formData, setFormData] = useState(initialFormState);
   
   const [date, setDate] = useState(new Date());
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+
+  // Custom Dropdown State
+  const [dropdownConfig, setDropdownConfig] = useState({
+      visible: false,
+      title: '',
+      data:[] as { label: string, value: string }[],
+      onSelect: (val: string) => {}
+  });
 
   const fetchAllData = useCallback(async () => {
       try {
@@ -73,7 +80,7 @@ const TeacherAdminPTMScreen = () => {
       } catch (error: any) {
           Alert.alert("Error", error.response?.data?.message || "Failed to load data.");
       } finally { setIsLoading(false); }
-  }, []);
+  },[]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -104,6 +111,23 @@ const TeacherAdminPTMScreen = () => {
         if (Platform.OS === 'android') setPickerMode(null);
       }
     } else { setPickerMode(null); }
+  };
+
+  // Dedicated iOS Date Change Handler to properly format date on "Done" press
+  const onIosPickerChange = (event: any, selectedValue?: Date) => {
+      if (selectedValue) setDate(selectedValue);
+  };
+
+  const handleIosDone = () => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const sqlDateString = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+      
+      setFormData(prev => ({ ...prev, meeting_datetime: sqlDateString }));
+      setPickerMode(null);
   };
   
   const handleOpenModal = (meeting: Meeting | null = null) => {
@@ -155,8 +179,7 @@ const TeacherAdminPTMScreen = () => {
   };
 
   const handleDelete = (id: number) => {
-    Alert.alert( "Confirm", "Delete this meeting?",
-      [ { text: "Cancel", style: "cancel" },
+    Alert.alert( "Confirm", "Delete this meeting?",[ { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: async () => {
           try { await apiClient.delete(`/ptm/${id}`); await fetchAllData(); } 
           catch (error: any) { Alert.alert("Error", "Failed to delete."); }
@@ -169,6 +192,25 @@ const TeacherAdminPTMScreen = () => {
       const d = new Date(formData.meeting_datetime.replace(" ", "T")); 
       if (isNaN(d.getTime())) return formData.meeting_datetime;
       return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  // Helper getters for dropdown labels
+  const getTeacherLabel = () => teachers.find(t => t.id.toString() === formData.teacher_id)?.full_name || '-- Select Person --';
+  const getClassLabel = () => formData.class_group || '-- Select Class --';
+
+  const openTeacherDropdown = () => {
+      const data = teachers.map(t => ({ label: t.full_name, value: t.id.toString() }));
+      setDropdownConfig({ visible: true, title: 'Select Teacher', data, onSelect: (val) => setFormData({...formData, teacher_id: val}) });
+  };
+
+  const openClassDropdown = () => {
+      const data = classes.map(c => ({ label: c, value: c }));
+      setDropdownConfig({ visible: true, title: 'Select Class', data, onSelect: (val) => setFormData({...formData, class_group: val}) });
+  };
+
+  const openStatusDropdown = () => {
+      const data =[{ label: 'Scheduled', value: 'Scheduled' }, { label: 'Completed', value: 'Completed' }];
+      setDropdownConfig({ visible: true, title: 'Select Status', data, onSelect: (val) => setFormData({...formData, status: val}) });
   };
 
   if (isLoading) return <View style={[styles.center, {backgroundColor: colors.background}]}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -217,11 +259,11 @@ const TeacherAdminPTMScreen = () => {
             contentContainerStyle={{ paddingBottom: 30 }}
         />
 
-        {/* Modal */}
+        {/* Form Modal */}
         <Modal visible={isModalOpen} animationType="slide" transparent={true} onRequestClose={() => setIsModalOpen(false)}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalBackdrop}>
                 <TouchableOpacity style={styles.modalTouchable} activeOpacity={1} onPress={() => setIsModalOpen(false)}>
-                    <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: colors.cardBg }]}>
+                    <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: colors.cardBg, width: width * 0.9, maxHeight: height * 0.85 }]}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom: 20}}>
                             <View style={styles.modalHeaderRow}>
                                 <Text style={[styles.modalTitle, { color: colors.textMain }]}>{editingMeeting ? "Edit Meeting" : "New Meeting"}</Text>
@@ -230,21 +272,25 @@ const TeacherAdminPTMScreen = () => {
                                 </TouchableOpacity>
                             </View>
                             
+                            {/* CUSTOM TEACHER DROPDOWN */}
                             <Text style={[styles.label, { color: colors.textMain }]}>Teacher / Admin:</Text>
-                            <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
-                                <Picker selectedValue={formData.teacher_id} onValueChange={val => setFormData({...formData, teacher_id: val})} style={{color: colors.textMain}} dropdownIconColor={colors.textSub}>
-                                    <Picker.Item label="-- Select Person --" value="" color={colors.textSub} />
-                                    {teachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color={colors.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                onPress={openTeacherDropdown}
+                            >
+                                <Text style={{ color: formData.teacher_id ? colors.textMain : colors.placeholder, fontSize: 16 }}>{getTeacherLabel()}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSub} />
+                            </TouchableOpacity>
 
+                            {/* CUSTOM CLASS DROPDOWN */}
                             <Text style={[styles.label, { color: colors.textMain }]}>Class:</Text>
-                            <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
-                                <Picker selectedValue={formData.class_group} onValueChange={val => setFormData({...formData, class_group: val})} style={{color: colors.textMain}} dropdownIconColor={colors.textSub}>
-                                    <Picker.Item label="-- Select Class --" value="" color={colors.textSub} />
-                                    {classes.map(c => <Picker.Item key={c} label={c} value={c} color={colors.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                onPress={openClassDropdown}
+                            >
+                                <Text style={{ color: formData.class_group ? colors.textMain : colors.placeholder, fontSize: 16 }}>{getClassLabel()}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSub} />
+                            </TouchableOpacity>
 
                             <Text style={[styles.label, { color: colors.textMain }]}>Subject Focus:</Text>
                             <TextInput 
@@ -256,19 +302,41 @@ const TeacherAdminPTMScreen = () => {
                             />
                             
                             <Text style={[styles.label, { color: colors.textMain }]}>Date & Time:</Text>
-                            <TouchableOpacity onPress={() => setPickerMode('date')} style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                            <TouchableOpacity onPress={() => setPickerMode('date')} style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, justifyContent: 'center' }]}>
                                 <Text style={{ color: formData.meeting_datetime ? colors.textMain : colors.placeholder, fontSize: 16 }}>{getDisplayDate()}</Text>
                             </TouchableOpacity>
                             
+                            {/* FIXED IOS DATETIME PICKER */}
                             {pickerMode && (
-                                <DateTimePicker 
-                                  testID="dateTimePicker" 
-                                  value={date} 
-                                  mode={pickerMode} 
-                                  is24Hour={false} 
-                                  display={Platform.OS === 'ios' ? 'spinner' : 'default'} 
-                                  onChange={onPickerChange} 
-                                />
+                                Platform.OS === 'ios' ? (
+                                    <Modal transparent animationType="slide" visible={!!pickerMode} onRequestClose={() => setPickerMode(null)}>
+                                        <View style={styles.iosPickerOverlay}>
+                                            <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                                                <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                                                    <TouchableOpacity onPress={handleIosDone}>
+                                                        <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <DateTimePicker 
+                                                    value={date} 
+                                                    mode="datetime" 
+                                                    display="spinner" 
+                                                    onChange={onIosPickerChange} 
+                                                    textColor={colors.textMain}
+                                                />
+                                            </View>
+                                        </View>
+                                    </Modal>
+                                ) : (
+                                    <DateTimePicker 
+                                        testID="dateTimePicker" 
+                                        value={date} 
+                                        mode={pickerMode} 
+                                        is24Hour={false} 
+                                        display="default" 
+                                        onChange={onPickerChange} 
+                                    />
+                                )
                             )}
                             
                             <Text style={[styles.label, { color: colors.textMain }]}>Meeting Link:</Text>
@@ -290,15 +358,17 @@ const TeacherAdminPTMScreen = () => {
                               placeholder="Discussion points..." 
                             />
                             
+                            {/* CUSTOM STATUS DROPDOWN */}
                             {editingMeeting && (
                                 <>
                                     <Text style={[styles.label, { color: colors.textMain }]}>Status:</Text>
-                                    <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
-                                        <Picker selectedValue={formData.status} onValueChange={val => setFormData({...formData, status: val})} style={{color: colors.textMain}} dropdownIconColor={colors.textSub}>
-                                            <Picker.Item label="Scheduled" value="Scheduled" color={colors.textMain} />
-                                            <Picker.Item label="Completed" value="Completed" color={colors.textMain} />
-                                        </Picker>
-                                    </View>
+                                    <TouchableOpacity 
+                                        style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                        onPress={openStatusDropdown}
+                                    >
+                                        <Text style={{ color: colors.textMain, fontSize: 16 }}>{formData.status}</Text>
+                                        <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSub} />
+                                    </TouchableOpacity>
                                 </>
                             )}
 
@@ -311,6 +381,32 @@ const TeacherAdminPTMScreen = () => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
+
+                        {/* CUSTOM DROPDOWN SELECTOR MODAL */}
+                        <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                            <TouchableOpacity style={styles.customPickerOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                                <View style={[styles.customPickerModal, { backgroundColor: colors.cardBg, width: width * 0.85 }]}>
+                                    <Text style={[styles.pickerTitle, { color: colors.primary }]}>{dropdownConfig.title}</Text>
+                                    <FlatList
+                                        data={dropdownConfig.data}
+                                        keyExtractor={(item, index) => item.value + index}
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity 
+                                                style={[styles.pickerItem, { borderBottomColor: colors.border }]} 
+                                                onPress={() => {
+                                                    dropdownConfig.onSelect(item.value);
+                                                    setDropdownConfig({ ...dropdownConfig, visible: false });
+                                                }}
+                                            >
+                                                <Text style={[styles.pickerItemText, { color: colors.textMain }]}>{item.label}</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        style={{ maxHeight: height * 0.5 }}
+                                    />
+                                </View>
+                            </TouchableOpacity>
+                        </Modal>
+
                     </TouchableOpacity>
                 </TouchableOpacity>
             </KeyboardAvoidingView>
@@ -342,15 +438,26 @@ const styles = StyleSheet.create({
     // Modal
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' },
     modalTouchable: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    modalContent: { borderRadius: 12, padding: 20, width: width * 0.9, maxHeight: height * 0.85, elevation: 5 },
+    modalContent: { borderRadius: 12, padding: 20, elevation: 5 },
     modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: 'bold' },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
-    input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, minHeight: 45, justifyContent: 'center', fontSize: 16 },
-    pickerWrapper: { borderWidth: 1, borderRadius: 8, marginBottom: 10, justifyContent: 'center', height: 50, overflow: 'hidden' },
+    input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, minHeight: 45, fontSize: 16 },
     modalActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#eee' },
     modalButton: { paddingVertical: 12, paddingHorizontal: 30, borderRadius: 8, alignItems: 'center', minWidth: 100 },
-    saveButtonText: { color: 'white', fontWeight: 'bold' }
+    saveButtonText: { color: 'white', fontWeight: 'bold' },
+
+    // Custom Dropdown & Pickers Styles
+    customPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    customPickerModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    pickerTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    pickerItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    pickerItemText: { fontSize: 16, fontWeight: '500', textAlign: 'center' },
+
+    // iOS Picker Styles
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 },
 });
 
 export default TeacherAdminPTMScreen;

@@ -1,24 +1,19 @@
-/**
- * File: src/screens/library/LibraryHistoryScreen.js
- * Purpose: Display a history of library transactions.
- * Updated: Added Phone Number, Handles Roles and Null Classes.
- */
 import React, { useState, useCallback, useLayoutEffect } from 'react';
-import { 
-    View, Text, StyleSheet, FlatList, TouchableOpacity, 
-    TextInput, Platform, ActivityIndicator, RefreshControl, 
-    SafeAreaView, Dimensions, useColorScheme, StatusBar
+import {
+    View, Text, StyleSheet, FlatList, TouchableOpacity,
+    TextInput, Platform, ActivityIndicator, RefreshControl,
+    SafeAreaView, useColorScheme, StatusBar, useWindowDimensions, Modal
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import apiClient from '../../api/client'; 
+import apiClient from '../../api/client';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
     primary: '#008080',
-    background: '#F2F5F8', 
+    background: '#F2F5F8',
     cardBg: '#FFFFFF',
     textMain: '#263238',
     textSub: '#546E7A',
@@ -33,10 +28,9 @@ const LightColors = {
     tableRowBorder: '#F1F5F9',
     white: '#ffffff'
 };
-
 const DarkColors = {
     primary: '#008080',
-    background: '#121212', 
+    background: '#121212',
     cardBg: '#1E1E1E',
     textMain: '#E0E0E0',
     textSub: '#B0B0B0',
@@ -53,42 +47,43 @@ const DarkColors = {
 };
 
 const LibraryHistoryScreen = () => {
-    // Theme Hooks
+    // Theme Hooks & Dimensions
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = isDark ? DarkColors : LightColors;
-
-    const navigation = useNavigation(); 
+    const { width } = useWindowDimensions();
     
+    const navigation = useNavigation(); 
+
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
 
-    const [data, setData] = useState([]);
+    const[data, setData] = useState([]);
     const [filteredData, setFilteredData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const[loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState('');
 
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
-    const [showStartPicker, setShowStartPicker] = useState(false);
+    const[showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             fetchHistory();
-        }, [])
+        },[])
     );
 
     React.useEffect(() => {
         applyFilters();
-    }, [search, startDate, endDate, data]);
+    },[search, startDate, endDate, data]);
 
     const fetchHistory = async () => {
         try {
             const res = await apiClient.get('/library/admin/history');
-            setData(res.data || []);
+            setData(res.data ||[]);
         } catch (error) {
             console.error("History Fetch Error:", error);
         } finally {
@@ -172,6 +167,57 @@ const LibraryHistoryScreen = () => {
         );
     };
 
+    // Helper to render cross-platform Date Picker properly
+    const renderDatePicker = (isVisible, setIsVisible, dateValue, setDate, minimumDate = undefined) => {
+        if (!isVisible) return null;
+
+        if (Platform.OS === 'ios') {
+            return (
+                <Modal visible={isVisible} transparent animationType="slide">
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.iosPickerContainer, { backgroundColor: theme.cardBg }]}>
+                            <View style={[styles.iosPickerHeader, { borderBottomColor: theme.border }]}>
+                                <TouchableOpacity onPress={() => setIsVisible(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.danger }]}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setIsVisible(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.primary }]}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                value={dateValue || new Date()}
+                                mode="date"
+                                display="spinner"
+                                minimumDate={minimumDate}
+                                onChange={(event, selectedDate) => {
+                                    if (selectedDate) setDate(selectedDate);
+                                }}
+                                textColor={theme.textMain}
+                                style={{ height: 200, width: '100%' }}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+            );
+        }
+
+        // Android Native Implementation
+        return (
+            <DateTimePicker
+                value={dateValue || new Date()}
+                mode="date"
+                display="default"
+                minimumDate={minimumDate}
+                onChange={(event, selectedDate) => {
+                    setIsVisible(false);
+                    if (selectedDate) setDate(selectedDate);
+                }}
+            />
+        );
+    };
+
+    function setSearchText(text) { setSearch(text); }
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
@@ -222,9 +268,9 @@ const LibraryHistoryScreen = () => {
                 </View>
             </View>
 
-            {/* Pickers */}
-            {showStartPicker && <DateTimePicker value={startDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowStartPicker(Platform.OS === 'ios'); if(d) setStartDate(d); }} />}
-            {showEndPicker && <DateTimePicker value={endDate || new Date()} mode="date" display="default" minimumDate={startDate || undefined} onChange={(e, d) => { setShowEndPicker(Platform.OS === 'ios'); if(d) setEndDate(d); }} />}
+            {/* Platform Aware Pickers */}
+            {renderDatePicker(showStartPicker, setShowStartPicker, startDate, setStartDate)}
+            {renderDatePicker(showEndPicker, setShowEndPicker, endDate, setEndDate, startDate || undefined)}
 
             {/* List */}
             <View style={[styles.tableContainer, { backgroundColor: theme.cardBg }]}>
@@ -242,9 +288,6 @@ const LibraryHistoryScreen = () => {
             </View>
         </SafeAreaView>
     );
-
-    // Filter Wrapper
-    function setSearchText(text) { setSearch(text); }
 };
 
 const styles = StyleSheet.create({
@@ -259,17 +302,21 @@ const styles = StyleSheet.create({
     headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
+    
     filterContainer: { paddingHorizontal: 15, marginBottom: 15 },
     searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 10, marginBottom: 10, borderWidth: 1, height: 45 },
     searchIcon: { marginRight: 8 },
     searchInput: { flex: 1, fontSize: 15, padding: 0 },
+    
     dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     dateBtn: { flex: 1, flexDirection: 'row', alignItems:'center', justifyContent:'space-between', padding: 10, borderRadius: 8, borderWidth: 1 },
     dateBtnTxt: { fontSize: 12, fontWeight: '600' },
     clearBtn: { padding: 8, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+    
     tableContainer: { flex: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 5, overflow: 'hidden' },
     headerRow: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 10 },
     row: { flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 14, paddingHorizontal: 10, alignItems:'center' },
+    
     col1: { flex: 3 }, col2: { flex: 3 }, col3: { flex: 2 }, col4: { flex: 2 },
     cell: { paddingRight: 5 },
     headText: { color: '#FFF', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
@@ -277,8 +324,15 @@ const styles = StyleSheet.create({
     cellTextBold: { fontSize: 13, fontWeight: '700' },
     cellRoleText: { fontSize: 10, fontWeight: '700', marginTop: 2 },
     cellSubText: { fontSize: 10, marginTop: 1 },
+    
     emptyContainer: { padding: 40, alignItems: 'center' },
-    emptyText: { textAlign: 'center', fontSize: 16 }
+    emptyText: { textAlign: 'center', fontSize: 16 },
+
+    // --- iOS Custom Date Picker Modal Styles ---
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
+    iosPickerBtnText: { fontSize: 16, fontWeight: 'bold' }
 });
 
 export default LibraryHistoryScreen;

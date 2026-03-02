@@ -1,21 +1,15 @@
-/**
- * File: src/screens/study-materials/TeacherAdminMaterialsScreen.tsx
- * Purpose: Teacher/Admin screen to manage Study Materials (Upload/Edit/Delete).
- * Updated: Back Button Removed, Responsive Design, Dark/Light Mode.
- */
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { 
-    View, Text, StyleSheet, FlatList, TouchableOpacity, 
-    ActivityIndicator, Alert, Modal, ScrollView, TextInput, 
+import {
+    View, Text, StyleSheet, FlatList, TouchableOpacity,
+    ActivityIndicator, Alert, Modal, ScrollView, TextInput,
     Linking, SafeAreaView, useColorScheme, StatusBar, Dimensions,
-    KeyboardAvoidingView, Platform
+    KeyboardAvoidingView, Platform, useWindowDimensions
 } from 'react-native';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Picker } from '@react-native-picker/picker';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import * as Animatable from 'react-native-animatable';
@@ -43,7 +37,6 @@ const LightColors = {
     cancelBtnText: '#334155',
     emptyIcon: '#CFD8DC'
 };
-
 const DarkColors = {
     primary: '#008080',
     background: '#121212',
@@ -66,18 +59,17 @@ const DarkColors = {
 };
 
 const TeacherAdminMaterialsScreen = () => {
-    // Theme Hooks
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = isDark ? DarkColors : LightColors;
-
+    
     const { user } = useAuth();
     const navigation = useNavigation();
     const isFocused = useIsFocused();
 
     const [materials, setMaterials] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isModalVisible, setIsModalVisible] = useState(false);
+    const[isModalVisible, setIsModalVisible] = useState(false);
     const [editingMaterial, setEditingMaterial] = useState(null);
 
     // Hide default header to use our custom one
@@ -96,11 +88,11 @@ const TeacherAdminMaterialsScreen = () => {
         } finally { 
             setIsLoading(false); 
         }
-    }, [user?.id]);
+    },[user?.id]);
 
     useEffect(() => {
         if (isFocused) fetchMaterials();
-    }, [isFocused, fetchMaterials]);
+    },[isFocused, fetchMaterials]);
 
     const openModal = (material = null) => {
         setEditingMaterial(material);
@@ -110,8 +102,7 @@ const TeacherAdminMaterialsScreen = () => {
     const handleMenuPress = (material) => {
         Alert.alert(
             "Manage Material",
-            `Options for "${material.title}"`,
-            [
+            `Options for "${material.title}"`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit", onPress: () => openModal(material) },
                 { text: "Delete", style: "destructive", onPress: () => handleDelete(material) }
@@ -120,7 +111,7 @@ const TeacherAdminMaterialsScreen = () => {
     };
 
     const handleDelete = (material) => {
-        Alert.alert("Confirm Delete", "Permanently delete this material?", [
+        Alert.alert("Confirm Delete", "Permanently delete this material?",[
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete", style: "destructive",
@@ -183,7 +174,7 @@ const TeacherAdminMaterialsScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.background} />
             
-            {/* --- HEADER CARD (Back Button Removed) --- */}
+            {/* --- HEADER CARD --- */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
@@ -232,9 +223,10 @@ const TeacherAdminMaterialsScreen = () => {
 // --- Modal Form Component ---
 const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
     const { user } = useAuth();
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
     const isEditMode = !!material;
     
-    const [title, setTitle] = useState(isEditMode ? material.title : '');
+    const[title, setTitle] = useState(isEditMode ? material.title : '');
     const [description, setDescription] = useState(isEditMode ? material.description : '');
     const [subject, setSubject] = useState(isEditMode ? material.subject : '');
     const [classGroup, setClassGroup] = useState(isEditMode ? material.class_group : '');
@@ -242,7 +234,20 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
     const [externalLink, setExternalLink] = useState(isEditMode ? material.external_link || '' : '');
     const [file, setFile] = useState(null);
     const [studentClasses, setStudentClasses] = useState([]);
-    const [isSaving, setIsSaving] = useState(false);
+    const[isSaving, setIsSaving] = useState(false);
+
+    // Custom Dropdown State
+    const[dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     useEffect(() => {
         const fetchClasses = async () => { 
@@ -252,7 +257,7 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
             } catch (e) { console.error(e); }
         };
         fetchClasses();
-    }, []);
+    },[]);
 
     const handleFilePick = async () => {
         try {
@@ -292,7 +297,7 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
     return (
         <Modal visible={true} onRequestClose={onClose} animationType="slide" transparent>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalBackground}>
-                <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
+                <View style={[styles.modalContent, { backgroundColor: theme.cardBg, maxHeight: screenHeight * 0.85 }]}>
                     
                     <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
                         <Text style={[styles.modalTitle, { color: theme.textMain }]}>{isEditMode ? 'Edit Material' : 'New Material'}</Text>
@@ -312,17 +317,18 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
                         />
                         
                         <Text style={[styles.label, { color: theme.textSub }]}>Class *</Text>
-                        <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                            <Picker 
-                                selectedValue={classGroup} 
-                                onValueChange={setClassGroup} 
-                                style={{ color: theme.textMain }} 
-                                dropdownIconColor={theme.textMain}
-                            >
-                                <Picker.Item label="-- Select Class --" value="" />
-                                {studentClasses.map(c => <Picker.Item key={c} label={c} value={c} />)}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                            onPress={() => openDropdown('Select Class',[
+                                {label: '-- Select Class --', value: ''},
+                                ...studentClasses.map(c => ({label: c, value: c}))
+                            ], classGroup, setClassGroup)}
+                        >
+                            <Text style={{ color: classGroup ? theme.textMain : theme.textPlaceholder, fontSize: 16 }}>
+                                {classGroup || '-- Select Class --'}
+                            </Text>
+                            <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                        </TouchableOpacity>
                         
                         <Text style={[styles.label, { color: theme.textSub }]}>Subject</Text>
                         <TextInput 
@@ -334,16 +340,17 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
                         />
                         
                         <Text style={[styles.label, { color: theme.textSub }]}>Type *</Text>
-                        <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                            <Picker 
-                                selectedValue={materialType} 
-                                onValueChange={setMaterialType} 
-                                style={{ color: theme.textMain }} 
-                                dropdownIconColor={theme.textMain}
-                            >
-                                {['Notes', 'Presentation', 'Video Lecture', 'Worksheet', 'Link', 'Other'].map(t => <Picker.Item key={t} label={t} value={t} />)}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                            onPress={() => openDropdown('Material Type',[
+                                'Notes', 'Presentation', 'Video Lecture', 'Worksheet', 'Link', 'Other'
+                            ].map(t => ({label: t, value: t})), materialType, setMaterialType)}
+                        >
+                            <Text style={{ color: theme.textMain, fontSize: 16 }}>
+                                {materialType}
+                            </Text>
+                            <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                        </TouchableOpacity>
                         
                         <Text style={[styles.label, { color: theme.textSub }]}>External Link (Optional)</Text>
                         <TextInput 
@@ -381,7 +388,36 @@ const MaterialFormModal = ({ material, theme, onClose, onSave }) => {
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
+
                 </View>
+
+                {/* Shared Inner Dropdown Overlay */}
+                <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                        <View style={[styles.dropdownModal, { backgroundColor: theme.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                            <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                            <FlatList
+                                data={dropdownConfig.data}
+                                keyExtractor={(item, index) => item.value + index.toString()}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity 
+                                        style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                        onPress={() => {
+                                            dropdownConfig.onSelect(item.value);
+                                            setDropdownConfig({ ...dropdownConfig, visible: false });
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.dropdownItemText, 
+                                            { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                        ]}>{item.label}</Text>
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+
             </KeyboardAvoidingView>
         </Modal>
     );
@@ -393,69 +429,28 @@ const styles = StyleSheet.create({
     
     // --- HEADER CARD STYLES ---
     headerCard: {
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10,
+        borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    // Back button style removed
-    headerIconContainer: {
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
-    headerBtn: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginLeft: 10,
-    },
+    headerBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10 },
     headerBtnText: { fontSize: 12, fontWeight: '600' },
 
     listContent: { paddingHorizontal: width * 0.04, paddingBottom: 20 },
     cardWrapper: { marginBottom: 15 },
-    
-    card: { 
-        borderRadius: 12, 
-        padding: 15, 
-        elevation: 2, 
-        shadowOpacity: 0.05, 
-        shadowRadius: 3, 
-        shadowOffset: { width: 0, height: 1 } 
-    },
+    card: { borderRadius: 12, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
     cardTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
     cardSubtitle: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
     cardDescription: { fontSize: 14, marginBottom: 15, lineHeight: 20 },
-    
+
     buttonContainer: { marginTop: 5 },
-    viewButton: { 
-        flexDirection: 'row', 
-        paddingVertical: 10, 
-        borderRadius: 8, 
-        justifyContent: 'center', 
-        alignItems: 'center' 
-    },
+    viewButton: { flexDirection: 'row', paddingVertical: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
     viewButtonText: { fontWeight: 'bold', marginLeft: 6, fontSize: 13 },
 
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 80 },
@@ -463,21 +458,30 @@ const styles = StyleSheet.create({
 
     // --- MODAL STYLES ---
     modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-    modalContent: { width: '90%', borderRadius: 16, padding: 20, maxHeight: '85%' },
+    modalContent: { width: '90%', borderRadius: 16, padding: 20 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1 },
     modalTitle: { fontSize: 20, fontWeight: 'bold' },
-    
+
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 5, overflow: 'hidden' },
-    
+
+    // Custom Dropdown Trigger
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 5 },
+
     uploadButton: { flexDirection: 'row', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
     uploadButtonText: { fontWeight: 'bold', marginLeft: 8, fontSize: 14, flex: 1 },
-    
+
     modalActions: { flexDirection: 'row', gap: 10, marginTop: 25, marginBottom: 10 },
     modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
     modalBtnText: { fontWeight: 'bold', fontSize: 16 },
     cancelBtnText: { fontWeight: 'bold', fontSize: 16 },
+
+    // Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherAdminMaterialsScreen;

@@ -1,25 +1,17 @@
-/**
- * File: src/screens/resources/TeacherAdminResourcesScreen.js
- * Purpose: Admin/Teacher screen to manage (Add/Edit/Delete) textbooks and digital resources.
- * Updated: Responsive Design, Dark/Light Mode, Consistent UI Header (Back Button Removed).
- */
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { 
-    View, Text, FlatList, StyleSheet, ActivityIndicator, 
-    TouchableOpacity, Alert, Modal, TextInput, ScrollView, 
+import {
+    View, Text, FlatList, StyleSheet, ActivityIndicator,
+    TouchableOpacity, Alert, Modal, TextInput, ScrollView,
     RefreshControl, Image, Linking, SafeAreaView, useColorScheme,
-    Dimensions, KeyboardAvoidingView, Platform, StatusBar
+    KeyboardAvoidingView, Platform, StatusBar, useWindowDimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Picker } from '@react-native-picker/picker';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -41,7 +33,6 @@ const LightColors = {
     menuBg: 'rgba(255, 255, 255, 0.9)',
     imagePlaceholderBg: '#EEEEEE'
 };
-
 const DarkColors = {
     primary: '#008080',
     background: '#121212',
@@ -67,39 +58,53 @@ const TeacherAdminResourcesScreen = () => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = isDark ? DarkColors : LightColors;
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
     const navigation = useNavigation();
-    
+
     // Hide default header to use our custom one
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
-    
+
     // View States
     const [boardView, setBoardView] = useState('state');
-    const [selectedClassFilter, setSelectedClassFilter] = useState('All'); 
-    
+    const[selectedClassFilter, setSelectedClassFilter] = useState('All'); 
+
     // Data States
-    const [textbooks, setTextbooks] = useState([]);
+    const[textbooks, setTextbooks] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
-    
+
     // UI States
     const [isLoading, setIsLoading] = useState(true);
-    const [isModalVisible, setIsModalVisible] = useState(false);
+    const[isModalVisible, setIsModalVisible] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    
+
     // Form States
-    const [modalBoardType, setModalBoardType] = useState('state');
+    const[modalBoardType, setModalBoardType] = useState('state');
     const [selectedClass, setSelectedClass] = useState('');
     const [subjectName, setSubjectName] = useState('');
-    const [url, setUrl] = useState('');
+    const[url, setUrl] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
-    
+
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [textbookRes, classesRes] = await Promise.all([
+            const[textbookRes, classesRes] = await Promise.all([
                 apiClient.get('/resources?type=textbook'),
                 apiClient.get('/all-classes')
             ]);
@@ -124,14 +129,14 @@ const TeacherAdminResourcesScreen = () => {
             else Alert.alert("Error", `Could not open link.`);
         }
     };
-    
+
     const handleChoosePhoto = () => { 
         launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response) => { 
             if (response.didCancel || response.errorCode) return; 
             setSelectedImage(response); 
         }); 
     };
-    
+
     const openCreateModal = () => { 
         setEditingItem(null); 
         setSelectedClass(''); 
@@ -141,7 +146,7 @@ const TeacherAdminResourcesScreen = () => {
         setModalBoardType(boardView); 
         setIsModalVisible(true); 
     };
-    
+
     const openEditModal = (item) => { 
         setEditingItem(item); 
         setModalBoardType(item.syllabus_type); 
@@ -155,17 +160,16 @@ const TeacherAdminResourcesScreen = () => {
     const handleMenuPress = (item) => {
         Alert.alert(
             "Manage Textbook",
-            `${item.subject_name} (${item.class_group})`,
-            [
+            `${item.subject_name} (${item.class_group})`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit", onPress: () => openEditModal(item) },
                 { text: "Delete", style: "destructive", onPress: () => handleDelete(item) }
             ]
         );
     };
-    
+
     const handleDelete = (item) => { 
-        Alert.alert(`Confirm Delete`, `Delete textbook for ${item.subject_name}?`, [
+        Alert.alert(`Confirm Delete`, `Delete textbook for ${item.subject_name}?`,[
             { text: "Cancel", style: 'cancel' }, 
             { text: "Delete", style: 'destructive', onPress: async () => { 
                 try { 
@@ -175,7 +179,7 @@ const TeacherAdminResourcesScreen = () => {
             }},
         ]);
     };
-    
+
     const handleSave = async () => { 
         if (!selectedClass || !url || !modalBoardType || !subjectName) {
             return Alert.alert("Validation Error", "Required fields missing."); 
@@ -204,7 +208,7 @@ const TeacherAdminResourcesScreen = () => {
             Alert.alert("Error", "Save failed."); 
         } finally { setIsSaving(false); }
     };
-    
+
     const displayableClasses = allClasses.filter(c => c.startsWith('Class') || c === 'LKG' || c === 'UKG');
 
     const renderList = () => {
@@ -231,7 +235,6 @@ const TeacherAdminResourcesScreen = () => {
                             >
                                 <Image source={{ uri: imageUri }} style={[styles.coverImage, { backgroundColor: theme.imagePlaceholderBg }]} resizeMode="cover" />
                                 
-                                {/* THREE DOT MENU REPLACING STATIC BUTTONS */}
                                 <View style={styles.menuOverlay}>
                                     <TouchableOpacity 
                                         style={[styles.menuIconCircle, { backgroundColor: theme.menuBg }]} 
@@ -252,7 +255,7 @@ const TeacherAdminResourcesScreen = () => {
             />
         );
     };
-    
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
@@ -278,31 +281,33 @@ const TeacherAdminResourcesScreen = () => {
             <View style={styles.filterSection}>
                 <View style={styles.pickerWrapper}>
                     <Text style={[styles.pickerLabel, { color: theme.textSub }]}>Board:</Text>
-                    <View style={[styles.pickerBox, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-                        <Picker 
-                            selectedValue={boardView} 
-                            onValueChange={setBoardView} 
-                            style={{ color: theme.textMain }} 
-                            dropdownIconColor={theme.textMain}
-                        >
-                            <Picker.Item label="State Board" value="state" />
-                            <Picker.Item label="Central Board" value="central" />
-                        </Picker>
-                    </View>
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.border, height: 45 }]}
+                        onPress={() => openDropdown('Select Board',[
+                            {label: 'State Board', value: 'state'}, 
+                            {label: 'Central Board', value: 'central'}
+                        ], boardView, setBoardView)}
+                    >
+                        <Text style={{ color: theme.textMain, fontSize: 14 }}>
+                            {boardView === 'state' ? 'State Board' : 'Central Board'}
+                        </Text>
+                        <MaterialIcons name="arrow-drop-down" size={20} color={theme.textSub} />
+                    </TouchableOpacity>
                 </View>
                 <View style={styles.pickerWrapper}>
                     <Text style={[styles.pickerLabel, { color: theme.textSub }]}>Class:</Text>
-                    <View style={[styles.pickerBox, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-                        <Picker 
-                            selectedValue={selectedClassFilter} 
-                            onValueChange={setSelectedClassFilter} 
-                            style={{ color: theme.textMain }} 
-                            dropdownIconColor={theme.textMain}
-                        >
-                            <Picker.Item label="All" value="All" />
-                            {displayableClasses.map((c) => <Picker.Item key={c} label={c} value={c} />)}
-                        </Picker>
-                    </View>
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.border, height: 45 }]}
+                        onPress={() => openDropdown('Select Class',[
+                            {label: 'All', value: 'All'},
+                            ...displayableClasses.map(c => ({label: c, value: c}))
+                        ], selectedClassFilter, setSelectedClassFilter)}
+                    >
+                        <Text style={{ color: theme.textMain, fontSize: 14 }} numberOfLines={1}>
+                            {selectedClassFilter}
+                        </Text>
+                        <MaterialIcons name="arrow-drop-down" size={20} color={theme.textSub} />
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -311,7 +316,7 @@ const TeacherAdminResourcesScreen = () => {
             {/* --- ADD/EDIT MODAL --- */}
             <Modal visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)} animationType="slide" transparent>
                 <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalBackground}>
-                    <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.cardBg, maxHeight: screenHeight * 0.85 }]}>
                         
                         <View style={styles.modalHeader}>
                             <Text style={[styles.modalTitle, { color: theme.textMain }]}>{editingItem ? 'Edit' : 'Add'} Textbook</Text>
@@ -322,20 +327,33 @@ const TeacherAdminResourcesScreen = () => {
 
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
                             <Text style={[styles.label, { color: theme.textSub }]}>Board Type *</Text>
-                            <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                                <Picker selectedValue={modalBoardType} onValueChange={setModalBoardType} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
-                                    <Picker.Item label="State Board" value="state"/>
-                                    <Picker.Item label="Central Board" value="central"/>
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                                onPress={() => openDropdown('Board Type',[
+                                    {label: 'State Board', value: 'state'}, 
+                                    {label: 'Central Board', value: 'central'}
+                                ], modalBoardType, setModalBoardType)}
+                            >
+                                <Text style={{ color: theme.textMain, fontSize: 15 }}>
+                                    {modalBoardType === 'state' ? 'State Board' : 'Central Board'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                            </TouchableOpacity>
 
                             <Text style={[styles.label, { color: theme.textSub }]}>Class *</Text>
-                            <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                                <Picker selectedValue={selectedClass} onValueChange={setSelectedClass} enabled={!editingItem} style={{color: theme.textMain}} dropdownIconColor={theme.textMain}>
-                                    <Picker.Item label="-- Select Class --" value="" />
-                                    {displayableClasses.map((c) => <Picker.Item key={c} label={c} value={c} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, opacity: editingItem ? 0.6 : 1 }]}
+                                disabled={!!editingItem}
+                                onPress={() => openDropdown('Select Class',[
+                                    {label: '-- Select Class --', value: ''},
+                                    ...displayableClasses.map(c => ({label: c, value: c}))
+                                ], selectedClass, setSelectedClass)}
+                            >
+                                <Text style={{ color: selectedClass ? theme.textMain : theme.textPlaceholder, fontSize: 15 }}>
+                                    {selectedClass || '-- Select Class --'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                            </TouchableOpacity>
 
                             <Text style={[styles.label, { color: theme.textSub }]}>Subject Name *</Text>
                             <TextInput 
@@ -380,9 +398,35 @@ const TeacherAdminResourcesScreen = () => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
-
                     </View>
                 </KeyboardAvoidingView>
+            </Modal>
+
+            {/* --- SHARED DROPDOWN OVERLAY --- */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: theme.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
             </Modal>
         </SafeAreaView>
     );
@@ -390,118 +434,72 @@ const TeacherAdminResourcesScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    
     // --- HEADER CARD STYLES ---
     headerCard: {
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        width: '96%', 
-        alignSelf: 'center',
-        marginTop: 15,
-        marginBottom: 10,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        elevation: 3,
-        shadowOpacity: 0.1, 
-        shadowRadius: 4, 
-        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 15, paddingVertical: 12, width: '96%', alignSelf: 'center', marginTop: 15, marginBottom: 10,
+        borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        elevation: 3, shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    headerIconContainer: {
-        borderRadius: 30,
-        width: 45,
-        height: 45,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
+    headerIconContainer: { borderRadius: 30, width: 45, height: 45, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13, marginTop: 2 },
-    headerBtn: {
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginLeft: 10,
-    },
+    headerBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10 },
     headerBtnText: { fontSize: 13, fontWeight: '600' },
 
     // --- FILTERS ---
     filterSection: { flexDirection: 'row', paddingHorizontal: 15, gap: 10, marginBottom: 15 },
     pickerWrapper: { flex: 1 },
     pickerLabel: { fontSize: 12, fontWeight: 'bold', marginBottom: 5, marginLeft: 2 },
-    pickerBox: { borderRadius: 8, borderWidth: 1, height: 45, justifyContent: 'center', overflow: 'hidden' },
-    
+
     // --- GRID LIST ---
     gridContainer: { paddingHorizontal: 10, paddingBottom: 30 },
-    gridItemWrapper: { 
-        width: '50%', // Responsive exact 2 columns
-        padding: 6 
-    },
+    gridItemWrapper: { width: '50%', padding: 6 },
     gridItem: { 
-        borderRadius: 12, 
-        elevation: 3, 
-        shadowOpacity: 0.15, 
-        shadowRadius: 3, 
-        shadowOffset: { width: 0, height: 1 },
-        overflow: 'hidden', 
-        height: 240, // Fixed height for visual consistency
-        flexDirection: 'column'
+        borderRadius: 12, elevation: 3, shadowOpacity: 0.15, shadowRadius: 3, 
+        shadowOffset: { width: 0, height: 1 }, overflow: 'hidden', height: 240, flexDirection: 'column'
     },
     coverImage: { width: '100%', height: 170 },
-    
+
     // 3 Dots Menu
     menuOverlay: { position: 'absolute', top: 8, right: 8 },
     menuIconCircle: { 
-        width: 32, 
-        height: 32, 
-        borderRadius: 16, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-        shadowOffset: { width: 0, height: 1 }
+        width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', 
+        elevation: 2, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }
     },
-    
+
     infoContainer: { padding: 8, alignItems: 'center', flex: 1, justifyContent: 'center' },
     gridTitle: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
     gridSubtitle: { fontSize: 12, marginTop: 2, textAlign: 'center' },
-    
     emptyText: { textAlign: 'center', fontSize: 16, marginTop: 80 },
 
     // --- MODAL ---
     modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-    modalContent: { width: '90%', borderRadius: 16, padding: 20, maxHeight: '85%' },
+    modalContent: { width: '90%', borderRadius: 16, padding: 20 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: 'bold' },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 12 },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-    pickerContainer: { borderWidth: 1, borderRadius: 8, height: 50, justifyContent: 'center' },
-    
-    imagePicker: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        padding: 15, 
-        borderRadius: 8, 
-        marginTop: 15, 
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderStyle: 'dashed'
-    },
+
+    // Custom Dropdown UI
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
+
+    imagePicker: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 8, marginTop: 15, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed' },
     imagePickerText: { marginLeft: 10, fontSize: 15, fontWeight: '500' },
     previewImage: { width: 100, height: 130, borderRadius: 8, alignSelf: 'center', marginTop: 15 },
-    
+
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30 },
     modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', marginHorizontal: 6 },
     saveBtnText: { fontWeight: 'bold', fontSize: 16 },
     cancelBtnText: { fontWeight: 'bold', fontSize: 16 },
+
+    // Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherAdminResourcesScreen;

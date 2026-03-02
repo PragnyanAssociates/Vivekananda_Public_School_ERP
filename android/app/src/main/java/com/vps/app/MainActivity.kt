@@ -1,4 +1,4 @@
-package com.school_app
+package com.vps.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

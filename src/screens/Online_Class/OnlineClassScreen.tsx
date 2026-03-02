@@ -2,18 +2,19 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking,
     ActivityIndicator, Modal, TextInput, FlatList, Platform, SafeAreaView,
-    Dimensions, useColorScheme, StatusBar
+    Dimensions, useColorScheme, StatusBar, useWindowDimensions
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import apiClient from '../../api/client';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import Video from 'react-native-video';
 import * as Animatable from 'react-native-animatable';
 
+// Kept at top level to ensure existing stylesheets don't crash
 const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -84,6 +85,9 @@ const formatDateTime = (isoString: string): string => {
 };
 
 const OnlineClassScreen: React.FC = () => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
@@ -91,25 +95,38 @@ const OnlineClassScreen: React.FC = () => {
 
     const [allClasses, setAllClasses] = useState<OnlineClass[]>([]);
     const [teachers, setTeachers] = useState<Teacher[]>([]);
-    const [classGroups, setClassGroups] = useState<string[]>([]);
+    const[classGroups, setClassGroups] = useState<string[]>([]);
     const [subjects, setSubjects] = useState<string[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [isSaving, setIsSaving] = useState<boolean>(false);
-    const [modalVisible, setModalVisible] = useState<boolean>(false);
+    const[modalVisible, setModalVisible] = useState<boolean>(false);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [currentClass, setCurrentClass] = useState<OnlineClass | null>(null);
     const [view, setView] = useState<'live' | 'recorded'>('live');
-    const [modalClassType, setModalClassType] = useState<'live' | 'recorded'>('live');
+    const[modalClassType, setModalClassType] = useState<'live' | 'recorded'>('live');
     
     const initialFormState: FormData = { title: '', class_group: '', subject: '', teacher_id: '', meet_link: '', description: '', topic: '' };
     const [formData, setFormData] = useState<FormData>(initialFormState);
     
     const [date, setDate] = useState(new Date());
-    const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+    const[pickerMode, setPickerMode] = useState<'date' | 'time' | 'datetime' | null>(null);
     
-    const [selectedVideo, setSelectedVideo] = useState<Asset | null>(null);
-    const [videoPlayerVisible, setVideoPlayerVisible] = useState(false);
+    const[selectedVideo, setSelectedVideo] = useState<Asset | null>(null);
+    const[videoPlayerVisible, setVideoPlayerVisible] = useState(false);
     const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
+
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[] as { label: string, value: string }[],
+        selectedValue: '',
+        onSelect: (val: any) => {}
+    });
+
+    const openDropdown = (title: string, data: any[], selectedValue: string, onSelect: (val: any) => void) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     const isPrivilegedUser = user?.role === 'admin' || user?.role === 'teacher';
 
@@ -153,7 +170,7 @@ const OnlineClassScreen: React.FC = () => {
     };
 
     const filteredClasses = useMemo(() => {
-      if (!user) return [];
+      if (!user) return[];
       if (user.role === 'admin') return allClasses;
       if (user.role === 'teacher') return allClasses.filter(c => String(c.teacher_id) === String(user.id) || String(c.created_by) === String(user.id));
       if (user.role === 'student') return allClasses.filter(c => c.class_group === user.class_group || c.class_group === 'All');
@@ -166,7 +183,7 @@ const OnlineClassScreen: React.FC = () => {
         live.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
         recorded.sort((a, b) => new Date(b.class_datetime).getTime() - new Date(a.class_datetime).getTime());
         return { liveClasses: live, recordedClasses: recorded };
-    }, [filteredClasses]);
+    },[filteredClasses]);
 
     // --- FIX: Robust Date Picker Logic ---
     const onPickerChange = (event: DateTimePickerEvent, selectedValue?: Date) => {
@@ -176,26 +193,25 @@ const OnlineClassScreen: React.FC = () => {
         }
 
         if (event.type === 'set' && selectedValue) {
-            if (pickerMode === 'date') {
-                setPickerMode(null);
-                // Create new date object preserving current time
-                const newDate = new Date(date);
-                newDate.setFullYear(selectedValue.getFullYear(), selectedValue.getMonth(), selectedValue.getDate());
-                setDate(newDate);
+            if (Platform.OS === 'ios') {
+                // iOS uses datetime mode, so we get everything at once
+                setDate(selectedValue);
+            } else {
+                // Android splits date and time
+                if (pickerMode === 'date') {
+                    setPickerMode(null);
+                    const newDate = new Date(date);
+                    newDate.setFullYear(selectedValue.getFullYear(), selectedValue.getMonth(), selectedValue.getDate());
+                    setDate(newDate);
 
-                // Small delay before opening Time picker (Android fix)
-                if (Platform.OS === 'android') {
                     setTimeout(() => setPickerMode('time'), 100);
-                } else {
-                    setPickerMode('time');
+                } else if (pickerMode === 'time') {
+                    setPickerMode(null);
+                    const newDate = new Date(date);
+                    newDate.setHours(selectedValue.getHours());
+                    newDate.setMinutes(selectedValue.getMinutes());
+                    setDate(newDate);
                 }
-            } else if (pickerMode === 'time') {
-                setPickerMode(null);
-                // Create new date object preserving current date
-                const newDate = new Date(date);
-                newDate.setHours(selectedValue.getHours());
-                newDate.setMinutes(selectedValue.getMinutes());
-                setDate(newDate);
             }
         }
     };
@@ -283,7 +299,7 @@ const OnlineClassScreen: React.FC = () => {
     };
 
     const handleDelete = (classId: number) => {
-        Alert.alert("Confirm", "Delete this class?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await apiClient.delete(`/online-classes/${classId}`); fetchInitialData(); } catch (error: any) { Alert.alert("Error", "Failed to delete."); } }}]);
+        Alert.alert("Confirm", "Delete this class?",[{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await apiClient.delete(`/online-classes/${classId}`); fetchInitialData(); } catch (error: any) { Alert.alert("Error", "Failed to delete."); } }}]);
     };
     
     const handleJoinOrWatch = (classItem: OnlineClass) => {
@@ -353,7 +369,7 @@ const OnlineClassScreen: React.FC = () => {
             {/* MODAL */}
             <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
                 <TouchableOpacity style={[styles.modalBackdrop, { backgroundColor: COLORS.modalOverlay }]} activeOpacity={1} onPress={() => setModalVisible(false)}>
-                    <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: COLORS.cardBg }]}>
+                    <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.9, maxHeight: screenHeight * 0.85 }]}>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom: 20}}>
                             <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>{isEditing ? 'Edit Class' : 'New Class'}</Text>
                              {!isEditing && ( 
@@ -376,64 +392,76 @@ const OnlineClassScreen: React.FC = () => {
                                 onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                             />
                             
+                            {/* Custom Class Dropdown */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Class</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker 
-                                    enabled={true} 
-                                    selectedValue={formData.class_group} 
-                                    onValueChange={(itemValue) => handleClassChange(itemValue)} 
-                                    dropdownIconColor={COLORS.textMain} 
-                                    style={{color: COLORS.textMain}}
-                                >
-                                    <Picker.Item label="-- Select Class --" value="" color={COLORS.textMain} />
-                                    {classGroups.map((c, i) => <Picker.Item key={i} label={c} value={c} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Class', classGroups.map(c => ({label: c, value: c})), formData.class_group, handleClassChange)}
+                            >
+                                <Text style={{ color: formData.class_group ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>{formData.class_group || '-- Select Class --'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
 
+                            {/* Custom Subject Dropdown */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Subject</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker 
-                                    enabled={true} 
-                                    selectedValue={formData.subject} 
-                                    onValueChange={(itemValue) => setFormData(prev => ({ ...prev, subject: itemValue }))} 
-                                    dropdownIconColor={COLORS.textMain} 
-                                    style={{color: COLORS.textMain}}
-                                >
-                                    <Picker.Item label="-- Select Subject --" value="" color={COLORS.textMain} />
-                                    {subjects.map((s, i) => <Picker.Item key={i} label={s} value={s} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Subject', subjects.map(s => ({label: s, value: s})), formData.subject, (val) => setFormData(prev => ({ ...prev, subject: val })))}
+                            >
+                                <Text style={{ color: formData.subject ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>{formData.subject || '-- Select Subject --'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
 
+                            {/* Custom Teacher Dropdown */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Teacher</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker 
-                                    enabled={true} 
-                                    selectedValue={String(formData.teacher_id)} 
-                                    onValueChange={(itemValue) => setFormData(prev => ({ ...prev, teacher_id: Number(itemValue) }))} 
-                                    dropdownIconColor={COLORS.textMain} 
-                                    style={{color: COLORS.textMain}}
-                                >
-                                    <Picker.Item label="-- Select Person --" value="" color={COLORS.textMain} />
-                                    {teachers.map((t) => <Picker.Item key={t.id} label={t.full_name} value={String(t.id)} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Teacher', teachers.map(t => ({label: t.full_name, value: String(t.id)})), String(formData.teacher_id), (val) => setFormData(prev => ({ ...prev, teacher_id: Number(val) })))}
+                            >
+                                <Text style={{ color: formData.teacher_id ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>
+                                    {teachers.find(t => String(t.id) === String(formData.teacher_id))?.full_name || '-- Select Person --'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
                             
-                            {/* DATE PICKER INPUT */}
+                            {/* FIXED IOS/ANDROID DATE & TIME PICKER */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Date & Time</Text>
                             <TouchableOpacity 
-                                onPress={() => setPickerMode('date')} 
+                                onPress={() => setPickerMode(Platform.OS === 'ios' ? 'datetime' : 'date')} 
                                 style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, justifyContent: 'center', height: 50 }]}
                             >
                                 <Text style={{ color: COLORS.textMain }}>{formatDateTime(date.toISOString())}</Text>
                             </TouchableOpacity>
+                            
                             {pickerMode && (
-                                <DateTimePicker 
-                                    value={date} 
-                                    mode={pickerMode} 
-                                    is24Hour={false} 
-                                    display="default" 
-                                    onChange={onPickerChange}
-                                />
+                                Platform.OS === 'ios' ? (
+                                    <Modal transparent animationType="slide" visible={!!pickerMode} onRequestClose={() => setPickerMode(null)}>
+                                        <View style={styles.iosPickerOverlay}>
+                                            <View style={[styles.iosPickerContainer, { backgroundColor: COLORS.cardBg }]}>
+                                                <View style={[styles.iosPickerHeader, { borderBottomColor: COLORS.border }]}>
+                                                    <TouchableOpacity onPress={() => setPickerMode(null)}>
+                                                        <Text style={{ color: COLORS.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <DateTimePicker 
+                                                    value={date} 
+                                                    mode="datetime" 
+                                                    display="spinner" 
+                                                    onChange={onPickerChange} 
+                                                    textColor={COLORS.textMain} 
+                                                />
+                                            </View>
+                                        </View>
+                                    </Modal>
+                                ) : (
+                                    <DateTimePicker 
+                                        value={date} 
+                                        mode={pickerMode} 
+                                        is24Hour={false} 
+                                        display="default" 
+                                        onChange={onPickerChange} 
+                                    />
+                                )
                             )}
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Topic</Text>
@@ -487,6 +515,34 @@ const OnlineClassScreen: React.FC = () => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
+
+                        {/* SHARED CUSTOM DROPDOWN SELECTOR MODAL */}
+                        <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                                <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                                    <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                                    <FlatList
+                                        data={dropdownConfig.data}
+                                        keyExtractor={(item, index) => item.value + index.toString()}
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity 
+                                                style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                                onPress={() => {
+                                                    dropdownConfig.onSelect(item.value);
+                                                    setDropdownConfig({ ...dropdownConfig, visible: false });
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dropdownItemText, 
+                                                    { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                                ]}>{item.label}</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    />
+                                </View>
+                            </TouchableOpacity>
+                        </Modal>
+
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
@@ -514,8 +570,7 @@ const ClassCard = ({ classItem, onEdit, onDelete, onJoinOrWatch, userRole, color
     const handleMenuPress = () => {
         Alert.alert(
             "Manage Class",
-            `Options for "${classItem.title}"`,
-            [
+            `Options for "${classItem.title}"`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit Details", onPress: () => onEdit && onEdit(classItem) },
                 { text: "Delete Record", style: "destructive", onPress: () => onDelete && onDelete(classItem.id) }
@@ -623,13 +678,24 @@ const styles = StyleSheet.create({
     joinButton: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 15 }, 
     joinButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold', marginLeft: 8 }, 
     
+    // Custom Dropdown Trigger
+    customDropdownTrigger: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        height: 50, 
+        paddingHorizontal: 15, 
+        marginBottom: 10 
+    },
+
     // Modal
     modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center' }, 
-    modalContent: { borderRadius: 12, padding: 20, width: width > 600 ? '60%' : '90%', maxHeight: '85%', elevation: 5 }, 
+    modalContent: { borderRadius: 12, padding: 20, elevation: 5 }, 
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }, 
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 }, 
     input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 16 }, 
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 10, justifyContent: 'center' }, 
     modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20 }, 
     modalButton: { paddingVertical: 12, paddingHorizontal: 25, borderRadius: 8, marginLeft: 10, alignItems: 'center' }, 
     saveButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 }, 
@@ -641,6 +707,17 @@ const styles = StyleSheet.create({
     filePickerButton: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, padding: 12, borderRadius: 8, marginBottom: 15 },
     filePickerText: { marginLeft: 10, flex: 1, fontSize: 14 },
     
+    // Custom Dropdown & iOS Date Picker Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' },
+
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 },
+
     // Video Modal
     videoModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
     videoPlayer: { width: '100%', height: height * 0.7 },

@@ -1,6 +1,5 @@
-package com.vps_app
+package com.vps.app
 
-import com.vps.app.BuildConfig // <--- ADD THIS LINE MANUALLY
 import android.app.Application
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication

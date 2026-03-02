@@ -5,7 +5,6 @@ import {
     View,
     Text,
     ScrollView,
-    Dimensions,
     TouchableOpacity,
     Linking,
     Pressable,
@@ -13,14 +12,12 @@ import {
     Animated,
     SafeAreaView,
     StatusBar,
-    useColorScheme
+    useColorScheme,
+    useWindowDimensions // Added useWindowDimensions for dynamic screen responsiveness
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
-
-const { width: screenWidth } = Dimensions.get('window');
-const isSmallScreen = screenWidth < 480;
 
 // --- THEME DEFINITIONS ---
 const LightColors = {
@@ -84,7 +81,7 @@ const AnimatedSection = ({ children, delay = 0 }) => {
     }, [fadeAnim, slideAnim, delay]);
 
     return (
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={{ opacity: fadeAnim, transform:[{ translateY: slideAnim }] }}>
             {children}
         </Animated.View>
     );
@@ -98,29 +95,38 @@ const AboutUs = () => {
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
 
+    // --- RESPONSIVE HOOK ---
+    // dynamically checks width to adjust layout (prevents cutting off on small devices like iPhone SE)
+    const { width: screenWidth } = useWindowDimensions();
+    const isSmallScreen = screenWidth < 390; 
+
     const handleLinkPress = (url) => {
         Linking.openURL(url).catch(err => console.error('An error occurred', err));
     };
 
     const ServiceItem = ({ children, style: customStyle, textStyle: customTextStyle, isCta }) => {
-        const baseItemStyle = isCta ? styles.ctaServiceItem : [styles.serviceItem, { backgroundColor: COLORS.gradientStart }];
+        // Adjusted base item style to react dynamically to screen width
+        const baseItemStyle = isCta 
+            ?[styles.ctaServiceItem, { width: isSmallScreen ? '100%' : '48%' }] 
+            :[styles.serviceItem, { backgroundColor: COLORS.gradientStart, width: isSmallScreen ? '100%' : '48%' }];
         const baseTextStyle = isCta ? styles.ctaServiceItemText : styles.serviceItemText;
+        
         return (
-            <Pressable style={({ pressed }) => [baseItemStyle, customStyle, pressed && styles.serviceItemPressed]}>
+            <Pressable style={({ pressed }) =>[baseItemStyle, customStyle, pressed && styles.serviceItemPressed]}>
                 <Text style={[baseTextStyle, customTextStyle]}>{children}</Text>
             </Pressable>
         );
     };
 
     const committeeData = {
-        patrons: ["Padma Vibhushan Dr Palle Rama Rao Garu", "Sri B.D. Jain"], 
+        patrons:["Padma Vibhushan Dr Palle Rama Rao Garu", "Sri B.D. Jain"], 
         president: "C. Vidya Sagar", 
-        vicePresidents: ["Dr. Y.Krishna", "G.Shankar"], 
+        vicePresidents:["Dr. Y.Krishna", "G.Shankar"], 
         secretary: "Dhathri Priya", 
         treasurer: "Dr. H.Sarvothaman", 
         jointSecretary: "Renuka Chekkala", 
         organisingSecretary: "Smita Rane", 
-        executiveMembers: ["Yugandhara Babu Lella", "Aarti Joshi", "M. Vijaya"]
+        executiveMembers:["Yugandhara Babu Lella", "Aarti Joshi", "M. Vijaya"]
     };
 
     return (
@@ -214,16 +220,16 @@ const AboutUs = () => {
                             <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.cardTopBorder} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
                             <View style={styles.sectionTitleContainer}><Text style={styles.sectionTitleEmoji}>🎓</Text><Text style={[styles.sectionTitle, { color: COLORS.sectionTitle }]}>Our Students</Text></View>
                             <View style={styles.galleryGrid}>
-                                <Pressable style={({ pressed }) => [styles.galleryPressable, pressed && styles.serviceItemPressed]}>
+                                <Pressable style={({ pressed }) => [[styles.galleryPressable, { width: isSmallScreen ? '100%' : '48%' }], pressed && styles.serviceItemPressed]}>
                                     <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.galleryItem} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}><Text style={styles.galleryItemText}>📚{'\n'}Dedicated Learners</Text></LinearGradient>
                                 </Pressable>
-                                <Pressable style={({ pressed }) => [styles.galleryPressable, pressed && styles.serviceItemPressed]}>
+                                <Pressable style={({ pressed }) => [[styles.galleryPressable, { width: isSmallScreen ? '100%' : '48%' }], pressed && styles.serviceItemPressed]}>
                                     <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.galleryItem} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}><Text style={styles.galleryItemText}>🌟{'\n'}Future Leaders</Text></LinearGradient>
                                 </Pressable>
-                                 <Pressable style={({ pressed }) => [styles.galleryPressable, pressed && styles.serviceItemPressed]}>
+                                 <Pressable style={({ pressed }) => [[styles.galleryPressable, { width: isSmallScreen ? '100%' : '48%' }], pressed && styles.serviceItemPressed]}>
                                     <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.galleryItem} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}><Text style={styles.galleryItemText}>💡{'\n'}Bright Minds</Text></LinearGradient>
                                 </Pressable>
-                                 <Pressable style={({ pressed }) => [styles.galleryPressable, pressed && styles.serviceItemPressed]}>
+                                 <Pressable style={({ pressed }) => [[styles.galleryPressable, { width: isSmallScreen ? '100%' : '48%' }], pressed && styles.serviceItemPressed]}>
                                     <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.galleryItem} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}><Text style={styles.galleryItemText}>💫{'\n'}Inspired Souls</Text></LinearGradient>
                                 </Pressable>
                             </View>
@@ -266,7 +272,7 @@ const styles = StyleSheet.create({
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: '96%', 
+        width: '94%', // Adjusted for edge spacing
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -279,7 +285,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: {
         borderRadius: 30,
         width: 45,
@@ -288,7 +294,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
 
@@ -307,7 +313,8 @@ const styles = StyleSheet.create({
         shadowRadius: 5, 
         shadowOffset: { width: 0, height: 2 },
     },
-    logoImage: { width: 280, height: 140, marginBottom: 10 },
+    // Made logo fully responsive to avoid edge cutting
+    logoImage: { width: '85%', maxWidth: 280, height: 140, marginBottom: 10, alignSelf: 'center' },
     schoolName: { fontSize: 20, fontWeight: "bold", textAlign: 'center' },
     schoolSubName: { fontSize: 13, fontWeight: "400", textAlign: 'center', marginTop: 4 },
     tagline: { fontSize: 14, fontStyle: 'italic', marginTop: 8, textAlign: 'center' },
@@ -318,12 +325,12 @@ const styles = StyleSheet.create({
     content: { padding: 15 },
     
     // --- SECTION CARD STYLE ---
-    sectionCard: { borderRadius: 15, padding: 25, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, position: 'relative', overflow: 'hidden' },
+    sectionCard: { borderRadius: 15, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, position: 'relative', overflow: 'hidden' },
     cardTopBorder: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
     
-    sectionTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+    sectionTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap' },
     sectionTitleEmoji: { marginRight: 10, fontSize: 20 },
-    sectionTitle: { fontSize: 20, fontWeight: 'bold' },
+    sectionTitle: { fontSize: 20, fontWeight: 'bold', flex: 1 },
     
     committeeRoleGroup: { marginBottom: 15 },
     committeeRoleTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 5 },
@@ -332,28 +339,31 @@ const styles = StyleSheet.create({
     
     serviceList: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginVertical: 10 },
     serviceListSmallScreen: { flexDirection: 'column', alignItems: 'stretch' },
-    serviceItem: { paddingVertical: 12, paddingHorizontal: 15, borderRadius: 8, alignItems: 'center', justifyContent: 'center', width: isSmallScreen ? '100%' : '48%', marginBottom: 10, shadowColor: 'rgba(102, 126, 234, 0.3)', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 3 },
+    // Width is now handled dynamically in the component based on screen size
+    serviceItem: { paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10, shadowColor: 'rgba(102, 126, 234, 0.3)', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 3 },
     serviceItemText: { color: 'white', fontSize: 13, fontWeight: '500', textAlign: 'center' },
-    serviceItemPressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
+    serviceItemPressed: { transform:[{ scale: 0.98 }], opacity: 0.9 },
     
     ctaSection: { borderRadius: 15, paddingHorizontal: 20, paddingVertical: 25, alignItems: 'center', marginVertical: 10 },
     ctaTitle: { fontSize: 18, fontWeight: 'bold', color: 'white', marginBottom: 15, textAlign: 'center' },
     ctaText: { fontSize: 14, color: 'white', lineHeight: 22, marginBottom: 20, textAlign: 'center' },
-    ctaServiceListContainer: { width: '100%' },
-    ctaServiceItem: { backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center', width: '48%', marginBottom: 10, minHeight: 50 },
+    ctaServiceListContainer: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    // Width is now handled dynamically in the component
+    ctaServiceItem: { backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10, minHeight: 50 },
     ctaServiceItemText: { color: 'white', fontSize: 13, fontWeight: '500', textAlign: 'center' },
     
     galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 15 },
-    galleryPressable: { width: '48%', marginBottom: 10 },
+    galleryPressable: { marginBottom: 10 },
     galleryItem: { width: '100%', height: 120, borderRadius: 10, alignItems: 'center', justifyContent: 'center', padding: 8 },
     galleryItemText: { color: 'white', fontSize: 14, fontWeight: '600', textAlign: 'center' },
     
     contactSection: { borderRadius: 15, padding: 25, marginTop: 10, },
     contactTitle: { fontSize: 20, fontWeight: 'bold', color: 'white', marginBottom: 20, textAlign: 'center' },
-    contactInfo: {},
+    contactInfo: { width: '100%' },
     contactItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingVertical: 8 },
     contactIcon: { width: 25, textAlign: 'center', marginRight: 12, color: '#76c7f7', fontSize: 18 },
-    contactItemText: { color: 'white', fontSize: 14, flexShrink: 1 },
+    // Added flex: 1 to ensure long text (like email/address) wraps to the next line instead of overflowing off screen
+    contactItemText: { color: 'white', fontSize: 14, flex: 1, flexWrap: 'wrap' },
     contactItemTextUnderline: { textDecorationLine: 'underline' },
     
     footer: {
@@ -361,8 +371,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         alignItems: 'center',
         borderTopWidth: 1,
+        width: '100%'
     },
-    footerTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 8 },
+    footerTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
     footerText: { textAlign: 'center', fontSize: 12, lineHeight: 18 },
 });
 

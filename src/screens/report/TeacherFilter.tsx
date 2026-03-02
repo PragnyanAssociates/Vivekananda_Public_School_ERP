@@ -1,17 +1,17 @@
 /**
  * File: src/screens/report/TeacherFilter.tsx
  * Purpose: Filter Teachers by Performance (Class & Subject).
- * Updated: Converted Class & Subject filters to Dropdowns.
+ * Updated: Converted Class & Subject filters to Custom Dropdowns (fixes iOS issue) & Responsive Hook.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     View, Text, StyleSheet, FlatList, ActivityIndicator,
     TouchableOpacity, ScrollView, RefreshControl, StatusBar, SafeAreaView, Platform, UIManager, Image,
-    Dimensions, useColorScheme
+    useColorScheme, Modal, useWindowDimensions
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker'; // Added Dropdown Picker
+// Removed native Picker import to fix iOS UI issues
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -19,8 +19,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -69,16 +67,16 @@ const DarkColors = {
 
 const CLASS_SUBJECTS: any = {
     'LKG': ['All Subjects'], 'UKG': ['All Subjects'], 
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
+    'Class 1':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 2':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
+    'Class 3':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 4':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'], 
+    'Class 5':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 6':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
+    'Class 7':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 8':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'], 
+    'Class 9':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 10':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
 // --- HELPER: CUSTOM ROUNDING ---
@@ -96,6 +94,9 @@ const getRoundedPercentage = (value: number | string): number => {
 };
 
 const TeacherFilter = () => {
+    // Responsive Hook
+    const { width, height } = useWindowDimensions();
+
     // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -106,7 +107,7 @@ const TeacherFilter = () => {
 
     // --- State ---
     const [loading, setLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
+    const[refreshing, setRefreshing] = useState(false);
     
     // Data State
     const [classList, setClassList] = useState<string[]>([]);
@@ -115,9 +116,13 @@ const TeacherFilter = () => {
     // Filters
     const [selectedClass, setSelectedClass] = useState('All Classes');
     const [selectedSubject, setSelectedSubject] = useState('All Subjects');
+
+    // Dropdown Modal States (Fixes iOS Issue)
+    const [showClassPicker, setShowClassPicker] = useState(false);
+    const[showSubjectPicker, setShowSubjectPicker] = useState(false);
     
     // Tabs - Default 'All'
-    const [activeTab, setActiveTab] = useState<'All' | 'Above Average' | 'Average' | 'Below Average'>('All');
+    const[activeTab, setActiveTab] = useState<'All' | 'Above Average' | 'Average' | 'Below Average'>('All');
 
     // --- 1. Fetch Classes ---
     useEffect(() => {
@@ -132,18 +137,18 @@ const TeacherFilter = () => {
             }
         };
         fetchClasses();
-    }, []);
+    },[]);
 
     // --- 2. Fetch Teacher Data ---
     useEffect(() => {
         fetchTeacherData();
-    }, []);
+    },[]);
 
     const fetchTeacherData = async () => {
         setLoading(true);
         try {
             const response = await apiClient.get(`/performance/admin/all-teachers`);
-            setRawTeacherData(response.data || []);
+            setRawTeacherData(response.data ||[]);
         } catch (error) {
             console.error('Error fetching teacher data:', error);
         } finally {
@@ -159,7 +164,7 @@ const TeacherFilter = () => {
 
     // --- 3. Calculation & Filtering Logic ---
     const processedList = useMemo(() => {
-        if (!rawTeacherData || rawTeacherData.length === 0) return [];
+        if (!rawTeacherData || rawTeacherData.length === 0) return[];
 
         let calculatedTeachers = rawTeacherData.map(teacher => {
             let rawPercentage = 0;
@@ -216,7 +221,7 @@ const TeacherFilter = () => {
         calculatedTeachers = calculatedTeachers.map((t, index) => ({ ...t, rank: index + 1 }));
 
         return calculatedTeachers;
-    }, [selectedClass, selectedSubject, rawTeacherData]);
+    },[selectedClass, selectedSubject, rawTeacherData]);
 
     // --- 4. Tab Filtering Logic (Updated Ranges & All Tab) ---
     const filteredList = useMemo(() => {
@@ -304,9 +309,9 @@ const TeacherFilter = () => {
 
     const currentSubjects = selectedClass === 'All Classes' 
         ? ['All Subjects'] 
-        : ['All Subjects', ...(CLASS_SUBJECTS[selectedClass] || [])];
+        :['All Subjects', ...(CLASS_SUBJECTS[selectedClass] || [])];
 
-    const TABS = ['All', 'Above Average', 'Average', 'Below Average'];
+    const TABS =['All', 'Above Average', 'Average', 'Below Average'];
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
@@ -339,44 +344,29 @@ const TeacherFilter = () => {
                 {/* 2. Filter Card */}
                 <View style={[styles.filterCard, { backgroundColor: COLORS.cardBg }]}>
                     
-                    {/* Class Dropdown */}
+                    {/* CUSTOM CLASS DROPDOWN */}
                     <View style={styles.pickerContainer}>
                         <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Select Class:</Text>
-                        <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                            <Picker
-                                selectedValue={selectedClass}
-                                onValueChange={(itemValue) => {
-                                    setSelectedClass(itemValue);
-                                    setSelectedSubject('All Subjects');
-                                }}
-                                style={{ color: COLORS.textMain }}
-                                dropdownIconColor={COLORS.textSub}
-                                mode="dropdown"
-                            >
-                                {classList.map((cls) => (
-                                    <Picker.Item key={cls} label={cls} value={cls} style={{fontSize: 14}} />
-                                ))}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                            onPress={() => setShowClassPicker(true)}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 14 }}>{selectedClass}</Text>
+                            <Icon name="chevron-down" size={24} color={COLORS.textSub} />
+                        </TouchableOpacity>
                     </View>
 
-                    {/* Subject Dropdown */}
+                    {/* CUSTOM SUBJECT DROPDOWN */}
                     <View style={styles.pickerContainer}>
                         <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Subject:</Text>
-                        <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                            <Picker
-                                selectedValue={selectedSubject}
-                                onValueChange={setSelectedSubject}
-                                enabled={selectedClass !== 'All Classes'}
-                                style={{ color: selectedClass === 'All Classes' ? COLORS.textSub : COLORS.textMain }}
-                                dropdownIconColor={COLORS.textSub}
-                                mode="dropdown"
-                            >
-                                {currentSubjects.map((sub) => (
-                                    <Picker.Item key={sub} label={sub} value={sub} style={{fontSize: 14}} />
-                                ))}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, opacity: selectedClass === 'All Classes' ? 0.6 : 1 }]}
+                            onPress={() => selectedClass !== 'All Classes' && setShowSubjectPicker(true)}
+                            disabled={selectedClass === 'All Classes'}
+                        >
+                            <Text style={{ color: selectedClass === 'All Classes' ? COLORS.textSub : COLORS.textMain, fontSize: 14 }}>{selectedSubject}</Text>
+                            <Icon name="chevron-down" size={24} color={COLORS.textSub} />
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -468,6 +458,56 @@ const TeacherFilter = () => {
                 </View>
             </View>
 
+            {/* --- CUSTOM DROPDOWN MODALS --- */}
+            {/* Class Picker Modal */}
+            <Modal visible={showClassPicker} transparent animationType="fade" onRequestClose={() => setShowClassPicker(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowClassPicker(false)}>
+                    <View style={[styles.modalContent, { backgroundColor: COLORS.cardBg, width: width * 0.85, maxHeight: height * 0.6 }]}>
+                        <Text style={[styles.modalTitle, { color: COLORS.primary }]}>Select Class</Text>
+                        <FlatList
+                            data={classList}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.modalItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        setSelectedClass(item);
+                                        setSelectedSubject('All Subjects');
+                                        setShowClassPicker(false);
+                                    }}
+                                >
+                                    <Text style={[styles.modalItemText, { color: COLORS.textMain, fontWeight: selectedClass === item ? 'bold' : 'normal' }]}>{item}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Subject Picker Modal */}
+            <Modal visible={showSubjectPicker} transparent animationType="fade" onRequestClose={() => setShowSubjectPicker(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowSubjectPicker(false)}>
+                    <View style={[styles.modalContent, { backgroundColor: COLORS.cardBg, width: width * 0.85, maxHeight: height * 0.6 }]}>
+                        <Text style={[styles.modalTitle, { color: COLORS.primary }]}>Select Subject</Text>
+                        <FlatList
+                            data={currentSubjects}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.modalItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        setSelectedSubject(item);
+                                        setShowSubjectPicker(false);
+                                    }}
+                                >
+                                    <Text style={[styles.modalItemText, { color: COLORS.textMain, fontWeight: selectedSubject === item ? 'bold' : 'normal' }]}>{item}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </SafeAreaView>
     );
 };
@@ -546,7 +586,7 @@ const styles = StyleSheet.create({
         width: '96%',
         alignSelf: 'center'
     },
-    // Picker
+    // Custom Dropdown Trigger Styles
     pickerContainer: {
         marginBottom: 8
     },
@@ -556,12 +596,14 @@ const styles = StyleSheet.create({
         marginBottom: 4,
         marginLeft: 2
     },
-    pickerWrapper: {
+    customDropdownTrigger: {
         borderWidth: 1,
         borderRadius: 10,
         height: 45,
-        justifyContent: 'center',
-        overflow: 'hidden'
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 15,
     },
     
     // Tabs
@@ -698,7 +740,14 @@ const styles = StyleSheet.create({
     legendText: {
         fontSize: 11,
         fontWeight: '600',
-    }
+    },
+
+    // Dropdown Modal Styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    modalContent: { borderRadius: 12, padding: 20, elevation: 5 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    modalItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    modalItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherFilter;

@@ -1,36 +1,35 @@
 /**
  * File: src/screens/report/MyPerformance.tsx
  * Purpose: Student view to compare performance.
- * Updated: Responsive Design & Dark/Light Mode Support.
+ * Updated: Responsive Design, Dark/Light Mode Support, & Custom Dropdown for Exam Selection.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
-    ScrollView, Animated, Easing, RefreshControl, Dimensions, SafeAreaView,
-    useColorScheme, StatusBar
+    ScrollView, Animated, Easing, RefreshControl, SafeAreaView,
+    useColorScheme, StatusBar, Modal, FlatList, useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import apiClient from '../../api/client';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // --- Constants ---
-const { width } = Dimensions.get('window');
 
 const CLASS_SUBJECTS: any = {
-    'LKG': ['All Subjects'], 'UKG': ['All Subjects'],
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
+    'LKG': ['All Subjects'], 'UKG':['All Subjects'],
+    'Class 1':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 2':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 3':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 4':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 5':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 6':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 7':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 8':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 9':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 10':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
-const SENIOR_CLASSES = ['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const SENIOR_CLASSES =['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const EXAM_NAME_TO_CODE: any = {
     'Assignment-1': 'AT1', 'Unitest-1': 'UT1',
@@ -43,7 +42,7 @@ const EXAM_NAME_TO_CODE: any = {
     'Overall': 'Overall'
 };
 
-const EXAM_OPTIONS = ['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4', 'SA2'];
+const EXAM_OPTIONS =['Overall', 'AT1', 'UT1', 'AT2', 'UT2', 'SA1', 'AT3', 'UT3', 'AT4', 'UT4', 'SA2'];
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -194,7 +193,7 @@ const PerformanceBar = ({ data, label, theme, showRank = true, slim = false }: a
 
     const fillHeight = animatedHeight.interpolate({
         inputRange: [0, 1],
-        outputRange: ['0%', `${Math.min(data.percentage, 100)}%`]
+        outputRange:['0%', `${Math.min(data.percentage, 100)}%`]
     });
 
     // Helper to get color based on percentage
@@ -239,6 +238,9 @@ const PerformanceBar = ({ data, label, theme, showRank = true, slim = false }: a
 };
 
 const MyPerformance = () => {
+    // Responsive Hook
+    const { width, height } = useWindowDimensions();
+
     // Theme Hooks
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -247,11 +249,14 @@ const MyPerformance = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     
-    const [myInfo, setMyInfo] = useState<any>(null); 
+    const[myInfo, setMyInfo] = useState<any>(null); 
     const [classData, setClassData] = useState<any>(null); 
     
     const [selectedExam, setSelectedExam] = useState('Overall');
     const [selectedSubject, setSelectedSubject] = useState('All Subjects');
+
+    // Dropdown Modal State (Fixes iOS Issue)
+    const [showExamPicker, setShowExamPicker] = useState(false);
 
     const fetchData = async () => {
         setLoading(true);
@@ -268,7 +273,7 @@ const MyPerformance = () => {
         }
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { fetchData(); },[]);
     const onRefresh = () => { setRefreshing(true); fetchData(); };
 
     const processedData = useMemo(() => {
@@ -278,7 +283,7 @@ const MyPerformance = () => {
         const myId = myInfo.id;
         const currentClassGroup = currentUserClass || myInfo.class_group;
         const isSeniorClass = SENIOR_CLASSES.includes(currentClassGroup);
-        const subjectsList = CLASS_SUBJECTS[currentClassGroup] || [];
+        const subjectsList = CLASS_SUBJECTS[currentClassGroup] ||[];
 
         if (selectedSubject === 'Overview') {
             const overviewResults = subjectsList.map((subj: string) => {
@@ -341,7 +346,7 @@ const MyPerformance = () => {
 
     const currentClass = myInfo?.class_group || classData?.currentUserClass;
     const rawSubjects = currentClass ? CLASS_SUBJECTS[currentClass] || [] : [];
-    const subjectsToRender = ['All Subjects', ...rawSubjects.filter((s: string) => s !== 'All Subjects'), 'Overview'];
+    const subjectsToRender =['All Subjects', ...rawSubjects.filter((s: string) => s !== 'All Subjects'), 'Overview'];
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -369,16 +374,15 @@ const MyPerformance = () => {
                 >
                     <View style={styles.controlsSection}>
                         <Text style={[styles.label, { color: theme.textSub }]}>Select Exam:</Text>
-                        <View style={[styles.pickerContainer, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
-                            <Picker
-                                selectedValue={selectedExam}
-                                onValueChange={setSelectedExam}
-                                style={[styles.picker, { color: theme.textMain }]}
-                                dropdownIconColor={theme.textMain}
-                            >
-                                {EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} style={{fontSize: 14, color: theme.textMain}} />)}
-                            </Picker>
-                        </View>
+                        
+                        {/* CUSTOM EXAM DROPDOWN */}
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.border }]}
+                            onPress={() => setShowExamPicker(true)}
+                        >
+                            <Text style={{ color: theme.textMain, fontSize: 14 }}>{selectedExam}</Text>
+                            <MaterialCommunityIcons name="chevron-down" size={24} color={theme.textSub} />
+                        </TouchableOpacity>
 
                         <Text style={[styles.label, { marginTop: 20, color: theme.textSub }]}>Select Subject:</Text>
                         <View style={styles.subjectsGrid}>
@@ -481,6 +485,31 @@ const MyPerformance = () => {
 
                 </ScrollView>
             )}
+
+            {/* Exam Picker Modal */}
+            <Modal visible={showExamPicker} transparent animationType="fade" onRequestClose={() => setShowExamPicker(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowExamPicker(false)}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.cardBg, width: width * 0.85, maxHeight: height * 0.6 }]}>
+                        <Text style={[styles.modalTitle, { color: theme.primary }]}>Select Exam</Text>
+                        <FlatList
+                            data={EXAM_OPTIONS}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.modalItem, { borderBottomColor: theme.border }]} 
+                                    onPress={() => {
+                                        setSelectedExam(item);
+                                        setShowExamPicker(false);
+                                    }}
+                                >
+                                    <Text style={[styles.modalItemText, { color: theme.textMain, fontWeight: selectedExam === item ? 'bold' : 'normal' }]}>{item}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </SafeAreaView>
     );
 };
@@ -523,8 +552,17 @@ const styles = StyleSheet.create({
     controlsSection: { paddingHorizontal: 20, paddingTop: 10 },
     label: { fontSize: 14, fontWeight: '700', marginBottom: 5, marginTop: 10, textTransform: 'uppercase' }, 
     
-    pickerContainer: { borderWidth: 1, borderRadius: 8, height: 45, justifyContent: 'center', elevation: 1 },
-    picker: { width: '100%', height: 48 },
+    // Custom Dropdown Styles
+    customDropdownTrigger: {
+        borderWidth: 1,
+        borderRadius: 8,
+        height: 45,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 15,
+        elevation: 1
+    },
     
     subjectsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 5 },
     subjectChip: { borderWidth: 1, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, minWidth: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
@@ -568,6 +606,13 @@ const styles = StyleSheet.create({
     barTrack: { borderWidth: 1, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end', elevation: 1 },
     barFill: { width: '100%', borderRadius: 2 },
     barLabel: { marginTop: 12, textAlign: 'center', fontWeight: '600' },
+
+    // Dropdown Modal Styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    modalContent: { borderRadius: 12, padding: 20, elevation: 5 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    modalItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    modalItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default MyPerformance;

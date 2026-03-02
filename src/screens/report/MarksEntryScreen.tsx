@@ -9,19 +9,20 @@
  * 5. PERFORMANCE FIX: Replaced vertical ScrollView with FlatList.
  * 6. PERFORMANCE FIX: Added MemoizedRow to prevent re-rendering entire table on keypress.
  * 7. PERFORMANCE FIX: Added InteractionManager and Loading State for instant Tab Switching.
+ * 8. UI FIX: Replaced Native Picker with Custom Dropdown Modal for seamless iOS & Android UI.
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, ScrollView, StyleSheet, TextInput,
     TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Dimensions,
-    useColorScheme, StatusBar, KeyboardAvoidingView, Platform, FlatList, InteractionManager
+    useColorScheme, StatusBar, KeyboardAvoidingView, Platform, FlatList, InteractionManager, Modal, useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-// Get Screen Dimensions for Responsive Design
+// Get Screen Dimensions for Responsive Design (Used for static stylesheet initialization)
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -64,20 +65,20 @@ const DarkColors = {
 // --- CONSTANTS ---
 const CLASS_SUBJECTS = {
     'LKG': ['All Subjects'],
-    'UKG': ['All Subjects'],
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
+    'UKG':['All Subjects'],
+    'Class 1':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 2':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 3':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 4':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 5':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 6':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 7':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 8':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 9':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 10':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
-const EDITABLE_EXAM_TYPES = [
+const EDITABLE_EXAM_TYPES =[
     'Assignment-1', 'Unitest-1',
     'Assignment-2', 'Unitest-2',
     'Assignment-3', 'Unitest-3',
@@ -85,7 +86,7 @@ const EDITABLE_EXAM_TYPES = [
     'SA1', 'SA2'
 ];
 
-const ALL_EXAM_OPTIONS = ['Overall', ...EDITABLE_EXAM_TYPES];
+const ALL_EXAM_OPTIONS =['Overall', ...EDITABLE_EXAM_TYPES];
 
 const EXAM_KEY_MAPPING = {
     'Assignment-1': 'AT1', 'Unitest-1': 'UT1', 'Assignment-2': 'AT2',
@@ -101,7 +102,7 @@ const EXAM_DISPLAY_MAPPING = {
     'Total': 'Overall'
 };
 
-const MONTHS = [
+const MONTHS =[
     'June', 'July', 'August', 'September', 'October', 'November',
     'December', 'January', 'February', 'March', 'April', 'May'
 ];
@@ -269,7 +270,10 @@ const StudentRow = React.memo(({
 
 const MarksEntryScreen = ({ route, navigation }) => {
     const { classGroup } = route.params;
-    const subjects = CLASS_SUBJECTS[classGroup] || [];
+    const subjects = CLASS_SUBJECTS[classGroup] ||[];
+
+    // Responsive hook for dynamic resizing of modals
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
     // Theme Hooks
     const colorScheme = useColorScheme();
@@ -288,7 +292,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
 
     // Original Data Snapshots (For Differential Saving)
     const [originalMarksData, setOriginalMarksData] = useState({});
-    const [originalAttendanceData, setOriginalAttendanceData] = useState({});
+    const[originalAttendanceData, setOriginalAttendanceData] = useState({});
 
     const [teacherAssignments, setTeacherAssignments] = useState([]);
 
@@ -300,18 +304,31 @@ const MarksEntryScreen = ({ route, navigation }) => {
     
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
+    const[refreshing, setRefreshing] = useState(false);
 
     // New State for handling heavy tab switching
-    const [isSwitchingTab, setIsSwitchingTab] = useState(false);
+    const[isSwitchingTab, setIsSwitchingTab] = useState(false);
+
+    // Custom Dropdown State
+    const[dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     useEffect(() => {
         fetchClassData();
-    }, [classGroup]);
+    },[classGroup]);
 
     useEffect(() => {
         setIsEditing(false);
-    }, [selectedExam, viewMode]);
+    },[selectedExam, viewMode]);
 
     // Handle Tab Switching with InteractionManager
     const handleTabChange = (mode) => {
@@ -336,7 +353,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             const { students, marks, attendance, assignments } = response.data;
 
             setStudents(students);
-            setTeacherAssignments(assignments || []);
+            setTeacherAssignments(assignments ||[]);
 
             // Process Marks Data
             const marksMap = {};
@@ -407,18 +424,16 @@ const MarksEntryScreen = ({ route, navigation }) => {
             [studentId]: {
                 ...prev[studentId],
                 [subject]: {
-                    ...prev[studentId][subject],
-                    [examType]: cleanValue
+                    ...prev[studentId][subject],[examType]: cleanValue
                 }
             }
         }));
-    }, []);
+    },[]);
 
     const updateAttendance = useCallback((studentId, month, field, value) => {
         const cleanValue = value.replace(/[^0-9]/g, '');
         setAttendanceData(prev => ({
-            ...prev,
-            [studentId]: {
+            ...prev,[studentId]: {
                 ...prev[studentId],
                 [month]: {
                     ...prev[studentId][month],
@@ -426,7 +441,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 }
             }
         }));
-    }, []);
+    },[]);
 
     // Moved calculations to useCallback to be stable
     const calculateOverallForSubject = useCallback((studentId, subject) => {
@@ -446,7 +461,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             total += parseFloat(overall) || 0;
         });
         return total;
-    }, [marksData, subjects, calculateOverallForSubject]);
+    },[marksData, subjects, calculateOverallForSubject]);
 
     const getSortedStudents = () => {
         if (sortOrder === 'rollno') {
@@ -475,7 +490,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
     // Save Marks Logic (Kept same as provided)
     const saveMarks = async () => {
         setSaving(true);
-        const marksPayload = [];
+        const marksPayload =[];
 
         students.forEach(student => {
             subjects.forEach(subject => {
@@ -538,7 +553,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
     // Save Attendance Logic
     const saveAttendance = async () => {
         setSaving(true);
-        const attendancePayload = [];
+        const attendancePayload =[];
 
         students.forEach(student => {
             MONTHS.forEach(month => {
@@ -599,7 +614,7 @@ const MarksEntryScreen = ({ route, navigation }) => {
             calculateOverallForSubject={calculateOverallForSubject}
             calculateStudentGrandTotal={calculateStudentGrandTotal}
         />
-    ), [
+    ),[
         viewMode, subjects, marksData, attendanceData, selectedExam, 
         isOverallView, canEditScreen, theme, updateMarks, updateAttendance, 
         userRole, userId, teacherAssignments
@@ -659,31 +674,39 @@ const MarksEntryScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Filters */}
+            {/* Filters (Replaced with Custom Dropdowns) */}
             {viewMode === 'marks' && (
                 <View style={styles.filterContainer}>
-                    <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-                        <Picker
-                            selectedValue={selectedExam}
-                            onValueChange={setSelectedExam}
-                            style={[styles.picker, { color: theme.textMain }]}
-                            dropdownIconColor={theme.textMain}
-                        >
-                            {ALL_EXAM_OPTIONS.map(exam => <Picker.Item key={exam} label={exam} value={exam} color={theme.textMain} />)}
-                        </Picker>
-                    </View>
-                    <View style={[styles.filterBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
-                        <Picker
-                            selectedValue={sortOrder}
-                            onValueChange={setSortOrder}
-                            style={[styles.picker, { color: theme.textMain }]}
-                            dropdownIconColor={theme.textMain}
-                        >
-                            <Picker.Item label="Roll No" value="rollno" color={theme.textMain} />
-                            <Picker.Item label="High to Low" value="descending" color={theme.textMain} />
-                            <Picker.Item label="Low to High" value="ascending" color={theme.textMain} />
-                        </Picker>
-                    </View>
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+                        onPress={() => openDropdown(
+                            'Select Exam',
+                            ALL_EXAM_OPTIONS.map(exam => ({ label: exam, value: exam })),
+                            selectedExam,
+                            setSelectedExam
+                        )}
+                    >
+                        <Text style={{ color: theme.textMain, fontSize: 14 }}>{selectedExam}</Text>
+                        <Icon name="chevron-down" size={20} color={theme.textSub} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        style={[styles.customDropdownTrigger, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+                        onPress={() => openDropdown(
+                            'Sort By',[
+                                { label: 'Roll No', value: 'rollno' },
+                                { label: 'High to Low', value: 'descending' },
+                                { label: 'Low to High', value: 'ascending' }
+                            ],
+                            sortOrder,
+                            setSortOrder
+                        )}
+                    >
+                        <Text style={{ color: theme.textMain, fontSize: 14 }}>
+                            {sortOrder === 'rollno' ? 'Roll No' : sortOrder === 'descending' ? 'High to Low' : 'Low to High'}
+                        </Text>
+                        <Icon name="chevron-down" size={20} color={theme.textSub} />
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -778,6 +801,34 @@ const MarksEntryScreen = ({ route, navigation }) => {
                     )
                 ) : null}
             </View>
+
+            {/* SHARED CUSTOM DROPDOWN SELECTOR MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: theme.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </KeyboardAvoidingView>
     );
 };
@@ -823,14 +874,22 @@ const styles = StyleSheet.create({
     tabButton: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' },
     tabText: { fontSize: 16, fontWeight: '500' },
 
-    // --- FILTERS ---
+    // --- FILTERS (Using Custom Dropdown Trigger) ---
     filterContainer: { flexDirection: 'row', gap: 12, paddingHorizontal: 15, marginBottom: 10 },
-    filterBox: { flex: 1, borderRadius: 10, overflow: 'hidden', borderWidth: 1, height: 45, justifyContent: 'center' },
-    picker: { width: '100%' },
+    customDropdownTrigger: { 
+        flex: 1, 
+        borderWidth: 1, 
+        borderRadius: 10, 
+        height: 45, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        paddingHorizontal: 10 
+    },
 
     // --- TABLE STRUCTURE ---
     tableWrapper: { 
-        minWidth: width, 
+        minWidth: width, // Safe to use the top-level Dimension width here
         paddingHorizontal: 10,
     },
     tableRow: { 
@@ -927,6 +986,13 @@ const styles = StyleSheet.create({
 
     editButton: { backgroundColor: '#e67e22', width: '90%', padding: 14, borderRadius: 25, alignItems: 'center', elevation: 3, flexDirection: 'row', justifyContent: 'center' },
     editButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default MarksEntryScreen;

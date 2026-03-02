@@ -1,31 +1,32 @@
 /**
  * File: src/screens/report/TeacherAssignmentScreen.js
  * Purpose: Admin screen to assign teachers to subjects.
- * Updated: Responsive Design & Dark/Light Mode Support.
+ * Updated: Responsive Design, Dark/Light Mode Support & Custom Dropdown Fix for iOS.
  */
 import React, { useState, useEffect } from 'react';
 import { 
     View, Text, StyleSheet, ScrollView, Alert, 
-    ActivityIndicator, TouchableOpacity, useColorScheme, StatusBar 
+    ActivityIndicator, TouchableOpacity, useColorScheme, StatusBar,
+    Modal, FlatList, useWindowDimensions 
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import apiClient from '../../api/client';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // --- CONSTANTS ---
 const CLASS_SUBJECTS = {
     'LKG': ['All Subjects'],
-    'UKG': ['All Subjects'],
-    'Class 1': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 2': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 3': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 4': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 5': ['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
-    'Class 6': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 7': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 8': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 9': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
-    'Class 10': ['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
+    'UKG':['All Subjects'],
+    'Class 1':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 2':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 3':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 4':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 5':['Telugu', 'English', 'Hindi', 'EVS', 'Maths'],
+    'Class 6':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 7':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 8':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 9':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social'],
+    'Class 10':['Telugu', 'English', 'Hindi', 'Maths', 'Science', 'Social']
 };
 
 // --- THEME CONFIGURATION ---
@@ -70,6 +71,9 @@ const DarkColors = {
 const TeacherAssignmentScreen = ({ route }) => {
     const { classGroup } = route.params;
     
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     // Theme Hooks
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -81,7 +85,16 @@ const TeacherAssignmentScreen = ({ route }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    const subjects = CLASS_SUBJECTS[classGroup] || [];
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const subjects = CLASS_SUBJECTS[classGroup] ||[];
 
     useEffect(() => {
         fetchData();
@@ -108,6 +121,10 @@ const TeacherAssignmentScreen = ({ route }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
     };
 
     const handleAssign = async (subject) => {
@@ -137,8 +154,7 @@ const TeacherAssignmentScreen = ({ route }) => {
     const handleRemove = async (assignmentId) => {
         Alert.alert(
             'Confirm Removal',
-            'Are you sure you want to remove this teacher assignment? \n\nNote: Student marks will NOT be deleted.',
-            [
+            'Are you sure you want to remove this teacher assignment? \n\nNote: Student marks will NOT be deleted.',[
                 { text: 'Cancel', style: 'cancel' },
                 {
                     text: 'Remove',
@@ -209,28 +225,27 @@ const TeacherAssignmentScreen = ({ route }) => {
                                     </TouchableOpacity>
                                 </View>
                             ) : (
-                                // UNASSIGNED STATE (PICKER)
+                                // UNASSIGNED STATE (CUSTOM DROPDOWN)
                                 <View style={styles.assignContainer}>
-                                    <View style={[styles.pickerContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-                                        <Picker
-                                            selectedValue={selectedTeachers[subject] || ''}
-                                            onValueChange={(value) => 
-                                                setSelectedTeachers(prev => ({ ...prev, [subject]: value }))
-                                            }
-                                            style={[styles.picker, { color: theme.textMain }]}
-                                            dropdownIconColor={theme.textMain}
-                                        >
-                                            <Picker.Item label="Select Teacher..." value="" color={theme.textSub}/>
-                                            {teachers.map(teacher => (
-                                                <Picker.Item 
-                                                    key={teacher.id} 
-                                                    label={teacher.full_name} 
-                                                    value={teacher.id.toString()} 
-                                                    color={theme.textMain}
-                                                />
-                                            ))}
-                                        </Picker>
-                                    </View>
+                                    <TouchableOpacity 
+                                        style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                                        onPress={() => openDropdown(
+                                            `Select Teacher for ${subject}`,[
+                                                { label: 'Select Teacher...', value: '' },
+                                                ...teachers.map(t => ({ label: t.full_name, value: t.id.toString() }))
+                                            ],
+                                            selectedTeachers[subject] || '',
+                                            (val) => setSelectedTeachers(prev => ({ ...prev, [subject]: val }))
+                                        )}
+                                    >
+                                        <Text style={{ color: selectedTeachers[subject] ? theme.textMain : theme.textSub, fontSize: 14 }} numberOfLines={1}>
+                                            {selectedTeachers[subject] 
+                                                ? teachers.find(t => t.id.toString() === selectedTeachers[subject])?.full_name || 'Select Teacher...' 
+                                                : 'Select Teacher...'}
+                                        </Text>
+                                        <Icon name="chevron-down" size={20} color={theme.textSub} />
+                                    </TouchableOpacity>
+                                    
                                     <TouchableOpacity
                                         style={[
                                             styles.assignButton, 
@@ -248,6 +263,33 @@ const TeacherAssignmentScreen = ({ route }) => {
                     );
                 })}
             </View>
+
+            {/* SHARED CUSTOM DROPDOWN MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: theme.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </ScrollView>
     );
 };
@@ -281,10 +323,25 @@ const styles = StyleSheet.create({
 
     // Assign Section
     assignContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    pickerContainer: { flex: 1, borderWidth: 1, borderRadius: 8, height: 45, justifyContent: 'center', overflow: 'hidden' },
-    picker: { width: '100%' },
+    customDropdownTrigger: { 
+        flex: 1, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        height: 45, 
+        paddingHorizontal: 12 
+    },
     assignButton: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: 'center', elevation: 2 },
-    assignButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 }
+    assignButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherAssignmentScreen;

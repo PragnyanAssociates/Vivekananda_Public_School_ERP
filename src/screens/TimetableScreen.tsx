@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   Dimensions, TouchableOpacity, Modal, ActivityIndicator, Alert,
-  StatusBar, useColorScheme
+  StatusBar, useColorScheme, FlatList, useWindowDimensions
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import * as Animatable from 'react-native-animatable';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
@@ -51,9 +51,9 @@ const DarkColors = {
 };
 
 // --- Constants ---
-const CLASS_GROUPS = ['Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5', 'Class 4', 'Class 3', 'Class 2', 'Class 1',  'UKG', 'LKG'];
+const CLASS_GROUPS =['Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5', 'Class 4', 'Class 3', 'Class 2', 'Class 1',  'UKG', 'LKG'];
 const DAYS: Day[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const PERIOD_DEFINITIONS: PeriodDefinition[] = [
+const PERIOD_DEFINITIONS: PeriodDefinition[] =[
   { period: 1, time: '09:00-09:45' }, { period: 2, time: '09:45-10:30' },
   { period: 3, time: '10:30-10:45', isBreak: true },
   { period: 4, time: '10:45-11:30' }, { period: 5, time: '11:30-12:15' },
@@ -63,7 +63,7 @@ const PERIOD_DEFINITIONS: PeriodDefinition[] = [
   { period: 10, time: '03:15-04:00' },
 ];
 
-// Responsive Dimensions
+// Responsive Dimensions kept at top for stylesheets
 const { width } = Dimensions.get('window');
 const TABLE_HORIZONTAL_MARGIN = 10;
 const tableContentWidth = width - TABLE_HORIZONTAL_MARGIN * 2;
@@ -71,7 +71,7 @@ const timeColumnWidth = Math.floor(tableContentWidth * 0.22);
 const dayColumnWidth = Math.floor((tableContentWidth * 0.78) / 6);
 
 // Helper to get headers based on theme
-const getTableHeaders = (isDark: boolean) => [
+const getTableHeaders = (isDark: boolean) =>[
   { name: 'TIME', color: isDark ? '#263238' : '#EBEBEB', textColor: isDark ? '#B0BEC5' : '#343A40', width: timeColumnWidth },
   { name: 'MON', color: isDark ? '#1B5E20' : '#E0F7FA', textColor: isDark ? '#E0E0E0' : '#455A64', width: dayColumnWidth },
   { name: 'TUE', color: isDark ? '#F57F17' : '#FFFDE7', textColor: isDark ? '#E0E0E0' : '#455A64', width: dayColumnWidth },
@@ -82,7 +82,7 @@ const getTableHeaders = (isDark: boolean) => [
 ];
 
 // Subject colors
-const subjectColorPalette = ['#B39DDB', '#80DEEA', '#FFAB91', '#A5D6A7', '#FFE082', '#F48FB1', '#C5CAE9', '#DCE775', '#FFCC80', '#B0BEC5'];
+const subjectColorPalette =['#B39DDB', '#80DEEA', '#FFAB91', '#A5D6A7', '#FFE082', '#F48FB1', '#C5CAE9', '#DCE775', '#FFCC80', '#B0BEC5'];
 const subjectColorMap = new Map<string, string>();
 let colorIndex = 0;
 const getSubjectColor = (subject?: string): string => {
@@ -96,43 +96,57 @@ const getSubjectColor = (subject?: string): string => {
 
 // --- Reusable Component for Admin Slot Editing Modal ---
 const EditSlotModal = ({ isVisible, onClose, onSave, slotInfo, teachers, currentData, selectedClass, colors }: any) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [selectedTeacherId, setSelectedTeacherId] = useState<number | undefined>(currentData?.teacher_id);
   const [selectedSubject, setSelectedSubject] = useState<string | undefined>(currentData?.subject_name);
 
+  // Custom Dropdown Config
+  const [dropdownConfig, setDropdownConfig] = useState({
+    visible: false, title: '', data: [] as { label: string, value: string }[], selectedValue: '', onSelect: (val: any) => {}
+  });
+
+  const openDropdown = (title: string, data: any[], selectedValue: string, onSelect: (val: any) => void) => {
+    setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+  };
+
   useEffect(() => { setSelectedTeacherId(currentData?.teacher_id); setSelectedSubject(currentData?.subject_name); }, [currentData, isVisible]);
 
-  const availableSubjects = useMemo(() => { if (!selectedTeacherId) return []; const teacher = teachers.find((t: any) => t.id === selectedTeacherId); return teacher?.subjects_taught || []; }, [selectedTeacherId, teachers]);
+  const availableSubjects = useMemo(() => { if (!selectedTeacherId) return[]; const teacher = teachers.find((t: any) => t.id === selectedTeacherId); return teacher?.subjects_taught || []; }, [selectedTeacherId, teachers]);
   const className = slotInfo.class_group || selectedClass;
+
+  const teacherName = teachers.find((t: any) => t.id === selectedTeacherId)?.full_name || '-- Select Teacher --';
 
   return (
     <Modal visible={isVisible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
-        <Animatable.View animation="zoomIn" duration={400} style={[styles.modalContent, { backgroundColor: colors.cardBg }]}>
+        <Animatable.View animation="zoomIn" duration={400} style={[styles.modalContent, { backgroundColor: colors.cardBg, width: screenWidth * 0.9 }]}>
           <Text style={[styles.modalTitle, { color: colors.textMain }]}>Edit Slot</Text>
           <Text style={[styles.modalSubtitle, { color: colors.textSub }]}>{className} - {slotInfo.day} - Period {slotInfo.period}</Text>
 
           <Text style={[styles.inputLabel, { color: colors.textMain }]}>Teacher</Text>
-          <View style={[styles.modalPickerStyle, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Picker selectedValue={selectedTeacherId?.toString() || 'none'}
-              onValueChange={(itemValue: string) => { const teacherId = itemValue === 'none' ? undefined : parseInt(itemValue); setSelectedTeacherId(teacherId); setSelectedSubject(undefined); }}
-              style={[styles.picker, { color: colors.textMain }]}
-              dropdownIconColor={colors.textMain}>
-              <Picker.Item label="-- Select Teacher --" value="none" color={colors.textMain} />
-              {teachers.map((t: any) => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color={colors.textMain} />))}
-            </Picker>
-          </View>
+          <TouchableOpacity 
+              style={[styles.customDropdownTrigger, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+              onPress={() => openDropdown('Select Teacher',[{label: '-- Select Teacher --', value: 'none'}, ...teachers.map((t: any) => ({label: t.full_name, value: t.id.toString()}))], selectedTeacherId?.toString() || 'none', (val) => {
+                  const teacherId = val === 'none' ? undefined : parseInt(val); 
+                  setSelectedTeacherId(teacherId); 
+                  setSelectedSubject(undefined);
+              })}
+          >
+              <Text style={{ color: colors.textMain, fontSize: 16 }}>{teacherName}</Text>
+              <Icon name="chevron-down" size={24} color={colors.textSub} />
+          </TouchableOpacity>
 
           <Text style={[styles.inputLabel, { color: colors.textMain }]}>Subject</Text>
-          <View style={[styles.modalPickerStyle, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Picker selectedValue={selectedSubject || 'none'}
-              onValueChange={(itemValue: string) => setSelectedSubject(itemValue === 'none' ? undefined : itemValue)}
-              style={[styles.picker, { color: colors.textMain }]}
-              enabled={!!selectedTeacherId && availableSubjects.length > 0}
-              dropdownIconColor={colors.textMain}>
-              <Picker.Item label="-- Select Subject --" value="none" color={colors.textMain} />
-              {availableSubjects.map((s: any) => (<Picker.Item key={s} label={s} value={s} color={colors.textMain} />))}
-            </Picker>
-          </View>
+          <TouchableOpacity 
+              style={[styles.customDropdownTrigger, { backgroundColor: colors.inputBg, borderColor: colors.border, opacity: (!!selectedTeacherId && availableSubjects.length > 0) ? 1 : 0.6 }]}
+              disabled={!(!!selectedTeacherId && availableSubjects.length > 0)}
+              onPress={() => openDropdown('Select Subject',[{label: '-- Select Subject --', value: 'none'}, ...availableSubjects.map((s: any) => ({label: s, value: s}))], selectedSubject || 'none', (val) => {
+                  setSelectedSubject(val === 'none' ? undefined : val);
+              })}
+          >
+              <Text style={{ color: colors.textMain, fontSize: 16 }}>{selectedSubject || '-- Select Subject --'}</Text>
+              <Icon name="chevron-down" size={24} color={colors.textSub} />
+          </TouchableOpacity>
 
           <View style={styles.modalButtonContainer}>
             <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.danger }]} onPress={() => onSave({})}><Text style={styles.modalButtonText}>Clear Slot</Text></TouchableOpacity>
@@ -142,11 +156,40 @@ const EditSlotModal = ({ isVisible, onClose, onSave, slotInfo, teachers, current
           <TouchableOpacity style={styles.closeButton} onPress={onClose}><Text style={[styles.closeButtonText, { color: colors.primary }]}>Cancel</Text></TouchableOpacity>
         </Animatable.View>
       </View>
+
+      {/* Internal Custom Dropdown Modal for EditSlotModal */}
+      <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+          <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+              <View style={[styles.dropdownModal, { backgroundColor: colors.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                  <Text style={[styles.dropdownTitle, { color: colors.primary }]}>{dropdownConfig.title}</Text>
+                  <FlatList
+                      data={dropdownConfig.data}
+                      keyExtractor={(item, index) => item.value + index}
+                      renderItem={({ item }) => (
+                          <TouchableOpacity 
+                              style={[styles.dropdownItem, { borderBottomColor: colors.border }]} 
+                              onPress={() => {
+                                  dropdownConfig.onSelect(item.value);
+                                  setDropdownConfig({ ...dropdownConfig, visible: false });
+                              }}
+                          >
+                              <Text style={[
+                                  styles.dropdownItemText, 
+                                  { color: colors.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                              ]}>{item.label}</Text>
+                          </TouchableOpacity>
+                      )}
+                  />
+              </View>
+          </TouchableOpacity>
+      </Modal>
+
     </Modal>
   );
 };
 
 const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { user, isLoading: isAuthLoading } = useAuth();
   const navigation = useNavigation<any>();
   const colorScheme = useColorScheme();
@@ -154,14 +197,23 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
   const COLORS = isDark ? DarkColors : LightColors;
   const tableHeaders = getTableHeaders(isDark);
 
-  const [activeTab, setActiveTab] = useState<'academic' | 'personal'>('academic');
-  const [isTimetableLoading, setIsTimetableLoading] = useState(true);
-  const [apiTimetableData, setApiTimetableData] = useState<TimetableSlotFromAPI[]>([]);
+  const[activeTab, setActiveTab] = useState<'academic' | 'personal'>('academic');
+  const[isTimetableLoading, setIsTimetableLoading] = useState(true);
+  const[apiTimetableData, setApiTimetableData] = useState<TimetableSlotFromAPI[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState<number | undefined>(undefined);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ day: Day; period: number; class_group?: string } | null>(null);
+
+  // Custom Dropdown State for Main Screen
+  const[dropdownConfig, setDropdownConfig] = useState({
+    visible: false, title: '', data:[] as { label: string, value: string }[], selectedValue: '', onSelect: (val: any) => {}
+  });
+
+  const openDropdown = (title: string, data: any[], selectedValue: string, onSelect: (val: any) => void) => {
+    setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+  };
 
   const fetchTeachers = async () => { try { const response = await apiClient.get('/teachers'); setTeachers(response.data); } catch (error: any) { Alert.alert('Error', error.response?.data?.message || 'Failed to fetch teachers list.'); } };
 
@@ -171,12 +223,12 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
     if (user.role === 'admin') { fetchTeachers(); setSelectedClass(initialClass); }
     else if (user.role === 'teacher') { setSelectedClass(initialClass); setSelectedTeacherId(user.id); setActiveTab('personal'); }
     else if (user.role === 'student' && user.class_group) { setSelectedClass(user.class_group); setActiveTab('academic'); }
-  }, [user, isAuthLoading, isEmbedded]);
+  },[user, isAuthLoading, isEmbedded]);
 
   useEffect(() => {
     if (isEmbedded) return;
     if (user?.role === 'admin' && teachers.length > 0 && selectedTeacherId === undefined) { setSelectedTeacherId(teachers[0].id); }
-  }, [user, teachers, selectedTeacherId, isEmbedded]);
+  },[user, teachers, selectedTeacherId, isEmbedded]);
 
   const fetchTimetable = useCallback(async () => {
     setIsTimetableLoading(true);
@@ -210,7 +262,7 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
     } finally {
       setIsTimetableLoading(false);
     }
-  }, [user, isAuthLoading, activeTab, selectedClass, selectedTeacherId, isEmbedded, propTeacherId]);
+  },[user, isAuthLoading, activeTab, selectedClass, selectedTeacherId, isEmbedded, propTeacherId]);
 
   useEffect(() => { fetchTimetable(); }, [fetchTimetable]);
 
@@ -236,7 +288,7 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
       }
     }
     return { scheduleData: data, headerTitle: title };
-  }, [apiTimetableData, activeTab, selectedClass, selectedTeacherId, teachers, user, isEmbedded]);
+  },[apiTimetableData, activeTab, selectedClass, selectedTeacherId, teachers, user, isEmbedded]);
 
   const handleSlotPress = (day: Day, period: number, currentSlotData?: RenderablePeriod) => {
     if (isEmbedded || user?.role !== 'admin') return;
@@ -247,7 +299,6 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
       else if (activeTab === 'personal') { Alert.alert('Assignment Rule', 'To assign a new class, please use the "Academic Timetable" tab. To modify an existing slot, click an assigned period on this view.'); return; }
       else { return; }
     }
-    const existingSlot = apiTimetableData.find(d => d.day_of_week === day && d.period_number === period && d.class_group === classGroupToModify);
     setSelectedSlot({ day, period, class_group: classGroupToModify });
     setIsModalVisible(true);
   };
@@ -345,7 +396,7 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
-      <ScrollView contentContainerStyle={styles.pageContainer}>
+      <ScrollView contentContainerStyle={styles.pageContainer} showsVerticalScrollIndicator={false}>
 
         {/* --- HEADER CARD --- */}
         <Animatable.View animation="fadeInDown" duration={600}>
@@ -374,28 +425,60 @@ const TimetableScreen = ({ teacherId: propTeacherId, isEmbedded = false }: any) 
           </Animatable.View>
         )}
 
-        {/* Filters/Pickers */}
+        {/* Filters/Pickers (Custom Dropdowns) */}
         {(showClassPicker || showTeacherPicker || user?.role === 'student') && (
           <Animatable.View animation="fadeIn" duration={500} delay={200} style={styles.filterContainer}>
             {(showClassPicker || user?.role === 'student') && (
-              <View style={[styles.pickerWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                <Picker selectedValue={selectedClass} onValueChange={(itemValue: string) => setSelectedClass(itemValue)} style={[styles.picker, { color: COLORS.textMain }]} itemStyle={[styles.pickerItem, { color: COLORS.textMain }]} dropdownIconColor={COLORS.textMain} enabled={user?.role !== 'student'}>
-                  {CLASS_GROUPS.map(option => (<Picker.Item key={option} label={option} value={option} color={COLORS.textMain} />))}
-                </Picker>
-              </View>
+              <TouchableOpacity 
+                  style={[styles.customDropdownTrigger, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}
+                  disabled={user?.role === 'student'}
+                  onPress={() => openDropdown('Select Class', CLASS_GROUPS.map(c => ({label: c, value: c})), selectedClass, setSelectedClass)}
+              >
+                  <Text style={{ color: COLORS.textMain, fontSize: 16 }}>{selectedClass}</Text>
+                  {user?.role !== 'student' && <Icon name="chevron-down" size={24} color={COLORS.textSub} />}
+              </TouchableOpacity>
             )}
             {showTeacherPicker && (
-              <View style={[styles.pickerWrapper, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                <Picker selectedValue={selectedTeacherId?.toString()} onValueChange={(itemValue: string) => setSelectedTeacherId(parseInt(itemValue))} style={[styles.picker, { color: COLORS.textMain }]} itemStyle={[styles.pickerItem, { color: COLORS.textMain }]} dropdownIconColor={COLORS.textMain}>
-                  {displayableTeacherList.map(t => (<Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color={COLORS.textMain} />))}
-                </Picker>
-              </View>
+              <TouchableOpacity 
+                  style={[styles.customDropdownTrigger, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}
+                  onPress={() => openDropdown('Select Teacher', displayableTeacherList.map(t => ({label: t.full_name, value: t.id.toString()})), selectedTeacherId?.toString() || '', (val) => setSelectedTeacherId(parseInt(val)))}
+              >
+                  <Text style={{ color: COLORS.textMain, fontSize: 16 }}>{teachers.find(t => t.id === selectedTeacherId)?.full_name || 'Select Teacher'}</Text>
+                  <Icon name="chevron-down" size={24} color={COLORS.textSub} />
+              </TouchableOpacity>
             )}
           </Animatable.View>
         )}
 
         {TimetableGrid}
       </ScrollView>
+
+      {/* SHARED CUSTOM DROPDOWN MODAL FOR MAIN SCREEN */}
+      <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+          <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+              <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                  <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                  <FlatList
+                      data={dropdownConfig.data}
+                      keyExtractor={(item, index) => item.value + index}
+                      renderItem={({ item }) => (
+                          <TouchableOpacity 
+                              style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                              onPress={() => {
+                                  dropdownConfig.onSelect(item.value);
+                                  setDropdownConfig({ ...dropdownConfig, visible: false });
+                              }}
+                          >
+                              <Text style={[
+                                  styles.dropdownItemText, 
+                                  { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                              ]}>{item.label}</Text>
+                          </TouchableOpacity>
+                      )}
+                  />
+              </View>
+          </TouchableOpacity>
+      </Modal>
 
       {/* Edit Modal */}
       {selectedSlot && (<EditSlotModal isVisible={isModalVisible} onClose={() => setIsModalVisible(false)} onSave={handleSaveChanges} slotInfo={selectedSlot} teachers={teachers} selectedClass={selectedClass} currentData={apiTimetableData.find(d => d.day_of_week === selectedSlot.day && d.period_number === selectedSlot.period && d.class_group === (selectedSlot.class_group || selectedSlot.class_group))} colors={COLORS} />)}
@@ -445,11 +528,18 @@ const styles = StyleSheet.create({
   tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
   tabButtonText: { fontSize: 14, fontWeight: '600' },
 
-  // Filters
+  // Filters (Custom Dropdown Triggers)
   filterContainer: { marginHorizontal: 15, marginBottom: 15 },
-  pickerWrapper: { borderWidth: 1, borderRadius: 8, marginVertical: 5, overflow: 'hidden', height: 45, justifyContent: 'center' },
-  picker: { width: '100%' },
-  pickerItem: { fontSize: 16, textAlign: 'left' },
+  customDropdownTrigger: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      justifyContent: 'space-between', 
+      borderWidth: 1, 
+      borderRadius: 8, 
+      marginVertical: 5, 
+      height: 50, 
+      paddingHorizontal: 15 
+  },
 
   // Table
   tableOuterContainer: { marginHorizontal: TABLE_HORIZONTAL_MARGIN, borderRadius: 12, overflow: 'hidden', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, borderWidth: 1 },
@@ -468,8 +558,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '90%', borderRadius: 15, padding: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
-  modalPickerStyle: { borderWidth: 1, borderRadius: 8, marginBottom: 10 },
+  modalContent: { borderRadius: 15, padding: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
   modalSubtitle: { fontSize: 16, textAlign: 'center', marginBottom: 20 },
   inputLabel: { fontSize: 16, marginTop: 15, marginBottom: 5, fontWeight: '500' },
@@ -478,6 +567,13 @@ const styles = StyleSheet.create({
   modalButtonText: { color: 'white', fontWeight: 'bold' },
   closeButton: { marginTop: 15, padding: 10 },
   closeButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600' },
+
+  // Custom Dropdown Modal Styles
+  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+  dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+  dropdownItemText: { fontSize: 16, textAlign: 'center' },
 
   embeddedTable: { marginHorizontal: 0, elevation: 0, shadowOpacity: 0, borderWidth: 0, borderRadius: 0, shadowRadius: 0 },
 });

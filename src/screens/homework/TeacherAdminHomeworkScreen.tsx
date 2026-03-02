@@ -3,10 +3,10 @@ import {
     View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity,
     Alert, Modal, TextInput, ScrollView, Linking, LayoutAnimation,
     UIManager, Platform, SafeAreaView, useColorScheme, StatusBar, Dimensions, Image,
-    KeyboardAvoidingView
+    KeyboardAvoidingView, useWindowDimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Animatable from 'react-native-animatable';
@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { SERVER_URL } from '../../../apiConfig';
 
+// Kept at top level to ensure existing stylesheets don't crash
 const { width, height } = Dimensions.get('window');
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -95,6 +96,9 @@ const TeacherAdminHomeworkScreen = () => {
 };
 
 const AssignmentList = ({ onSelectAssignment }) => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     const { user } = useAuth();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -103,7 +107,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     const [assignments, setAssignments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const [editingAssignment, setEditingAssignment] = useState(null);
+    const[editingAssignment, setEditingAssignment] = useState(null);
     const [studentClasses, setStudentClasses] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
@@ -114,16 +118,29 @@ const AssignmentList = ({ onSelectAssignment }) => {
 
     const initialAssignmentState = { title: '', description: '', due_date: '', homework_type: 'PDF' };
     const [newAssignment, setNewAssignment] = useState(initialAssignmentState);
-    const [questionsList, setQuestionsList] = useState(['']); 
+    const[questionsList, setQuestionsList] = useState(['']); 
     const [attachments, setAttachments] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Custom Dropdown State
+    const[dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     const fetchTeacherAssignments = useCallback(async () => {
         if (!user) return;
         setIsLoading(true);
         try {
             const response = await apiClient.get(`/homework/teacher/${user.id}`);
-            setAssignments(Array.isArray(response.data) ? response.data : []);
+            setAssignments(Array.isArray(response.data) ? response.data :[]);
         } catch (e) {
             console.error(e);
             Alert.alert("Error", "Failed to fetch assignments.");
@@ -159,16 +176,15 @@ const AssignmentList = ({ onSelectAssignment }) => {
                 return response.data;
             } catch (e) { return []; }
         }
-        return [];
+        return[];
     };
 
     const handleDateChange = (event, selectedDate) => {
-        setShowDatePicker(Platform.OS === 'ios'); 
+        if (Platform.OS === 'android') setShowDatePicker(false);
         if (selectedDate) {
-            setShowDatePicker(false);
             setDateObject(selectedDate);
             setNewAssignment({ ...newAssignment, due_date: selectedDate.toISOString().split('T')[0] });
-        } else { setShowDatePicker(false); }
+        }
     };
 
     const addQuestionField = () => {
@@ -229,8 +245,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     const handleMenuPress = (assignment) => {
         Alert.alert(
             "Manage Assignment",
-            `Options for "${assignment.title}"`,
-            [
+            `Options for "${assignment.title}"`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit", onPress: () => openEditModal(assignment) },
                 { text: "Delete", style: "destructive", onPress: () => handleDelete(assignment) }
@@ -239,7 +254,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
     };
 
     const handleDelete = (assignment) => {
-        Alert.alert("Confirm Delete", "Delete this assignment?", [{ text: "Cancel", style: 'cancel' }, {
+        Alert.alert("Confirm Delete", "Delete this assignment?",[{ text: "Cancel", style: 'cancel' }, {
             text: "Delete",
             style: 'destructive',
             onPress: async () => {
@@ -255,7 +270,7 @@ const AssignmentList = ({ onSelectAssignment }) => {
         try {
             const results = await pick({ type: [types.allFiles], allowMultiSelection: true });
             if (results) {
-                setAttachments(prev => [...prev, ...results]);
+                setAttachments(prev =>[...prev, ...results]);
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             }
         } catch (err) { if (!isCancel(err)) Alert.alert('Error', 'File picker error.'); }
@@ -366,29 +381,34 @@ const AssignmentList = ({ onSelectAssignment }) => {
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.modalView} contentContainerStyle={{ paddingBottom: 100 }}>
+                            
+                            {/* CUSTOM DROPDOWNS (Replaces Native Pickers) */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Homework Type *</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={newAssignment.homework_type} onValueChange={(v) => setNewAssignment({ ...newAssignment, homework_type: v })} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="PDF / File Upload" value="PDF" color={COLORS.textMain} />
-                                    <Picker.Item label="Written / Text Answer" value="Written" color={COLORS.textMain} />
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Homework Type',[{label: 'PDF / File Upload', value: 'PDF'}, {label: 'Written / Text Answer', value: 'Written'}], newAssignment.homework_type, (v) => setNewAssignment({ ...newAssignment, homework_type: v }))}
+                            >
+                                <Text style={{ color: COLORS.textMain, fontSize: 16 }}>{newAssignment.homework_type === 'PDF' ? 'PDF / File Upload' : 'Written / Text Answer'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Class *</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={selectedClass} onValueChange={handleClassChange} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="-- Select --" value="" color={COLORS.textMain} />
-                                    {studentClasses.map(c => <Picker.Item key={c} label={c} value={c} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Class', studentClasses.map(c => ({label: c, value: c})), selectedClass, handleClassChange)}
+                            >
+                                <Text style={{ color: selectedClass ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>{selectedClass || '-- Select Class --'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Subject *</Text>
-                            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} style={{ color: COLORS.textMain }} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="-- Select --" value="" color={COLORS.textMain} />
-                                    {subjects.map(s => <Picker.Item key={s} label={s} value={s} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Subject', subjects.map(s => ({label: s, value: s})), selectedSubject, setSelectedSubject)}
+                            >
+                                <Text style={{ color: selectedSubject ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>{selectedSubject || '-- Select Subject --'}</Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                            </TouchableOpacity>
                             
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Title *</Text>
                             <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Title" placeholderTextColor={COLORS.placeholder} value={newAssignment.title} onChangeText={t => setNewAssignment({ ...newAssignment, title: t })} />
@@ -430,12 +450,37 @@ const AssignmentList = ({ onSelectAssignment }) => {
                                 </TouchableOpacity>
                             </View>
 
+                            {/* FIXED IOS DATE PICKER */}
                             <Text style={[styles.label, { color: COLORS.textSub }]}>Due Date *</Text>
                             <TouchableOpacity onPress={() => setShowDatePicker(true)} style={[styles.datePickerInput, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
                                 <Text style={{ color: newAssignment.due_date ? COLORS.textMain : COLORS.placeholder }}>{newAssignment.due_date ? formatDateDisplay(newAssignment.due_date) : "DD/MM/YYYY"}</Text>
                                 <MaterialIcons name="event" size={20} color={COLORS.textSub} />
                             </TouchableOpacity>
-                            {showDatePicker && <DateTimePicker value={dateObject} mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()} />}
+                            {showDatePicker && (
+                                Platform.OS === 'ios' ? (
+                                    <Modal transparent animationType="slide" visible={showDatePicker} onRequestClose={() => setShowDatePicker(false)}>
+                                        <View style={styles.iosPickerOverlay}>
+                                            <View style={[styles.iosPickerContainer, { backgroundColor: COLORS.cardBg }]}>
+                                                <View style={[styles.iosPickerHeader, { borderBottomColor: COLORS.border }]}>
+                                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                                        <Text style={{ color: COLORS.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <DateTimePicker 
+                                                    value={dateObject} 
+                                                    mode="date" 
+                                                    display="spinner" 
+                                                    onChange={handleDateChange} 
+                                                    minimumDate={new Date()} 
+                                                    textColor={COLORS.textMain}
+                                                />
+                                            </View>
+                                        </View>
+                                    </Modal>
+                                ) : (
+                                    <DateTimePicker value={dateObject} mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()} />
+                                )
+                            )}
                             
                             <View style={styles.attachmentSection}>
                                 <TouchableOpacity style={[styles.uploadButton, { backgroundColor: COLORS.blue }]} onPress={selectAttachment}>
@@ -455,6 +500,34 @@ const AssignmentList = ({ onSelectAssignment }) => {
                             </View>
                         </ScrollView>
                     </SafeAreaView>
+
+                    {/* SHARED CUSTOM DROPDOWN SELECTOR MODAL */}
+                    <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                            <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                                <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                                <FlatList
+                                    data={dropdownConfig.data}
+                                    keyExtractor={(item, index) => item.value + index.toString()}
+                                    renderItem={({ item }) => (
+                                        <TouchableOpacity 
+                                            style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                            onPress={() => {
+                                                dropdownConfig.onSelect(item.value);
+                                                setDropdownConfig({ ...dropdownConfig, visible: false });
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.dropdownItemText, 
+                                                { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                            ]}>{item.label}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+
                 </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
@@ -468,15 +541,15 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     const [studentRoster, setStudentRoster] = useState([]);
     const [filteredRoster, setFilteredRoster] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const[isLoading, setIsLoading] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState(null);
-    const [gradeData, setGradeData] = useState({ grade: '', remarks: '' });
-    const [isGrading, setIsGrading] = useState(false);
+    const[gradeData, setGradeData] = useState({ grade: '', remarks: '' });
+    const[isGrading, setIsGrading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeTab, setActiveTab] = useState('All'); 
+    const[activeTab, setActiveTab] = useState('All'); 
     const [isViewerVisible, setIsViewerVisible] = useState(false);
     const [currentFile, setCurrentFile] = useState({ uri: '', type: '', name: '' });
-    const [submissionFiles, setSubmissionFiles] = useState([]);
+    const[submissionFiles, setSubmissionFiles] = useState([]);
 
     const fetchStudentRoster = useCallback(async () => {
         setIsLoading(true);
@@ -486,7 +559,7 @@ const SubmissionList = ({ assignment, onBack }) => {
             setFilteredRoster(response.data);
         } catch (e) { Alert.alert("Error", "Failed to fetch roster."); } 
         finally { setIsLoading(false); }
-    }, [assignment.id]);
+    },[assignment.id]);
 
     useEffect(() => { fetchStudentRoster(); }, [fetchStudentRoster]);
 
@@ -518,7 +591,7 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     const openDocumentViewer = (file) => {
         if (file.type === 'unknown') {
-            Alert.alert('Cannot View', 'This file type is not supported for in-app viewing.', [
+            Alert.alert('Cannot View', 'This file type is not supported for in-app viewing.',[
                 { text: 'Open Externally', onPress: () => Linking.openURL(file.uri) },
                 { text: 'Cancel', style: 'cancel' }
             ]);
@@ -530,7 +603,7 @@ const SubmissionList = ({ assignment, onBack }) => {
 
     // Helper to parse questions from the assignment object
     const getQuestionsList = () => {
-        let qList = [];
+        let qList =[];
         try {
             if (assignment.questions) {
                 const parsed = JSON.parse(assignment.questions);
@@ -567,7 +640,7 @@ const SubmissionList = ({ assignment, onBack }) => {
             </View>
 
             <View style={[styles.searchContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                <MaterialIcons name="search" size={22} color={COLORS.textSub} />
+                <MaterialIcons name="search" size={22} color={COLORS.textSub} style={styles.searchIcon} />
                 <TextInput style={[styles.searchInput, { color: COLORS.textMain }]} placeholder="Search student..." placeholderTextColor={COLORS.placeholder} value={searchQuery} onChangeText={t => setSearchQuery(t)} />
             </View>
 
@@ -578,7 +651,7 @@ const SubmissionList = ({ assignment, onBack }) => {
                     <TouchableOpacity style={[styles.card, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]} onPress={() => { 
                         setSelectedStudent(item); 
                         setGradeData({ grade: item.grade || '', remarks: item.remarks || '' });
-                        let files = [];
+                        let files =[];
                         if (item.submission_path) {
                             try {
                                 files = JSON.parse(item.submission_path);
@@ -604,8 +677,10 @@ const SubmissionList = ({ assignment, onBack }) => {
                         </View>
                     </TouchableOpacity>
                 )}
+                onRefresh={fetchStudentRoster}
+                refreshing={isLoading}
+                ListEmptyComponent={!isLoading ? <View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found.</Text></View> : null}
                 contentContainerStyle={{ paddingHorizontal: width * 0.04, paddingBottom: 20 }}
-                ListEmptyComponent={<View style={styles.center}><Text style={{ color: COLORS.textSub, marginTop: 20 }}>No students found.</Text></View>}
             />
 
             <Modal visible={!!selectedStudent} onRequestClose={() => setSelectedStudent(null)} animationType="slide">
@@ -719,7 +794,10 @@ const styles = StyleSheet.create({
     modalHeaderBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
     modalView: { flex: 1, padding: 20 },
     modalFormTitle: { fontSize: 20, fontWeight: 'bold' },
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 15, overflow: 'hidden', justifyContent: 'center' },
+    
+    // Custom Dropdown Triggers
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 8, marginBottom: 15, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
+    
     attachmentSection: { marginTop: 10, marginBottom: 20 },
     uploadButton: { flexDirection: 'row', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
     uploadButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 },
@@ -740,7 +818,7 @@ const styles = StyleSheet.create({
     label: { fontSize: 14, fontWeight: '600', marginBottom: 5, marginTop: 10 },
     input: { borderWidth: 1, padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 15 },
     modalButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-    emptyText: { textAlign: 'center', marginTop: 50 },
+    emptyText: { textAlign: 'center', marginTop: 50, fontSize: 15 },
     viewerModalContainer: { flex: 1 },
     viewerSafeArea: { flex: 1 },
     viewerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
@@ -749,6 +827,18 @@ const styles = StyleSheet.create({
     viewerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     pdfView: { flex: 1, width: width, height: height },
     imageView: { flex: 1, width: width, height: height },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' },
+
+    // iOS Picker Styles
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 }
 });
 
 export default TeacherAdminHomeworkScreen;

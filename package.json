@@ -1,5 +1,5 @@
 {
-  "name": "VPS",
+  "name": "vpschool",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -26,10 +26,7 @@
     "country-state-city": "^3.2.1",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
-    "express": "^5.1.0",
-    "mysql": "^2.18.1",
     "react": "19.0.0",
-    "react-icons": "^5.5.0",
     "react-native": "0.79.2",
     "react-native-animatable": "^1.4.0",
     "react-native-audio-recorder-player": "^4.5.0",
@@ -38,6 +35,7 @@
     "react-native-calendars": "^1.1313.0",
     "react-native-chart-kit": "^6.12.0",
     "react-native-dropdown-picker": "^5.4.6",
+    "react-native-element-dropdown": "^2.12.4",
     "react-native-emoji-selector": "^0.2.0",
     "react-native-fast-image": "^8.6.3",
     "react-native-file-access": "^3.2.0",

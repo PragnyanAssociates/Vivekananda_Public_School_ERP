@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, 
-    Alert, Platform, LayoutAnimation, SafeAreaView, useColorScheme, StatusBar, Dimensions 
+    Alert, Platform, SafeAreaView, useColorScheme, StatusBar, useWindowDimensions, Modal
 } from 'react-native';
 import apiClient from '../../api/client';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons'; 
 import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
 
 // --- THEME DEFINITIONS ---
 const LightColors = {
@@ -53,23 +51,12 @@ const DarkColors = {
 };
 
 // --- Local Interfaces ---
-interface AttendanceRecord {
-  date: string; 
-  status: 'P' | 'A' | 'L';
-}
-
-interface AttendanceReport {
-  stats: {
-    overallPercentage: string;
-    daysPresent: number;
-    daysAbsent: number;
-    totalDays: number; 
-  };
-  detailedHistory: AttendanceRecord[];
-}
+// (Kept as comments for JS context, matches TS structures)
+// interface AttendanceRecord { date: string; status: 'P' | 'A' | 'L'; }
+// interface AttendanceReport { stats: { overallPercentage: string; daysPresent: number; daysAbsent: number; totalDays: number; }; detailedHistory: AttendanceRecord[]; }
 
 // --- DATE FORMATTER HELPER (DD/MM/YYYY) ---
-const formatDate = (date: Date | string) => {
+const formatDate = (date) => {
     if (!date) return '';
     const d = typeof date === 'string' ? new Date(date) : date;
     const day = String(d.getDate()).padStart(2, '0');
@@ -81,7 +68,7 @@ const formatDate = (date: Date | string) => {
 // --- Reusable Sub-components ---
 
 // 1. Summary Card
-const SummaryCard = ({ label, value, color, delay, width = '23%', colors }) => ( 
+const SummaryCard = ({ label, value, color, delay, width = '48%', colors }) => ( 
     <Animatable.View animation="zoomIn" duration={500} delay={delay} style={[styles.summaryBox, { width: width, backgroundColor: colors.cardBg, borderColor: colors.border }]}>
         <Text style={[styles.summaryValue, { color }]}>{value}</Text>
         <Text style={[styles.summaryLabel, { color: colors.textSub }]}>{label}</Text>
@@ -91,7 +78,7 @@ const SummaryCard = ({ label, value, color, delay, width = '23%', colors }) => (
 // 2. History Record List Item
 const HistoryRecordCard = ({ item, index, colors }) => {
     const isPresent = item.status === 'P';
-    const statusText = item.status === 'P' ? 'Present' : (item.status === 'A' ? 'Absent' : 'Leave/Late');
+    const statusText = item.status === 'P' ? 'Present' : (item.status === 'A' ? 'Absent' : 'Late/Leave');
     const statusColor = isPresent ? colors.success : colors.danger;
 
     return (
@@ -145,32 +132,58 @@ const DailyStatusCard = ({ record, date, colors }) => {
     );
 };
 
-// --- Main Component ---
-interface TeacherReportViewProps {
-    teacherId: string;
-    headerTitle: string;
-    onBack?: () => void; 
-}
+// 4. Reusable Date Picker Wrapper (Fixes iOS issue)
+const CustomDatePicker = ({ visible, date, onChange, onClose, colors }) => {
+    if (!visible) return null;
 
-const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, headerTitle, onBack }) => {
+    if (Platform.OS === 'ios') {
+        return (
+            <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
+                <View style={styles.iosPickerOverlay}>
+                    <View style={[styles.iosPickerContainer, { backgroundColor: colors.cardBg }]}>
+                        <View style={[styles.iosPickerHeader, { borderBottomColor: colors.border }]}>
+                            <TouchableOpacity onPress={onClose}>
+                                <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <DateTimePicker
+                            value={date}
+                            mode="date"
+                            display="spinner"
+                            onChange={onChange}
+                            textColor={colors.textMain}
+                        />
+                    </View>
+                </View>
+            </Modal>
+        );
+    }
+    return <DateTimePicker value={date} mode="date" display="default" onChange={onChange} />;
+};
+
+// --- Main Component ---
+const TeacherReportView = ({ teacherId, headerTitle, onBack }) => {
+    
+    // Responsive Hook
+    const { width } = useWindowDimensions();
     
     // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
 
-    const [report, setReport] = useState<AttendanceReport | null>(null);
+    const [report, setReport] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [viewMode, setViewMode] = useState<'daily' | 'monthly' | 'yearly' | 'custom'>('daily'); 
+    const [viewMode, setViewMode] = useState('daily'); 
     
     // Date States
     const [selectedDate, setSelectedDate] = useState(new Date()); 
-    const [fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30))); 
+    const[fromDate, setFromDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30))); 
     const [toDate, setToDate] = useState(new Date());
     
     // Picker Visibility
     const [showMainPicker, setShowMainPicker] = useState(false);
-    const [showFromPicker, setShowFromPicker] = useState(false);
+    const[showFromPicker, setShowFromPicker] = useState(false);
     const [showToPicker, setShowToPicker] = useState(false);
 
     const API_BASE_URL = '/teacher-attendance';
@@ -179,7 +192,7 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
         if (!teacherId) return;
         setIsLoading(true);
         
-        const params: any = { period: viewMode };
+        const params = { period: viewMode };
         if (viewMode === 'daily') {
             params.targetDate = selectedDate.toISOString().slice(0, 10);
         } else if (viewMode === 'monthly') {
@@ -192,33 +205,34 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
         }
 
         try {
-            const response = await apiClient.get<AttendanceReport>(`${API_BASE_URL}/report/${teacherId}`, { params });
+            const response = await apiClient.get(`${API_BASE_URL}/report/${teacherId}`, { params });
             setReport(response.data);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Attendance Report Error:", error);
             Alert.alert("Error", error.response?.data?.message || "Failed to load attendance report.");
             setReport(null);
         } finally {
             setIsLoading(false);
         }
-    }, [teacherId, viewMode, selectedDate, fromDate, toDate]);
+    },[teacherId, viewMode, selectedDate, fromDate, toDate]);
 
     useEffect(() => {
         fetchReport();
-    }, [fetchReport]); 
+    },[fetchReport]); 
 
-    const onMainDateChange = (event: any, date?: Date) => {
-        setShowMainPicker(Platform.OS === 'ios'); 
+    // Picker Handlers that DO NOT auto-close on iOS
+    const onMainDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowMainPicker(false);
         if (date) setSelectedDate(date);
     };
 
-    const onFromDateChange = (event: any, date?: Date) => {
-        setShowFromPicker(Platform.OS === 'ios');
+    const onFromDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowFromPicker(false);
         if (date) setFromDate(date);
     };
 
-    const onToDateChange = (event: any, date?: Date) => {
-        setShowToPicker(Platform.OS === 'ios');
+    const onToDateChange = (event, date) => {
+        if (Platform.OS === 'android') setShowToPicker(false);
         if (date) setToDate(date);
     };
     
@@ -250,9 +264,9 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     <View style={[styles.headerIconContainer, { backgroundColor: COLORS.headerIconBg }]}>
                         <MaterialIcons name="history" size={24} color={COLORS.primary} />
                     </View>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]}>{headerTitle}</Text>
-                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]}>{subTitle}</Text>
+                    <View style={[styles.headerTextContainer, { maxWidth: width * 0.5 }]}>
+                        <Text style={[styles.headerTitle, { color: COLORS.textMain }]} numberOfLines={1}>{headerTitle}</Text>
+                        <Text style={[styles.headerSubtitle, { color: COLORS.textSub }]} numberOfLines={1}>{subTitle}</Text>
                     </View>
                 </View>
                 
@@ -274,7 +288,7 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                             { backgroundColor: COLORS.inputBg },
                             viewMode === mode && { backgroundColor: COLORS.primary }
                         ]} 
-                        onPress={() => setViewMode(mode as any)}
+                        onPress={() => setViewMode(mode)}
                     >
                         <Text style={[
                             styles.toggleButtonText, 
@@ -303,9 +317,10 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                 </Animatable.View>
             )}
 
-            {showMainPicker && <DateTimePicker value={selectedDate} mode="date" onChange={onMainDateChange} />}
-            {showFromPicker && <DateTimePicker value={fromDate} mode="date" onChange={onFromDateChange} />}
-            {showToPicker && <DateTimePicker value={toDate} mode="date" onChange={onToDateChange} />}
+            {/* iOS/Android Pickers */}
+            <CustomDatePicker visible={showMainPicker} date={selectedDate} onChange={onMainDateChange} onClose={() => setShowMainPicker(false)} colors={COLORS} />
+            <CustomDatePicker visible={showFromPicker} date={fromDate} onChange={onFromDateChange} onClose={() => setShowFromPicker(false)} colors={COLORS} />
+            <CustomDatePicker visible={showToPicker} date={toDate} onChange={onToDateChange} onClose={() => setShowToPicker(false)} colors={COLORS} />
 
             {isLoading ? <ActivityIndicator style={styles.loaderContainer} size="large" color={COLORS.primary} /> : (
                 <>
@@ -323,7 +338,7 @@ const TeacherReportView: React.FC<TeacherReportViewProps> = ({ teacherId, header
                     )}
                     
                     <FlatList
-                        data={report?.detailedHistory || []}
+                        data={report?.detailedHistory ||[]}
                         keyExtractor={(item) => item.date}
                         renderItem={({ item, index }) => <HistoryRecordCard item={item} index={index} colors={COLORS} />}
                         ListHeaderComponent={
@@ -363,7 +378,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4, 
         shadowOffset: { width: 0, height: 2 },
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     headerIconContainer: {
         borderRadius: 30,
         width: 45,
@@ -372,34 +387,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 12,
     },
-    headerTextContainer: { justifyContent: 'center' },
+    headerTextContainer: { justifyContent: 'center', flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: 'bold' },
     headerSubtitle: { fontSize: 13 },
-    headerSubtitleSmall: { fontSize: 12, fontWeight: '500' },
-    headerActionBtn: { padding: 8, borderRadius: 8, borderWidth: 1 },
+    headerActionBtn: { padding: 10, borderRadius: 8, borderWidth: 1, marginLeft: 10 },
 
     // Tabs
-    toggleContainer: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 5, marginBottom: 10 },
-    toggleButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: 4 },
-    toggleButtonText: { fontWeight: '600', fontSize: 12 },
+    toggleContainer: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', paddingVertical: 5, marginBottom: 10, paddingHorizontal: 10 },
+    toggleButton: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, marginHorizontal: 4, marginBottom: 5 },
+    toggleButtonText: { fontWeight: '600', fontSize: 13 },
 
     // Range Inputs
     rangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 10 },
-    dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 6, marginHorizontal: 5, borderWidth: 1, justifyContent: 'center' },
-    dateInputText: { fontSize: 12, fontWeight: '500' },
-    goButton: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 6, marginLeft: 5 },
-    goButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 },
+    dateInputBox: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 6, marginHorizontal: 5, borderWidth: 1, justifyContent: 'center' },
+    dateInputText: { fontSize: 13, fontWeight: '500' },
+    goButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 6, marginLeft: 5 },
+    goButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
 
-    // Summary Cards
-    summaryContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', paddingVertical: 15, marginHorizontal: 15, marginBottom: 10, borderRadius: 12, elevation: 2 },
-    summaryBox: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2, borderWidth: 1, borderRadius: 8 },
-    summaryValue: { fontSize: 20, fontWeight: 'bold' },
-    summaryLabel: { fontSize: 11, marginTop: 4, fontWeight: '500', textAlign: 'center' },
+    // Summary Cards (Set width to wrap perfectly on any size)
+    summaryContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 10, marginHorizontal: 15, marginBottom: 10, borderRadius: 12, elevation: 2 },
+    summaryBox: { alignItems: 'center', paddingVertical: 15, paddingHorizontal: 5, borderWidth: 1, borderRadius: 8, marginBottom: 10 },
+    summaryValue: { fontSize: 22, fontWeight: 'bold' },
+    summaryLabel: { fontSize: 12, marginTop: 4, fontWeight: '500', textAlign: 'center' },
     
     // Daily Card
     dailyContainer: { padding: 20, alignItems: 'center' },
-    dailyCard: { width: '90%', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
-    dailyStatusText: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+    dailyCard: { width: '90%', padding: 25, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+    dailyStatusText: { fontSize: 26, fontWeight: 'bold', marginTop: 10 },
     dailyDateText: { fontSize: 16, marginTop: 5 },
 
     // History List
@@ -411,6 +425,11 @@ const styles = StyleSheet.create({
     historyStatus: { fontSize: 13, fontWeight: 'bold' },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
     noDataText: { textAlign: 'center', marginTop: 20, fontSize: 16 },
+
+    // iOS Picker Styles
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 },
 });
 
 export default TeacherReportView;

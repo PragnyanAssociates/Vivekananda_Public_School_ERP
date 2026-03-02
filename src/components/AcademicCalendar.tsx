@@ -1,16 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView,
-  Dimensions, Modal, TextInput, Alert, Platform, ActivityIndicator, useColorScheme, StatusBar
+  Modal, TextInput, Alert, Platform, ActivityIndicator, useColorScheme, StatusBar,
+  useWindowDimensions, FlatList // Added useWindowDimensions & FlatList for responsiveness and custom dropdown
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker'; // Imported Picker
+// Removed the native Picker import to fix iOS UI overlapping issues.
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import * as Animatable from 'react-native-animatable';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-
-const { width: windowWidth } = Dimensions.get('window');
-const DAY_BOX_SIZE = Math.floor((windowWidth - 40) / 7);
 
 // --- THEME DEFINITIONS ---
 const LightColors = {
@@ -49,8 +47,7 @@ interface EventItem {
   event_date: string;
 }
 
-interface EventsData {
-  [dateKey: string]: EventItem[];
+interface EventsData {[dateKey: string]: EventItem[];
 }
 
 const eventTypesConfig: { [key: string]: { color: string; displayName: string } } = {
@@ -62,14 +59,21 @@ const eventTypesConfig: { [key: string]: { color: string; displayName: string } 
   'Other': { color: '#af2ffeff', displayName: 'Other' }
 };
 const DEFAULT_EVENT_TYPE = 'Meeting';
-const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const monthNames =['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const dayNames =['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+// Helper to format Date for UI Display (DD/MM/YYYY)
+const displayFormatDate = (dateKey: string | null) => {
+  if (!dateKey) return '';
+  const[year, month, day] = dateKey.split('-');
+  return `${day}/${month}/${year}`;
 };
 
 const AcademicCalendar = () => {
@@ -81,15 +85,23 @@ const AcademicCalendar = () => {
   const isDark = colorScheme === 'dark';
   const COLORS = isDark ? DarkColors : LightColors;
 
+  // Responsive Layout Hook (Ensures Calendar boxes fit exactly on any screen size)
+  const { width: windowWidth } = useWindowDimensions();
+  // 40 is total padding (15 on each side of scroll content + 5 on calendar grid)
+  const DAY_BOX_SIZE = Math.floor((windowWidth - 40) / 7);
+
   const [isLoading, setIsLoading] = useState(true);
   const [events, setEvents] = useState<EventsData>({});
   const [currentDisplayDate, setCurrentDisplayDate] = useState(new Date());
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const[selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [eventDetails, setEventDetails] = useState({ name: '', time: '', description: '', type: DEFAULT_EVENT_TYPE });
   
-  const today = useMemo(() => new Date(), []);
+  // --- NEW STATE: Custom Dropdown Control ---
+  const [isTypePickerVisible, setIsTypePickerVisible] = useState(false);
+
+  const today = useMemo(() => new Date(),[]);
   const month = currentDisplayDate.getMonth();
   const year = currentDisplayDate.getFullYear();
   const calendarRef = useRef<Animatable.View & View>(null);
@@ -108,7 +120,7 @@ const AcademicCalendar = () => {
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  },[]);
 
   const calendarGrid = useMemo(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -129,14 +141,26 @@ const AcademicCalendar = () => {
     });
   };
 
-  const openModalForNew = (dateKey: string) => { setEditingEvent(null); setSelectedDate(dateKey); setEventDetails({ name: '', time: '', description: '', type: DEFAULT_EVENT_TYPE }); setIsModalVisible(true); };
-  const openModalForEdit = (event: EventItem) => { setEditingEvent(event); setSelectedDate(event.event_date); setEventDetails({ name: event.name, time: event.time || '', description: event.description || '', type: event.type }); setIsModalVisible(true); };
+  const openModalForNew = (dateKey: string) => { 
+    setEditingEvent(null); 
+    setSelectedDate(dateKey); 
+    setEventDetails({ name: '', time: '', description: '', type: DEFAULT_EVENT_TYPE }); 
+    setIsModalVisible(true); 
+  };
+  
+  const openModalForEdit = (event: EventItem) => { 
+    setEditingEvent(event); 
+    setSelectedDate(event.event_date); 
+    setEventDetails({ name: event.name, time: event.time || '', description: event.description || '', type: event.type }); 
+    setIsModalVisible(true); 
+  };
 
   const handleSaveEvent = async () => {
     if (!eventDetails.name.trim() || !selectedDate) return Alert.alert("Error", "Title is required.");
     const isEditing = !!editingEvent;
     const url = isEditing ? `/calendar/${editingEvent!.id}` : '/calendar';
     const method = isEditing ? 'put' : 'post';
+    // Keeping selectedDate as YYYY-MM-DD for backend consistency
     const body = { ...eventDetails, event_date: selectedDate, adminId: user?.id };
     try {
       const response = await apiClient[method](url, body);
@@ -149,7 +173,7 @@ const AcademicCalendar = () => {
   };
   
   const handleDeleteEvent = (eventId: number) => {
-    Alert.alert("Confirm Delete", "Are you sure you want to delete this event?", [
+    Alert.alert("Confirm Delete", "Are you sure you want to delete this event?",[
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
         try {
@@ -166,8 +190,7 @@ const AcademicCalendar = () => {
   const handleMenuPress = (item: EventItem) => {
     Alert.alert(
       "Manage Event",
-      `Options for "${item.name}"`,
-      [
+      `Options for "${item.name}"`,[
         { text: "Cancel", style: "cancel" },
         { text: "Edit Event", onPress: () => openModalForEdit(item) },
         { text: "Delete Event", onPress: () => handleDeleteEvent(item.id), style: 'destructive' }
@@ -176,9 +199,9 @@ const AcademicCalendar = () => {
   };
 
   const currentMonthItems = useMemo(() => {
-    const items: (EventItem & { day: number; formattedDate: string; })[] = [];
+    const items: (EventItem & { day: number; formattedDate: string; })[] =[];
     Object.entries(events).forEach(([dateKey, dateItemsArray]) => {
-      const [itemYear, itemMonthNum, itemDay] = dateKey.split('-').map(Number);
+      const[itemYear, itemMonthNum, itemDay] = dateKey.split('-').map(Number);
       if (itemYear === year && (itemMonthNum - 1) === month) {
         dateItemsArray.forEach(item => {
           items.push({ ...item, day: itemDay, formattedDate: `${monthNames[month].substring(0,3)} ${String(itemDay).padStart(2, '0')}` });
@@ -196,7 +219,7 @@ const AcademicCalendar = () => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
       
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContentContainer}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContentContainer} showsVerticalScrollIndicator={false}>
         
         {/* LEGEND */}
         <Animatable.View animation="fadeIn" duration={600} delay={200}>
@@ -228,9 +251,9 @@ const AcademicCalendar = () => {
           
           <Animatable.View ref={calendarRef} style={[styles.calendarGrid, { backgroundColor: COLORS.cardBg }]}>
             {calendarGrid.map((day, i) => {
-              if (day === null) return <View key={`e-${i}`} style={styles.dayBox} />;
+              if (day === null) return <View key={`e-${i}`} style={{ width: DAY_BOX_SIZE, height: DAY_BOX_SIZE }} />;
               const dateKey = formatDateKey(new Date(year, month, day));
-              const dayItems = events[dateKey] || [];
+              const dayItems = events[dateKey] ||[];
               const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
               const isSunday = new Date(year, month, day).getDay() === 0;
               const hasEvents = dayItems.length > 0;
@@ -238,7 +261,11 @@ const AcademicCalendar = () => {
               return (
                 <TouchableOpacity 
                     key={dateKey} 
-                    style={[styles.dayBox, isToday && { borderWidth: 2, borderColor: COLORS.primary, backgroundColor: isDark ? 'rgba(74, 144, 226, 0.2)' : 'rgba(74, 144, 226, 0.1)' }]} 
+                    style={[
+                        styles.dayBox, 
+                        { width: DAY_BOX_SIZE, height: DAY_BOX_SIZE, borderRadius: DAY_BOX_SIZE / 2 },
+                        isToday && { borderWidth: 2, borderColor: COLORS.primary, backgroundColor: isDark ? 'rgba(74, 144, 226, 0.2)' : 'rgba(74, 144, 226, 0.1)' }
+                    ]} 
                     onPress={isAdmin ? () => openModalForNew(dateKey) : undefined} 
                     activeOpacity={isAdmin ? 0.7 : 1}
                 >
@@ -291,27 +318,26 @@ const AcademicCalendar = () => {
         )}
       </ScrollView>
       
-      {/* MODAL */}
+      {/* MAIN MODAL */}
       <Modal animationType="fade" transparent={true} visible={isModalVisible} onRequestClose={() => setIsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <Animatable.View animation="zoomIn" duration={400} style={[styles.modalContent, { backgroundColor: COLORS.cardBg }]}>
             <Text style={[styles.modalTitle, { color: COLORS.textMain }]}>{editingEvent ? 'Edit Event' : 'Add New Event'}</Text>
-            <Text style={[styles.modalDateLabel, { color: COLORS.textSub }]}>For Date: {selectedDate}</Text>
+            {/* Displaying Date in DD/MM/YYYY format as requested */}
+            <Text style={[styles.modalDateLabel, { color: COLORS.textSub }]}>For Date: {displayFormatDate(selectedDate)}</Text>
             
-            {/* TYPE DROPDOWN PICKER */}
+            {/* CUSTOM TYPE DROPDOWN PICKER (Fixes iOS Issue) */}
             <Text style={[styles.modalInputLabel, { color: COLORS.textSub }]}>Type</Text>
-            <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                <Picker
-                    selectedValue={eventDetails.type}
-                    onValueChange={(itemValue) => setEventDetails(prev => ({ ...prev, type: itemValue }))}
-                    style={{ color: COLORS.textMain, height: 50 }}
-                    dropdownIconColor={COLORS.textSub}
-                >
-                    {Object.entries(eventTypesConfig).map(([key, val]) => (
-                        <Picker.Item key={key} label={val.displayName} value={key} color={COLORS.textMain} />
-                    ))}
-                </Picker>
-            </View>
+            <TouchableOpacity 
+                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                onPress={() => setIsTypePickerVisible(true)}
+                activeOpacity={0.8}
+            >
+                <Text style={{ color: COLORS.textMain, fontSize: 16 }}>
+                    {eventTypesConfig[eventDetails.type]?.displayName || 'Select Type'}
+                </Text>
+                <Icon name="arrow-drop-down" size={24} color={COLORS.textSub} />
+            </TouchableOpacity>
 
             <Text style={[styles.modalInputLabel, { color: COLORS.textSub }]}>Title</Text>
             <TextInput 
@@ -352,6 +378,29 @@ const AcademicCalendar = () => {
           </Animatable.View>
         </View>
       </Modal>
+
+      {/* CUSTOM DROPDOWN MODAL FOR EVENT TYPE */}
+      <Modal transparent visible={isTypePickerVisible} animationType="fade" onRequestClose={() => setIsTypePickerVisible(false)}>
+        <TouchableOpacity style={styles.customPickerOverlay} activeOpacity={1} onPress={() => setIsTypePickerVisible(false)}>
+            <View style={[styles.customPickerModal, { backgroundColor: COLORS.cardBg }]}>
+                <Text style={[styles.pickerTitle, { color: COLORS.primary }]}>Select Event Type</Text>
+                <FlatList
+                    data={Object.entries(eventTypesConfig)}
+                    keyExtractor={([key]) => key}
+                    renderItem={({ item: [key, val] }) => (
+                        <TouchableOpacity style={styles.pickerItem} onPress={() => {
+                            setEventDetails(prev => ({ ...prev, type: key }));
+                            setIsTypePickerVisible(false);
+                        }}>
+                            <View style={[styles.legendColorBox, { backgroundColor: val.color, marginRight: 15 }]} />
+                            <Text style={[styles.pickerItemText, { color: COLORS.textMain }]}>{val.displayName}</Text>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -376,7 +425,9 @@ const styles = StyleSheet.create({
   dayOfWeekHeader: { flexDirection: 'row' },
   dayOfWeekText: { flex: 1, textAlign: 'center', paddingVertical: 12, fontSize: 14, fontWeight: '500' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 5, paddingVertical: 5 },
-  dayBox: { width: DAY_BOX_SIZE, height: DAY_BOX_SIZE, justifyContent: 'center', alignItems: 'center', borderRadius: DAY_BOX_SIZE / 2 },
+  
+  // Size dynamically updated via inline styles
+  dayBox: { justifyContent: 'center', alignItems: 'center' },
   dayNumber: { fontSize: 15, fontWeight: '500' },
   dayNumberWrapper: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   dayNumberWithEvent: { color: '#212121', fontWeight: 'bold' },
@@ -394,15 +445,56 @@ const styles = StyleSheet.create({
   
   menuButton: { padding: 8, marginLeft: 10 },
   
-  // Modal
+  // Main Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '90%', borderRadius: 15, padding: 25, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 5, textAlign: 'center' },
   modalDateLabel: { fontSize: 15, marginBottom: 20, textAlign: 'center' },
   modalInputLabel: { fontSize: 14, marginBottom: 8, marginTop: 10, fontWeight: '500' },
   
-  pickerContainer: { borderWidth: 1, borderRadius: 10, marginBottom: 15, justifyContent: 'center' },
-  
+  // --- New Styles for Custom Dropdown ---
+  customDropdownTrigger: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    borderWidth: 1, 
+    borderRadius: 10, 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    marginBottom: 15 
+  },
+  customPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  customPickerModal: {
+    width: '85%',
+    maxHeight: '60%',
+    borderRadius: 12,
+    padding: 20,
+    elevation: 5
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center'
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ccc'
+  },
+  pickerItemText: {
+    fontSize: 16,
+    fontWeight: '500'
+  },
+  // --------------------------------------
+
   modalInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, marginBottom: 15 },
   modalDescriptionInput: { height: 80, textAlignVertical: 'top' },
   modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },

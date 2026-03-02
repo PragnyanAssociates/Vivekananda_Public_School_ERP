@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
-    ActivityIndicator, Alert, TextInput, useColorScheme, StatusBar, Dimensions, Modal, Animated, Easing
+    ActivityIndicator, Alert, TextInput, useColorScheme, StatusBar, Modal, Animated, Easing, useWindowDimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
-
-const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -49,7 +47,7 @@ const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
     }, [percentage]);
 
     const heightStyle = animatedHeight.interpolate({
-        inputRange: [0, 100],
+        inputRange:[0, 100],
         outputRange:['0%', '100%']
     });
 
@@ -73,18 +71,19 @@ const StudentLessonFeedback = () => {
     const isDark = useColorScheme() === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
+    const { width } = useWindowDimensions(); // Ensures precise responsive width padding
 
     const[viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
     const[subjects, setSubjects] = useState([]);
-    const [lessons, setLessons] = useState([]);
+    const[lessons, setLessons] = useState([]);
     const[selectedSubject, setSelectedSubject] = useState('');
-    const [selectedLesson, setSelectedLesson] = useState('');
+    const[selectedLesson, setSelectedLesson] = useState('');
 
     const[answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
     const [remarks, setRemarks] = useState('');
-    const [isMarked, setIsMarked] = useState(false);
+    const[isMarked, setIsMarked] = useState(false);
     const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
     const [showGraph, setShowGraph] = useState(false);

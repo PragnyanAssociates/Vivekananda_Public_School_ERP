@@ -1,15 +1,22 @@
+/**
+ * File: src/screens/report/AdminSyllabusScreen.tsx
+ * Purpose: Manage Syllabus creation, editing, and progress tracking.
+ * Updated: Responsive Design, Dark/Light Mode Support & Custom Dropdown Fix for iOS.
+ */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, 
     ActivityIndicator, Alert, ScrollView, TextInput, Platform,
-    SafeAreaView, useColorScheme, StatusBar, Dimensions
+    SafeAreaView, useColorScheme, StatusBar, Dimensions, Modal, useWindowDimensions
 } from 'react-native';
 import apiClient from '../../api/client';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import { useIsFocused } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+// Kept at top level to ensure existing stylesheets don't crash
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
@@ -29,12 +36,11 @@ const DarkColors = {
     divider: '#2C2C2C', tabInactive: '#263238', filterTabBg: '#2C2C2C'
 };
 
-// CHANGED: Exported Exam Types for consistent use
-const EXAM_TYPES = ["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
-const FILTER_TYPES = ["Overall", ...EXAM_TYPES];
+const EXAM_TYPES =["AT1", "UT1", "AT2", "UT2", "SA1", "AT3", "UT3", "AT4", "UT4", "SA2"];
+const FILTER_TYPES =["Overall", ...EXAM_TYPES];
 
 // --- DYNAMIC CARD COLORS ---
-const DYNAMIC_COLORS = [
+const DYNAMIC_COLORS =[
     { border: '#0D9488', bg: '#F0FDFA', text: '#0F766E' }, 
     { border: '#0284C7', bg: '#F0F9FF', text: '#0369A1' }, 
     { border: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9' }, 
@@ -58,7 +64,7 @@ const formatDateForBackend = (dateObj) => {
 // --- Main Component ---
 const AdminSyllabusScreen = () => {
     const [view, setView] = useState('classes'); 
-    const [selectedClass, setSelectedClass] = useState(null);
+    const[selectedClass, setSelectedClass] = useState(null);
     const [selectedSyllabus, setSelectedSyllabus] = useState(null);
 
     const navigateTo = (targetView, data = null, classGrp = null) => { 
@@ -160,7 +166,7 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
     const COLORS = isDark ? DarkColors : LightColors;
 
     const [syllabuses, setSyllabuses] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const[isLoading, setIsLoading] = useState(false);
     const isFocused = useIsFocused();
 
     const fetchData = useCallback(async () => {
@@ -176,8 +182,7 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
 
     const handleMenuPress = (item) => {
         Alert.alert(
-            "Manage Syllabus", `${item.subject_name}`,
-            [
+            "Manage Syllabus", `${item.subject_name}`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit Syllabus", onPress: () => onEdit(item) },
                 { text: "Delete", style: "destructive", onPress: async () => {
@@ -249,6 +254,9 @@ const SubjectListScreen = ({ classGroup, onBack, onEdit, onCreate, onViewProgres
 
 // --- Sub-Component 3: Create/Edit Form ---
 const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
@@ -259,13 +267,26 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
     const [selectedTeacherId, setSelectedTeacherId] = useState(isEditMode ? initialSyllabus.creator_id.toString() : '');
     
     const [lessons, setLessons] = useState([{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
-    const [examFilter, setExamFilter] = useState('AT1');
+    const[examFilter, setExamFilter] = useState('AT1');
 
     const [availableSubjects, setAvailableSubjects] = useState([]);
     const [availableTeachers, setAvailableTeachers] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [datePickerState, setDatePickerState] = useState({ show: false, index: null, mode: 'from' });
+    const[datePickerState, setDatePickerState] = useState({ show: false, index: null, mode: 'from' });
+
+    // Custom Dropdown Config
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data: [] as { label: string, value: string }[],
+        selectedValue: '',
+        onSelect: (val: any) => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     useEffect(() => {
         const bootstrapForm = async () => {
@@ -283,37 +304,44 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                     const formattedLessons = syllabusDetailsRes.data.lessons.map(l => ({ 
                         id: l.id || Date.now() + Math.random(),
                         lessonName: l.lesson_name, 
-                        examTypes: l.exam_type ? l.exam_type.split(',').map(e => e.trim()) : [],
+                        examTypes: l.exam_type ? l.exam_type.split(',').map(e => e.trim()) :[],
                         fromDate: new Date(l.from_date), 
                         toDate: new Date(l.to_date) 
                     }));
-                    setLessons(formattedLessons.length > 0 ? formattedLessons : [{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
+                    setLessons(formattedLessons.length > 0 ? formattedLessons :[{ id: Date.now(), lessonName: '', examTypes: [], fromDate: new Date(), toDate: new Date() }]);
                 }
             } catch (e) { Alert.alert("Error", "Could not load data."); } 
             finally { setIsLoading(false); }
         };
         bootstrapForm();
-    }, []);
+    },[]);
 
+    // iOS safe date picker
     const onDateChange = (event, selectedDate) => {
-        if (event.type === 'dismissed') { setDatePickerState({ ...datePickerState, show: false }); return; }
+        if (event.type === 'dismissed' && Platform.OS === 'android') { 
+            setDatePickerState({ ...datePickerState, show: false }); 
+            return; 
+        }
         if (selectedDate && datePickerState.index !== null) {
             const newLessons = [...lessons];
             if (datePickerState.mode === 'from') newLessons[datePickerState.index].fromDate = selectedDate;
             else newLessons[datePickerState.index].toDate = selectedDate;
             setLessons(newLessons);
-            if(Platform.OS === 'android') setDatePickerState({ ...datePickerState, show: false });
+            
+            if (Platform.OS === 'android') {
+                setDatePickerState({ ...datePickerState, show: false });
+            }
         }
     };
 
     const toggleLessonExam = (index) => {
         const newLessons = [...lessons];
-        const currentExams = newLessons[index].examTypes || [];
+        const currentExams = newLessons[index].examTypes ||[];
         
         if (currentExams.includes(examFilter)) {
             newLessons[index].examTypes = currentExams.filter(e => e !== examFilter);
         } else {
-            newLessons[index].examTypes = [...currentExams, examFilter];
+            newLessons[index].examTypes =[...currentExams, examFilter];
         }
         setLessons(newLessons);
     };
@@ -377,20 +405,27 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                     <View>
                         <View style={[styles.formSection, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                             <Text style={[styles.label, { color: COLORS.textSub, marginTop: 0 }]}>Subject</Text>
-                            <View style={[styles.inputWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={selectedSubject} onValueChange={setSelectedSubject} enabled={!isEditMode} style={{color: COLORS.textMain}} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="Select Subject..." value="" color={COLORS.textMain} />
-                                    {availableSubjects.map((s, i) => <Picker.Item key={i} label={s} value={s} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, opacity: isEditMode ? 0.6 : 1 }]}
+                                onPress={() => !isEditMode && openDropdown('Select Subject', availableSubjects.map(s => ({label: s, value: s})), selectedSubject, setSelectedSubject)}
+                                disabled={isEditMode}
+                            >
+                                <Text style={{ color: selectedSubject ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>
+                                    {selectedSubject || 'Select Subject...'}
+                                </Text>
+                                {!isEditMode && <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textMain} />}
+                            </TouchableOpacity>
                             
-                            <Text style={[styles.label, { color: COLORS.textSub }]}>Teacher</Text>
-                            <View style={[styles.inputWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                                <Picker selectedValue={selectedTeacherId} onValueChange={setSelectedTeacherId} style={{color: COLORS.textMain}} dropdownIconColor={COLORS.textMain}>
-                                    <Picker.Item label="Select Teacher..." value="" color={COLORS.textMain} />
-                                    {availableTeachers.map((t) => <Picker.Item key={t.id} label={t.full_name} value={t.id.toString()} color={COLORS.textMain} />)}
-                                </Picker>
-                            </View>
+                            <Text style={[styles.label, { color: COLORS.textSub, marginTop: 10 }]}>Teacher</Text>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                                onPress={() => openDropdown('Select Teacher', availableTeachers.map(t => ({label: t.full_name, value: t.id.toString()})), selectedTeacherId, setSelectedTeacherId)}
+                            >
+                                <Text style={{ color: selectedTeacherId ? COLORS.textMain : COLORS.textSub, fontSize: 16 }}>
+                                    {availableTeachers.find(t => t.id.toString() === selectedTeacherId)?.full_name || 'Select Teacher...'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textMain} />
+                            </TouchableOpacity>
                         </View>
 
                         <View style={[styles.formSection, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
@@ -433,11 +468,13 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                 {activeTab === 'exams' && (
                     <View style={[styles.formSection, { backgroundColor: COLORS.cardBg, shadowColor: COLORS.border }]}>
                         <Text style={[styles.label, { color: COLORS.textSub, marginTop: 0 }]}>Select Exam Type</Text>
-                        <View style={[styles.inputWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, marginBottom: 20 }]}>
-                            <Picker selectedValue={examFilter} onValueChange={setExamFilter} style={{color: COLORS.textMain}} dropdownIconColor={COLORS.textMain}>
-                                {EXAM_TYPES.map((e) => <Picker.Item key={e} label={e} value={e} color={COLORS.textMain} />)}
-                            </Picker>
-                        </View>
+                        <TouchableOpacity 
+                            style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, marginBottom: 20 }]}
+                            onPress={() => openDropdown('Select Exam Type', EXAM_TYPES.map(e => ({label: e, value: e})), examFilter, setExamFilter)}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 16 }}>{examFilter}</Text>
+                            <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textMain} />
+                        </TouchableOpacity>
 
                         <Text style={[styles.sectionHeader, { color: COLORS.textMain, borderBottomColor: COLORS.divider }]}>Lessons (Select for {examFilter})</Text>
                         
@@ -481,7 +518,64 @@ const CreateOrEditSyllabus = ({ initialSyllabus, fixedClassGroup, onFinish }) =>
                 </TouchableOpacity>
             </ScrollView>
 
-            {datePickerState.show && <DateTimePicker value={datePickerState.mode === 'from' ? lessons[datePickerState.index].fromDate : lessons[datePickerState.index].toDate} mode="date" display="default" onChange={onDateChange} />}
+            {/* iOS Fixed Date Picker */}
+            {datePickerState.show && (
+                Platform.OS === 'ios' ? (
+                    <Modal transparent animationType="slide" visible={datePickerState.show} onRequestClose={() => setDatePickerState({ ...datePickerState, show: false })}>
+                        <View style={styles.iosPickerOverlay}>
+                            <View style={[styles.iosPickerContainer, { backgroundColor: COLORS.cardBg }]}>
+                                <View style={[styles.iosPickerHeader, { borderBottomColor: COLORS.border }]}>
+                                    <TouchableOpacity onPress={() => setDatePickerState({ ...datePickerState, show: false })}>
+                                        <Text style={{ color: COLORS.primary, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker 
+                                    value={datePickerState.mode === 'from' ? lessons[datePickerState.index].fromDate : lessons[datePickerState.index].toDate} 
+                                    mode="date" 
+                                    display="spinner" 
+                                    onChange={onDateChange} 
+                                    textColor={COLORS.textMain} 
+                                />
+                            </View>
+                        </View>
+                    </Modal>
+                ) : (
+                    <DateTimePicker 
+                        value={datePickerState.mode === 'from' ? lessons[datePickerState.index].fromDate : lessons[datePickerState.index].toDate} 
+                        mode="date" 
+                        display="default" 
+                        onChange={onDateChange} 
+                    />
+                )
+            )}
+
+            {/* SHARED CUSTOM DROPDOWN MODAL */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: COLORS.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </SafeAreaView>
     );
 };
@@ -493,7 +587,7 @@ const AdminProgressView = ({ syllabus, onBack }) => {
     const COLORS = isDark ? DarkColors : LightColors;
     
     // CHANGED: Added states for filtering in Admin side
-    const [auditLog, setAuditLog] = useState([]);
+    const[auditLog, setAuditLog] = useState([]);
     const [filteredLogs, setFilteredLogs] = useState([]);
     const [selectedFilter, setSelectedFilter] = useState("Overall");
     const [isLoading, setIsLoading] = useState(true);
@@ -615,7 +709,7 @@ const styles = StyleSheet.create({
 
     card: { borderRadius: 12, marginVertical: 6, padding: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, width: '96%', alignSelf: 'center' },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-    cardTitle: { fontSize: 17, fontWeight: 'bold' },
+    cardTitle: { fontSize: 17, fontWeight: 'bold', flexWrap: 'wrap' },
     classBadgeContainer: { marginTop: 4, alignSelf: 'flex-start', borderRadius: 12, paddingVertical: 2, paddingHorizontal: 8 },
     cardClassBadge: { fontSize: 11, fontWeight: 'bold' },
     menuIconBtn: { padding: 4 },
@@ -640,6 +734,18 @@ const styles = StyleSheet.create({
     formSection: { borderRadius: 12, padding: 15, marginBottom: 15, elevation: 2, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     sectionHeader: { fontSize: 16, fontWeight: '700', marginBottom: 10, borderBottomWidth: 1, paddingBottom: 10 },
     label: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 15 },
+    
+    // Custom Dropdown Trigger
+    customDropdownTrigger: { 
+        borderWidth: 1, 
+        borderRadius: 8, 
+        height: 50, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        paddingHorizontal: 15 
+    },
+    
     inputWrapper: { borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
     input: { borderWidth: 1, padding: 12, borderRadius: 8, fontSize: 15 },
     
@@ -664,6 +770,18 @@ const styles = StyleSheet.create({
     logMetaText: { fontSize: 12 },
     statusBadge: { fontSize: 11, fontWeight: '700' },
     examBadge: { fontSize: 10, color: '#fff', backgroundColor: '#6366f1', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4, overflow: 'hidden', fontWeight: 'bold' },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' },
+
+    // iOS Picker Styles
+    iosPickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'flex-end', padding: 15, borderBottomWidth: 1 }
 });
 
 export default AdminSyllabusScreen;

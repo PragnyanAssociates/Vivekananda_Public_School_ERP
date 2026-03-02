@@ -4,10 +4,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
     TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform, 
-    useColorScheme, Dimensions, StatusBar 
+    useColorScheme, Dimensions, StatusBar, Modal, useWindowDimensions 
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker to fix iOS UI issues
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
@@ -42,7 +42,7 @@ const DarkColors = {
 };
 
 // --- REUSABLE HEADER ---
-const ScreenHeader = ({ icon, title, subtitle, colors }) => (
+const ScreenHeader = ({ icon, title, subtitle, colors }: any) => (
   <View style={[styles.headerCard, { backgroundColor: colors.cardBg, shadowColor: colors.shadow }]}>
     <View style={styles.headerContent}>
       <View style={[styles.headerIconContainer, { backgroundColor: colors.iconBg }]}>
@@ -87,7 +87,10 @@ const TeacherHealthAdminScreen = () => {
 // ==========================================================
 // --- 1. STUDENT LIST VIEW ---
 // ==========================================================
-const StudentListView = ({ onSelectStudent }) => {
+const StudentListView = ({ onSelectStudent }: any) => {
+    // Responsive Hook
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
     // Theme Hook
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
@@ -96,10 +99,13 @@ const StudentListView = ({ onSelectStudent }) => {
     const [classes, setClasses] = useState<string[]>([]);
     const [selectedClass, setSelectedClass] = useState<string | null>(null);
     const [students, setStudents] = useState<any[]>([]);
-    const [isLoadingClasses, setIsLoadingClasses] = useState(true);
+    const[isLoadingClasses, setIsLoadingClasses] = useState(true);
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Custom Dropdown State
+    const [showClassPicker, setShowClassPicker] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -122,7 +128,7 @@ const StudentListView = ({ onSelectStudent }) => {
                 }
             };
             fetchClasses();
-        }, [])
+        },[])
     );
 
     const fetchStudents = async (classGroup: string) => {
@@ -171,20 +177,17 @@ const StudentListView = ({ onSelectStudent }) => {
             />
 
             <View style={styles.controlsContainer}>
-                <View style={[styles.pickerContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                    <Picker
-                        selectedValue={selectedClass}
-                        onValueChange={(itemValue) => {
-                            if (itemValue) fetchStudents(itemValue);
-                        }}
-                        enabled={!isLoadingClasses && classes.length > 0}
-                        style={{ color: COLORS.textMain }}
-                        dropdownIconColor={COLORS.textMain}
-                    >
-                        <Picker.Item label={isLoadingClasses ? "Loading classes..." : "Select a Class..."} value={null} color={COLORS.textSub} />
-                        {classes.map(c => <Picker.Item key={c} label={c} value={c} color={COLORS.textMain} />)}
-                    </Picker>
-                </View>
+                {/* CUSTOM CLASS DROPDOWN */}
+                <TouchableOpacity 
+                    style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                    onPress={() => !isLoadingClasses && classes.length > 0 && setShowClassPicker(true)}
+                    activeOpacity={0.8}
+                >
+                    <Text style={{ color: COLORS.textMain, fontSize: 16 }}>
+                        {selectedClass ? selectedClass : (isLoadingClasses ? "Loading classes..." : "Select a Class...")}
+                    </Text>
+                    <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                </TouchableOpacity>
 
                 {students.length > 0 && (
                      <View style={[styles.searchContainer, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
@@ -217,6 +220,34 @@ const StudentListView = ({ onSelectStudent }) => {
                     )} 
                 />
             </View>
+
+            {/* SHARED CUSTOM DROPDOWN MODAL */}
+            <Modal visible={showClassPicker} transparent animationType="fade" onRequestClose={() => setShowClassPicker(false)}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setShowClassPicker(false)}>
+                    <View style={[styles.dropdownModal, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: COLORS.primary }]}>Select Class</Text>
+                        <FlatList
+                            data={classes}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: COLORS.border }]} 
+                                    onPress={() => {
+                                        fetchStudents(item);
+                                        setShowClassPicker(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: COLORS.textMain, fontWeight: selectedClass === item ? 'bold' : 'normal' }
+                                    ]}>{item}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
         </View>
     );
 };
@@ -224,14 +255,14 @@ const StudentListView = ({ onSelectStudent }) => {
 // ==========================================================
 // --- 2. STUDENT DETAIL & EDIT VIEW ---
 // ==========================================================
-const StudentHealthDetailView = ({ student, onBack }) => {
+const StudentHealthDetailView = ({ student, onBack }: any) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
 
     const { user: editor } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const[saving, setSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [record, setRecord] = useState<any>({});
     const [editData, setEditData] = useState<any>({});
@@ -289,7 +320,7 @@ const StudentHealthDetailView = ({ student, onBack }) => {
                 </View>
                 <View style={{width: 34}} /> 
             </View>
-            <ScrollView style={styles.detailScrollContainer}>
+            <ScrollView style={styles.detailScrollContainer} showsVerticalScrollIndicator={false}>
                 {isEditing ? (
                     <EditView data={editData} setData={setEditData} onSave={handleSave} onCancel={() => setIsEditing(false)} isSaving={saving} colors={COLORS} />
                 ) : (
@@ -302,7 +333,7 @@ const StudentHealthDetailView = ({ student, onBack }) => {
 
 
 // --- Sub-components for Detail/Edit View ---
-const DisplayView = ({ data, onEdit, colors }) => {
+const DisplayView = ({ data, onEdit, colors }: any) => {
     const calculatedBmi = useMemo(() => {
         if (data?.height_cm && data?.weight_kg) {
             const heightM = data.height_cm / 100;
@@ -335,8 +366,8 @@ const DisplayView = ({ data, onEdit, colors }) => {
     );
 };
 
-const EditView = ({ data, setData, onSave, onCancel, isSaving, colors }) => {
-    const handleInputChange = (field, value) => setData(prev => ({ ...prev, [field]: value }));
+const EditView = ({ data, setData, onSave, onCancel, isSaving, colors }: any) => {
+    const handleInputChange = (field: string, value: string) => setData((prev: any) => ({ ...prev, [field]: value }));
     const calculatedBmi = useMemo(() => {
         if (data?.height_cm && data?.weight_kg) {
             const h = Number(data.height_cm) / 100; const bmi = Number(data.weight_kg) / (h * h);
@@ -346,19 +377,19 @@ const EditView = ({ data, setData, onSave, onCancel, isSaving, colors }) => {
     
     return (
         <View style={styles.formContainer}>
-            <FormInput label="Blood Group (e.g., A+, O-)" value={data.blood_group || ''} onChangeText={v => handleInputChange('blood_group', v)} colors={colors} />
-            <FormInput label="Height (cm)" value={data.height_cm?.toString() || ''} onChangeText={v => handleInputChange('height_cm', v)} keyboardType="numeric" colors={colors} />
-            <FormInput label="Weight (kg)" value={data.weight_kg?.toString() || ''} onChangeText={v => handleInputChange('weight_kg', v)} keyboardType="numeric" colors={colors} />
+            <FormInput label="Blood Group (e.g., A+, O-)" value={data.blood_group || ''} onChangeText={(v: string) => handleInputChange('blood_group', v)} colors={colors} />
+            <FormInput label="Height (cm)" value={data.height_cm?.toString() || ''} onChangeText={(v: string) => handleInputChange('height_cm', v)} keyboardType="numeric" colors={colors} />
+            <FormInput label="Weight (kg)" value={data.weight_kg?.toString() || ''} onChangeText={(v: string) => handleInputChange('weight_kg', v)} keyboardType="numeric" colors={colors} />
             
             <View style={styles.inputContainer}>
                 <Text style={[styles.label, { color: colors.textMain }]}>BMI (Calculated)</Text>
                 <TextInput style={[styles.input, styles.readOnly, { backgroundColor: colors.background, color: colors.textMain, borderColor: colors.border }]} value={calculatedBmi} editable={false} />
             </View>
             
-            <FormInput label="Last Checkup Date (YYYY-MM-DD)" value={data.last_checkup_date || ''} onChangeText={v => handleInputChange('last_checkup_date', v)} placeholder="YYYY-MM-DD" colors={colors} />
-            <FormInput label="Allergies" value={data.allergies || ''} onChangeText={v => handleInputChange('allergies', v)} multiline colors={colors} />
-            <FormInput label="Medical Conditions" value={data.medical_conditions || ''} onChangeText={v => handleInputChange('medical_conditions', v)} multiline colors={colors} />
-            <FormInput label="Medications" value={data.medications || ''} onChangeText={v => handleInputChange('medications', v)} multiline colors={colors} />
+            <FormInput label="Last Checkup Date (YYYY-MM-DD)" value={data.last_checkup_date || ''} onChangeText={(v: string) => handleInputChange('last_checkup_date', v)} placeholder="YYYY-MM-DD" colors={colors} />
+            <FormInput label="Allergies" value={data.allergies || ''} onChangeText={(v: string) => handleInputChange('allergies', v)} multiline colors={colors} />
+            <FormInput label="Medical Conditions" value={data.medical_conditions || ''} onChangeText={(v: string) => handleInputChange('medical_conditions', v)} multiline colors={colors} />
+            <FormInput label="Medications" value={data.medications || ''} onChangeText={(v: string) => handleInputChange('medications', v)} multiline colors={colors} />
             
             <View style={styles.buttonRow}>
                 <TouchableOpacity style={[styles.button, styles.cancelButton, { borderColor: colors.border }]} onPress={onCancel} disabled={isSaving}>
@@ -375,7 +406,7 @@ const EditView = ({ data, setData, onSave, onCancel, isSaving, colors }) => {
 // ==========================================================
 // --- REUSABLE HELPER COMPONENTS ---
 // ==========================================================
-const InfoBox = ({ icon, label, value, color, isFullWidth = false, colors }) => (
+const InfoBox = ({ icon, label, value, color, isFullWidth = false, colors }: any) => (
     <View style={[styles.infoBox, isFullWidth && styles.fullWidth, { backgroundColor: colors.infoBoxBg }]}>
         <MaterialIcons name={icon} size={28} color={color} />
         <Text style={[styles.infoLabel, { color: colors.textSub }]}>{label}</Text>
@@ -383,7 +414,7 @@ const InfoBox = ({ icon, label, value, color, isFullWidth = false, colors }) => 
     </View>
 );
 
-const Section = ({ title, icon, content, colors }) => (
+const Section = ({ title, icon, content, colors }: any) => (
     <View style={[styles.sectionCard, { backgroundColor: colors.cardBg }]}>
         <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
             <MaterialIcons name={icon} size={22} color={colors.primary} />
@@ -393,7 +424,7 @@ const Section = ({ title, icon, content, colors }) => (
     </View>
 );
 
-const FormInput = ({ label, multiline = false, colors, ...props }) => (
+const FormInput = ({ label, multiline = false, colors, ...props }: any) => (
     <View style={styles.inputContainer}>
         <Text style={[styles.label, { color: colors.textMain }]}>{label}</Text>
         <TextInput 
@@ -423,7 +454,7 @@ const styles = StyleSheet.create({
     // List View Styles
     listContainer: { flex: 1 },
     controlsContainer: { paddingHorizontal: 10, paddingTop: 10 },
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 10 },
+    customDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 8, height: 50, paddingHorizontal: 15, marginBottom: 10 },
     searchContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10 },
     searchIcon: { marginRight: 5 },
     searchInput: { flex: 1, height: 45, fontSize: 16 },
@@ -466,6 +497,13 @@ const styles = StyleSheet.create({
     sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, paddingBottom: 8 },
     sectionTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
     sectionContent: { fontSize: 14, lineHeight: 20, paddingHorizontal: 5 },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default TeacherHealthAdminScreen;

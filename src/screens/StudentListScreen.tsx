@@ -2,10 +2,10 @@ import React, { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
   TouchableOpacity, Image, RefreshControl, SafeAreaView, Platform, UIManager,
-  TextInput, useColorScheme, StatusBar, Dimensions
+  TextInput, useColorScheme, StatusBar, Dimensions, Modal, FlatList, useWindowDimensions
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
+// Removed native Picker import to fix iOS UI issues
 import Icon from 'react-native-vector-icons/MaterialIcons'; 
 import apiClient from '../api/client';
 import { SERVER_URL } from '../../apiConfig';
@@ -15,6 +15,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// Kept at top level to ensure existing stylesheets don't crash
 const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION (Master Style Guide) ---
@@ -44,18 +45,24 @@ const DarkColors = {
   shadow: '#000'
 };
 
-const CLASS_ORDER = ['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+const CLASS_ORDER =['LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const StudentListScreen = ({ navigation }) => {
+  // Responsive Hook for dynamic modal sizing
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const COLORS = isDark ? DarkColors : LightColors;
 
   const [students, setStudents] = useState([]);
-  const [selectedClass, setSelectedClass] = useState('Class 10');
+  const[selectedClass, setSelectedClass] = useState('Class 10');
   const [searchText, setSearchText] = useState(''); // Search State
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const[refreshing, setRefreshing] = useState(false);
+
+  // Custom Dropdown State
+  const [showClassPicker, setShowClassPicker] = useState(false);
 
   // Hide default header
   useLayoutEffect(() => {
@@ -65,7 +72,7 @@ const StudentListScreen = ({ navigation }) => {
   const loadStudentData = async () => {
     try {
       const response = await apiClient.get('/students/all');
-      setStudents(response.data || []);
+      setStudents(response.data ||[]);
     } catch (error) {
       console.error('Error fetching student list:', error);
     } finally {
@@ -80,7 +87,7 @@ const StudentListScreen = ({ navigation }) => {
         setLoading(true);
       }
       loadStudentData();
-    }, [])
+    },[])
   );
 
   const onRefresh = () => {
@@ -94,7 +101,7 @@ const StudentListScreen = ({ navigation }) => {
     students.forEach(student => {
       const groupName = student.class_group;
       if (!groups[groupName]) {
-        groups[groupName] = [];
+        groups[groupName] =[];
       }
       groups[groupName].push(student);
     });
@@ -111,7 +118,7 @@ const StudentListScreen = ({ navigation }) => {
 
   // Filtering Logic (Class + Search)
   const filteredStudents = useMemo(() => {
-    const classStudents = groupedStudents[selectedClass] || [];
+    const classStudents = groupedStudents[selectedClass] ||[];
     if (!searchText) return classStudents;
 
     const lowerSearch = searchText.toLowerCase();
@@ -193,22 +200,17 @@ const StudentListScreen = ({ navigation }) => {
           )}
         </View>
 
-        {/* Class Picker */}
+        {/* Custom Class Picker (Fixes iOS Issue) */}
         <View style={[styles.pickerCard, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
           <Icon name="class" size={20} color={COLORS.primary} style={{ marginLeft: 10 }} />
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={selectedClass}
-              onValueChange={(itemValue) => setSelectedClass(itemValue)}
-              style={[styles.picker, { color: COLORS.textMain }]}
-              dropdownIconColor={COLORS.primary}
-              mode="dropdown"
-            >
-              {CLASS_ORDER.map(className => (
-                <Picker.Item key={className} label={className} value={className} color={COLORS.textMain} />
-              ))}
-            </Picker>
-          </View>
+          <TouchableOpacity 
+            style={styles.customDropdownTrigger} 
+            onPress={() => setShowClassPicker(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={{ color: COLORS.textMain, fontSize: 15 }}>{selectedClass}</Text>
+            <Icon name="arrow-drop-down" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -233,6 +235,33 @@ const StudentListScreen = ({ navigation }) => {
           </View>
         )}
       </ScrollView>
+
+      {/* CUSTOM CLASS SELECTOR MODAL */}
+      <Modal visible={showClassPicker} transparent animationType="fade" onRequestClose={() => setShowClassPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowClassPicker(false)}>
+          <View style={[styles.modalContent, { backgroundColor: COLORS.cardBg, width: screenWidth * 0.85, maxHeight: screenHeight * 0.6 }]}>
+            <Text style={[styles.modalTitle, { color: COLORS.primary }]}>Select Class</Text>
+            <FlatList
+              data={CLASS_ORDER}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalItem, { borderBottomColor: COLORS.border }]} 
+                  onPress={() => {
+                    setSelectedClass(item);
+                    setShowClassPicker(false);
+                  }}
+                >
+                  <Text style={[styles.modalItemText, { color: COLORS.textMain, fontWeight: selectedClass === item ? 'bold' : 'normal' }]}>
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -317,13 +346,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 1 },
   },
-  pickerWrapper: {
+  customDropdownTrigger: {
     flex: 1,
-    justifyContent: 'center',
-  },
-  picker: {
-    width: '100%',
-    height: 50, // Standard height for touch targets
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: '100%'
   },
 
   // --- Content Area ---
@@ -379,6 +408,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
+  // --- Modal Styles ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalContent: {
+    borderRadius: 12,
+    padding: 20,
+    elevation: 5
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center'
+  },
+  modalItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 0.5
+  },
+  modalItemText: {
+    fontSize: 16,
+    textAlign: 'center'
+  }
 });
 
 export default StudentListScreen;

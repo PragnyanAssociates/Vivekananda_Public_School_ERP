@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   SafeAreaView, View, Text, TextInput, TouchableOpacity, Modal, StyleSheet,
   Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  LayoutAnimation, UIManager, Dimensions, StatusBar, useColorScheme
+  LayoutAnimation, UIManager, Dimensions, StatusBar, useColorScheme, FlatList
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+// We remove the native Picker import here to fix the iOS UI bug.
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
 import apiClient from '../api/client';
@@ -98,6 +98,10 @@ const AdminLM = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [currentSubjectInput, setCurrentSubjectInput] = useState('');
 
+  // --- NEW STATE: Custom Dropdown Control ---
+  const [isRolePickerVisible, setIsRolePickerVisible] = useState(false);
+  const [isClassPickerVisible, setIsClassPickerVisible] = useState(false);
+
   // --- NEW STATE: Date Picker State ---
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeDateField, setActiveDateField] = useState<string | null>(null);
@@ -188,9 +192,8 @@ const AdminLM = () => {
   // --- HELPER: DATE VALIDATION ---
   // Returns { valid: boolean, msg: string }
   const checkDateValidity = (dateStr: string, fieldName: string) => {
-    if (!dateStr || dateStr.trim() === '') return { valid: true, msg: '' }; // Allow empty if not mandatory, or handle mandatory elsewhere
+    if (!dateStr || dateStr.trim() === '') return { valid: true, msg: '' }; 
     
-    // Regex for DD/MM/YYYY
     const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
     const match = dateStr.match(regex);
     
@@ -202,13 +205,10 @@ const AdminLM = () => {
     const month = parseInt(match[2], 10);
     const year = parseInt(match[3], 10);
 
-    // Basic range check
     if (month < 1 || month > 12 || day < 1 || day > 31) {
       return { valid: false, msg: `Invalid date in ${fieldName}.` };
     }
 
-    // JS Date object check (handles leap years and month lengths automatically)
-    // Note: Month is 0-indexed in JS Date
     const dateObj = new Date(year, month - 1, day);
     
     if (
@@ -219,9 +219,8 @@ const AdminLM = () => {
       return { valid: false, msg: `Invalid date in ${fieldName}.` };
     }
 
-    // Future Date Check
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // normalize today to start of day
+    today.setHours(0, 0, 0, 0); 
     if (dateObj > today) {
       return { valid: false, msg: `${fieldName} cannot be in the future.` };
     }
@@ -231,30 +230,25 @@ const AdminLM = () => {
 
   // --- NEW HELPERS: CALENDAR LOGIC ---
   
-  // 1. Convert "DD/MM/YYYY" string to JS Date object for the Picker
   const getDateObject = (dateString: string) => {
     if (!dateString) return new Date();
     const parts = dateString.split('/');
     if (parts.length === 3) {
-      // parts[0] = Day, parts[1] = Month, parts[2] = Year
       const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1; // JS months are 0-11
+      const month = parseInt(parts[1], 10) - 1; 
       const year = parseInt(parts[2], 10);
       return new Date(year, month, day);
     }
     return new Date();
   };
 
-  // 2. Handle Date Selection
   const onDateChange = (event: any, selectedDate?: Date) => {
-    // On Android, dismissing the picker sends event.type = 'dismissed'
     if (event.type === 'dismissed') {
       setShowDatePicker(false);
       setActiveDateField(null);
       return;
     }
 
-    // If on Android, hide immediately. On iOS, you might keep it open (or hide).
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
     }
@@ -268,13 +262,11 @@ const AdminLM = () => {
       setFormData({ ...formData, [activeDateField]: formattedDate });
     }
 
-    // Cleanup active field on Android close
     if (Platform.OS === 'android') {
       setActiveDateField(null);
     }
   };
 
-  // 3. Trigger Picker
   const showDatepicker = (fieldName: string) => {
     setActiveDateField(fieldName);
     setShowDatePicker(true);
@@ -297,9 +289,7 @@ const AdminLM = () => {
         break;
       case 'joining_date':
       case 'admission_date':
-        // Only allow numbers and slash
         sanitized = value.replace(/[^0-9/]/g, '');
-        // Optional: Block more than 10 chars (DD/MM/YYYY is 10 chars)
         if (sanitized.length > 10) sanitized = sanitized.slice(0, 10);
         break;
       case 'parent_name':
@@ -346,9 +336,7 @@ const AdminLM = () => {
     return changes;
   };
 
-  // --- FINAL VALIDATION & SAVE ---
   const handleSave = async () => {
-    // 1. Basic Required Fields
     if (!formData.username || !formData.full_name) {
       Alert.alert('Error', 'Username and Full Name are required.');
       return;
@@ -363,7 +351,6 @@ const AdminLM = () => {
       return;
     }
 
-    // 2. PHONE VALIDATION
     if (formData.phone_no && formData.phone_no.trim() !== '') {
       const phoneRegex = /^[1-9][0-9]{9}$/;
       if (!phoneRegex.test(formData.phone_no)) {
@@ -372,7 +359,6 @@ const AdminLM = () => {
       }
     }
 
-    // 3. DATE VALIDATIONS (DD/MM/YYYY)
     if (formData.joining_date) {
       const dateCheck = checkDateValidity(formData.joining_date, 'Joining Date');
       if (!dateCheck.valid) {
@@ -388,7 +374,6 @@ const AdminLM = () => {
         }
     }
 
-    // 4. AADHAAR VALIDATION
     if (formData.aadhar_no && formData.aadhar_no.trim() !== '') {
       const aadhaarRegex = /^[0-9]{12}$/;
       if (!aadhaarRegex.test(formData.aadhar_no)) {
@@ -397,7 +382,6 @@ const AdminLM = () => {
       }
     }
 
-    // 5. PEN NUMBER VALIDATION
     if (formData.pen_no && formData.pen_no.trim() !== '') {
       const penRegex = /^[a-zA-Z0-9]{6,20}$/;
       if (!penRegex.test(formData.pen_no)) {
@@ -405,7 +389,6 @@ const AdminLM = () => {
         return;
       }
 
-      // Unique Check (Client side)
       const duplicatePen = users.find(u =>
         u.pen_no === formData.pen_no &&
         u.id !== (editingUser ? editingUser.id : -1)
@@ -417,7 +400,6 @@ const AdminLM = () => {
       }
     }
 
-    // 6. TEACHER SUBJECT VALIDATION
     if (formData.role === 'teacher') {
       if (!formData.subjects_taught || formData.subjects_taught.length === 0) {
         Alert.alert('Missing Info', 'A Teacher must have at least one subject assigned.');
@@ -425,7 +407,6 @@ const AdminLM = () => {
       }
     }
 
-    // --- PROCEED TO SAVE ---
     try {
       if (isEditing) {
         const changes = getChangedFields(editingUser!, formData);
@@ -499,7 +480,6 @@ const AdminLM = () => {
     setFormData({ ...formData, subjects_taught: updatedSubjects });
   };
 
-  // --- MENU HANDLER ---
   const handleMenuPress = (user: User) => {
     setSelectedUserForMenu(user);
     setMenuVisible(true);
@@ -526,7 +506,6 @@ const AdminLM = () => {
     }, 300);
   };
 
-  // --- RENDER USER ITEM ---
   const renderUserItem = (item: User) => {
     let iconName = 'person';
     if (item.role === 'admin') iconName = 'admin-panel-settings';
@@ -535,7 +514,6 @@ const AdminLM = () => {
 
     return (
       <View style={[styles.card, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-        {/* Header Part of Card */}
         <View style={styles.cardHeader}>
           <View style={styles.userInfoLeft}>
             <View style={[styles.userIconWrapper, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
@@ -549,8 +527,6 @@ const AdminLM = () => {
               </Text>
             </View>
           </View>
-
-          {/* 3-DOT MENU BUTTON */}
           <TouchableOpacity
             style={styles.menuButton}
             onPress={() => handleMenuPress(item)}
@@ -562,7 +538,6 @@ const AdminLM = () => {
 
         <View style={[styles.divider, { backgroundColor: COLORS.border }]} />
 
-        {/* Details Part of Card */}
         <View style={styles.cardDetails}>
           <Text style={styles.detailRow}>
             <Text style={[styles.detailLabel, { color: COLORS.textSub }]}>Username: </Text>
@@ -610,12 +585,12 @@ const AdminLM = () => {
 
   const isEditing = !!editingUser;
   const displayRole = formData.role === 'admin' ? formData.class_group : formData.role;
+  const roleLabel = DISPLAY_USER_ROLES.find(r => r.value === displayRole)?.label || 'Select Role';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={COLORS.background} />
 
-      {/* Header Card */}
       <View style={[styles.headerCard, { backgroundColor: COLORS.cardBg, shadowColor: isDark ? '#000' : '#ccc' }]}>
         <View style={styles.headerLeftContainer}>
           <View style={[styles.headerIconContainer, { backgroundColor: isDark ? '#333' : '#E0F2F1' }]}>
@@ -635,7 +610,6 @@ const AdminLM = () => {
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-        {/* Search Bar */}
         <View style={[styles.searchCard, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
           <Icon name="search" size={24} color={COLORS.textSub} style={styles.searchIcon} />
           <TextInput
@@ -652,7 +626,6 @@ const AdminLM = () => {
           )}
         </View>
 
-        {/* List Items */}
         {CLASS_CATEGORIES.map((className, index) => (
           <Animatable.View key={className} animation="fadeInUp" duration={400} delay={index * 50} style={styles.accordionContainer}>
             <TouchableOpacity style={[styles.accordionHeader, { backgroundColor: COLORS.cardBg }]} onPress={() => handleToggleAccordion(className)} activeOpacity={0.8}>
@@ -700,7 +673,6 @@ const AdminLM = () => {
               Options for "{selectedUserForMenu?.full_name}"
             </Text>
 
-            {/* Row 1: View, Edit, Delete */}
             <View style={styles.menuRowThree}>
               <TouchableOpacity onPress={() => performMenuAction('VIEW')}>
                 <Text style={[styles.menuBtnText, { color: COLORS.primary }]}>VIEW</Text>
@@ -713,7 +685,6 @@ const AdminLM = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Row 2: Cancel (Centered and Boxed) */}
             <View style={styles.menuRowCenter}>
               <TouchableOpacity
                 style={[styles.cancelButtonBox, { borderColor: COLORS.primary }]}
@@ -785,30 +756,16 @@ const AdminLM = () => {
               />
 
               <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Role</Text>
-              <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                <Picker
-                  selectedValue={displayRole}
-                  onValueChange={(val) => {
-                    const newFormData = { ...formData };
-                    if (val === 'Management Admin' || val === 'General Admin') {
-                      newFormData.role = 'admin';
-                      newFormData.class_group = val;
-                    } else {
-                      newFormData.role = val;
-                      if (val === 'teacher') newFormData.class_group = 'Teachers';
-                      else if (val === 'others') newFormData.class_group = 'Others';
-                    }
-                    setFormData(newFormData);
-                  }}
-                  style={[styles.modalPicker, { color: COLORS.textMain }]}
-                  dropdownIconColor={COLORS.textSub}
-                  mode="dropdown"
-                >
-                  {DISPLAY_USER_ROLES.map((role) => (
-                    <Picker.Item key={role.value} label={role.label} value={role.value} color={COLORS.textMain} />
-                  ))}
-                </Picker>
-              </View>
+              {/* FIXED: CUSTOM DROP DOWN FOR iOS & ANDROID CONSISTENCY */}
+              <TouchableOpacity 
+                style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} 
+                onPress={() => setIsRolePickerVisible(true)}
+              >
+                <Text style={{ color: formData.role ? COLORS.textMain : COLORS.iconGrey, fontSize: 15 }}>
+                  {roleLabel}
+                </Text>
+                <Icon name="arrow-drop-down" size={24} color={COLORS.iconGrey} />
+              </TouchableOpacity>
 
               {formData.role === 'teacher' && (
                 <>
@@ -842,18 +799,17 @@ const AdminLM = () => {
               {formData.role === 'student' ? (
                 <>
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Class / Group</Text>
-                  <View style={[styles.pickerWrapper, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
-                    <Picker
-                      selectedValue={formData.class_group}
-                      onValueChange={(val) => setFormData({ ...formData, class_group: val })}
-                      style={[styles.modalPicker, { color: COLORS.textMain }]}
-                      dropdownIconColor={COLORS.textSub}
-                    >
-                      {CLASS_CATEGORIES.filter(c => !['Admins', 'Teachers', 'Others'].includes(c)).map((level) => (
-                        <Picker.Item key={level} label={level} value={level} color={COLORS.textMain} />
-                      ))}
-                    </Picker>
-                  </View>
+                  {/* FIXED: CUSTOM DROP DOWN FOR CLASS SELECTION */}
+                  <TouchableOpacity 
+                    style={[styles.customDropdownTrigger, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]} 
+                    onPress={() => setIsClassPickerVisible(true)}
+                  >
+                    <Text style={{ color: formData.class_group ? COLORS.textMain : COLORS.iconGrey, fontSize: 15 }}>
+                      {formData.class_group || 'Select Class'}
+                    </Text>
+                    <Icon name="arrow-drop-down" size={24} color={COLORS.iconGrey} />
+                  </TouchableOpacity>
+
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Roll No.</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Roll Number" placeholderTextColor={COLORS.iconGrey} value={formData.roll_no} onChangeText={(val) => validateInput('roll_no', val)} keyboardType="numeric" />
 
@@ -869,7 +825,6 @@ const AdminLM = () => {
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>PEN No.</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="PEN Number" placeholderTextColor={COLORS.iconGrey} value={formData.pen_no} onChangeText={(val) => validateInput('pen_no', val)} />
                   
-                  {/* --- UPDATED: Admission Date with Calendar (Student) --- */}
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Admission Date</Text>
                   <TouchableOpacity 
                     onPress={() => showDatepicker('admission_date')}
@@ -892,7 +847,6 @@ const AdminLM = () => {
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Aadhar No.</Text>
                   <TextInput style={[styles.input, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border, color: COLORS.textMain }]} placeholder="Aadhar Number" placeholderTextColor={COLORS.iconGrey} value={formData.aadhar_no} onChangeText={(val) => validateInput('aadhar_no', val)} keyboardType="numeric" maxLength={12} />
 
-                  {/* --- UPDATED: Joining Date with Calendar (Teacher/Others) --- */}
                   <Text style={[styles.inputLabel, { color: COLORS.textSub }]}>Joining Date</Text>
                   <TouchableOpacity 
                     onPress={() => showDatepicker('joining_date')}
@@ -932,14 +886,64 @@ const AdminLM = () => {
           </Animatable.View>
         </KeyboardAvoidingView>
 
-        {/* --- NEW COMPONENT: Date Picker Modal --- */}
+        {/* ROLE SELECTION LIST MODAL */}
+        <Modal transparent visible={isRolePickerVisible} animationType="fade">
+          <TouchableOpacity style={styles.customPickerOverlay} onPress={() => setIsRolePickerVisible(false)}>
+            <View style={[styles.customPickerModal, { backgroundColor: COLORS.cardBg }]}>
+              <Text style={[styles.pickerTitle, { color: COLORS.primary }]}>Select Role</Text>
+              <FlatList
+                data={DISPLAY_USER_ROLES}
+                keyExtractor={(item) => item.value}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.pickerItem} onPress={() => {
+                    const newFormData = { ...formData };
+                    if (item.value === 'Management Admin' || item.value === 'General Admin') {
+                      newFormData.role = 'admin';
+                      newFormData.class_group = item.value;
+                    } else {
+                      newFormData.role = item.value;
+                      if (item.value === 'teacher') newFormData.class_group = 'Teachers';
+                      else if (item.value === 'others') newFormData.class_group = 'Others';
+                    }
+                    setFormData(newFormData);
+                    setIsRolePickerVisible(false);
+                  }}>
+                    <Text style={[styles.pickerItemText, { color: COLORS.textMain }]}>{item.label}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* CLASS SELECTION LIST MODAL */}
+        <Modal transparent visible={isClassPickerVisible} animationType="fade">
+          <TouchableOpacity style={styles.customPickerOverlay} onPress={() => setIsClassPickerVisible(false)}>
+            <View style={[styles.customPickerModal, { backgroundColor: COLORS.cardBg }]}>
+              <Text style={[styles.pickerTitle, { color: COLORS.primary }]}>Select Class</Text>
+              <FlatList
+                data={CLASS_CATEGORIES.filter(c => !['Admins', 'Teachers', 'Others'].includes(c))}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.pickerItem} onPress={() => {
+                    setFormData({ ...formData, class_group: item });
+                    setIsClassPickerVisible(false);
+                  }}>
+                    <Text style={[styles.pickerItemText, { color: COLORS.textMain }]}>{item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         {showDatePicker && (
             <DateTimePicker
                 value={getDateObject(formData[activeDateField!])}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={onDateChange}
-                maximumDate={new Date()} // Prevent future dates
+                maximumDate={new Date()} 
             />
         )}
       </Modal>
@@ -952,7 +956,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { paddingVertical: 10, paddingBottom: 50 },
 
-  // --- Header Card Style ---
   headerCard: {
     padding: 15,
     width: '96%',
@@ -1009,7 +1012,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // --- Search Bar Style ---
   searchCard: {
     borderRadius: 12,
     width: '96%',
@@ -1032,7 +1034,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  // --- Accordion Container ---
   accordionContainer: {
     marginBottom: 10,
     width: '96%',
@@ -1071,7 +1072,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
-  // --- CARD STYLE ---
   card: {
     borderRadius: 12,
     padding: 15,
@@ -1143,7 +1143,6 @@ const styles = StyleSheet.create({
     fontSize: 15
   },
 
-  // --- Menu Modal Styles ---
   menuModalOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -1193,7 +1192,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase'
   },
 
-  // --- Add/Edit User Modal Styles ---
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   modalContainer: {
     width: width > 400 ? '80%' : '92%',
@@ -1220,7 +1218,6 @@ const styles = StyleSheet.create({
   passwordInput: { flex: 1, paddingHorizontal: 15, paddingVertical: 12, fontSize: 15 },
   eyeIcon: { padding: 10 },
   
-  // --- New Date Picker Styles ---
   datePickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1238,11 +1235,45 @@ const styles = StyleSheet.create({
     padding: 10,
   },
 
-  pickerWrapper: {
-    borderRadius: 8, borderWidth: 1,
-    justifyContent: 'center', marginBottom: 15,
+  // --- NEW STYLES FOR CUSTOM DROPDOWN ---
+  customDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
   },
-  modalPicker: { height: 50, width: '100%' },
+  customPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  customPickerModal: {
+    width: '80%',
+    maxHeight: '60%',
+    borderRadius: 12,
+    padding: 20,
+    elevation: 5
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center'
+  },
+  pickerItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#eee'
+  },
+  pickerItemText: {
+    fontSize: 16
+  },
+  // --------------------------------------
 
   subjectInputContainer: { flexDirection: 'row', marginBottom: 10 },
   subjectInput: {

@@ -6,12 +6,13 @@
  * - Fixes 500 Error by sending ISO Date
  * - DD/MM/YYYY Format Display
  * - FIX ADDED: Added Lab Type Picker to satisfy DB 'NOT NULL' constraint.
+ * - NEW FIX: Custom Modal Dropdowns & iOS Modal DatePicker setup.
  */
 
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import { 
     View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
-    Modal, TextInput, Alert, ScrollView, Platform, SafeAreaView, Dimensions,
+    Modal, TextInput, Alert, ScrollView, Platform, SafeAreaView, useWindowDimensions,
     useColorScheme, StatusBar, KeyboardAvoidingView
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -22,11 +23,7 @@ import { LabCard } from './LabCard';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import { useNavigation } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-// Get screen dimensions
-const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -90,6 +87,8 @@ const formatDisplayDate = (dateObj: Date): string => {
 };
 
 const TeacherAdminLabsScreen = () => {
+    // Hooks for dynamic dimensions & themes
+    const { width, height } = useWindowDimensions();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = isDark ? DarkColors : LightColors;
@@ -101,11 +100,11 @@ const TeacherAdminLabsScreen = () => {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
 
-    const [labs, setLabs] = useState([]);
+    const[labs, setLabs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false); // Loading state for save button
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingLab, setEditingLab] = useState(null);
+    const[isSaving, setIsSaving] = useState(false); // Loading state for save button
+    const[isModalOpen, setIsModalOpen] = useState(false);
+    const [editingLab, setEditingLab] = useState<any>(null);
     
     const initialFormState = { 
         title: '', subject: '', lab_type: '', description: '', access_url: '',
@@ -114,13 +113,27 @@ const TeacherAdminLabsScreen = () => {
     const [formData, setFormData] = useState(initialFormState);
     const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
 
-    const [selectedImage, setSelectedImage] = useState(null);
+    const[selectedImage, setSelectedImage] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const [studentClasses, setStudentClasses] = useState([]);
     const [selectedClass, setSelectedClass] = useState('');
     
     const [showPicker, setShowPicker] = useState(false);
-    const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+    // Updated type to include datetime for iOS
+    const [pickerMode, setPickerMode] = useState<'date' | 'time' | 'datetime'>('date');
+
+    // Custom Dropdown State
+    const [dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data: [] as {label: string, value: string}[],
+        selectedValue: '',
+        onSelect: (val: string) => {}
+    });
+
+    const openDropdown = (title: string, data: {label: string, value: string}[], selectedValue: string, onSelect: (val: string) => void) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
 
     const fetchLabs = useCallback(async () => {
         if (!user) return;
@@ -152,17 +165,28 @@ const TeacherAdminLabsScreen = () => {
 
     // --- DATE PICKER LOGIC ---
     const showMode = (currentMode: 'date' | 'time') => {
+        if (Platform.OS === 'ios') {
+            // iOS handles date and time beautifully in a single spinner
+            setPickerMode('datetime');
+        } else {
+            setPickerMode(currentMode);
+        }
         setShowPicker(true);
-        setPickerMode(currentMode);
     };
     
     const handleDateChange = (event: any, selectedDate?: Date) => {
-        if (Platform.OS === 'android') setShowPicker(false);
+        if (event.type === 'dismissed') {
+            setShowPicker(false);
+            return;
+        }
 
-        if (event.type === 'set' && selectedDate) {
-            const currentDate = selectedDate;
-            if (Platform.OS === 'android' && pickerMode === 'date') {
+        const currentDate = selectedDate || scheduleDate || new Date();
+
+        if (Platform.OS === 'android') {
+            setShowPicker(false);
+            if (pickerMode === 'date') {
                 setScheduleDate(currentDate); 
+                // Chain to time picker
                 setTimeout(() => showMode('time'), 100);
             } else if (pickerMode === 'time') {
                 const baseDate = scheduleDate || new Date();
@@ -170,13 +194,55 @@ const TeacherAdminLabsScreen = () => {
                 finalDate.setHours(currentDate.getHours());
                 finalDate.setMinutes(currentDate.getMinutes());
                 setScheduleDate(finalDate);
-                if (Platform.OS === 'ios') setShowPicker(false);
-            } else {
-                setScheduleDate(currentDate);
             }
-        } else if (event.type === 'dismissed') {
-            setShowPicker(false);
+        } else {
+            // iOS - updates live as spinner moves
+            setScheduleDate(currentDate);
         }
+    };
+
+    // iOS Specific Renderer to wrap picker in a Modal
+    const renderDatePicker = () => {
+        if (!showPicker) return null;
+
+        if (Platform.OS === 'ios') {
+            return (
+                <Modal visible={showPicker} transparent animationType="slide">
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.iosPickerContainer, { backgroundColor: theme.cardBg }]}>
+                            <View style={[styles.iosPickerHeader, { borderBottomColor: theme.border }]}>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.danger }]}>Close</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.primary }]}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                testID="dateTimePicker"
+                                value={scheduleDate || new Date()}
+                                mode={pickerMode}
+                                display="spinner"
+                                onChange={handleDateChange}
+                                textColor={theme.textMain}
+                                style={{ height: 210, width: '100%' }}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+            );
+        }
+
+        return (
+            <DateTimePicker
+                testID="dateTimePicker"
+                value={scheduleDate || new Date()}
+                mode={pickerMode as any}
+                is24Hour={false} 
+                display="default"
+                onChange={handleDateChange}
+            />
+        );
     };
 
     const handleChoosePhoto = () => {
@@ -292,7 +358,7 @@ const TeacherAdminLabsScreen = () => {
     };
 
     const handleDelete = async (id: number) => {
-        Alert.alert("Confirm Deletion", "Are you sure you want to delete this lab?", [
+        Alert.alert("Confirm Deletion", "Are you sure you want to delete this lab?",[
             { text: "Cancel", style: "cancel" },
             { text: "Delete", style: "destructive", onPress: async () => {
                 try {
@@ -318,7 +384,7 @@ const TeacherAdminLabsScreen = () => {
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
             
             {/* --- HEADER --- */}
-            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border, width: width > 600 ? '90%' : '96%' }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialCommunityIcons name="flask" size={24} color={theme.primary} />
@@ -356,7 +422,7 @@ const TeacherAdminLabsScreen = () => {
             {/* --- MODAL --- */}
             <Modal visible={isModalOpen} onRequestClose={() => setIsModalOpen(false)} animationType="slide" transparent>
                 <View style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}>
-                    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalContent, { backgroundColor: theme.modalBg }]}>
+                    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalContent, { backgroundColor: theme.modalBg, height: height * 0.9 }]}>
                         
                         {/* Modal Header */}
                         <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
@@ -368,20 +434,20 @@ const TeacherAdminLabsScreen = () => {
 
                         <ScrollView contentContainerStyle={{ padding: 20 }}>
                             
-                            {/* Class Selection */}
+                            {/* Class Selection Dropdown (Replaced Native Picker) */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Assign to Class</Text>
-                            <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                                <Picker 
-                                    selectedValue={selectedClass} 
-                                    onValueChange={(itemValue) => setSelectedClass(itemValue)}
-                                    style={{ color: theme.textMain }}
-                                    dropdownIconColor={theme.textMain}
-                                >
-                                    <Picker.Item label="-- Select Class --" value="" color={theme.textSub}/>
-                                    {/* @ts-ignore */}
-                                    {studentClasses.map((c, i) => <Picker.Item key={i} label={c} value={c} color={theme.textMain} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                                onPress={() => openDropdown('Assign to Class',[
+                                    {label: '-- Select Class --', value: ''},
+                                    ...studentClasses.map((c: string) => ({label: c, value: c}))
+                                ], selectedClass, setSelectedClass)}
+                            >
+                                <Text style={{ color: selectedClass ? theme.textMain : theme.textPlaceholder, fontSize: 16 }}>
+                                    {selectedClass || '-- Select Class --'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                            </TouchableOpacity>
 
                             {/* Inputs */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Title*</Text>
@@ -402,23 +468,24 @@ const TeacherAdminLabsScreen = () => {
                                 onChangeText={t => setFormData({...formData, subject: t})} 
                             />
 
-                            {/* --- FIX: Added Lab Type Picker here --- */}
+                            {/* Lab Type Selection Dropdown (Replaced Native Picker) */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Lab Type*</Text>
-                            <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                                <Picker 
-                                    selectedValue={formData.lab_type} 
-                                    onValueChange={(itemValue) => setFormData({...formData, lab_type: itemValue})}
-                                    style={{ color: theme.textMain }}
-                                    dropdownIconColor={theme.textMain}
-                                >
-                                    <Picker.Item label="-- Select Type --" value="" color={theme.textSub}/>
-                                    <Picker.Item label="Video / Lecture" value="Video" color={theme.textMain}/>
-                                    <Picker.Item label="Simulation" value="Simulation" color={theme.textMain}/>
-                                    <Picker.Item label="PDF / Document" value="PDF" color={theme.textMain}/>
-                                    <Picker.Item label="Live Class" value="Live Class" color={theme.textMain}/>
-                                    <Picker.Item label="External Link" value="Link" color={theme.textMain}/>
-                                </Picker>
-                            </View>
+                            <TouchableOpacity 
+                                style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                                onPress={() => openDropdown('Select Lab Type',[
+                                    {label: '-- Select Type --', value: ''},
+                                    {label: 'Video / Lecture', value: 'Video'},
+                                    {label: 'Simulation', value: 'Simulation'},
+                                    {label: 'PDF / Document', value: 'PDF'},
+                                    {label: 'Live Class', value: 'Live Class'},
+                                    {label: 'External Link', value: 'Link'}
+                                ], formData.lab_type, (val) => setFormData({...formData, lab_type: val}))}
+                            >
+                                <Text style={{ color: formData.lab_type ? theme.textMain : theme.textPlaceholder, fontSize: 16 }}>
+                                    {formData.lab_type || '-- Select Type --'}
+                                </Text>
+                                <MaterialIcons name="arrow-drop-down" size={24} color={theme.textSub} />
+                            </TouchableOpacity>
                             
                             <Text style={[styles.label, { color: theme.textSub }]}>Topic / Chapter</Text>
                             <TextInput 
@@ -439,7 +506,7 @@ const TeacherAdminLabsScreen = () => {
                                 multiline 
                             />
                             
-                            {/* Date Picker */}
+                            {/* Date Picker Trigger */}
                             <Text style={[styles.label, { color: theme.textSub }]}>Scheduled Date & Time (DD/MM/YYYY)</Text>
                             <View style={styles.datePickerContainer}>
                                 <TouchableOpacity 
@@ -452,18 +519,6 @@ const TeacherAdminLabsScreen = () => {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
-
-                            {/* Show Picker Component */}
-                            {showPicker && (
-                                <DateTimePicker
-                                    testID="dateTimePicker"
-                                    value={scheduleDate || new Date()}
-                                    mode={pickerMode}
-                                    is24Hour={false} 
-                                    display="default"
-                                    onChange={handleDateChange}
-                                />
-                            )}
 
                             {/* Cover Image */}
                             <Text style={[styles.label, { color: theme.textSub, marginTop: 15 }]}>Cover Image</Text>
@@ -533,9 +588,40 @@ const TeacherAdminLabsScreen = () => {
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
+
+                        {/* Dropdown Options Modal Overlay */}
+                        <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                            <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                                <View style={[styles.dropdownModal, { backgroundColor: theme.modalBg, width: width * 0.85, maxHeight: height * 0.6 }]}>
+                                    <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                                    <FlatList
+                                        data={dropdownConfig.data}
+                                        keyExtractor={(item, index) => item.value + index.toString()}
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity 
+                                                style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                                onPress={() => {
+                                                    dropdownConfig.onSelect(item.value);
+                                                    setDropdownConfig({ ...dropdownConfig, visible: false });
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.dropdownItemText, 
+                                                    { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                                ]}>{item.label}</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    />
+                                </View>
+                            </TouchableOpacity>
+                        </Modal>
+
                     </KeyboardAvoidingView>
                 </View>
             </Modal>
+            
+            {/* Native & iOS Modaled Date Picker */}
+            {renderDatePicker()}
         </SafeAreaView>
     );
 };
@@ -548,7 +634,6 @@ const styles = StyleSheet.create({
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -572,9 +657,9 @@ const styles = StyleSheet.create({
     cardWrapper: { width: '100%', alignItems: 'center', marginBottom: 5 },
     emptyText: { textAlign: 'center', marginTop: 10, fontSize: 16 },
 
-    // Modal
+    // Main Modal Layout
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-    modalContent: { height: '90%', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 20 },
+    modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 20 },
     modalHeader: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
     modalTitle: { fontSize: 18, fontWeight: 'bold' },
     closeBtn: { position: 'absolute', right: 20 },
@@ -582,7 +667,14 @@ const styles = StyleSheet.create({
     label: { fontSize: 14, fontWeight: '600', marginBottom: 6, marginTop: 12 },
     input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
     textarea: { height: 80, textAlignVertical: 'top' },
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 5, justifyContent: 'center' },
+    
+    // Custom Dropdown Specific UI
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 5 },
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' },
     
     uploadButton: { flexDirection: 'row', padding: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 5 },
     uploadButtonText: { marginLeft: 10, fontWeight: 'bold', fontSize: 14 },
@@ -597,8 +689,15 @@ const styles = StyleSheet.create({
 
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 50 },
     modalButton: { paddingVertical: 14, borderRadius: 8, flex: 0.48, alignItems: 'center', elevation: 2 },
+    cancelButton: {},
+    saveButton: {},
     cancelButtonText: { fontWeight: 'bold', fontSize: 16 },
     saveButtonText: { fontWeight: 'bold', fontSize: 16 },
+
+    // --- iOS Custom Date Picker Modal Styles ---
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
+    iosPickerBtnText: { fontSize: 16, fontWeight: 'bold' }
 });
 
 export default TeacherAdminLabsScreen;

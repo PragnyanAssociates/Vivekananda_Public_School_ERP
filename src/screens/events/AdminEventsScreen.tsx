@@ -5,14 +5,15 @@
  * - FIX: Solved +5:30 Timezone shift.
  * - Format: DD/MM/YYYY.
  * - Responsive Design.
+ * - FIX ADDED: Custom Dropdown Modal and iOS DatePicker Modal integrated.
  */
 
 import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { 
     View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, 
     ActivityIndicator, TextInput, ScrollView, Platform, SafeAreaView, 
-    UIManager, LayoutAnimation, useColorScheme, StatusBar, Dimensions,
-    KeyboardAvoidingView
+    UIManager, LayoutAnimation, useColorScheme, StatusBar, useWindowDimensions,
+    KeyboardAvoidingView, Modal
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -20,10 +21,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/client';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import * as Animatable from 'react-native-animatable';
-
-const { width } = Dimensions.get('window');
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -51,7 +49,8 @@ const LightColors = {
     tagBorder: '#ccfbf1',
     tagText: '#00796B',
     expandedBg: '#FAFAFA',
-    emptyIcon: '#CFD8DC'
+    emptyIcon: '#CFD8DC',
+    modalOverlay: 'rgba(0,0,0,0.5)'
 };
 
 const DarkColors = {
@@ -74,7 +73,8 @@ const DarkColors = {
     tagBorder: '#115e59',
     tagText: '#2dd4bf',
     expandedBg: '#252525',
-    emptyIcon: '#475569'
+    emptyIcon: '#475569',
+    modalOverlay: 'rgba(255,255,255,0.1)'
 };
 
 // --- HELPER: PARSE SERVER DATE WITHOUT TIMEZONE SHIFT ---
@@ -146,7 +146,7 @@ const AdminEventsScreen = () => {
     // Hide default header
     useLayoutEffect(() => {
         navigation.setOptions({ headerShown: false });
-    }, [navigation]);
+    },[navigation]);
     
     const handleBack = () => {
         setEventToEdit(null);
@@ -177,6 +177,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedEventId, setExpandedEventId] = useState(null);
+    const { width } = useWindowDimensions();
 
     const fetchData = useCallback(() => {
         setLoading(true);
@@ -188,7 +189,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
             })
             .catch(err => Alert.alert("Error", "Could not load events."))
             .finally(() => setLoading(false));
-    }, []);
+    },[]);
 
     useFocusEffect(fetchData);
 
@@ -200,8 +201,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     const handleMenuPress = (event) => {
         Alert.alert(
             "Manage Event",
-            `Options for "${event.title}"`,
-            [
+            `Options for "${event.title}"`,[
                 { text: "Cancel", style: "cancel" },
                 { text: "Edit", onPress: () => onEdit(event) },
                 { text: "Delete", style: "destructive", onPress: () => handleDelete(event.id) }
@@ -210,7 +210,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     };
 
     const handleDelete = (eventId) => {
-        Alert.alert("Confirm Delete", "Are you sure you want to delete this event?", [
+        Alert.alert("Confirm Delete", "Are you sure you want to delete this event?",[
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete", style: "destructive",
@@ -227,7 +227,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
     return (
         <View style={styles.container}>
             {/* --- HEADER CARD --- */}
-            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border, width: width > 600 ? '90%' : '96%' }]}>
                 <View style={styles.headerLeft}>
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.iconBg }]}>
                         <MaterialIcons name="event" size={24} color={theme.primary} />
@@ -257,6 +257,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
                             isExpanded={expandedEventId === item.id}
                             onPress={() => toggleExpand(item.id)}
                             onMenu={() => handleMenuPress(item)}
+                            width={width}
                         />
                     )}
                     ListEmptyComponent={
@@ -265,7 +266,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
                             <Text style={[styles.emptyText, { color: theme.textSub }]}>No events found.</Text>
                         </View>
                     }
-                    contentContainerStyle={styles.listContent}
+                    contentContainerStyle={[styles.listContent, { paddingHorizontal: width * 0.02 }]}
                     showsVerticalScrollIndicator={false}
                 />
             )}
@@ -274,7 +275,7 @@ const EventListView = ({ user, onCreate, onEdit, theme }) => {
 };
 
 // --- EVENT CARD COMPONENT ---
-const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
+const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme, width }) => {
     // Parse using the helper to ensure correctness
     const date = parseServerDateTime(event.event_datetime);
     
@@ -285,7 +286,7 @@ const AdminEventCard = ({ event, isExpanded, onPress, onMenu, theme }) => {
     const fullFormattedDate = formatDisplayDate(date);
 
     return (
-        <Animatable.View animation="fadeInUp" duration={500} style={styles.cardWrapper}>
+        <Animatable.View animation="fadeInUp" duration={500} style={[styles.cardWrapper, { width: width > 600 ? '90%' : '96%' }]}>
             <View style={[styles.card, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
                     <View style={styles.cardContent}>
@@ -338,6 +339,7 @@ const InfoRow = ({ icon, text, theme }) => (
 // --- FORM COMPONENT ---
 const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const isEditMode = !!eventToEdit;
+    const { width, height } = useWindowDimensions();
     // Ensure initial date is parsed correctly without timezone shifts
     const initialDate = isEditMode ? parseServerDateTime(eventToEdit.event_datetime) : new Date();
 
@@ -347,19 +349,32 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const [description, setDescription] = useState(isEditMode ? eventToEdit.description : '');
     const [targetClass, setTargetClass] = useState(isEditMode ? eventToEdit.target_class : 'All');
     const [classes, setClasses] = useState([]);
-    const [isSaving, setIsSaving] = useState(false);
+    const[isSaving, setIsSaving] = useState(false);
     
     // Date Picker State
-    const [date, setDate] = useState(initialDate);
+    const[date, setDate] = useState(initialDate);
     const [showPicker, setShowPicker] = useState(false);
     const [mode, setMode] = useState('date');
 
+    // Custom Dropdown State
+    const[dropdownConfig, setDropdownConfig] = useState({
+        visible: false,
+        title: '',
+        data:[],
+        selectedValue: '',
+        onSelect: () => {}
+    });
+
+    const openDropdown = (title, data, selectedValue, onSelect) => {
+        setDropdownConfig({ visible: true, title, data, selectedValue, onSelect });
+    };
+
     useEffect(() => {
         apiClient.get('/classes').then(res => setClasses(['All', ...res.data]));
-    }, []);
+    },[]);
 
     const onChangeDateTime = (event, selectedValue) => {
-        // Android closes picker automatically, iOS needs manual handling if desired
+        // Android closes picker automatically
         if (Platform.OS === 'android') setShowPicker(false);
         
         if (event.type === 'set' && selectedValue) {
@@ -377,6 +392,47 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
     const showMode = (currentMode) => {
         setShowPicker(true);
         setMode(currentMode);
+    };
+
+    const renderDatePicker = () => {
+        if (!showPicker) return null;
+
+        if (Platform.OS === 'ios') {
+            return (
+                <Modal visible={showPicker} transparent animationType="slide">
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.iosPickerContainer, { backgroundColor: theme.cardBg }]}>
+                            <View style={[styles.iosPickerHeader, { borderBottomColor: theme.border }]}>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.danger }]}>Close</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setShowPicker(false)}>
+                                    <Text style={[styles.iosPickerBtnText, { color: theme.primary }]}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                                value={date}
+                                mode={mode}
+                                display="spinner"
+                                onChange={(e, val) => { if(val) setDate(val); }}
+                                textColor={theme.textMain}
+                                style={{ height: 210, width: '100%' }}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+            );
+        }
+
+        return (
+            <DateTimePicker 
+                value={date} 
+                mode={mode} 
+                is24Hour={false} 
+                display="default" 
+                onChange={onChangeDateTime}
+            />
+        );
     };
 
     const handleSubmit = async () => {
@@ -405,7 +461,7 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
 
     return (
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
-            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
+            <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border, width: width > 600 ? '90%' : '96%' }]}>
                 <View style={styles.headerLeft}>
                     <TouchableOpacity onPress={onBack} style={styles.backButton}>
                         <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
@@ -420,7 +476,7 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.formContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={[styles.formContainer, { width: width > 600 ? '80%' : '100%' }]} showsVerticalScrollIndicator={false}>
                 <FormInput theme={theme} icon="format-title" placeholder="Event Title *" value={title} onChangeText={setTitle} />
                 <FormInput theme={theme} icon="tag-outline" placeholder="Category (e.g., Academic)" value={category} onChangeText={setCategory} />
                 
@@ -442,16 +498,15 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                 </View>
                 
                 <Text style={[styles.label, { color: theme.textSub }]}>Target Class</Text>
-                <View style={[styles.pickerContainer, { borderColor: theme.inputBorder, backgroundColor: theme.inputBg }]}>
-                    <Picker 
-                        selectedValue={targetClass} 
-                        onValueChange={(v) => setTargetClass(v)} 
-                        dropdownIconColor={theme.textMain}
-                        style={{ color: theme.textMain }}
-                    >
-                        {classes.map((c) => <Picker.Item key={c} label={c} value={c} color={theme.textMain} />)}
-                    </Picker>
-                </View>
+                <TouchableOpacity 
+                    style={[styles.customDropdownTrigger, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}
+                    onPress={() => openDropdown('Target Class', classes.map(c => ({label: c, value: c})), targetClass, setTargetClass)}
+                >
+                    <Text style={{ color: theme.textMain, fontSize: 15 }}>
+                        {targetClass}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-down" size={24} color={theme.textSub} />
+                </TouchableOpacity>
                 
                 <FormInput theme={theme} icon="map-marker-outline" placeholder="Location" value={location} onChangeText={setLocation} />
                 <FormInput theme={theme} icon="text" placeholder="Description..." multiline value={description} onChangeText={setDescription} />
@@ -460,16 +515,36 @@ const EventForm = ({ onBack, user, eventToEdit, theme }) => {
                     {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishButtonText}>{isEditMode ? "Save Changes" : "Publish Event"}</Text>}
                 </TouchableOpacity>
                 
-                {showPicker && (
-                    <DateTimePicker 
-                        value={date} 
-                        mode={mode} 
-                        is24Hour={false} 
-                        display="default" 
-                        onChange={onChangeDateTime}
-                    />
-                )}
+                {/* Platform Specific Picker Wrapper */}
+                {renderDatePicker()}
             </ScrollView>
+
+            {/* Dropdown Options Modal Overlay */}
+            <Modal visible={dropdownConfig.visible} transparent animationType="fade" onRequestClose={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setDropdownConfig({ ...dropdownConfig, visible: false })}>
+                    <View style={[styles.dropdownModal, { backgroundColor: theme.cardBg, width: width * 0.85, maxHeight: height * 0.6 }]}>
+                        <Text style={[styles.dropdownTitle, { color: theme.primary }]}>{dropdownConfig.title}</Text>
+                        <FlatList
+                            data={dropdownConfig.data}
+                            keyExtractor={(item, index) => item.value + index.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity 
+                                    style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                                    onPress={() => {
+                                        dropdownConfig.onSelect(item.value);
+                                        setDropdownConfig({ ...dropdownConfig, visible: false });
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.dropdownItemText, 
+                                        { color: theme.textMain, fontWeight: dropdownConfig.selectedValue === item.value ? 'bold' : 'normal' }
+                                    ]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </KeyboardAvoidingView>
     );
 };
@@ -494,7 +569,6 @@ const styles = StyleSheet.create({
     headerCard: {
         paddingHorizontal: 15,
         paddingVertical: 12,
-        width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
         marginTop: 15,
         marginBottom: 10,
@@ -532,9 +606,8 @@ const styles = StyleSheet.create({
     headerBtnText: { fontSize: 12, fontWeight: '600' },
 
     // --- LIST STYLES ---
-    listContent: { paddingHorizontal: width * 0.02, paddingBottom: 100 },
+    listContent: { paddingBottom: 100 },
     cardWrapper: { 
-        width: width > 600 ? '90%' : '96%', // Responsive width
         alignSelf: 'center',
         marginBottom: 15 
     },
@@ -589,7 +662,6 @@ const styles = StyleSheet.create({
     formContainer: { 
         paddingHorizontal: 15, 
         paddingBottom: 40,
-        width: width > 600 ? '80%' : '100%', // Responsive form width
         alignSelf: 'center'
     },
     label: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 4, marginTop: 10 },
@@ -601,9 +673,24 @@ const styles = StyleSheet.create({
     dateTimePickerButton: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 8, borderWidth: 1, flex: 1, justifyContent: 'center', gap: 8 },
     dateTimePickerText: { fontSize: 14 },
     
-    pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 15, justifyContent: 'center' },
+    // Custom Dropdown Trigger
+    customDropdownTrigger: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, marginBottom: 15 },
+    
     publishButton: { paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, elevation: 2 },
-    publishButtonText: { fontWeight: 'bold', fontSize: 16 },
+    publishButtonText: { fontWeight: 'bold', fontSize: 16, color: '#fff' },
+
+    // --- iOS Custom Date Picker Modal Styles ---
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    iosPickerContainer: { paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+    iosPickerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
+    iosPickerBtnText: { fontSize: 16, fontWeight: 'bold' },
+
+    // Custom Dropdown Modal Styles
+    dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownModal: { borderRadius: 12, padding: 20, elevation: 5 },
+    dropdownTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    dropdownItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    dropdownItemText: { fontSize: 16, textAlign: 'center' }
 });
 
 export default AdminEventsScreen;

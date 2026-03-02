@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
-    ActivityIndicator, Alert, useColorScheme, StatusBar, Dimensions, Modal, Animated, Easing
+    ActivityIndicator, Alert, useColorScheme, StatusBar, Modal, Animated, Easing, useWindowDimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { Picker } from '@react-native-picker/picker'; // MUST BE IMPORTED
+// Removed native Picker to fix iOS UI issues
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
-
-const { width } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
@@ -39,6 +37,12 @@ const CLASS_COLORS =[
 const TEACHER_REMARK_OPTIONS =[
     "Irregular", "Unfocused", "Unhealthy", 
     "Poor Performance", "Needs improvement", "None of the above"
+];
+
+const SORT_OPTIONS =[
+    { label: 'Roll No wise', value: 'roll_no' },
+    { label: 'High to low', value: 'high_to_low' },
+    { label: 'Low to High', value: 'low_to_high' }
 ];
 
 const getBarColor = (percentage, colors) => {
@@ -88,13 +92,15 @@ const TeacherLessonFeedback = () => {
     const isDark = useColorScheme() === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
+    const { width } = useWindowDimensions(); // Added for dynamic responsiveness
 
     const[viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
     
     // Graph Modal & Sort State
     const [showGraph, setShowGraph] = useState(false);
-    const[sortOrder, setSortOrder] = useState('roll_no'); // Default to Roll No
+    const[sortOrder, setSortOrder] = useState('roll_no'); 
+    const [showSortPicker, setShowSortPicker] = useState(false); // New state for Custom Dropdown
 
     const[groupedClasses, setGroupedClasses] = useState({}); 
     const[students, setStudents] = useState([]);
@@ -105,9 +111,9 @@ const TeacherLessonFeedback = () => {
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [selectedLesson, setSelectedLesson] = useState(null);
 
-    const [answers, setAnswers] = useState([]);
+    const[answers, setAnswers] = useState([]);
     const [remarks, setRemarks] = useState('');
-    const [teacherRemarks, setTeacherRemarks] = useState([]); 
+    const[teacherRemarks, setTeacherRemarks] = useState([]); 
 
     useEffect(() => { if (user) fetchClasses(); }, [user]);
 
@@ -183,7 +189,7 @@ const TeacherLessonFeedback = () => {
     const handleTeacherRemarkToggle = (option) => {
         if (isAdmin) return;
         setTeacherRemarks(prev => {
-            if (option === "None of the above") return prev.includes("None of the above") ? [] :["None of the above"];
+            if (option === "None of the above") return prev.includes("None of the above") ?[] :["None of the above"];
             let newArr = prev.filter(item => item !== "None of the above");
             if (newArr.includes(option)) newArr = newArr.filter(item => item !== option);
             else newArr.push(option);
@@ -454,7 +460,7 @@ const TeacherLessonFeedback = () => {
                                                 <MaterialIcons 
                                                     name={isChecked ? "check-box" : "check-box-outline-blank"} 
                                                     size={24} 
-                                                    color={isChecked ? COLORS.primary : COLORS.iconGrey} 
+                                                    color={isChecked ? COLORS.primary : COLORS.border} 
                                                 />
                                                 <Text style={[styles.checkboxText, { color: isChecked ? COLORS.primary : COLORS.textMain }]}>
                                                     {opt}
@@ -475,7 +481,7 @@ const TeacherLessonFeedback = () => {
                 </>
             )}
 
-            {/* --- GRAPH MODAL WITH FIXED FILTER --- */}
+            {/* --- GRAPH MODAL WITH CUSTOM DROPDOWN --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -492,18 +498,19 @@ const TeacherLessonFeedback = () => {
 
                     {/* --- FILTER & TEACHER NAME BLOCK --- */}
                     <View style={{ paddingHorizontal: 20, marginBottom: 15, width: '100%' }}>
-                        <View style={{ borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden', backgroundColor: COLORS.inputBg, height: 50, justifyContent: 'center' }}>
-                            <Picker
-                                selectedValue={sortOrder}
-                                onValueChange={(val) => setSortOrder(val)}
-                                style={{ color: COLORS.textMain, width: '100%' }}
-                                dropdownIconColor={COLORS.textSub}
-                            >
-                                <Picker.Item label="Roll No wise" value="roll_no" style={{ fontSize: 15 }} />
-                                <Picker.Item label="High to low" value="high_to_low" style={{ fontSize: 15 }} />
-                                <Picker.Item label="Low to High" value="low_to_high" style={{ fontSize: 15 }} />
-                            </Picker>
-                        </View>
+                        
+                        {/* CUSTOM DROPDOWN (Replaces Picker) */}
+                        <TouchableOpacity
+                            style={[styles.customDropdownBtn, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
+                            onPress={() => setShowSortPicker(true)}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={{ color: COLORS.textMain, fontSize: 15 }}>
+                                {SORT_OPTIONS.find(o => o.value === sortOrder)?.label || 'Roll No wise'}
+                            </Text>
+                            <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.textSub} />
+                        </TouchableOpacity>
+                        
                         <Text style={{ textAlign: 'center', fontSize: 13, fontWeight: '700', color: COLORS.textSub, marginTop: 10 }}>
                             Teacher: {selectedSubjectItem?.teacher_name || user?.full_name || 'N/A'}
                         </Text>
@@ -547,6 +554,25 @@ const TeacherLessonFeedback = () => {
                             <Text style={[styles.legendText, { color: COLORS.textSub }]}>Below Avg (&lt;50%)</Text>
                         </View>
                     </View>
+
+                    {/* CUSTOM DROPDOWN MODAL OVERLAY */}
+                    <Modal transparent visible={showSortPicker} animationType="fade" onRequestClose={() => setShowSortPicker(false)}>
+                        <TouchableOpacity style={styles.customPickerOverlay} activeOpacity={1} onPress={() => setShowSortPicker(false)}>
+                            <View style={[styles.customPickerModal, { backgroundColor: COLORS.cardBg }]}>
+                                <Text style={[styles.pickerTitle, { color: COLORS.primary }]}>Sort By</Text>
+                                {SORT_OPTIONS.map((item) => (
+                                    <TouchableOpacity 
+                                        key={item.value} 
+                                        style={[styles.pickerItem, { borderBottomColor: COLORS.border }]} 
+                                        onPress={() => { setSortOrder(item.value); setShowSortPicker(false); }}
+                                    >
+                                        <Text style={[styles.pickerItemText, { color: COLORS.textMain }]}>{item.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+
                 </SafeAreaView>
             </Modal>
         </SafeAreaView>
@@ -561,7 +587,7 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 13, marginTop: 2 },
     graphBtnTop: { padding: 8, backgroundColor: '#E0F2F1', borderRadius: 8 },
     
-    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: width * 0.03, paddingTop: 10, paddingBottom: 50 },
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: '3%', paddingTop: 10, paddingBottom: 50 },
     gridCard: { width: '48%', borderWidth: 1.5, borderRadius: 12, padding: 18, marginBottom: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1, shadowOpacity: 0.05 },
     gridText: { fontSize: 16, fontWeight: 'bold' },
 
@@ -603,7 +629,15 @@ const styles = StyleSheet.create({
     legendFooter: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 10, borderTopWidth: 1 },
     legendItem: { flexDirection: 'row', alignItems: 'center' },
     legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-    legendText: { fontSize: 12, fontWeight: '700' }
+    legendText: { fontSize: 12, fontWeight: '700' },
+
+    // --- New Styles for Custom Dropdown ---
+    customDropdownBtn: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
+    customPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    customPickerModal: { width: '80%', borderRadius: 12, padding: 20, elevation: 5 },
+    pickerTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+    pickerItem: { paddingVertical: 15, borderBottomWidth: 0.5 },
+    pickerItemText: { fontSize: 16, fontWeight: '500', textAlign: 'center' }
 });
 
 export default TeacherLessonFeedback;
