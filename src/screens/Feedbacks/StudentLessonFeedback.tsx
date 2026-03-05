@@ -22,10 +22,10 @@ const DarkColors = {
 };
 
 const QUESTIONS =[
-    "Why should we learn this lesson?", "Who made or found this?", "What is this lesson about?",
-    "Can you explain this in your own words?", "Where do we see this in our daily life?",
-    "Tell 3 important words from this lesson.", "Can you give one example?",
-    "What was hard for you in this lesson?", "Did you understand it better now?", "How will you tell this to your friend?"
+    "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
+    "Spot real-world applications?", "Explore keywords and core ideas?",
+    "Capture a summary of the topic?", "Write your own student notes?",
+    "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
 ];
 
 const getBarColor = (percentage, colors) => {
