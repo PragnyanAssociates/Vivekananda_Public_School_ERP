@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
+    View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput,
     ActivityIndicator, Alert, useColorScheme, StatusBar, Modal, Animated, Easing, useWindowDimensions
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-// Removed native Picker to fix iOS UI issues
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
-// --- THEME CONFIGURATION ---
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60', 
@@ -24,7 +22,6 @@ const DarkColors = {
     graphRed: '#EF4444'
 };
 
-// --- GRID COLORS ---
 const CLASS_COLORS =[
     { border: '#0F766E', bg: '#F0FDF4' }, 
     { border: '#4F46E5', bg: '#EEF2FF' }, 
@@ -45,13 +42,19 @@ const SORT_OPTIONS =[
     { label: 'Low to High', value: 'low_to_high' }
 ];
 
+const QUESTIONS =[
+    "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
+    "Spot real-world applications?", "Explore keywords and core ideas?",
+    "Capture a summary of the topic?", "Write your own student notes?",
+    "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
+];
+
 const getBarColor = (percentage, colors) => {
     if (percentage >= 80) return colors.graphGreen;
     if (percentage >= 50) return colors.graphBlue;  
     return colors.graphRed;                         
 };
 
-// --- ANIMATED BAR COMPONENT ---
 const AnimatedBar = ({ percentage, label, topLabel, rollNo, color, colors }) => {
     const animatedHeight = useRef(new Animated.Value(0)).current;
 
@@ -66,7 +69,7 @@ const AnimatedBar = ({ percentage, label, topLabel, rollNo, color, colors }) => 
 
     const heightStyle = animatedHeight.interpolate({
         inputRange: [0, 100],
-        outputRange: ['0%', '100%']
+        outputRange:['0%', '100%']
     });
 
     const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
@@ -92,26 +95,28 @@ const TeacherLessonFeedback = () => {
     const isDark = useColorScheme() === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
-    const { width } = useWindowDimensions(); // Added for dynamic responsiveness
+    const { width } = useWindowDimensions(); 
 
-    const[viewStep, setViewStep] = useState('classes'); 
+    const [viewStep, setViewStep] = useState('classes'); 
     const [loading, setLoading] = useState(false);
     
-    // Graph Modal & Sort State
-    const [showGraph, setShowGraph] = useState(false);
-    const[sortOrder, setSortOrder] = useState('roll_no'); 
-    const [showSortPicker, setShowSortPicker] = useState(false); // New state for Custom Dropdown
+    const[showGraph, setShowGraph] = useState(false);
+    const [sortOrder, setSortOrder] = useState('roll_no'); 
+    const [showSortPicker, setShowSortPicker] = useState(false); 
 
-    const[groupedClasses, setGroupedClasses] = useState({}); 
-    const[students, setStudents] = useState([]);
-    const[lessons, setLessons] = useState([]);
+    const [groupedClasses, setGroupedClasses] = useState({}); 
+    const [students, setStudents] = useState([]);
+    const [lessons, setLessons] = useState([]);
     
     const[selectedClassGroup, setSelectedClassGroup] = useState(''); 
-    const[selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
-    const [selectedStudent, setSelectedStudent] = useState(null);
+    const [selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
     const [selectedLesson, setSelectedLesson] = useState(null);
+    const[selectedStudent, setSelectedStudent] = useState(null);
 
-    const[answers, setAnswers] = useState([]);
+    const [activeTab, setActiveTab] = useState('students'); 
+    const [guideAnswers, setGuideAnswers] = useState([]);
+
+    const [answers, setAnswers] = useState([]);
     const [remarks, setRemarks] = useState('');
     const[teacherRemarks, setTeacherRemarks] = useState([]); 
 
@@ -125,7 +130,7 @@ const TeacherLessonFeedback = () => {
             
             const grouped = {};
             res.data.forEach(item => {
-                if (!grouped[item.class_group]) grouped[item.class_group] =[];
+                if (!grouped[item.class_group]) grouped[item.class_group] = [];
                 grouped[item.class_group].push(item);
             });
             setGroupedClasses(grouped);
@@ -137,34 +142,66 @@ const TeacherLessonFeedback = () => {
         setSelectedSubjectItem(subjectItem);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/class-students/${subjectItem.class_group}/${subjectItem.subject_name}`);
-            setStudents(res.data);
-            setViewStep('students');
-        } catch (e) { Alert.alert('Error', 'Failed to load students.'); }
-        setLoading(false);
-    };
-
-    const handleStudentSelect = async (student) => {
-        setSelectedStudent(student);
-        setLoading(true);
-        try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${student.student_id}`);
+            const res = await apiClient.get(`/lesson-feedback/teacher/subject-lessons/${subjectItem.class_group}/${subjectItem.subject_name}`);
             setLessons(res.data);
             setViewStep('lessons');
-        } catch (e) { Alert.alert('Error', 'Failed to load student lessons.'); }
+        } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
         setLoading(false);
     };
 
     const handleLessonSelect = async (lesson) => {
         setSelectedLesson(lesson);
-        if (!lesson.is_submitted) {
-            Alert.alert("Pending", "Student has not submitted answers for this lesson yet.");
-            return;
-        }
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
-            setAnswers(res.data.answers ||[]);
+            const resStuds = await apiClient.get(`/lesson-feedback/teacher/lesson-students-status/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
+            setStudents(resStuds.data);
+
+            const resGuide = await apiClient.get(`/lesson-feedback/guide/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
+            if (resGuide.data && resGuide.data.guide_answers) {
+                setGuideAnswers(resGuide.data.guide_answers);
+            } else {
+                setGuideAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '' })));
+            }
+            
+            setActiveTab('students'); 
+            setViewStep('lessonDetail');
+        } catch (e) { Alert.alert('Error', 'Failed to load lesson hub.'); }
+        setLoading(false);
+    };
+
+    const handleGuideAnswerChange = (index, text) => {
+        const newGuide =[...guideAnswers];
+        newGuide[index].answer = text;
+        setGuideAnswers(newGuide);
+    };
+
+    const handleSaveGuide = async () => {
+        if (isAdmin) return;
+        setLoading(true);
+        try {
+            await apiClient.post('/lesson-feedback/teacher/guide/submit', {
+                class_group: selectedSubjectItem.class_group,
+                subject_name: selectedSubjectItem.subject_name,
+                lesson_name: selectedLesson.lesson_name,
+                teacher_id: user.id,
+                guide_answers: guideAnswers
+            });
+            Alert.alert('Success', 'Teacher guide saved successfully!');
+            handleSubjectSelect(selectedSubjectItem);
+        } catch (e) { Alert.alert('Error', 'Failed to save guide.'); }
+        setLoading(false);
+    };
+
+    const handleStudentSelect = async (student) => {
+        if (!student.is_submitted) {
+            Alert.alert("Pending", "Student has not submitted answers yet.");
+            return;
+        }
+        setSelectedStudent(student);
+        setLoading(true);
+        try {
+            const res = await apiClient.get(`/lesson-feedback/student/submission/${student.student_id}/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${selectedLesson.lesson_name}`);
+            setAnswers(res.data.answers || []);
             setRemarks(res.data.teaching_remarks || '');
             
             let parsedRemarks =[];
@@ -189,7 +226,7 @@ const TeacherLessonFeedback = () => {
     const handleTeacherRemarkToggle = (option) => {
         if (isAdmin) return;
         setTeacherRemarks(prev => {
-            if (option === "None of the above") return prev.includes("None of the above") ?[] :["None of the above"];
+            if (option === "None of the above") return prev.includes("None of the above") ?[] : ["None of the above"];
             let newArr = prev.filter(item => item !== "None of the above");
             if (newArr.includes(option)) newArr = newArr.filter(item => item !== option);
             else newArr.push(option);
@@ -209,7 +246,7 @@ const TeacherLessonFeedback = () => {
                 answers, teacher_id: user.id, teacher_remarks_checkboxes: teacherRemarks
             });
             Alert.alert('Success', 'Marks and remarks saved successfully!');
-            handleStudentSelect(selectedStudent); 
+            handleLessonSelect(selectedLesson); 
         } catch (e) { Alert.alert('Error', 'Failed to save marks.'); }
         setLoading(false);
     };
@@ -229,14 +266,12 @@ const TeacherLessonFeedback = () => {
         });
     };
 
-    // Sort Logic for Graph
     const getSortedStudentsForGraph = () => {
         return[...students]
             .filter(s => s.has_marks)
             .sort((a, b) => {
                 if (sortOrder === 'high_to_low') return b.percentage - a.percentage;
                 if (sortOrder === 'low_to_high') return a.percentage - b.percentage;
-                // Default Roll No wise
                 return parseInt(a.roll_no || 0, 10) - parseInt(b.roll_no || 0, 10);
             });
     };
@@ -273,7 +308,6 @@ const TeacherLessonFeedback = () => {
 
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} /> : (
                 <>
-                    {/* STEP 1: CLASSES (GRID VIEW) */}
                     {viewStep === 'classes' && (
                         <>
                             {renderHeader(isAdmin ? "All Classes" : "My Classes", "Select a Class", false, null, false)}
@@ -298,7 +332,6 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 2: SUBJECTS (LIST VIEW) */}
                     {viewStep === 'subjects' && (
                         <>
                             {renderHeader(selectedClassGroup, "Select a Subject", true, () => setViewStep('classes'), false)}
@@ -323,50 +356,9 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {/* STEP 3: STUDENTS */}
-                    {viewStep === 'students' && (
-                        <>
-                            {renderHeader(`${selectedSubjectItem.class_group} - ${selectedSubjectItem.subject_name}`, "Select a Student", true, () => {
-                                setViewStep('subjects'); fetchClasses();
-                            }, true)}
-                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
-                                {students.length > 0 ? students.map((student, idx) => (
-                                    <TouchableOpacity 
-                                        key={student.student_id} 
-                                        style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
-                                        onPress={() => handleStudentSelect(student)}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                            <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>
-                                                {student.roll_no || '-'}
-                                            </Text>
-                                            <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>
-                                                {student.full_name}
-                                            </Text>
-                                        </View>
-
-                                        <View style={styles.badgeContainer}>
-                                            {student.has_marks && (
-                                                <View style={[styles.scoreBoxLarge, { borderColor: COLORS.redBox }]}>
-                                                    <Text style={[styles.scoreTextLarge, { color: COLORS.redBox }]}>
-                                                        {student.total_obtained}/{student.total_max}
-                                                    </Text>
-                                                </View>
-                                            )}
-                                            <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
-                                        </View>
-                                    </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
-                            </ScrollView>
-                        </>
-                    )}
-
-                    {/* STEP 4: LESSONS */}
                     {viewStep === 'lessons' && (
                         <>
-                            {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => {
-                                setViewStep('students'); handleSubjectSelect(selectedSubjectItem); 
-                            }, false)}
+                            {renderHeader(`${selectedSubjectItem.class_group} - ${selectedSubjectItem.subject_name}`, "Select a Lesson", true, () => setViewStep('subjects'), true)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 {lessons.length > 0 ? lessons.map((lesson) => (
                                     <TouchableOpacity 
@@ -377,37 +369,107 @@ const TeacherLessonFeedback = () => {
                                         <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]} numberOfLines={2}>
                                             {lesson.lesson_name}
                                         </Text>
-                                        
                                         <View style={styles.badgeContainer}>
-                                            {lesson.is_marked ? (
-                                                <>
-                                                    <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
-                                                        <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
-                                                    </View>
-                                                    <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
-                                                        <Text style={styles.badgeText}>MARKED</Text>
-                                                    </View>
-                                                </>
-                                            ) : lesson.is_submitted ? (
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
-                                                    <Text style={styles.badgeText}>PENDING</Text>
-                                                </View>
+                                            {lesson.has_guide ? (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success, marginRight: 8 }]}><Text style={styles.badgeText}>GUIDE ADDED</Text></View>
                                             ) : (
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
-                                                    <Text style={styles.badgeText}>NO DATA</Text>
-                                                </View>
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning, marginRight: 8 }]}><Text style={styles.badgeText}>NO GUIDE</Text></View>
                                             )}
+                                            <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
                                         </View>
                                     </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found in syllabus.</Text>}
+                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
                             </ScrollView>
                         </>
                     )}
 
-                    {/* STEP 5: GRADING & REMARKS */}
+                    {viewStep === 'lessonDetail' && (
+                        <>
+                            {renderHeader(selectedLesson.lesson_name, "Manage Guide & Grade Students", true, () => handleSubjectSelect(selectedSubjectItem), false)}
+                            
+                            <View style={[styles.tabContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                <TouchableOpacity 
+                                    style={[styles.tabButton, activeTab === 'students' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveTab('students')}
+                                >
+                                    <Text style={[styles.tabText, activeTab === 'students' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Student Submissions</Text>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity 
+                                    style={[styles.tabButton, activeTab === 'guide' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveTab('guide')}
+                                >
+                                    <Text style={[styles.tabText, activeTab === 'guide' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Edit Lesson Guide</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+                                
+                                {activeTab === 'students' && (
+                                    <View>
+                                        {students.length > 0 ? students.map((student, idx) => (
+                                            <TouchableOpacity 
+                                                key={student.student_id} 
+                                                style={[styles.card, { backgroundColor: COLORS.cardBg, width: '100%' }]} 
+                                                onPress={() => handleStudentSelect(student)}
+                                            >
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                                    <Text style={{ fontWeight: 'bold', width: 35, color: COLORS.textSub, fontSize: 16 }}>{student.roll_no || '-'}</Text>
+                                                    <Text style={[styles.cardTitle, { color: COLORS.textMain, marginLeft: 10 }]} numberOfLines={1}>{student.full_name}</Text>
+                                                </View>
+
+                                                <View style={styles.badgeContainer}>
+                                                    {student.is_marked ? (
+                                                        <>
+                                                            <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}><Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{student.obtained_marks}/{student.max_marks}</Text></View>
+                                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}><Text style={styles.badgeText}>MARKED</Text></View>
+                                                        </>
+                                                    ) : student.is_submitted ? (
+                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}><Text style={styles.badgeText}>PENDING</Text></View>
+                                                    ) : (
+                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}><Text style={styles.badgeText}>NO DATA</Text></View>
+                                                    )}
+                                                </View>
+                                            </TouchableOpacity>
+                                        )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
+                                    </View>
+                                )}
+
+                                {activeTab === 'guide' && (
+                                    <View>
+                                        <View style={{ backgroundColor: COLORS.iconBg, padding: 12, borderRadius: 8, marginBottom: 15 }}>
+                                            <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 13 }}>These answers will be visible to students as a reference guide for this lesson.</Text>
+                                        </View>
+
+                                        {guideAnswers.map((item, index) => (
+                                            <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, width: '100%' }]}>
+                                                <Text style={[styles.label, { color: COLORS.primary, marginBottom: 8 }]}>{item.q_no}. {item.question}</Text>
+                                                <TextInput
+                                                    style={[styles.inputGuide, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
+                                                    multiline
+                                                    placeholder="Type model answer here..."
+                                                    placeholderTextColor={COLORS.textSub}
+                                                    value={item.answer}
+                                                    onChangeText={(txt) => handleGuideAnswerChange(index, txt)}
+                                                    editable={!isAdmin}
+                                                />
+                                            </View>
+                                        ))}
+
+                                        {!isAdmin && (
+                                            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary, width: '100%' }]} onPress={handleSaveGuide}>
+                                                <Text style={styles.saveBtnText}>Save Lesson Guide</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </>
+                    )}
+
                     {viewStep === 'grading' && (
                         <>
-                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessons'), false)}
+                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessonDetail'), false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 
                                 <View style={[styles.remarksBox, { backgroundColor: COLORS.rowAlt, borderColor: COLORS.border }]}>
@@ -444,7 +506,6 @@ const TeacherLessonFeedback = () => {
                                     </View>
                                 ))}
 
-                                {/* --- TEACHER REMARKS CHECKBOXES --- */}
                                 <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, paddingBottom: 5 }]}>
                                     <Text style={[styles.label, { color: COLORS.primary, marginBottom: 10 }]}>Teacher Remarks (Check all that apply):</Text>
                                     
@@ -481,7 +542,6 @@ const TeacherLessonFeedback = () => {
                 </>
             )}
 
-            {/* --- GRAPH MODAL WITH CUSTOM DROPDOWN --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -496,10 +556,7 @@ const TeacherLessonFeedback = () => {
                         Student Ranking ({selectedSubjectItem?.class_group} - {selectedSubjectItem?.subject_name})
                     </Text>
 
-                    {/* --- FILTER & TEACHER NAME BLOCK --- */}
                     <View style={{ paddingHorizontal: 20, marginBottom: 15, width: '100%' }}>
-                        
-                        {/* CUSTOM DROPDOWN (Replaces Picker) */}
                         <TouchableOpacity
                             style={[styles.customDropdownBtn, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}
                             onPress={() => setShowSortPicker(true)}
@@ -539,7 +596,6 @@ const TeacherLessonFeedback = () => {
                         )}
                     </View>
 
-                    {/* --- GUIDANCE LEGEND FOOTER --- */}
                     <View style={[styles.legendFooter, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
                         <View style={styles.legendItem}>
                             <View style={[styles.legendDot, { backgroundColor: COLORS.graphGreen }]} />
@@ -555,7 +611,6 @@ const TeacherLessonFeedback = () => {
                         </View>
                     </View>
 
-                    {/* CUSTOM DROPDOWN MODAL OVERLAY */}
                     <Modal transparent visible={showSortPicker} animationType="fade" onRequestClose={() => setShowSortPicker(false)}>
                         <TouchableOpacity style={styles.customPickerOverlay} activeOpacity={1} onPress={() => setShowSortPicker(false)}>
                             <View style={[styles.customPickerModal, { backgroundColor: COLORS.cardBg }]}>
@@ -594,9 +649,11 @@ const styles = StyleSheet.create({
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
+    tabContainer: { flexDirection: 'row', width: '94%', alignSelf: 'center', borderRadius: 8, marginTop: 10, marginBottom: 5, overflow: 'hidden', borderWidth: 1 },
+    tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+    tabText: { fontSize: 14 },
+
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
-    scoreBoxLarge: { borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
-    scoreTextLarge: { fontWeight: 'bold', fontSize: 16 },
     scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
@@ -605,6 +662,7 @@ const styles = StyleSheet.create({
     remarksBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     questionBox: { padding: 15, width: '94%', alignSelf: 'center', borderRadius: 10, borderWidth: 1, marginBottom: 15, elevation: 1, shadowOpacity: 0.05 },
     label: { fontSize: 13, fontWeight: 'bold' },
+    inputGuide: { borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 60, textAlignVertical: 'top', fontSize: 14 },
     gradingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 12 },
     markBtn: { width: 45, height: 40, borderRadius: 8, borderWidth: 1, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
     markBtnText: { fontWeight: 'bold', fontSize: 16, color: '#777' },
@@ -631,7 +689,6 @@ const styles = StyleSheet.create({
     legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
     legendText: { fontSize: 12, fontWeight: '700' },
 
-    // --- New Styles for Custom Dropdown ---
     customDropdownBtn: { borderWidth: 1, borderRadius: 8, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
     customPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     customPickerModal: { width: '80%', borderRadius: 12, padding: 20, elevation: 5 },

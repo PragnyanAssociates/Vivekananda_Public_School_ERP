@@ -7,7 +7,6 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import apiClient from '../../api/client'; 
 import { useAuth } from '../../context/AuthContext';
 
-// --- THEME CONFIGURATION ---
 const LightColors = {
     background: '#F5F7FA', cardBg: '#FFFFFF', textMain: '#263238', textSub: '#546E7A',
     primary: '#008080', border: '#CFD8DC', inputBg: '#FAFAFA', success: '#27AE60',
@@ -48,7 +47,7 @@ const AnimatedBar = ({ percentage, label, topLabel, color, colors }) => {
 
     const heightStyle = animatedHeight.interpolate({
         inputRange:[0, 100],
-        outputRange:['0%', '100%']
+        outputRange: ['0%', '100%']
     });
 
     const displayLabel = label.length > 8 ? label.substring(0, 8) + '..' : label;
@@ -71,17 +70,20 @@ const StudentLessonFeedback = () => {
     const isDark = useColorScheme() === 'dark';
     const COLORS = isDark ? DarkColors : LightColors;
     const isAdmin = user?.role === 'admin';
-    const { width } = useWindowDimensions(); // Ensures precise responsive width padding
+    const { width } = useWindowDimensions(); 
 
     const[viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
-    const[subjects, setSubjects] = useState([]);
-    const[lessons, setLessons] = useState([]);
-    const[selectedSubject, setSelectedSubject] = useState('');
-    const[selectedLesson, setSelectedLesson] = useState('');
+    const [subjects, setSubjects] = useState([]);
+    const [lessons, setLessons] = useState([]);
+    const [selectedSubject, setSelectedSubject] = useState('');
+    const [selectedLesson, setSelectedLesson] = useState('');
 
-    const[answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
+    const [activeTab, setActiveTab] = useState('guide'); 
+    const[guideAnswers, setGuideAnswers] = useState([]);
+
+    const [answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
     const [remarks, setRemarks] = useState('');
     const[isMarked, setIsMarked] = useState(false);
     const [teacherRemarks, setTeacherRemarks] = useState([]); 
@@ -114,6 +116,13 @@ const StudentLessonFeedback = () => {
         setSelectedLesson(lesson.lesson_name);
         setLoading(true);
         try {
+            const guideRes = await apiClient.get(`/lesson-feedback/guide/${user.class_group}/${selectedSubject}/${lesson.lesson_name}`);
+            if (guideRes.data && guideRes.data.guide_answers) {
+                setGuideAnswers(guideRes.data.guide_answers);
+            } else {
+                setGuideAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '' })));
+            }
+
             const res = await apiClient.get(`/lesson-feedback/student/submission/${user.id}/${user.class_group}/${selectedSubject}/${lesson.lesson_name}`);
             if (res.data && res.data.answers) {
                 const savedAnswers = res.data.answers;
@@ -135,13 +144,15 @@ const StudentLessonFeedback = () => {
                 setAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
                 setRemarks(''); setIsMarked(false); setTeacherRemarks([]);
             }
+            
+            setActiveTab('guide'); 
             setViewStep('form');
         } catch (e) { Alert.alert('Error', 'Failed to load submission.'); }
         setLoading(false);
     };
 
     const handleAnswerChange = (index, text) => {
-        const newAnswers =[...answers];
+        const newAnswers = [...answers];
         newAnswers[index].answer = text;
         setAnswers(newAnswers);
     };
@@ -254,69 +265,110 @@ const StudentLessonFeedback = () => {
 
                     {viewStep === 'form' && (
                         <>
-                            {renderHeader(selectedLesson, isMarked ? "Marked by Teacher (Read-only)" : "Answer Questions", true, () => setViewStep('lessons'), false)}
+                            {renderHeader(selectedLesson, isMarked ? "Marked by Teacher (Read-only)" : "Study & Submit", true, () => setViewStep('lessons'), false)}
+                            
+                            <View style={[styles.tabContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                <TouchableOpacity 
+                                    style={[styles.tabButton, activeTab === 'guide' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveTab('guide')}
+                                >
+                                    <Text style={[styles.tabText, activeTab === 'guide' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Teacher's Guide</Text>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity 
+                                    style={[styles.tabButton, activeTab === 'answers' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveTab('answers')}
+                                >
+                                    <Text style={[styles.tabText, activeTab === 'answers' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>My Answers</Text>
+                                </TouchableOpacity>
+                            </View>
+
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
-                                {answers.map((item, index) => (
-                                    <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                            <View style={{ flex: 1, paddingRight: 10 }}>
-                                                <Text style={[styles.questionLabel, { color: COLORS.primary }]}>
+                                
+                                {activeTab === 'guide' && (
+                                    <View>
+                                        <View style={{ backgroundColor: COLORS.iconBg, padding: 12, borderRadius: 8, marginBottom: 15 }}>
+                                            <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 13 }}>Read your teacher's reference answers before typing your own.</Text>
+                                        </View>
+
+                                        {guideAnswers.map((item, index) => (
+                                            <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                                <Text style={[styles.questionLabel, { color: COLORS.primary, marginBottom: 8 }]}>
                                                     {item.q_no}. {item.question}
                                                 </Text>
+                                                <Text style={{ color: COLORS.textMain, backgroundColor: COLORS.inputBg, padding: 12, borderRadius: 8 }}>
+                                                    {item.answer ? item.answer : <Text style={{ color: COLORS.textSub, fontStyle: 'italic' }}>Teacher hasn't added an answer yet.</Text>}
+                                                </Text>
                                             </View>
-                                            {item.mark !== null && (
-                                                <View style={[styles.markBadge, { backgroundColor: item.mark === 1 ? COLORS.success : COLORS.danger }]}>
-                                                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>
-                                                        Marks: {item.mark}
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
-                                            multiline
-                                            placeholder="Type your answer here..."
-                                            placeholderTextColor={COLORS.textSub}
-                                            value={item.answer}
-                                            onChangeText={(txt) => handleAnswerChange(index, txt)}
-                                            editable={!isMarked && !isAdmin}
-                                        />
-                                    </View>
-                                ))}
-
-                                <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                                    <Text style={[styles.questionLabel, { color: COLORS.primary, marginBottom: 8 }]}>Teaching Remarks</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border, minHeight: 80 }]}
-                                        multiline
-                                        placeholder="Add any remarks regarding teaching..."
-                                        placeholderTextColor={COLORS.textSub}
-                                        value={remarks}
-                                        onChangeText={setRemarks}
-                                        editable={!isMarked && !isAdmin}
-                                    />
-                                </View>
-
-                                {isMarked && teacherRemarks.length > 0 && (
-                                    <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
-                                        <Text style={[styles.questionLabel, { color: COLORS.primary, marginBottom: 10 }]}>Teacher's Feedback:</Text>
-                                        <View style={styles.tagsContainer}>
-                                            {teacherRemarks.map(rmk => {
-                                                const isGood = rmk === 'None of the above';
-                                                return (
-                                                    <View key={rmk} style={[styles.tag, { borderColor: isGood ? COLORS.success : COLORS.danger, backgroundColor: isGood ? COLORS.success + '20' : COLORS.danger + '20' }]}>
-                                                        <Text style={[styles.tagText, { color: isGood ? COLORS.success : COLORS.danger }]}>{rmk}</Text>
-                                                    </View>
-                                                );
-                                            })}
-                                        </View>
+                                        ))}
                                     </View>
                                 )}
 
-                                {!isMarked && !isAdmin && (
-                                    <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary }]} onPress={handleSave}>
-                                        <Text style={styles.saveBtnText}>Submit Answers</Text>
-                                    </TouchableOpacity>
+                                {activeTab === 'answers' && (
+                                    <View>
+                                        {answers.map((item, index) => (
+                                            <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                    <View style={{ flex: 1, paddingRight: 10 }}>
+                                                        <Text style={[styles.questionLabel, { color: COLORS.textMain }]}>
+                                                            {item.q_no}. {item.question}
+                                                        </Text>
+                                                    </View>
+                                                    {item.mark !== null && (
+                                                        <View style={[styles.markBadge, { backgroundColor: item.mark === 1 ? COLORS.success : COLORS.danger }]}>
+                                                            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>
+                                                                Marks: {item.mark}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                                <TextInput
+                                                    style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
+                                                    multiline
+                                                    placeholder="Type your answer here..."
+                                                    placeholderTextColor={COLORS.textSub}
+                                                    value={item.answer}
+                                                    onChangeText={(txt) => handleAnswerChange(index, txt)}
+                                                    editable={!isMarked && !isAdmin}
+                                                />
+                                            </View>
+                                        ))}
+
+                                        <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                            <Text style={[styles.questionLabel, { color: COLORS.textMain, marginBottom: 8 }]}>My Teaching Remarks</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border, minHeight: 80 }]}
+                                                multiline
+                                                placeholder="Add any remarks regarding teaching..."
+                                                placeholderTextColor={COLORS.textSub}
+                                                value={remarks}
+                                                onChangeText={setRemarks}
+                                                editable={!isMarked && !isAdmin}
+                                            />
+                                        </View>
+
+                                        {isMarked && teacherRemarks.length > 0 && (
+                                            <View style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
+                                                <Text style={[styles.questionLabel, { color: COLORS.primary, marginBottom: 10 }]}>Teacher's Feedback:</Text>
+                                                <View style={styles.tagsContainer}>
+                                                    {teacherRemarks.map(rmk => {
+                                                        const isGood = rmk === 'None of the above';
+                                                        return (
+                                                            <View key={rmk} style={[styles.tag, { borderColor: isGood ? COLORS.success : COLORS.danger, backgroundColor: isGood ? COLORS.success + '20' : COLORS.danger + '20' }]}>
+                                                                <Text style={[styles.tagText, { color: isGood ? COLORS.success : COLORS.danger }]}>{rmk}</Text>
+                                                            </View>
+                                                        );
+                                                    })}
+                                                </View>
+                                            </View>
+                                        )}
+
+                                        {!isMarked && !isAdmin && (
+                                            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary }]} onPress={handleSave}>
+                                                <Text style={styles.saveBtnText}>Submit Answers</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
                                 )}
                             </ScrollView>
                         </>
@@ -324,7 +376,6 @@ const StudentLessonFeedback = () => {
                 </>
             )}
 
-            {/* --- GRAPH MODAL --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -363,7 +414,6 @@ const StudentLessonFeedback = () => {
                         )}
                     </View>
 
-                    {/* --- GUIDANCE LEGEND FOOTER --- */}
                     <View style={[styles.legendFooter, { backgroundColor: COLORS.cardBg, borderTopColor: COLORS.border }]}>
                         <View style={styles.legendItem}>
                             <View style={[styles.legendDot, { backgroundColor: COLORS.graphGreen }]} />
@@ -394,6 +444,10 @@ const styles = StyleSheet.create({
     card: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, marginBottom: 12, borderRadius: 10, elevation: 1, width: '94%', alignSelf: 'center' },
     cardTitle: { fontSize: 15, fontWeight: '600', flex: 1 },
     
+    tabContainer: { flexDirection: 'row', width: '94%', alignSelf: 'center', borderRadius: 8, marginTop: 10, marginBottom: 5, overflow: 'hidden', borderWidth: 1 },
+    tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+    tabText: { fontSize: 14 },
+
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
     scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
