@@ -67,6 +67,7 @@ import TeacherFilter from '../screens/report/TeacherFilter';
 import StudentLessonFeedback from '../screens/Feedbacks/StudentLessonFeedback';
 import TeacherLessonFeedback from '../screens/Feedbacks/TeacherLessonFeedback';
 import StudentAttendance from '../screens/StudentAttendance';
+import KeywordScreen from '../screens/Feedbacks/KeywordScreen';
 
 // --- CONSTANTS ---
 const { width: windowWidth } = Dimensions.get('window');
@@ -187,6 +188,7 @@ const AdminDashboard = ({ navigation }) => {
         subModules: [
             { id: 'qa24', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
             { id: 'qa25', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'TeacherAdminResourcesScreen' },
+            { id: 'qa35', title: 'Keywords', imageSource: 'https://cdn-icons-png.flaticon.com/128/12142/12142622.png', navigateToTab: 'KeywordScreen' },
             { id: 'qa26', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'TeacherAdminMaterialsScreen' },
             { id: 'qa27', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'TeacherAdminLabsScreen' },
             { id: 'qa28', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
@@ -455,6 +457,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'StudentLessonFeedback': return ( <><ContentScreenHeader title="Student Feedback" onBack={handleModuleBack} /><StudentLessonFeedback /></> );
         case 'TeacherLessonFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><TeacherLessonFeedback /></> );
         case 'StudentAttendance': return ( <><ContentScreenHeader title="Student Attendance" onBack={handleModuleBack} /><StudentAttendance /></> );
+        case 'KeywordScreen': return ( <><ContentScreenHeader title="Keywords" onBack={handleModuleBack} /><KeywordScreen /></> );
 
         default: return ( <View style={styles.fallbackContent}><Text style={[styles.fallbackText, {color: theme.textPrimary}]}>Content not available.</Text><TouchableOpacity onPress={() => switchTab('home')}><Text style={styles.fallbackLink}>Go Home</Text></TouchableOpacity></View> );
       }

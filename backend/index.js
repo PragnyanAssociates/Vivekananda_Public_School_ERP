@@ -11143,6 +11143,68 @@ app.get('/api/lesson-feedback/teacher/lesson-students-status/:class_group/:subje
 
 
 
+// ==========================================================
+// --- LESSON KEYWORDS API ROUTES ---
+// ==========================================================
+
+// 1. [ALL ROLES] Get all keywords for a specific lesson
+app.get('/api/lesson-keywords/:class_group/:subject_name/:lesson_name', async (req, res) => {
+    try {
+        const { class_group, subject_name, lesson_name } = req.params;
+        const[keywords] = await db.query(
+            `SELECT * FROM lesson_keywords 
+             WHERE class_group = ? AND subject_name = ? AND lesson_name = ?
+             ORDER BY updated_at DESC`,[class_group, subject_name, lesson_name]
+        );
+        res.json(keywords);
+    } catch (error) {
+        console.error("Error fetching keywords:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2.[TEACHER/ADMIN] Save (Insert or Update) a keyword
+app.post('/api/lesson-keywords/save', async (req, res) => {
+    try {
+        const { id, class_group, subject_name, lesson_name, word, meaning, definition, example, user_id } = req.body;
+        
+        if (id) {
+            // Update existing keyword
+            await db.query(
+                `UPDATE lesson_keywords 
+                 SET word = ?, meaning = ?, definition = ?, example = ?
+                 WHERE id = ?`,
+                [word, meaning, definition, example, id]
+            );
+            res.json({ success: true, message: "Keyword updated successfully!" });
+        } else {
+            // Insert new keyword
+            await db.query(
+                `INSERT INTO lesson_keywords (class_group, subject_name, lesson_name, word, meaning, definition, example, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,[class_group, subject_name, lesson_name, word, meaning, definition, example, user_id]
+            );
+            res.json({ success: true, message: "Keyword added successfully!" });
+        }
+    } catch (error) {
+        console.error("Error saving keyword:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. [TEACHER/ADMIN] Delete a keyword
+app.delete('/api/lesson-keywords/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query(`DELETE FROM lesson_keywords WHERE id = ?`, [id]);
+        res.json({ success: true, message: "Keyword deleted successfully!" });
+    } catch (error) {
+        console.error("Error deleting keyword:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+
 
 // By using "server.listen", you enable both your API routes and the real-time chat.
 server.listen(PORT, '0.0.0.0', () => {

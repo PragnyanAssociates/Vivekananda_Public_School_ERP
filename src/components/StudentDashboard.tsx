@@ -52,6 +52,7 @@ import TransportScreen from '../screens/transport/TransportScreen';
 import LibraryHomeScreen from '../screens/library/LibraryHomeScreen';
 import MyPerformance from '../screens/report/MyPerformance';
 import StudentLessonFeedback from '../screens/Feedbacks/StudentLessonFeedback';
+import KeywordScreen from '../screens/Feedbacks/KeywordScreen';
 
 const { width: windowWidth } = Dimensions.get('window');
 const BOTTOM_NAV_HEIGHT = 70;
@@ -155,6 +156,7 @@ const StudentDashboard = ({ navigation }) => {
         { id: 'qa19', title: 'Study Materials', imageSource: 'https://cdn-icons-png.flaticon.com/128/3273/3273259.png', navigateToTab: 'StudentMaterialsScreen' },
         { id: 'qa3', title: 'Library', imageSource: 'https://cdn-icons-png.flaticon.com/128/9043/9043296.png', navigateToTab: 'LibraryHomeScreen' },
         { id: 'qa21', title: 'Textbooks', imageSource: 'https://cdn-icons-png.flaticon.com/128/4541/4541151.png', navigateToTab: 'StudentResourcesScreen' },
+        { id: 'qa35', title: 'Keywords', imageSource: 'https://cdn-icons-png.flaticon.com/128/12142/12142622.png', navigateToTab: 'KeywordScreen' },
         { id: 'qa17', title: 'Digital Labs', imageSource: 'https://cdn-icons-png.flaticon.com/128/17104/17104528.png', navigateToTab: 'StudentLabsScreen' },
         { id: 'qa9', title: 'Dictionary', imageSource: 'https://cdn-icons-png.flaticon.com/128/4033/4033369.png', navigateToTab: 'DictionaryScreen' },
       ]
@@ -409,6 +411,7 @@ const StudentDashboard = ({ navigation }) => {
       case 'LibraryHomeScreen': return ( <><ContentScreenHeader title="Library" onBack={handleModuleBack} /><LibraryHomeScreen /></> );
       case 'MyPerformance': return ( <><ContentScreenHeader title="My Performance" onBack={handleModuleBack} /><MyPerformance /></> );
       case 'StudentLessonFeedback': return ( <><ContentScreenHeader title="Teacher Feedback" onBack={handleModuleBack} /><StudentLessonFeedback /></> );
+      case 'KeywordScreen': return ( <><ContentScreenHeader title="Keywords" onBack={handleModuleBack} /><KeywordScreen /></> );
 
       default: return ( 
           <View style={[styles.fallbackContent, {backgroundColor: theme.background}]}>

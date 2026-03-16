@@ -147,6 +147,7 @@ import StudentFeedback from './src/screens/Feedbacks/StudentFeedback';
 import TeacherFeedback from './src/screens/Feedbacks/TeacherFeedback';
 import StudentLessonFeedback from './src/screens/Feedbacks/StudentLessonFeedback';
 import TeacherLessonFeedback from './src/screens/Feedbacks/TeacherLessonFeedback';
+import KeywordScreen from './src/screens/Feedbacks/KeywordScreen';
 // Donor-Specific Screens
 // import DonorNotifications from './src/components/DonorNotifications';
 
@@ -385,6 +386,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="TeacherFeedback" component={TeacherFeedback} />
       <Stack.Screen name="StudentLessonFeedback" component={StudentLessonFeedback} />
       <Stack.Screen name="TeacherLessonFeedback" component={TeacherLessonFeedback} />
+      <Stack.Screen name="KeywordScreen" component={KeywordScreen} />
 
       <Stack.Screen name="TeacherPerformanceScreen" component={TeacherPerformanceScreen} />
       <Stack.Screen name="StudentPerformance" component={StudentPerformance} />
