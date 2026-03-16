@@ -27,6 +27,17 @@ const QUESTIONS =[
     "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
 ];
 
+// Helper to extract the bracket number and sort numerically
+const sortLessons = (lessonsArray) => {
+    return [...lessonsArray].sort((a, b) => {
+        const matchA = a.lesson_name.match(/\((\d+)\)/);
+        const matchB = b.lesson_name.match(/\((\d+)\)/);
+        const numA = matchA ? parseInt(matchA[1], 10) : 9999;
+        const numB = matchB ? parseInt(matchB[1], 10) : 9999;
+        return numA - numB;
+    });
+};
+
 const getBarColor = (percentage, colors) => {
     if (percentage >= 80) return colors.graphGreen;
     if (percentage >= 50) return colors.graphBlue;  
@@ -75,20 +86,20 @@ const StudentLessonFeedback = () => {
     const[viewStep, setViewStep] = useState('subjects'); 
     const [loading, setLoading] = useState(false);
     
-    const [subjects, setSubjects] = useState([]);
+    const[subjects, setSubjects] = useState([]);
     const [lessons, setLessons] = useState([]);
-    const [selectedSubject, setSelectedSubject] = useState('');
+    const[selectedSubject, setSelectedSubject] = useState('');
     const [selectedLesson, setSelectedLesson] = useState('');
 
-    const [activeTab, setActiveTab] = useState('guide'); 
+    const[activeTab, setActiveTab] = useState('guide'); 
     const[guideAnswers, setGuideAnswers] = useState([]);
 
     const [answers, setAnswers] = useState(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '', mark: null })));
-    const [remarks, setRemarks] = useState('');
+    const[remarks, setRemarks] = useState('');
     const[isMarked, setIsMarked] = useState(false);
     const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
-    const [showGraph, setShowGraph] = useState(false);
+    const[showGraph, setShowGraph] = useState(false);
 
     useEffect(() => { if (user?.class_group) fetchSubjects(); }, [user]);
 
@@ -106,7 +117,7 @@ const StudentLessonFeedback = () => {
         setLoading(true);
         try {
             const res = await apiClient.get(`/lesson-feedback/student/lessons/${user.id}/${user.class_group}/${subject}`);
-            setLessons(res.data);
+            setLessons(sortLessons(res.data)); // Applied Sorting Here
             setViewStep('lessons');
         } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
         setLoading(false);

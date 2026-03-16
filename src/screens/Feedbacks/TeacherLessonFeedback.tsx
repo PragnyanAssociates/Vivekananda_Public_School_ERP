@@ -49,6 +49,17 @@ const QUESTIONS =[
     "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
 ];
 
+// Helper to extract the bracket number and sort numerically
+const sortLessons = (lessonsArray) => {
+    return [...lessonsArray].sort((a, b) => {
+        const matchA = a.lesson_name.match(/\((\d+)\)/);
+        const matchB = b.lesson_name.match(/\((\d+)\)/);
+        const numA = matchA ? parseInt(matchA[1], 10) : 9999;
+        const numB = matchB ? parseInt(matchB[1], 10) : 9999;
+        return numA - numB;
+    });
+};
+
 const getBarColor = (percentage, colors) => {
     if (percentage >= 80) return colors.graphGreen;
     if (percentage >= 50) return colors.graphBlue;  
@@ -97,28 +108,33 @@ const TeacherLessonFeedback = () => {
     const isAdmin = user?.role === 'admin';
     const { width } = useWindowDimensions(); 
 
+    // Navigation states
     const [viewStep, setViewStep] = useState('classes'); 
-    const [loading, setLoading] = useState(false);
+    const [activeHubTab, setActiveHubTab] = useState('students'); 
+    const[loading, setLoading] = useState(false);
     
+    // Graph Modal states
     const[showGraph, setShowGraph] = useState(false);
     const [sortOrder, setSortOrder] = useState('roll_no'); 
     const [showSortPicker, setShowSortPicker] = useState(false); 
 
+    // Data states
     const [groupedClasses, setGroupedClasses] = useState({}); 
-    const [students, setStudents] = useState([]);
-    const [lessons, setLessons] = useState([]);
+    const[students, setStudents] = useState([]);
+    const [lessons, setLessons] = useState([]); 
+    const[studentLessonsData, setStudentLessonsData] = useState([]); 
     
+    // Selection states
     const[selectedClassGroup, setSelectedClassGroup] = useState(''); 
-    const [selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
-    const [selectedLesson, setSelectedLesson] = useState(null);
-    const[selectedStudent, setSelectedStudent] = useState(null);
+    const[selectedSubjectItem, setSelectedSubjectItem] = useState(null); 
+    const [selectedStudent, setSelectedStudent] = useState(null);
+    const[selectedLesson, setSelectedLesson] = useState(null);
 
-    const [activeTab, setActiveTab] = useState('students'); 
-    const [guideAnswers, setGuideAnswers] = useState([]);
-
+    // Form states
+    const[guideAnswers, setGuideAnswers] = useState([]);
     const [answers, setAnswers] = useState([]);
-    const [remarks, setRemarks] = useState('');
-    const[teacherRemarks, setTeacherRemarks] = useState([]); 
+    const[remarks, setRemarks] = useState('');
+    const [teacherRemarks, setTeacherRemarks] = useState([]); 
 
     useEffect(() => { if (user) fetchClasses(); }, [user]);
 
@@ -130,7 +146,7 @@ const TeacherLessonFeedback = () => {
             
             const grouped = {};
             res.data.forEach(item => {
-                if (!grouped[item.class_group]) grouped[item.class_group] = [];
+                if (!grouped[item.class_group]) grouped[item.class_group] =[];
                 grouped[item.class_group].push(item);
             });
             setGroupedClasses(grouped);
@@ -138,34 +154,69 @@ const TeacherLessonFeedback = () => {
         setLoading(false);
     };
 
-    const handleSubjectSelect = async (subjectItem) => {
+    const handleSubjectSelect = async (subjectItem, defaultTab = 'students') => {
         setSelectedSubjectItem(subjectItem);
         setLoading(true);
         try {
-            const res = await apiClient.get(`/lesson-feedback/teacher/subject-lessons/${subjectItem.class_group}/${subjectItem.subject_name}`);
-            setLessons(res.data);
-            setViewStep('lessons');
-        } catch (e) { Alert.alert('Error', 'Failed to load lessons.'); }
+            const resStuds = await apiClient.get(`/lesson-feedback/teacher/class-students/${subjectItem.class_group}/${subjectItem.subject_name}`);
+            setStudents(resStuds.data);
+
+            const resLessons = await apiClient.get(`/lesson-feedback/teacher/subject-lessons/${subjectItem.class_group}/${subjectItem.subject_name}`);
+            setLessons(sortLessons(resLessons.data)); // Applied Sorting Here
+
+            setActiveHubTab(defaultTab);
+            setViewStep('subjectHub');
+        } catch (e) { Alert.alert('Error', 'Failed to load subject data.'); }
         setLoading(false);
     };
 
-    const handleLessonSelect = async (lesson) => {
+    const handleStudentSelect = async (student) => {
+        setSelectedStudent(student);
+        setLoading(true);
+        try {
+            const res = await apiClient.get(`/lesson-feedback/teacher/student-lessons/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${student.student_id}`);
+            setStudentLessonsData(sortLessons(res.data)); // Applied Sorting Here
+            setViewStep('studentLessons');
+        } catch (e) { Alert.alert('Error', 'Failed to load student lessons.'); }
+        setLoading(false);
+    };
+
+    const handleLessonGradeSelect = async (lesson) => {
+        setSelectedLesson(lesson);
+        if (!lesson.is_submitted) {
+            Alert.alert("Pending", "Student has not submitted answers for this lesson yet.");
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await apiClient.get(`/lesson-feedback/student/submission/${selectedStudent.student_id}/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
+            setAnswers(res.data.answers ||[]);
+            setRemarks(res.data.teaching_remarks || '');
+            
+            let parsedRemarks =[];
+            try {
+                if (typeof res.data.teacher_remarks_checkboxes === 'string') parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
+                else if (Array.isArray(res.data.teacher_remarks_checkboxes)) parsedRemarks = res.data.teacher_remarks_checkboxes;
+            } catch (e) {}
+            setTeacherRemarks(parsedRemarks);
+            
+            setViewStep('grading');
+        } catch (e) { Alert.alert('Error', 'Failed to load answers.'); }
+        setLoading(false);
+    };
+
+    const handleGuideSelect = async (lesson) => {
         setSelectedLesson(lesson);
         setLoading(true);
         try {
-            const resStuds = await apiClient.get(`/lesson-feedback/teacher/lesson-students-status/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
-            setStudents(resStuds.data);
-
             const resGuide = await apiClient.get(`/lesson-feedback/guide/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${lesson.lesson_name}`);
             if (resGuide.data && resGuide.data.guide_answers) {
                 setGuideAnswers(resGuide.data.guide_answers);
             } else {
                 setGuideAnswers(QUESTIONS.map((q, i) => ({ q_no: i + 1, question: q, answer: '' })));
             }
-            
-            setActiveTab('students'); 
-            setViewStep('lessonDetail');
-        } catch (e) { Alert.alert('Error', 'Failed to load lesson hub.'); }
+            setViewStep('editGuide');
+        } catch (e) { Alert.alert('Error', 'Failed to load guide.'); }
         setLoading(false);
     };
 
@@ -187,32 +238,8 @@ const TeacherLessonFeedback = () => {
                 guide_answers: guideAnswers
             });
             Alert.alert('Success', 'Teacher guide saved successfully!');
-            handleSubjectSelect(selectedSubjectItem);
+            handleSubjectSelect(selectedSubjectItem, 'guides'); 
         } catch (e) { Alert.alert('Error', 'Failed to save guide.'); }
-        setLoading(false);
-    };
-
-    const handleStudentSelect = async (student) => {
-        if (!student.is_submitted) {
-            Alert.alert("Pending", "Student has not submitted answers yet.");
-            return;
-        }
-        setSelectedStudent(student);
-        setLoading(true);
-        try {
-            const res = await apiClient.get(`/lesson-feedback/student/submission/${student.student_id}/${selectedSubjectItem.class_group}/${selectedSubjectItem.subject_name}/${selectedLesson.lesson_name}`);
-            setAnswers(res.data.answers || []);
-            setRemarks(res.data.teaching_remarks || '');
-            
-            let parsedRemarks =[];
-            try {
-                if (typeof res.data.teacher_remarks_checkboxes === 'string') parsedRemarks = JSON.parse(res.data.teacher_remarks_checkboxes);
-                else if (Array.isArray(res.data.teacher_remarks_checkboxes)) parsedRemarks = res.data.teacher_remarks_checkboxes;
-            } catch (e) {}
-            setTeacherRemarks(parsedRemarks);
-            
-            setViewStep('grading');
-        } catch (e) { Alert.alert('Error', 'Failed to load answers.'); }
         setLoading(false);
     };
 
@@ -246,7 +273,7 @@ const TeacherLessonFeedback = () => {
                 answers, teacher_id: user.id, teacher_remarks_checkboxes: teacherRemarks
             });
             Alert.alert('Success', 'Marks and remarks saved successfully!');
-            handleLessonSelect(selectedLesson); 
+            handleStudentSelect(selectedStudent); 
         } catch (e) { Alert.alert('Error', 'Failed to save marks.'); }
         setLoading(false);
     };
@@ -308,6 +335,7 @@ const TeacherLessonFeedback = () => {
 
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} /> : (
                 <>
+                    {/* STEP 1: CLASSES */}
                     {viewStep === 'classes' && (
                         <>
                             {renderHeader(isAdmin ? "All Classes" : "My Classes", "Select a Class", false, null, false)}
@@ -332,6 +360,7 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
+                    {/* STEP 2: SUBJECTS */}
                     {viewStep === 'subjects' && (
                         <>
                             {renderHeader(selectedClassGroup, "Select a Subject", true, () => setViewStep('classes'), false)}
@@ -356,56 +385,30 @@ const TeacherLessonFeedback = () => {
                         </>
                     )}
 
-                    {viewStep === 'lessons' && (
+                    {/* STEP 3: SUBJECT HUB */}
+                    {viewStep === 'subjectHub' && (
                         <>
-                            {renderHeader(`${selectedSubjectItem.class_group} - ${selectedSubjectItem.subject_name}`, "Select a Lesson", true, () => setViewStep('subjects'), true)}
-                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
-                                {lessons.length > 0 ? lessons.map((lesson) => (
-                                    <TouchableOpacity 
-                                        key={lesson.id} 
-                                        style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
-                                        onPress={() => handleLessonSelect(lesson)}
-                                    >
-                                        <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]} numberOfLines={2}>
-                                            {lesson.lesson_name}
-                                        </Text>
-                                        <View style={styles.badgeContainer}>
-                                            {lesson.has_guide ? (
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.success, marginRight: 8 }]}><Text style={styles.badgeText}>GUIDE ADDED</Text></View>
-                                            ) : (
-                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning, marginRight: 8 }]}><Text style={styles.badgeText}>NO GUIDE</Text></View>
-                                            )}
-                                            <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
-                                        </View>
-                                    </TouchableOpacity>
-                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
-                            </ScrollView>
-                        </>
-                    )}
-
-                    {viewStep === 'lessonDetail' && (
-                        <>
-                            {renderHeader(selectedLesson.lesson_name, "Manage Guide & Grade Students", true, () => handleSubjectSelect(selectedSubjectItem), false)}
+                            {renderHeader(`${selectedSubjectItem.class_group} - ${selectedSubjectItem.subject_name}`, "Manage Students & Guides", true, () => setViewStep('subjects'), true)}
                             
                             <View style={[styles.tabContainer, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border }]}>
                                 <TouchableOpacity 
-                                    style={[styles.tabButton, activeTab === 'students' && { borderBottomColor: COLORS.primary }]}
-                                    onPress={() => setActiveTab('students')}
+                                    style={[styles.tabButton, activeHubTab === 'students' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveHubTab('students')}
                                 >
-                                    <Text style={[styles.tabText, activeTab === 'students' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Student Submissions</Text>
+                                    <Text style={[styles.tabText, activeHubTab === 'students' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Students Grading</Text>
                                 </TouchableOpacity>
                                 
                                 <TouchableOpacity 
-                                    style={[styles.tabButton, activeTab === 'guide' && { borderBottomColor: COLORS.primary }]}
-                                    onPress={() => setActiveTab('guide')}
+                                    style={[styles.tabButton, activeHubTab === 'guides' && { borderBottomColor: COLORS.primary }]}
+                                    onPress={() => setActiveHubTab('guides')}
                                 >
-                                    <Text style={[styles.tabText, activeTab === 'guide' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Edit Lesson Guide</Text>
+                                    <Text style={[styles.tabText, activeHubTab === 'guides' ? { color: COLORS.primary, fontWeight: 'bold' } : { color: COLORS.textSub }]}>Lesson Guides</Text>
                                 </TouchableOpacity>
                             </View>
 
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 
-                                {activeTab === 'students' && (
+                                {activeHubTab === 'students' && (
                                     <View>
                                         {students.length > 0 ? students.map((student, idx) => (
                                             <TouchableOpacity 
@@ -419,57 +422,94 @@ const TeacherLessonFeedback = () => {
                                                 </View>
 
                                                 <View style={styles.badgeContainer}>
-                                                    {student.is_marked ? (
-                                                        <>
-                                                            <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}><Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{student.obtained_marks}/{student.max_marks}</Text></View>
-                                                            <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}><Text style={styles.badgeText}>MARKED</Text></View>
-                                                        </>
-                                                    ) : student.is_submitted ? (
-                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}><Text style={styles.badgeText}>PENDING</Text></View>
-                                                    ) : (
-                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}><Text style={styles.badgeText}>NO DATA</Text></View>
+                                                    {student.has_marks && (
+                                                        <View style={[styles.scoreBoxLarge, { borderColor: COLORS.redBox }]}>
+                                                            <Text style={[styles.scoreTextLarge, { color: COLORS.redBox }]}>
+                                                                {student.total_obtained}/{student.total_max}
+                                                            </Text>
+                                                        </View>
                                                     )}
+                                                    <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
                                                 </View>
                                             </TouchableOpacity>
                                         )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No students in this class.</Text>}
                                     </View>
                                 )}
 
-                                {activeTab === 'guide' && (
+                                {activeHubTab === 'guides' && (
                                     <View>
-                                        <View style={{ backgroundColor: COLORS.iconBg, padding: 12, borderRadius: 8, marginBottom: 15 }}>
-                                            <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 13 }}>These answers will be visible to students as a reference guide for this lesson.</Text>
-                                        </View>
-
-                                        {guideAnswers.map((item, index) => (
-                                            <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, width: '100%' }]}>
-                                                <Text style={[styles.label, { color: COLORS.primary, marginBottom: 8 }]}>{item.q_no}. {item.question}</Text>
-                                                <TextInput
-                                                    style={[styles.inputGuide, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
-                                                    multiline
-                                                    placeholder="Type model answer here..."
-                                                    placeholderTextColor={COLORS.textSub}
-                                                    value={item.answer}
-                                                    onChangeText={(txt) => handleGuideAnswerChange(index, txt)}
-                                                    editable={!isAdmin}
-                                                />
-                                            </View>
-                                        ))}
-
-                                        {!isAdmin && (
-                                            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary, width: '100%' }]} onPress={handleSaveGuide}>
-                                                <Text style={styles.saveBtnText}>Save Lesson Guide</Text>
+                                        {lessons.length > 0 ? lessons.map((lesson) => (
+                                            <TouchableOpacity 
+                                                key={lesson.id} 
+                                                style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
+                                                onPress={() => handleGuideSelect(lesson)}
+                                            >
+                                                <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]} numberOfLines={2}>
+                                                    {lesson.lesson_name}
+                                                </Text>
+                                                <View style={styles.badgeContainer}>
+                                                    {lesson.has_guide ? (
+                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.success, marginRight: 8 }]}><Text style={styles.badgeText}>GUIDE ADDED</Text></View>
+                                                    ) : (
+                                                        <View style={[styles.statusBadge, { backgroundColor: COLORS.warning, marginRight: 8 }]}><Text style={styles.badgeText}>NO GUIDE</Text></View>
+                                                    )}
+                                                    <MaterialIcons name="chevron-right" size={24} color={COLORS.textSub} />
+                                                </View>
                                             </TouchableOpacity>
-                                        )}
+                                        )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
                                     </View>
                                 )}
                             </ScrollView>
                         </>
                     )}
 
+                    {/* STEP 4: STUDENT'S LESSONS */}
+                    {viewStep === 'studentLessons' && (
+                        <>
+                            {renderHeader(selectedStudent.full_name, "Select a Lesson to Mark", true, () => {
+                                setViewStep('subjectHub'); setActiveHubTab('students');
+                            }, false)}
+                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+                                {studentLessonsData.length > 0 ? studentLessonsData.map((lesson) => (
+                                    <TouchableOpacity 
+                                        key={lesson.id} 
+                                        style={[styles.card, { backgroundColor: COLORS.cardBg }]} 
+                                        onPress={() => handleLessonGradeSelect(lesson)}
+                                    >
+                                        <Text style={[styles.cardTitle, { color: COLORS.textMain, flex: 1 }]} numberOfLines={2}>
+                                            {lesson.lesson_name}
+                                        </Text>
+                                        
+                                        <View style={styles.badgeContainer}>
+                                            {lesson.is_marked ? (
+                                                <>
+                                                    <View style={[styles.scoreBoxSmall, { borderColor: COLORS.redBox }]}>
+                                                        <Text style={[styles.scoreTextSmall, { color: COLORS.redBox }]}>{lesson.obtained_marks}/{lesson.max_marks}</Text>
+                                                    </View>
+                                                    <View style={[styles.statusBadge, { backgroundColor: COLORS.success }]}>
+                                                        <Text style={styles.badgeText}>MARKED</Text>
+                                                    </View>
+                                                </>
+                                            ) : lesson.is_submitted ? (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.warning }]}>
+                                                    <Text style={styles.badgeText}>PENDING</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={[styles.statusBadge, { backgroundColor: COLORS.danger }]}>
+                                                    <Text style={styles.badgeText}>NO DATA</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                )) : <Text style={[styles.emptyText, { color: COLORS.textSub }]}>No lessons found.</Text>}
+                            </ScrollView>
+                        </>
+                    )}
+
+                    {/* STEP 5: GRADING A STUDENT */}
                     {viewStep === 'grading' && (
                         <>
-                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('lessonDetail'), false)}
+                            {renderHeader(selectedLesson.lesson_name, selectedStudent.full_name, true, () => setViewStep('studentLessons'), false)}
                             <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
                                 
                                 <View style={[styles.remarksBox, { backgroundColor: COLORS.rowAlt, borderColor: COLORS.border }]}>
@@ -539,9 +579,45 @@ const TeacherLessonFeedback = () => {
                             </ScrollView>
                         </>
                     )}
+
+                    {/* STEP 6: EDITING LESSON GUIDE */}
+                    {viewStep === 'editGuide' && (
+                        <>
+                            {renderHeader(selectedLesson.lesson_name, "Edit Teacher Guide", true, () => {
+                                setViewStep('subjectHub'); setActiveHubTab('guides');
+                            }, false)}
+                            <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 50 }}>
+                                <View style={{ backgroundColor: COLORS.iconBg, padding: 12, borderRadius: 8, marginBottom: 15 }}>
+                                    <Text style={{ color: COLORS.primary, fontWeight: '600', fontSize: 13 }}>These answers will be visible to students as a reference guide for this lesson.</Text>
+                                </View>
+
+                                {guideAnswers.map((item, index) => (
+                                    <View key={index} style={[styles.questionBox, { backgroundColor: COLORS.cardBg, borderColor: COLORS.border, width: '100%' }]}>
+                                        <Text style={[styles.label, { color: COLORS.primary, marginBottom: 8 }]}>{item.q_no}. {item.question}</Text>
+                                        <TextInput
+                                            style={[styles.inputGuide, { backgroundColor: COLORS.inputBg, color: COLORS.textMain, borderColor: COLORS.border }]}
+                                            multiline
+                                            placeholder="Type model answer here..."
+                                            placeholderTextColor={COLORS.textSub}
+                                            value={item.answer}
+                                            onChangeText={(txt) => handleGuideAnswerChange(index, txt)}
+                                            editable={!isAdmin}
+                                        />
+                                    </View>
+                                ))}
+
+                                {!isAdmin && (
+                                    <TouchableOpacity style={[styles.saveBtn, { backgroundColor: COLORS.primary, width: '100%' }]} onPress={handleSaveGuide}>
+                                        <Text style={styles.saveBtnText}>Save Lesson Guide</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </ScrollView>
+                        </>
+                    )}
                 </>
             )}
 
+            {/* --- GRAPH MODAL --- */}
             <Modal visible={showGraph} animationType="slide" onRequestClose={() => setShowGraph(false)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                     <View style={[styles.modalHeader, { backgroundColor: COLORS.cardBg, borderBottomColor: COLORS.border }]}>
@@ -654,6 +730,8 @@ const styles = StyleSheet.create({
     tabText: { fontSize: 14 },
 
     badgeContainer: { flexDirection: 'row', alignItems: 'center' },
+    scoreBoxLarge: { borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
+    scoreTextLarge: { fontWeight: 'bold', fontSize: 16 },
     scoreBoxSmall: { borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8, backgroundColor: 'transparent' },
     scoreTextSmall: { fontWeight: 'bold', fontSize: 14 },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
