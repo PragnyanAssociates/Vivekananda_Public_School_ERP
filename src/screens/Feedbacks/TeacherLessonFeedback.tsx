@@ -42,11 +42,11 @@ const SORT_OPTIONS =[
     { label: 'Low to High', value: 'low_to_high' }
 ];
 
-const QUESTIONS =[
-    "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
-    "Spot real-world applications?", "Explore keywords and core ideas?",
-    "Capture a summary of the topic?", "Write your own student notes?",
-    "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
+const QUESTIONS = [
+  "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
+  "Spot real-world applications?", "Explore keywords and core ideas?",
+  "Capture a summary of the topic?", "Write your own student notes?", "Hands on experience with projects and workshop?",
+  "Set a time plan to finish learning?",  "Track examination performance?"
 ];
 
 // Helper to extract the bracket number and sort numerically

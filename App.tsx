@@ -58,6 +58,7 @@ import AdminSyllabusScreen from './src/screens/syllabus/AdminSyllabusScreen';
 // import AdminSuggestionsScreen from './src/screens/suggestions/AdminSuggestionsScreen';
 // import AdminPaymentScreen from './src/screens/payments/AdminPaymentScreen';
 import KitchenScreen from './src/screens/kitchen/KitchenScreen';
+import StoreScreen from './src/screens/kitchen/StoreScreen';
 import FoodScreen from './src/screens/food/FoodScreen';
 import AlumniScreen from './src/screens/Alumni/AlumniScreen';
 import PreAdmissionsScreen from './src/screens/Pre-Admissions/PreAdmissionsScreen';
@@ -334,6 +335,7 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="AlumniScreen" component={AlumniScreen} />
       <Stack.Screen name="PreAdmissionsScreen" component={PreAdmissionsScreen} />
       <Stack.Screen name="KitchenScreen" component={KitchenScreen} />
+      <Stack.Screen name="StoreScreen" component={StoreScreen} />
       <Stack.Screen name="OnlineClassScreen" component={OnlineClassScreen} />
       <Stack.Screen name="ChatFeature" component={ChatStackNavigator} options={{ headerShown: true, 
           title: 'Group chat',

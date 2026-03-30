@@ -48,6 +48,7 @@ import PreAdmissionsScreen from '../screens/Pre-Admissions/PreAdmissionsScreen';
 import AdminEventsScreen from '../screens/events/AdminEventsScreen';
 import TeacherAdminExamScreen from '../screens/exams_Schedule/TeacherAdminExamScreen';
 import KitchenScreen from '../screens/kitchen/KitchenScreen';
+import StoreScreen from '../screens/kitchen/StoreScreen';
 import TeacherAdminLabsScreen from '../screens/labs/TeacherAdminLabsScreen';
 import TeacherAdminMaterialsScreen from '../screens/study-materials/TeacherAdminMaterialsScreen';
 import AdminSyllabusScreen from '../screens/syllabus/AdminSyllabusScreen';
@@ -201,6 +202,7 @@ const AdminDashboard = ({ navigation }) => {
         imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png',
         subModules: [
             { id: 'qa30', title: 'Kitchen Stock', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
+            { id: 'qa39', title: 'Store', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'StoreScreen' },
             { id: 'qa31', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
             { id: 'qa29', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
             { id: 'qa23', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
@@ -438,6 +440,7 @@ const AdminDashboard = ({ navigation }) => {
         case 'AdminEventsScreen': return ( <><ContentScreenHeader title="Events" onBack={handleModuleBack} /><AdminEventsScreen /></> );
         case 'TeacherAdminExamScreen': return ( <><ContentScreenHeader title="Exam Schedules" onBack={handleModuleBack} /><TeacherAdminExamScreen /></> );
         case 'KitchenScreen': return ( <><ContentScreenHeader title="Kitchen" onBack={handleModuleBack} /><KitchenScreen /></> );
+        case 'StoreScreen': return ( <><ContentScreenHeader title="Store" onBack={handleModuleBack} /><StoreScreen /></> );
         case 'TeacherAdminLabsScreen': return ( <><ContentScreenHeader title="Digital Labs" onBack={handleModuleBack} /><TeacherAdminLabsScreen /></> );
         case 'TeacherAdminMaterialsScreen': return ( <><ContentScreenHeader title="Study Materials" onBack={handleModuleBack} /><TeacherAdminMaterialsScreen /></> );
         case 'AdminSyllabusScreen': return ( <><ContentScreenHeader title="Syllabus Tracking" onBack={handleModuleBack} /><AdminSyllabusScreen /></> );

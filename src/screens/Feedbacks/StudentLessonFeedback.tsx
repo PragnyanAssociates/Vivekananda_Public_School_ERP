@@ -20,11 +20,11 @@ const DarkColors = {
     graphBg: '#333333', graphGreen: '#10B981', graphBlue: '#3B82F6', graphRed: '#EF4444'
 };
 
-const QUESTIONS =[
-    "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
-    "Spot real-world applications?", "Explore keywords and core ideas?",
-    "Capture a summary of the topic?", "Write your own student notes?",
-    "Set a time plan to finish learning?", "Get teacher feedback and appreciation?", "Track examination performance?"
+const QUESTIONS = [
+  "Know why the topic matters?", "Note the author/inventor and discovery time?", "Define what the topic is about?",
+  "Spot real-world applications?", "Explore keywords and core ideas?",
+  "Capture a summary of the topic?", "Write your own student notes?", "Hands on experience with projects and workshop?",
+  "Set a time plan to finish learning?",  "Track examination performance?"
 ];
 
 // Helper to extract the bracket number and sort numerically
