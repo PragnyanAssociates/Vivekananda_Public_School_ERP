@@ -10463,7 +10463,6 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
 // --- FEE SCHEDULE & REAL PAYMENT API ROUTES ---
 // ==========================================================
 const Razorpay = require('razorpay');
-const crypto = require('crypto');
 
 // Initialize Razorpay
 const razorpayInstance = new Razorpay({
