@@ -1,13 +1,13 @@
 /**
  * File: src/screens/store/StoreScreen.tsx
  * Purpose: Manage Permanent Storage Assets (School assets, furniture, etc.)
- * Features: Responsive Design, Dark/Light Mode, Role-based Access, Search, Camera/Gallery uploads.
+ * Features: Responsive Design, Dark/Light Mode, Role-based Access, Search, Camera/Gallery uploads, Three-dot action menu.
  */
 import React, { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     Alert, ActivityIndicator, SafeAreaView, Modal, TextInput, Platform, Image, UIManager,
-    useColorScheme, StatusBar, Dimensions, KeyboardAvoidingView
+    useColorScheme, StatusBar, Dimensions, KeyboardAvoidingView, TouchableWithoutFeedback
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'react-native-image-picker';
@@ -27,7 +27,7 @@ const { width, height } = Dimensions.get('window');
 
 // --- THEME CONFIGURATION ---
 const LightColors = {
-    primary: '#2563EB', // Blue-600 to match web theme
+    primary: '#008080', // Blue-600 to match web theme
     background: '#F8FAFC',
     cardBg: '#FFFFFF',
     textMain: '#1E293B',
@@ -37,18 +37,19 @@ const LightColors = {
     inputBorder: '#CBD5E1',
     headerIconBg: '#DBEAFE',
     success: '#16A34A',
-    danger: '#DC2626',
+    danger: '#D32F2F', // Matches the teal color in your options dialog image
     qtyBg: '#EFF6FF',
     iconBtnBg: '#F1F5F9',
     modalOverlay: 'rgba(0,0,0,0.5)',
     emptyIcon: '#CBD5E1',
     white: '#ffffff',
     cancelBtnBg: '#E2E8F0',
-    cancelBtnText: '#334155'
+    cancelBtnText: '#334155',
+    dialogActionText: '#00796B' // Teal action text for the dialog
 };
 
 const DarkColors = {
-    primary: '#3B82F6',
+    primary: '#008080',
     background: '#0F172A',
     cardBg: '#1E293B',
     textMain: '#F1F5F9',
@@ -58,14 +59,15 @@ const DarkColors = {
     inputBorder: '#475569',
     headerIconBg: '#1E3A8A',
     success: '#22C55E',
-    danger: '#EF4444',
+    danger: '#D32F2F', // Lighter teal for dark mode
     qtyBg: '#1E3A8A',
     iconBtnBg: '#334155',
     modalOverlay: 'rgba(0,0,0,0.7)',
     emptyIcon: '#475569',
     white: '#ffffff',
     cancelBtnBg: '#334155',
-    cancelBtnText: '#F1F5F9'
+    cancelBtnText: '#F1F5F9',
+    dialogActionText: '#2DD4BF' // Lighter teal for dark mode
 };
 
 // --- IMAGE ENLARGER COMPONENT ---
@@ -100,6 +102,7 @@ const StoreScreen = () => {
     
     // Modals
     const [itemModalInfo, setItemModalInfo] = useState({ visible: false, mode: null, data: null });
+    const [actionMenuInfo, setActionMenuInfo] = useState({ visible: false, item: null });
     const [enlargeImage, setEnlargeImage] = useState(null);
 
     const fetchItems = useCallback(async () => {
@@ -117,10 +120,14 @@ const StoreScreen = () => {
 
     useFocusEffect(useCallback(() => {
         fetchItems();
-    }, [fetchItems]));
+    },[fetchItems]));
 
+    // Modal Helpers
     const openItemModal = (mode, data = null) => setItemModalInfo({ visible: true, mode, data });
     const closeItemModal = () => setItemModalInfo({ visible: false, mode: null, data: null });
+    
+    const openActionMenu = (item) => setActionMenuInfo({ visible: true, item });
+    const closeActionMenu = () => setActionMenuInfo({ visible: false, item: null });
 
     const handleSaveItem = async (formData, mode, id) => {
         try {
@@ -155,6 +162,20 @@ const StoreScreen = () => {
         ]);
     };
 
+    // Action Menu Handlers
+    const handleMenuEdit = () => {
+        const itemToEdit = actionMenuInfo.item;
+        closeActionMenu();
+        // Slight delay to allow the action menu to close before opening the edit modal
+        setTimeout(() => openItemModal('edit', itemToEdit), 300);
+    };
+
+    const handleMenuDelete = () => {
+        const itemToDelete = actionMenuInfo.item;
+        closeActionMenu();
+        setTimeout(() => handleDeleteItem(itemToDelete), 300);
+    };
+
     const filteredItems = items.filter(item => 
         item.item_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -166,9 +187,7 @@ const StoreScreen = () => {
             {/* --- HEADER --- */}
             <View style={[styles.headerCard, { backgroundColor: theme.cardBg, shadowColor: theme.border }]}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={{marginRight: 10}}>
-                        <MaterialIcons name="arrow-back" size={24} color={theme.textMain} />
-                    </TouchableOpacity>
+                    {/* Back arrow removed as requested */}
                     <View style={[styles.headerIconContainer, { backgroundColor: theme.headerIconBg }]}>
                         <MaterialCommunityIcons name="warehouse" size={24} color={theme.primary} />
                     </View>
@@ -213,8 +232,7 @@ const StoreScreen = () => {
                                 item={item} 
                                 theme={theme}
                                 isAdmin={user?.role === 'admin'}
-                                onEdit={(data) => openItemModal('edit', data)} 
-                                onDelete={handleDeleteItem}
+                                onOptionsPress={() => openActionMenu(item)}
                                 onImagePress={(uri) => setEnlargeImage(uri)} 
                             />
                         ))
@@ -229,7 +247,37 @@ const StoreScreen = () => {
                 </ScrollView>
             }
 
-            {/* --- MODALS --- */}
+            {/* --- THREE-DOT ACTION MENU MODAL --- */}
+            {actionMenuInfo.visible && (
+                <Modal visible={true} transparent animationType="fade" onRequestClose={closeActionMenu}>
+                    <TouchableWithoutFeedback onPress={closeActionMenu}>
+                        <View style={[styles.optionsModalOverlay, { backgroundColor: theme.modalOverlay }]}>
+                            <TouchableWithoutFeedback>
+                                <View style={[styles.optionsModalContent, { backgroundColor: theme.cardBg }]}>
+                                    <Text style={[styles.optionsModalTitle, { color: theme.textMain }]}>Manage Asset</Text>
+                                    <Text style={[styles.optionsModalSubtitle, { color: theme.textSub }]}>
+                                        Options for "{actionMenuInfo.item?.item_name}"
+                                    </Text>
+                                    
+                                    <View style={styles.optionsModalActions}>
+                                        <TouchableOpacity onPress={closeActionMenu} style={styles.optionsActionBtn}>
+                                            <Text style={[styles.optionsActionText, { color: theme.dialogActionText }]}>CANCEL</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={handleMenuEdit} style={styles.optionsActionBtn}>
+                                            <Text style={[styles.optionsActionText, { color: theme.dialogActionText }]}>EDIT</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={handleMenuDelete} style={styles.optionsActionBtn}>
+                                            <Text style={[styles.optionsActionText, { color: theme.dialogActionText }]}>DELETE</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </TouchableWithoutFeedback>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </Modal>
+            )}
+
+            {/* --- ADD / EDIT ASSET MODAL --- */}
             {itemModalInfo.visible && (
                 <AssetModal 
                     modalInfo={itemModalInfo} 
@@ -249,7 +297,7 @@ const StoreScreen = () => {
 };
 
 // --- ASSET ITEM CARD ---
-const AssetItemCard = ({ item, theme, isAdmin, onEdit, onDelete, onImagePress }) => {
+const AssetItemCard = ({ item, theme, isAdmin, onOptionsPress, onImagePress }) => {
     const imageUri = item.image_url ? `${SERVER_URL}${item.image_url}` : null;
 
     return (
@@ -291,14 +339,11 @@ const AssetItemCard = ({ item, theme, isAdmin, onEdit, onDelete, onImagePress })
                 </View>
             </View>
 
-            {/* Actions (Right) */}
+            {/* Actions (Right) - Three Dots menu */}
             {isAdmin && (
                 <View style={styles.actionRow}>
-                    <TouchableOpacity onPress={() => onEdit(item)} style={[styles.actionBtn, { backgroundColor: theme.iconBtnBg }]}>
-                        <MaterialCommunityIcons name="pencil" size={20} color={theme.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => onDelete(item)} style={[styles.actionBtn, { backgroundColor: theme.isDark ? '#3E2723' : '#FFEBEE', marginLeft: 8 }]}>
-                        <MaterialCommunityIcons name="trash-can" size={20} color={theme.danger} />
+                    <TouchableOpacity onPress={() => onOptionsPress(item)} style={styles.moreButton}>
+                        <MaterialCommunityIcons name="dots-vertical" size={24} color={theme.textSub} />
                     </TouchableOpacity>
                 </View>
             )}
@@ -481,9 +526,9 @@ const styles = StyleSheet.create({
     miniChipLabel: { fontSize: 11, fontWeight: '600', marginRight: 4 },
     miniChipValue: { fontSize: 12, fontWeight: 'bold' },
     
-    // Card Actions
-    actionRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 10 },
-    actionBtn: { padding: 8, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    // Card Actions (Three dots)
+    actionRow: { paddingLeft: 10, justifyContent: 'center' },
+    moreButton: { padding: 6 },
 
     // Empty state
     emptyBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, opacity: 0.7, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12 },
@@ -493,6 +538,15 @@ const styles = StyleSheet.create({
     enlargeBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.95)', justifyContent: 'center', alignItems: 'center' },
     enlargeImage: { width: width, height: height * 0.8 },
     enlargeClose: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(50,50,50,0.8)', borderRadius: 20 },
+
+    // Options Modal (Three dots click)
+    optionsModalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    optionsModalContent: { width: '85%', borderRadius: 8, padding: 24, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+    optionsModalTitle: { fontSize: 20, fontWeight: '600', marginBottom: 8 },
+    optionsModalSubtitle: { fontSize: 15, marginBottom: 28 },
+    optionsModalActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+    optionsActionBtn: { marginLeft: 20, paddingVertical: 6, paddingHorizontal: 4 },
+    optionsActionText: { fontSize: 14, fontWeight: '700' },
 
     // Modals
     modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },

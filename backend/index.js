@@ -10460,44 +10460,18 @@ app.get('/api/admin/teacher-feedback', async (req, res) => {
 
 
 // ==========================================================
-// --- FEE SCHEDULE API ROUTES ---
+// --- FEE SCHEDULE & REAL PAYMENT API ROUTES ---
 // ==========================================================
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
-const proofStorage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, '/data/uploads'); },
-    filename: (req, file, cb) => {
-        cb(null, generateUniqueFilename(file.originalname, 'fee-proof'));
-    }
-});
-const proofUpload = multer({ storage: proofStorage });
-
-
-// 9. [ADMIN] Verify Payment
-app.put('/api/fees/verify', async (req, res) => {
-    console.log("Verify Request Body:", req.body);
-
-    const { submission_id, status, admin_remarks } = req.body; 
-    
-    if (!submission_id) {
-        console.error("Error: Submission ID is missing.");
-        return res.status(400).json({ message: 'Submission ID is required' });
-    }
-
-    try {
-        const sql = "UPDATE student_fee_submissions SET status=?, admin_remarks=? WHERE id=?";
-        const [result] = await db.query(sql, [status, admin_remarks, submission_id]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Submission record not found' });
-        }
-        res.json({ message: 'Status updated successfully' });
-    } catch (err) {
-        console.error("Verify Error:", err);
-        res.status(500).json({ message: 'Error updating status' });
-    }
+// Initialize Razorpay
+const razorpayInstance = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID || 'YOUR_RAZORPAY_KEY_ID', 
+    key_secret: process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET',
 });
 
-// 1. [ADMIN] Create a Fee Schedule (UPDATED FOR TITLES)
+// 1. [ADMIN] Create a Fee Schedule
 app.post('/api/fees/create', async (req, res) => {
     const { class_group, title, description, total_amount, due_date, allow_installments, installment_details } = req.body;
     const connection = await db.getConnection();
@@ -10505,19 +10479,12 @@ app.post('/api/fees/create', async (req, res) => {
         await connection.beginTransaction();
         const sqlMaster = `INSERT INTO fee_schedules (class_group, title, description, total_amount, due_date, allow_installments, max_installments) VALUES (?, ?, ?, ?, ?, ?, ?)`;
         const maxInst = (allow_installments && installment_details) ? installment_details.length : 1;
-        const isInstallmentAllowed = allow_installments ? 1 : 0;
-        const [result] = await connection.query(sqlMaster, [class_group, title, description, total_amount, due_date, isInstallmentAllowed, maxInst]);
+        const [result] = await connection.query(sqlMaster,[class_group, title, description, total_amount, due_date, allow_installments ? 1 : 0, maxInst]);
         const feeId = result.insertId;
 
-        if (isInstallmentAllowed === 1 && installment_details && installment_details.length > 0) {
+        if (allow_installments && installment_details && installment_details.length > 0) {
             const sqlInstallment = `INSERT INTO fee_installments (fee_schedule_id, installment_number, amount, due_date, title) VALUES ?`;
-            const values = installment_details.map((inst, index) => [
-                feeId, 
-                index + 1, 
-                inst.amount, 
-                inst.due_date,
-                inst.title || '' // Added Title
-            ]);
+            const values = installment_details.map((inst, index) =>[feeId, index + 1, inst.amount, inst.due_date, inst.title || '']);
             await connection.query(sqlInstallment, [values]);
         }
         await connection.commit();
@@ -10536,156 +10503,148 @@ app.put('/api/fees/:id', async (req, res) => {
     const { id } = req.params;
     const { title, total_amount, due_date } = req.body;
     try {
-        await db.query("UPDATE fee_schedules SET title = ?, total_amount = ?, due_date = ? WHERE id = ?", [title, total_amount, due_date, id]);
+        await db.query("UPDATE fee_schedules SET title = ?, total_amount = ?, due_date = ? WHERE id = ?",[title, total_amount, due_date, id]);
         res.json({ message: 'Fee updated successfully' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error updating fee' });
-    }
+    } catch (err) { res.status(500).json({ message: 'Error updating fee' }); }
 });
 
 // 3. [ADMIN] Delete Fee Schedule
 app.delete('/api/fees/:id', async (req, res) => {
-    const { id } = req.params;
     try {
-        await db.query("DELETE FROM fee_schedules WHERE id = ?", [id]);
+        await db.query("DELETE FROM fee_schedules WHERE id = ?", [req.params.id]);
         res.json({ message: 'Fee deleted successfully' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error deleting fee' });
-    }
+    } catch (err) { res.status(500).json({ message: 'Error deleting fee' }); }
 });
 
 // 4. [ADMIN/STUDENT] Get List of Fees
 app.get('/api/fees/list/:class_group', async (req, res) => {
-    const { class_group } = req.params;
     try {
-        const sql = `SELECT * FROM fee_schedules WHERE class_group = ? ORDER BY due_date DESC`;
-        const [rows] = await db.query(sql, [class_group]);
+        const [rows] = await db.query(`SELECT * FROM fee_schedules WHERE class_group = ? ORDER BY due_date DESC`, [req.params.class_group]);
         res.json(rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error fetching fees' });
-    }
+    } catch (err) { res.status(500).json({ message: 'Error fetching fees' }); }
 });
 
-// 5. [STUDENT] Get Fee Details (UPDATED TO RETURN TITLE)
+// 5. [STUDENT] Get Fee Details & Payment History
 app.get('/api/student/fee-details', async (req, res) => {
     const { fee_schedule_id, student_id } = req.query;
     if(!fee_schedule_id || !student_id) return res.status(400).json({ message: 'Missing parameters' });
 
     try {
         const [installments] = await db.query("SELECT * FROM fee_installments WHERE fee_schedule_id = ? ORDER BY installment_number ASC", [fee_schedule_id]);
-        const [submissions] = await db.query("SELECT id, installment_number, status, screenshot_url FROM student_fee_submissions WHERE fee_schedule_id = ? AND student_id = ?", [fee_schedule_id, student_id]);
+        const[submissions] = await db.query("SELECT id, installment_number, status, amount_paid FROM student_fee_submissions WHERE fee_schedule_id = ? AND student_id = ?",[fee_schedule_id, student_id]);
 
         const data = installments.map(inst => {
             const sub = submissions.find(s => s.installment_number === inst.installment_number);
             return {
-                id: inst.id,
-                installment_number: inst.installment_number,
-                title: inst.title, // Added Title here
-                amount: inst.amount,
-                due_date: inst.due_date,
-                status: sub ? sub.status : 'unpaid',
-                submission_id: sub ? sub.id : null,
-                screenshot_url: sub ? sub.screenshot_url : null
+                id: inst.id, installment_number: inst.installment_number, title: inst.title,
+                amount: inst.amount, due_date: inst.due_date,
+                status: sub ? sub.status : 'unpaid', submission_id: sub ? sub.id : null
             };
         });
+        
         const oneTimeSub = submissions.find(s => s.installment_number === 0);
-        const oneTimeStatus = oneTimeSub ? oneTimeSub.status : 'unpaid';
-        res.json({ installments: data, oneTimeStatus });
-    } catch (err) {
-        console.error("Fee Details Error:", err);
-        res.status(500).json({ message: 'Error fetching details' });
-    }
+        res.json({ installments: data, oneTimeStatus: oneTimeSub ? oneTimeSub.status : 'unpaid' });
+    } catch (err) { res.status(500).json({ message: 'Error fetching details' }); }
 });
 
-// 6. [STUDENT] Submit Proof
-app.post('/api/fees/submit', proofUpload.single('screenshot'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: 'No image file uploaded' });
-    const finalScreenshotUrl = `${req.protocol}://${req.get('host')}/api/image/${req.file.filename}`;
-    const { fee_schedule_id, student_id, payment_mode, installment_number } = req.body;
-    const finalInstNum = payment_mode === 'one_time' ? 0 : (parseInt(installment_number) || 0);
-
-    try {
-        const checkSql = "SELECT id FROM student_fee_submissions WHERE fee_schedule_id = ? AND student_id = ? AND installment_number = ?";
-        const [existing] = await db.query(checkSql, [fee_schedule_id, student_id, finalInstNum]);
-
-        if (existing.length > 0) {
-            const updateSql = `UPDATE student_fee_submissions SET payment_mode=?, screenshot_url=?, status='pending', submitted_at=NOW() WHERE id=?`;
-            await db.query(updateSql, [payment_mode, finalScreenshotUrl, existing[0].id]);
-        } else {
-            const insertSql = `INSERT INTO student_fee_submissions (fee_schedule_id, student_id, payment_mode, screenshot_url, status, installment_number) VALUES (?, ?, ?, ?, 'pending', ?)`;
-            await db.query(insertSql, [fee_schedule_id, student_id, payment_mode, finalScreenshotUrl, finalInstNum]);
-        }
-        res.json({ message: 'Proof submitted successfully', url: finalScreenshotUrl });
-    } catch (err) {
-        console.error("Submit Error:", err);
-        res.status(500).json({ message: 'Error submitting proof' });
-    }
-});
-
-// 7. [STUDENT] Delete Pending Submission
-app.delete('/api/student/submission/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const [check] = await db.query("SELECT status FROM student_fee_submissions WHERE id = ?", [id]);
-        if (check.length === 0) return res.status(404).json({ message: 'Submission not found' });
-        if (check[0].status !== 'pending') return res.status(400).json({ message: 'Cannot delete processed payments' });
-        await db.query("DELETE FROM student_fee_submissions WHERE id = ?", [id]);
-        res.json({ message: 'Submission deleted successfully' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error deleting submission' });
-    }
-});
-
-// 8. [ADMIN] Get Student Status List
+// 6. [ADMIN] Get Student Status List (Replaced manual verification)
 app.get('/api/fees/status/:fee_schedule_id', async (req, res) => {
     const { fee_schedule_id } = req.params;
     try {
         const [feeDetails] = await db.query("SELECT class_group FROM fee_schedules WHERE id = ?", [fee_schedule_id]);
         if (feeDetails.length === 0) return res.status(404).json({ message: 'Fee not found' });
-        
-        const classGroup = feeDetails[0].class_group;
 
         const sql = `
-            SELECT 
-                u.id as student_id,
-                u.full_name,
-                p.roll_no,
-                sfs.id as submission_id,
-                COALESCE(sfs.status, 'unpaid') as status,
-                sfs.payment_mode,
-                sfs.installment_number,
-                sfs.screenshot_url,
-                sfs.submitted_at
+            SELECT u.id as student_id, u.full_name, p.roll_no, 
+                   sfs.id as submission_id, COALESCE(sfs.status, 'unpaid') as status, 
+                   sfs.payment_mode, sfs.installment_number, sfs.amount_paid, sfs.submitted_at
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
-            LEFT JOIN student_fee_submissions sfs 
-                ON u.id = sfs.student_id AND sfs.fee_schedule_id = ?
+            LEFT JOIN student_fee_submissions sfs ON u.id = sfs.student_id AND sfs.fee_schedule_id = ?
             WHERE u.role = 'student' AND u.class_group = ?
             ORDER BY CAST(p.roll_no AS UNSIGNED) ASC
         `;
-        const [rows] = await db.query(sql, [fee_schedule_id, classGroup]);
+        const [rows] = await db.query(sql, [fee_schedule_id, feeDetails[0].class_group]);
         res.json(rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error fetching student status' });
+    } catch (err) { res.status(500).json({ message: 'Error fetching student status' }); }
+});
+
+// 7. [ADMIN] Get Installment Details
+app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
+    try {
+        const [rows] = await db.query(`SELECT title, amount, due_date FROM fee_installments WHERE fee_schedule_id = ? ORDER BY installment_number ASC`,[req.params.fee_schedule_id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ message: 'Error fetching installments' }); }
+});
+// ==========================================
+// --- RAZORPAY INTEGRATION ENDPOINTS ---
+// ==========================================
+
+// 8. [STUDENT] Initialize Payment (Creates Razorpay Order)
+app.post('/api/fees/create-order', async (req, res) => {
+    const { fee_schedule_id, student_id, payment_mode, installment_number } = req.body;
+    const instNum = payment_mode === 'one_time' ? 0 : (parseInt(installment_number) || 0);
+
+    try {
+        // 1. Calculate Exact Amount Securely from DB (Never trust frontend amounts)
+        let amountToPay = 0;
+        if (instNum === 0) {
+            const [fee] = await db.query("SELECT total_amount FROM fee_schedules WHERE id = ?", [fee_schedule_id]);
+            amountToPay = fee[0].total_amount;
+        } else {
+            const [inst] = await db.query("SELECT amount FROM fee_installments WHERE fee_schedule_id = ? AND installment_number = ?",[fee_schedule_id, instNum]);
+            amountToPay = inst[0].amount;
+        }
+
+        // 2. Create Razorpay Order
+        const options = {
+            amount: Math.round(amountToPay * 100), // Razorpay needs amount in Paise
+            currency: "INR",
+            receipt: `rcpt_${student_id}_${fee_schedule_id}_${instNum}`,
+        };
+        const order = await razorpayInstance.orders.create(options);
+
+        // 3. Save pending transaction in DB
+        const insertOrUpdateSql = `
+            INSERT INTO student_fee_submissions (fee_schedule_id, student_id, installment_number, amount_paid, payment_mode, razorpay_order_id, status) 
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            ON DUPLICATE KEY UPDATE razorpay_order_id = VALUES(razorpay_order_id), status = 'pending', amount_paid = VALUES(amount_paid)
+        `;
+        await db.query(insertOrUpdateSql,[fee_schedule_id, student_id, instNum, amountToPay, payment_mode, order.id]);
+
+        res.json({ success: true, order_id: order.id, amount: amountToPay, key: process.env.RAZORPAY_KEY_ID });
+    } catch (error) {
+        console.error("Order Creation Error:", error);
+        res.status(500).json({ message: 'Failed to create payment order' });
     }
 });
 
-// 10. [ADMIN] Get Installment Details (UPDATED TO FETCH TITLE)
-app.get('/api/fees/installments/:fee_schedule_id', async (req, res) => {
-    const { fee_schedule_id } = req.params;
+// 9. [STUDENT] Verify Razorpay Payment Signature
+app.post('/api/fees/verify-payment', async (req, res) => {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, fee_schedule_id, student_id, installment_number } = req.body;
+
     try {
-        // CHANGED: Added 'title' to SELECT
-        const sql = `SELECT title, amount, due_date FROM fee_installments WHERE fee_schedule_id = ? ORDER BY installment_number ASC`;
-        const [rows] = await db.query(sql, [fee_schedule_id]);
-        res.json(rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error fetching installments' });
+        // Generate our own signature to compare with Razorpay's
+        const generated_signature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET')
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest('hex');
+
+        if (generated_signature === razorpay_signature) {
+            // Success! Update DB
+            const finalInstNum = installment_number || 0;
+            const updateSql = `
+                UPDATE student_fee_submissions 
+                SET status = 'paid', razorpay_payment_id = ?, razorpay_signature = ?
+                WHERE razorpay_order_id = ? AND student_id = ?
+            `;
+            await db.query(updateSql,[razorpay_payment_id, razorpay_signature, razorpay_order_id, student_id]);
+            res.json({ success: true, message: 'Payment verified and updated successfully.' });
+        } else {
+            res.status(400).json({ success: false, message: 'Invalid payment signature.' });
+        }
+    } catch (error) {
+        console.error("Verification Error:", error);
+        res.status(500).json({ message: 'Server error during verification' });
     }
 });
 

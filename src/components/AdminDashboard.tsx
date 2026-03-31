@@ -202,7 +202,7 @@ const AdminDashboard = ({ navigation }) => {
         imageSource: 'https://cdn-icons-png.flaticon.com/128/12693/12693554.png',
         subModules: [
             { id: 'qa30', title: 'Kitchen Stock', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'KitchenScreen' },
-            { id: 'qa39', title: 'Store', imageSource: 'https://cdn-icons-png.flaticon.com/128/1698/1698742.png', navigateToTab: 'StoreScreen' },
+            { id: 'qa39', title: 'Store', imageSource: 'https://cdn-icons-png.flaticon.com/128/4437/4437654.png', navigateToTab: 'StoreScreen' },
             { id: 'qa31', title: 'Lunch Menu', imageSource: 'https://cdn-icons-png.flaticon.com/128/561/561611.png', navigateToTab: 'FoodScreen' },
             { id: 'qa29', title: 'Events', imageSource: 'https://cdn-icons-png.flaticon.com/128/9592/9592283.png', navigateToTab: 'AdminEventsScreen' },
             { id: 'qa23', title: 'Group Chat', imageSource: 'https://cdn-icons-png.flaticon.com/128/6576/6576146.png', navigateTo: 'ChatFeature' },
