@@ -116,6 +116,9 @@ import SportsScreen from './src/screens/Extra_activity/SportsScreen';
 
 import DictionaryScreen from './src/screens/dictionary/DictionaryScreen';
 
+import AdminFeeScreen from './src/screens/Fees/AdminFeeScreen';
+import StudentFeeScreen from './src/screens/Fees/StudentFeeScreen';
+
 // import TransportScreen from './src/screens/transport/TransportScreen';
 // import PassengersScreen from './src/screens/transport/PassengersScreen';
 // import VehicalDetails from './src/screens/transport/VehicalDetails';
@@ -360,6 +363,9 @@ const AuthenticatedStack = () => {
       <Stack.Screen name="SportsScreen" component={SportsScreen} />
 
       <Stack.Screen name="DictionaryScreen" component={DictionaryScreen} />
+
+      <Stack.Screen name="AdminFeeScreen" component={AdminFeeScreen} />
+      <Stack.Screen name="StudentFeeScreen" component={StudentFeeScreen} />
 
       {/* <Stack.Screen name="TransportScreen" component={TransportScreen} />
       <Stack.Screen name="PassengersScreen" component={PassengersScreen} />
