@@ -11248,6 +11248,186 @@ app.delete('/api/permanent-storage/:id', verifyToken, isAdmin, async (req, res) 
 
 
 
+// ==========================================================
+// --- SUBJECT INDEX API ROUTES ---
+// ==========================================================
+
+const textbookStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = '/data/uploads/textbooks';
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, generateUniqueFilename(file.originalname, 'textbook'));
+    }
+});
+const textbookUpload = multer({
+    storage: textbookStorage,
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') cb(null, true);
+        else cb(new Error('Only PDF files are allowed.'), false);
+    }
+});
+
+// 1. Upload Textbook PDF (Admin / Teacher)
+app.post('/api/subject-index/upload', verifyToken, isTeacherOrAdmin, textbookUpload.single('pdf'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'No PDF file provided' });
+
+    const class_group = (req.body.class_group || '').trim();
+    const subject_name = (req.body.subject_name || '').trim();
+
+    if (!class_group || !subject_name) {
+        return res.status(400).json({ message: 'class_group and subject_name are required' });
+    }
+
+    const pdf_url = `/uploads/textbooks/${req.file.filename}`;
+
+    try {
+        const [existing] = await db.query(
+            'SELECT id, pdf_url FROM textbooks WHERE class_group = ? AND subject_name = ?',
+            [class_group, subject_name]
+        );
+
+        let textbook_id;
+        if (existing.length > 0) {
+            const oldFile = existing[0].pdf_url;
+            if (oldFile && oldFile !== pdf_url) {
+                const oldPath = path.join('/data', oldFile);
+                fs.promises.unlink(oldPath).catch(err => console.warn('Could not delete old PDF:', err.message));
+            }
+            await db.query(
+                'UPDATE textbooks SET pdf_url = ?, created_at = NOW() WHERE id = ?',
+                [pdf_url, existing[0].id]
+            );
+            textbook_id = existing[0].id;
+        } else {
+            const [result] = await db.query(
+                'INSERT INTO textbooks (class_group, subject_name, pdf_url) VALUES (?, ?, ?)',
+                [class_group, subject_name, pdf_url]
+            );
+            textbook_id = result.insertId;
+        }
+
+        res.status(200).json({ success: true, textbook_id, pdf_url });
+    } catch (err) {
+        console.error('uploadTextbook error:', err);
+        res.status(500).json({ message: 'Server error while uploading textbook' });
+    }
+});
+
+// 2. Save Auto-Extracted Chapters (Admin / Teacher)
+app.post('/api/subject-index/textbooks/:id/chapters', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { chapters } = req.body;
+    
+    if (!Array.isArray(chapters)) return res.status(400).json({ message: 'chapters array required' });
+
+    try {
+        await db.query('DELETE FROM textbook_chapters WHERE textbook_id = ?', [id]);
+
+        if (chapters.length > 0) {
+            const values = chapters.map(ch => [id, ch.number, ch.name, ch.page, ch.endPage]);
+            await db.query(
+                'INSERT INTO textbook_chapters (textbook_id, chapter_number, chapter_name, start_page, end_page) VALUES ?',
+                [values]
+            );
+        }
+
+        const [rows] = await db.query(
+            'SELECT * FROM textbook_chapters WHERE textbook_id = ? ORDER BY chapter_number',
+            [id]
+        );
+        res.status(200).json({ success: true, chapters: rows });
+    } catch (err) {
+        console.error('saveChapters error:', err);
+        res.status(500).json({ message: 'Server error saving chapters' });
+    }
+});
+
+// 3. Get Textbook Details (All Roles)
+app.get('/api/subject-index/:class_group/:subject_name', verifyToken, async (req, res) => {
+    const class_group = (req.params.class_group || '').trim();
+    const subject_name = (req.params.subject_name || '').trim();
+
+    try {
+        const [textbooks] = await db.query(
+            'SELECT * FROM textbooks WHERE class_group = ? AND subject_name = ?',
+            [class_group, subject_name]
+        );
+
+        if (textbooks.length === 0) {
+            return res.json({ success: true, textbook: null, chapters: [], keywords: {} });
+        }
+
+        const textbook = textbooks[0];
+        const [chapters] = await db.query(
+            'SELECT * FROM textbook_chapters WHERE textbook_id = ? ORDER BY chapter_number',
+            [textbook.id]
+        );
+
+        const keywords = {};
+        if (chapters.length > 0) {
+            const chapterIds = chapters.map(c => c.id);
+            const [kws] = await db.query(
+                'SELECT * FROM subject_keywords WHERE chapter_id IN (?)',
+                [chapterIds]
+            );
+            kws.forEach(kw => {
+                if (!keywords[kw.chapter_id]) keywords[kw.chapter_id] = [];
+                keywords[kw.chapter_id].push({
+                    id: kw.id,
+                    text: kw.keyword,
+                    meaning: kw.meaning || '',
+                    definition: kw.definition || '',
+                    example: kw.example || '',
+                });
+            });
+        }
+
+        res.status(200).json({ success: true, textbook, chapters, keywords });
+    } catch (err) {
+        console.error('getSubjectIndex error:', err);
+        res.status(500).json({ message: 'Server error retrieving subject index' });
+    }
+});
+
+// 4. Add Keyword (Admin / Teacher)
+app.post('/api/subject-index/chapters/:id/keywords', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { keyword, meaning, definition, example } = req.body;
+
+    if (!keyword || !keyword.trim()) return res.status(400).json({ message: 'keyword is required' });
+
+    try {
+        const [result] = await db.query(
+            'INSERT INTO subject_keywords (chapter_id, keyword, meaning, definition, example) VALUES (?, ?, ?, ?, ?)',
+            [id, keyword.trim(), (meaning || '').trim(), (definition || '').trim(), (example || '').trim()]
+        );
+        res.status(200).json({
+            success: true,
+            keyword: { id: result.insertId, text: keyword.trim(), meaning, definition, example },
+        });
+    } catch (err) {
+        console.error('addKeyword error:', err);
+        res.status(500).json({ message: 'Server error adding keyword' });
+    }
+});
+
+// 5. Delete Keyword (Admin / Teacher)
+app.delete('/api/subject-index/keywords/:id', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM subject_keywords WHERE id = ?', [id]);
+        res.status(200).json({ success: true });
+    } catch (err) {
+        console.error('deleteKeyword error:', err);
+        res.status(500).json({ message: 'Server error deleting keyword' });
+    }
+});
+
+
+
 
 // By using "server.listen", you enable both your API routes and the real-time chat.
 server.listen(PORT, '0.0.0.0', () => {
