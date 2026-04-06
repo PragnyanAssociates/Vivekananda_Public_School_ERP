@@ -11413,6 +11413,25 @@ app.delete('/api/subject-index/keywords/:id', verifyToken, isTeacherOrAdmin, asy
     }
 });
 
+// 6. Edit/Update Keyword (Admin / Teacher Only)
+app.put('/api/subject-index/keywords/:id', verifyToken, isTeacherOrAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { keyword, meaning, definition, example } = req.body;
+
+    if (!keyword || !keyword.trim()) return res.status(400).json({ message: 'keyword is required' });
+
+    try {
+        await db.query(
+            'UPDATE subject_keywords SET keyword = ?, meaning = ?, definition = ?, example = ? WHERE id = ?',
+            [keyword.trim(), (meaning || '').trim(), (definition || '').trim(), (example || '').trim(), id]
+        );
+        res.status(200).json({ success: true });
+    } catch (err) {
+        console.error('editKeyword error:', err);
+        res.status(500).json({ message: 'Server error updating keyword' });
+    }
+});
+
 
 
 
